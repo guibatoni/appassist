@@ -358,11 +358,17 @@ def ligar_ao_overlay(root, app=None, compact=None):
                 setattr(compact,"_active_profile",snapshot)
         # A interface legacy pode exigir reinício para reprojetar abas já renderizadas.
 
-    win_candidates=[compact,root]
+    win_candidates=[]
     for attr in ("win","window","top","root","frame","master"):
         if compact is not None:win_candidates.append(getattr(compact,attr,None))
+    win_candidates.extend([compact,root])
     surface=next((w for w in win_candidates if isinstance(w,Misc)
                   and hasattr(w,"winfo_exists") and w.winfo_exists()),root)
+    if surface is root:
+        for widget in root.winfo_children():
+            if isinstance(widget,tk.Toplevel) and "multimod" in widget.title().lower():
+                surface=widget
+                break
 
     current={"window":None}
     def show(_event=None):
