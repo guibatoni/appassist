@@ -286,7 +286,7 @@ def main():
             print('ISO duplicada:',path.name,'igual a',processed[digest]);continue
         processed[digest]=path.name
         print('Analisando:',path.name,flush=True)
-        info=process(path,args.saida,args.artes)
+        info=process(path,args.saida,args.artes,digest=digest)
         all_infos.append(info)
         print('  ->',info['status'],info.get('drops_status',''))
     summary=[{'nome':r['arquivo'],'sha256':r['sha256'],'versao':r.get('versao_conhecida',''),'status':r['status'],'oponentes':r.get('oponentes',0),'cartas':r.get('cartas',0),'drops':r.get('drops',0),'codificacao':','.join(r.get('codificacao_drops',[]))} for r in all_infos]
