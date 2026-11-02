@@ -1,0 +1,1 @@
+v0.3.7 — correção do contrato de pasta de extração SHA, compatibilidade com nomes de ISO contendo símbolos e acentos, validação do relatório e prevenção de CSVs obsoletos.
