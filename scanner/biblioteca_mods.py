@@ -82,6 +82,8 @@ class BibliotecaMods(tk.Toplevel):
         self.field_probe=(FieldMemoryProbe(ram_probe.reader_provider, self.catalog.home)
                           if ram_probe is not None else None)
         self.field_target_id=tk.StringVar(value="291")
+        self.field_face=tk.StringVar(value="faceup")
+        self.field_slot=tk.StringVar(value="1")
         self.field_status=tk.StringVar(value="Campo ainda não mapeado. Inicie com carta na mão e ausente da mesa.")
         self._temporal_after_id=None
         self.temporal_interval=tk.StringVar(value="250")
@@ -308,7 +310,7 @@ class BibliotecaMods(tk.Toplevel):
             "NENHUMA carta da mesa é inventada por heurística."
         ),wraplength=940,justify="left").pack(anchor="w")
         ttk.Separator(field_page,orient="horizontal").pack(fill="x",pady=12)
-        ttk.Label(field_page,text="Diagnóstico restrito — 3 estados de uma carta conhecida",
+        ttk.Label(field_page,text="Diagnóstico por fases — preparação, mesa e atualização da mão",
                   font=("Segoe UI",10,"bold")).pack(anchor="w",pady=5)
         ttk.Label(field_page,text=(
             "Investiga somente 96 KiB próximos à memória conhecida da mão. "
@@ -319,24 +321,40 @@ class BibliotecaMods(tk.Toplevel):
         target_row.pack(fill="x",pady=(0,7))
         ttk.Label(target_row,text="ID da carta que será invocada:").pack(side="left")
         ttk.Entry(target_row,textvariable=self.field_target_id,width=8).pack(side="left",padx=8)
-        ttk.Label(target_row,text="Ex.: #291 da captura anterior; precisa estar na mão AGORA.").pack(side="left")
+        ttk.Label(target_row,text="A carta precisa estar na mão na fase ANTES.").pack(side="left")
+        options=ttk.Frame(field_page)
+        options.pack(fill="x",pady=(0,8))
+        ttk.Label(options,text="Face escolhida:").pack(side="left")
+        ttk.Combobox(options,values=("faceup","facedown"),state="readonly",
+                     textvariable=self.field_face,width=11).pack(side="left",padx=(5,16))
+        ttk.Label(options,text="Slot observado (1 a 5):").pack(side="left")
+        ttk.Combobox(options,values=("1","2","3","4","5"),state="readonly",
+                     textvariable=self.field_slot,width=4).pack(side="left",padx=5)
         controls=ttk.Frame(field_page)
         controls.pack(fill="x",pady=(0,9))
-        ttk.Button(controls,text="1. Capturar ANTES",
+        ttk.Button(controls,text="1. ANTES",
                    command=self.capture_field_before).pack(side="left",padx=(0,6))
-        ttk.Button(controls,text="2. Capturar INVOCADA",
-                   command=self.capture_field_after).pack(side="left",padx=6)
-        ttk.Button(controls,text="3. Capturar REMOVIDA (opcional)",
-                   command=self.capture_field_removed).pack(side="left",padx=6)
+        ttk.Button(controls,text="2. PREPARADA (opcional)",
+                   command=self.capture_field_prepared).pack(side="left",padx=5)
+        ttk.Button(controls,text="3. NA MESA",
+                   command=self.capture_field_after).pack(side="left",padx=5)
+        ttk.Button(controls,text="4. MÃO ATUALIZADA (opcional)",
+                   command=self.capture_field_refresh).pack(side="left",padx=5)
+        ttk.Button(controls,text="5. REMOVIDA (opcional)",
+                   command=self.capture_field_removed).pack(side="left",padx=5)
         ttk.Label(field_page,textvariable=self.field_status,
                   wraplength=960,justify="left").pack(fill="x",pady=(5,8))
         ttk.Label(field_page,text=(
-            "Faça UMA invocação entre 1 e 2. Confirme visualmente que o monstro está "
-            "no seu campo na etapa 2; se puder, remova-o do campo para a etapa 3. "
-            "Apenas ocorrências candidatas são salvas em "
+            "1 ANTES: carta na mão e fora da mesa. 2 PREPARADA (opcional): "
+            "selecione FaceUp/FaceDown e Guardian Star, mas ainda não SETE. "
+            "3 NA MESA: imediatamente após a carta aparecer no slot, SEM passar o turno. "
+            "4 MÃO ATUALIZADA (opcional): depois que o controle do turno voltar e "
+            "a mão se atualizar. 5 REMOVIDA (opcional): após retirar a carta da mesa. "
+            "A fase 3 NÃO exige que o ID tenha saído da RAM da mão. "
+            "JSON de hipóteses em "
             "%LOCALAPPDATA%\\ForbiddenMemoriesMultiMod\\diagnosticos_campo\\<SHA>. "
-            "Nada é automaticamente reconhecido ou aprovado."
-        ),wraplength=945,justify="left").pack(anchor="w")
+            "Nenhuma posição da mesa é validada automaticamente."
+        ),wraplength=950,justify="left").pack(anchor="w")
         self.tabs.add(field_page,text="Campo de duelo")
 
 
@@ -499,7 +517,26 @@ class BibliotecaMods(tk.Toplevel):
                 f"ANTES registrada: PID {snap['pid']}; carta #{target:03d} na mão. "
                 f"{snap['readable_chunks']} blocos legíveis; "
                 f"{len(snap['unreadable_chunks'])} indisponíveis. "
-                "Agora invoque a carta e clique Capturar INVOCADA.")
+                "Agora prepare a carta (fase 2 opcional), SETE no campo e capture 3. NA MESA SEM passar o turno.")
+        except Exception as exc:
+            messagebox.showwarning("Investigação do campo",str(exc),parent=self)
+
+    def capture_field_prepared(self):
+        try:
+            sha=self._field_selected_sha()
+            if not messagebox.askyesno(
+                "Carta preparada, ainda fora do slot",
+                "Você já selecionou a carta, FaceUp/FaceDown e Guardian Star, "
+                "mas AINDA NÃO a posicionou no campo? Esta etapa é opcional.",
+                parent=self):
+                return
+            prepared=self.field_probe.capture_prepared(
+                sha,face_state=self.field_face.get())
+            diff=prepared["changes_since_before"]
+            self.field_status.set(
+                f"PREPARADA registrada: {diff['changed_bytes']} bytes alterados "
+                f"na região experimental. Agora POSICIONE a carta no slot e "
+                "clique imediatamente 3. NA MESA, sem passar o turno.")
         except Exception as exc:
             messagebox.showwarning("Investigação do campo",str(exc),parent=self)
 
@@ -507,20 +544,45 @@ class BibliotecaMods(tk.Toplevel):
         try:
             sha=self._field_selected_sha()
             if not messagebox.askyesno(
-                "Confirmar invocação",
-                "Você já invocou a carta informada e consegue vê-la no SEU campo? "
-                "A captura apenas procura padrões de bytes, não confirma slots.",
+                "Carta SETADA no slot",
+                "A carta já está VISÍVEL no slot da sua mesa? "
+                "Capture AGORA, antes de passar o turno. "
+                "Ela pode continuar aparecendo na RAM da mão e isso NÃO é erro. "
+                "Confirme apenas se realmente a colocou no campo.",
                 parent=self):
                 return
-            report,path=self.field_probe.capture_after(sha)
+            report,path=self.field_probe.capture_after(
+                sha,face_state=self.field_face.get(),
+                user_slot=int(self.field_slot.get()))
             analysis=report["analysis"]
+            still=report["hand_state_at_set"]["target_still_visible_in_hand_ram"]
             self.field_status.set(
-                f"INVOCADA registrada: {analysis['candidate_count_total']} ocorrências novas "
-                f"do ID #{report['reference_card_id']:03d} fora da mão, "
-                f"{analysis['chunks_compared']} blocos comparados. "
-                f"Arquivo: {path}. Isso NÃO comprova cartas no campo. "
-                "Opcional: remova a carta e clique REMOVIDA.")
+                f"NA MESA registrada: {analysis['candidate_count_total']} ocorrências "
+                f"novas do ID #{report['reference_card_id']:03d}. "
+                f"ID continua na RAM da mão: {'SIM (esperado neste estágio)' if still else 'NÃO'}. "
+                f"Arquivo: {path}. "
+                "Opcional: capture MÃO ATUALIZADA após o turno, depois REMOVIDA.")
             self.status.set("Hipóteses de campo salvas em: "+str(path))
+        except Exception as exc:
+            messagebox.showwarning("Investigação do campo",str(exc),parent=self)
+
+    def capture_field_refresh(self):
+        try:
+            sha=self._field_selected_sha()
+            if not messagebox.askyesno(
+                "Confirmar nova mão no turno",
+                "O turno já foi passado e a mão do ePSXe atualizou? "
+                "A carta pode permanecer na mesa; esta fase é opcional.",
+                parent=self):
+                return
+            report,path=self.field_probe.capture_hand_refresh(sha)
+            analysis=report["hand_refresh_analysis"]
+            self.field_status.set(
+                f"MÃO ATUALIZADA registrada: ID diminuiu na mão: "
+                f"{'SIM' if analysis['target_count_decreased'] else 'NÃO'}. "
+                f"Relatório atualizado: {path}. "
+                "Este dado NÃO comprova slot de mesa.")
+            self.status.set("Diagnóstico do campo atualizado: "+str(path))
         except Exception as exc:
             messagebox.showwarning("Investigação do campo",str(exc),parent=self)
 
