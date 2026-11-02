@@ -1,0 +1,1 @@
+MultiMod v0.4.6: nova aba Campo de Duelo com capturas ANTES, INVOCADA e REMOVIDA, varredura restrita de 96 KiB em torno da mão conhecida, IDs candidatos sem RAM bruta no JSON, sem confirmação de fusões e sem alterar emulador, ISOs, Memory Cards ou saves.
