@@ -74,14 +74,68 @@ class FieldRamTests(unittest.TestCase):
         self.assertNotIn('"hex"',path.read_text(encoding="utf-8"))
         self.assertEqual(len(self.reader.calls),3*(1+SEARCH_SIZE//CHUNK_SIZE))
 
-    def test_reject_unknown_id_and_unremoved_hand(self):
+    def test_unmodified_hand_is_accepted_at_set(self):
         with self.assertRaises(ValueError):
             self.probe.capture_before(self.sha,0)
         with self.assertRaises(ValueError):
             self.probe.capture_before(self.sha,722)
         self.probe.capture_before(self.sha,291)
-        with self.assertRaisesRegex(RuntimeError,"não saiu da mão"):
-            self.probe.capture_after(self.sha)
+        report,path=self.probe.capture_after(self.sha)
+        self.assertTrue(path.is_file())
+        self.assertEqual(report["schema"],2)
+        self.assertTrue(report["hand_state_at_set"]["target_still_visible_in_hand_ram"])
+        self.assertTrue(report["hand_state_at_set"]["hand_ids_identical_to_before"])
+        self.assertFalse(report["duel_field_ram_verified"])
+
+    def test_prepared_set_before_hand_refresh_and_removed(self):
+        self.probe.capture_before(self.sha,291)
+        # Jogador escolhe FaceDown e Guardian Star; mão ainda está estática.
+        self.reader.chunks[self.chunk][self.offset-1]=12
+        prepared=self.probe.capture_prepared(self.sha,face_state="facedown")
+        self.assertEqual(prepared["phase"],"PREPARADA_INFORMADA_PELO_USUARIO")
+        self.assertGreater(prepared["changes_since_before"]["changed_bytes"],0)
+        # Carta agora visível no slot 3; RAM da mão ainda lista o ID 291.
+        self.reader.chunks[self.chunk][self.offset:self.offset+2]=struct.pack("<H",291)
+        report,path=self.probe.capture_after(self.sha,face_state="facedown",user_slot=3)
+        self.assertEqual(report["observed_by_user"]["slot_position_1_to_5"],3)
+        self.assertEqual(report["observed_by_user"]["face_state"],"facedown")
+        self.assertTrue(report["hand_state_at_set"]["target_still_visible_in_hand_ram"])
+        self.assertEqual(report["after_summon"]["hand_ids"],[159,291,16,635,192])
+        self.assertEqual(report["analysis"]["candidate_count_total"],1)
+        self.assertIsNotNone(report["phase_differences"]["before_to_preparation"])
+        self.assertGreater(report["phase_differences"]["reference_to_set"]["changed_bytes"],0)
+        # Somente no turno seguinte a RAM da mão finalmente é atualizada.
+        self.reader.hand=make_hand([159,16,635,192,10])
+        report,path2=self.probe.capture_hand_refresh(self.sha)
+        self.assertEqual(path,path2)
+        self.assertTrue(report["hand_refresh_analysis"]["target_count_decreased"])
+        self.assertIsNotNone(report["phase_differences"]["set_to_hand_refresh"])
+        # Depois a carta é removida do campo.
+        self.reader.chunks[self.chunk][self.offset:self.offset+2]=b"\x00\x00"
+        report,path3=self.probe.capture_removed(self.sha)
+        self.assertEqual(path3,path)
+        self.assertTrue(report["analysis"]["candidates"][0]["disappeared_after_removal"])
+        self.assertIsNotNone(report["phase_differences"]["set_to_removed"])
+        self.assertFalse(report["duel_field_ram_verified"])
+        self.assertFalse(report["fusion_catalog_changed"])
+        saved=json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(saved["after_hand_refresh"]["hand_ids"],[159,16,635,192,10])
+        self.assertNotIn('"hex"',path.read_text(encoding="utf-8"))
+
+    def test_falsely_assuming_id_is_field_is_blocked(self):
+        self.probe.capture_before(self.sha,291)
+        # Nenhum byte RAM mudou, mas o usuário afirma que colocou a carta.
+        # O relatório não inventa uma posição nem aprova uma leitura.
+        report,path=self.probe.capture_after(self.sha,face_state="faceup",user_slot=1)
+        self.assertEqual(report["analysis"]["candidate_count_total"],0)
+        self.assertFalse(report["duel_field_ram_verified"])
+        self.assertIsNone(report["duel_field_card_ids"])
+        self.assertTrue(report["hand_state_at_set"]["target_still_visible_in_hand_ram"])
+        self.assertEqual(report["phase_differences"]["before_to_set"]["changed_bytes"],0)
+        with self.assertRaises(RuntimeError):
+            self.probe.capture_prepared(self.sha)
+        with self.assertRaises(ValueError):
+            self.probe.capture_after(self.sha,user_slot=6)
 
     def test_same_pid_sha_must_remain(self):
         self.probe.capture_before(self.sha,291)
