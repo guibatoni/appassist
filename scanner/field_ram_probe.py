@@ -21,6 +21,12 @@ CHUNK_SIZE = 4096
 SEARCH_START = (HAND_ADDR & ~(CHUNK_SIZE - 1)) - 8 * CHUNK_SIZE
 SEARCH_SIZE = 24 * CHUNK_SIZE  # 96 KiB máximo; não é varredura de processo completo.
 MAX_CANDIDATES = 150
+# HIPÓTESE, NÃO estrutura validada: em testes de slot 1, o ID ficou em BFF510;
+# no teste do slot 2, houve alteração em BFF52C (+28 bytes).
+# Lemos exclusivamente uint16 LE nesses cinco endereços candidatos.
+HYPOTHESIS_FIRST_SLOT_ID_ADDR = 0xBFF510
+HYPOTHESIS_SLOT_STRIDE = 28
+HYPOTHESIS_SLOT_COUNT = 5
 # Investigação AMPLIADA manual: 1 MiB do MESMO processo ePSXe, sem dump.
 # Inclui endereços de interesse B483A2, B5B21E, BFF484 e C02D00.
 # Não corresponde a um mapa confirmado do campo.
@@ -88,6 +94,32 @@ def find_new_id_candidates(before: dict[int, bytes], after: dict[int, bytes],
         "hand_region_excluded":True,
         "field_address_verified":False,
     }
+
+
+def hypothetical_slot_u16_values(chunks: dict[int, bytes]) -> list[dict]:
+    """Cinco valores uint16 dos offsets candidatos, nunca cartas identificadas.
+
+    A presença de um valor 1..722 não significa carta na mesa, nem determina
+    lado, ocupação, Guardian Star, status faceup/facedown ou fusões.
+    """
+    records = []
+    for i in range(HYPOTHESIS_SLOT_COUNT):
+        addr = HYPOTHESIS_FIRST_SLOT_ID_ADDR + HYPOTHESIS_SLOT_STRIDE * i
+        chunk_addr = addr & ~(CHUNK_SIZE - 1)
+        buffer = chunks.get(chunk_addr)
+        local_offset = addr - chunk_addr
+        readable = (isinstance(buffer, bytes) and
+                    len(buffer) == CHUNK_SIZE and
+                    local_offset + 2 <= len(buffer))
+        number = int.from_bytes(buffer[local_offset:local_offset + 2], "little") if readable else None
+        records.append({
+            "hypothetical_slot": i + 1,
+            "address": f"0x{addr:08X}",
+            "u16_le": number,
+            "plausible_card_id": (1 <= number <= 722) if number is not None else None,
+            "field_slot_verified": False,
+        })
+    return records
 
 
 def summarize_phase_changes(before: dict[int, bytes], after: dict[int, bytes]) -> dict:
@@ -217,6 +249,7 @@ class FieldMemoryProbe:
         self.prepared={"snapshot":sample,"face_state":face_state}
         return {
             **self._public(sample),
+            "hypothetical_slot_values": hypothetical_slot_u16_values(sample["chunks"]),
             "phase":"PREPARADA_INFORMADA_PELO_USUARIO",
             "changes_since_before":summarize_phase_changes(
                 initial["chunks"],sample["chunks"]),
@@ -258,6 +291,18 @@ class FieldMemoryProbe:
             "after_summon":self._public(sample),
             "after_hand_refresh":None,
             "after_removal":None,
+            "hypothetical_slot_probe":{
+                "status":"PADRAO DE 28 BYTES NAO VALIDADO COMO CAMPO",
+                "hypothesis":"0xBFF510 + (slot - 1) * 28",
+                "before":hypothetical_slot_u16_values(initial["chunks"]),
+                "prepared":(hypothetical_slot_u16_values(self.prepared["snapshot"]["chunks"])
+                            if self.prepared else None),
+                "set":hypothetical_slot_u16_values(sample["chunks"]),
+                "hand_refreshed":None,
+                "removed":None,
+                "field_slot_verified":False,
+                "does_not_confirm_occupancy":True,
+            },
             "observed_by_user":{
                 "face_state":face_state or (self.prepared or {}).get("face_state"),
                 "slot_position_1_to_5":user_slot,
@@ -296,6 +341,8 @@ class FieldMemoryProbe:
                 "A presença do ID uint16 em memória não comprova a ocupação do campo.",
                 "Endereço 0xBFF510 pode ser buffer adjacente à mão, não slot da mesa.",
                 "Nenhum dump bruto da memória é incluído neste relatório.",
+                "Os valores em BFF510 + n*28 são leituras uint16 experimentais "
+                "e NAO provam que existam cinco slots nesse endereço.",
                 "A faixa ampliada de 1 MiB não equivale a uma varredura integral "
                 "da RAM do ePSXe nem garante cobrir o campo.",
                 "Contagens de bytes podem mudar por efeitos, animação e outras "
@@ -323,6 +370,9 @@ class FieldMemoryProbe:
         self.refreshed=sample
         report=dict(self.report)
         report["after_hand_refresh"]=self._public(sample)
+        probe=dict(report["hypothetical_slot_probe"])
+        probe["hand_refreshed"]=hypothetical_slot_u16_values(sample["chunks"])
+        report["hypothetical_slot_probe"]=probe
         report["hand_refresh_analysis"]={
             "target_count_before":before_count,
             "target_count_after_refresh":refreshed_count,
@@ -353,6 +403,9 @@ class FieldMemoryProbe:
         # experimental e não atestam que houve realmente a remoção.
         report=dict(self.report)
         report["after_removal"]=self._public(sample)
+        probe=dict(report["hypothetical_slot_probe"])
+        probe["removed"]=hypothetical_slot_u16_values(sample["chunks"])
+        report["hypothetical_slot_probe"]=probe
         reference=self.prepared["snapshot"] if self.prepared else initial
         report["analysis"]=find_new_id_candidates(
             reference["chunks"],self.after["chunks"],target,
