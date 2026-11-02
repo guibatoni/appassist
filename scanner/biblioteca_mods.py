@@ -17,6 +17,7 @@ from integracao_overlay import OverlayProfileObserver
 from overlay_profile_bridge import apply_overlay_profile
 from investigador_iso import investigate
 from ia_local import analyse_with_local_ai, save_suggestion, DEFAULT_MODEL
+from overlay_card_labels import CardLabelSync
 
 VERIFIED_LABELS = {
     "verificado": "✓ Confirmado",
@@ -473,19 +474,6 @@ def ligar_ao_overlay(root, app=None, compact=None):
     """
     from tkinter import Misc
 
-    def apply_snapshot(snapshot):
-        summary=apply_overlay_profile(snapshot,app=app,compact=compact)
-        if summary.get("applied"):
-            print("MultiMod: perfil carregado no overlay — "+
-                  str(summary.get("profile_name",""))+
-                  " ("+str(summary.get("card_count",0))+" cartas).",flush=True)
-        return summary
-
-    # Persistir mudanças quando a Biblioteca grava perfil_ativo.json:
-    # o overlay reaplica o banco selecionado ao abrir e ao trocar de mod.
-    observer=OverlayProfileObserver(root,apply_snapshot)
-    observer.start()
-
     win_candidates=[]
     for attr in ("win","window","top","root","frame","master"):
         if compact is not None:win_candidates.append(getattr(compact,attr,None))
@@ -497,6 +485,23 @@ def ligar_ao_overlay(root, app=None, compact=None):
             if isinstance(widget,tk.Toplevel) and "multimod" in widget.title().lower():
                 surface=widget
                 break
+
+    # Painéis legados podem continuar desenhando o marcador textual
+    # "Carta #123 (ID somente)" mesmo após atualização dos dicts.
+    # Um sincronizador visual conservador atualiza apenas esses rótulos.
+    renderer=CardLabelSync(root,roots=(root,surface,compact))
+    def apply_snapshot(snapshot):
+        summary=apply_overlay_profile(snapshot,app=app,compact=compact)
+        renderer.use_snapshot(snapshot)
+        if summary.get("applied"):
+            print("MultiMod: perfil carregado no overlay — "+
+                  str(summary.get("profile_name",""))+
+                  " ("+str(summary.get("card_count",0))+" cartas).",flush=True)
+        return summary
+
+    observer=OverlayProfileObserver(root,apply_snapshot)
+    observer.start()
+    renderer.start()
 
     current={"window":None}
     def show(_event=None):
@@ -517,4 +522,4 @@ def ligar_ao_overlay(root, app=None, compact=None):
     except tk.TclError:
         button=None
     return {"open":show,"button":button,"callback":apply_snapshot,
-            "observer":observer}
+            "observer":observer,"renderer":renderer}
