@@ -596,6 +596,7 @@ class BibliotecaMods(tk.Toplevel):
                 elif k=="encontrado":
                     self.status.set("Nova ISO detectada: "+evt.get("file",""))
                 elif k=="ia_concluida":
+                    self.load_fusion_candidates()
                     self.status.set("IA local: hipóteses salvas em "+evt["path"])
                     messagebox.showinfo("IA local — não validado",
                         "Sugestões salvas em:\n"+evt["path"]+"\n\n"+
@@ -617,11 +618,15 @@ class BibliotecaMods(tk.Toplevel):
                     self._fusion_busy=False
                 elif k=="investigacao":
                     report=evt["report"]
+                    summary=report.get("candidates",{}).get("fusion_bank_summary",{})
+                    self.load_fusion_candidates()
                     messagebox.showinfo("Investigação concluída",
-                        "Relatório salvo em:\n"+evt["path"]+"\n\n"
-                        "Candidatas de fusões: "+
-                        str(len(report.get("candidates",{}).get("fusion_tables_u16",[])))+
-                        "\nAtenção: candidatas NÃO são fusões validadas.",parent=self)
+                        "Relatório salvo em:\n"+evt["path"]+"\n\n"+
+                        f"WA_MRG: {summary.get('candidate_count',0)} receitas candidatas; "+
+                        f"{summary.get('matching_banks',0)} bancos coincidentes.\n"+
+                        f"Formato: {summary.get('status','não identificado')}\n"+
+                        "Abra a aba Candidatas (fusões) para revisar.\n"+
+                        "Atenção: candidatas NÃO são fusões validadas.",parent=self)
                     self.status.set("Relatório de investigação salvo.")
         except queue.Empty:
             pass
