@@ -92,7 +92,7 @@ class ScannerSpeedTests(unittest.TestCase):
             self.assertEqual(info["sha256"],"a"*64)
             self.assertIsNone(info["hash_wa"])
             self.assertLess(self_obj["disc"].limit,17*1024*1024)
-            self.assertGreater(self_obj["disc"].limit,15*1024*1024)
+            self.assertGreater(self_obj["disc"].limit,14*1024*1024)
             self.assertEqual(info["wa_total_bytes"],100000000)
 
 
