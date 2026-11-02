@@ -87,6 +87,137 @@ class FusionBankTests(unittest.TestCase):
             self.assertTrue(report["divergent_banks"])
             self.assertIn("REVISÃO",report["status"])
 
+    def test_batch_review_requires_explicit_ack_and_seven_consistent_banks(self):
+        with tempfile.TemporaryDirectory() as folder:
+            home=Path(folder)
+            catalog=ModCatalog(home)
+            sha="a"*64
+            iso=home/"fm_original.iso"
+            iso.write_bytes(b"test source")
+            stat=iso.stat()
+            cards=[{"id":i,"name":f"C{i}"} for i in range(1,723)]
+            profile={
+                "rom_sha256":sha,"cards":cards,
+                "verified":{"cartas":"verificado","fusoes":"não_extraídas"},
+                "supported_features":{"cards":True,"fusions":False,"ranks":False,"drops":False},
+                "fusion_recipes":[],
+            }
+            path=home/"profiles"/sha[:16]/"profile.json"
+            atomic_json(path,profile)
+            entry={
+                "sha256":sha,"file_name":iso.name,"profile_path":str(path),
+                "source_path":str(iso),"size":stat.st_size,"mtime_ns":stat.st_mtime_ns,
+                "approved":True,"level":"parcial_revisar",
+                "features":supported_for_runtime(profile),"verified":profile["verified"],
+            }
+            atomic_json(catalog.registry_file,{"schema":1,"entries":[entry]})
+            atomic_json(catalog.active_file,{"sha256":sha,"features":entry["features"]})
+            decoded=decode_bank(make_bank())
+            recipe_rows=decoded["recipes"]
+            fp=decoded["recipelist_sha256"]
+            banks=[{
+                "bank":i,"status":"decodificado","conflict_count":0,
+                "unique_recipe_count":len(recipe_rows),"recipelist_sha256":fp,
+            } for i in range(1,8)]
+            report={
+                "rom_sha256":sha,"banks":banks,"valid_banks":7,"matching_banks":7,
+                "divergent_banks":False,"bank_conflicts":0,
+                "candidate_count":len(recipe_rows),
+                "candidate_fingerprint":fp,"candidates":recipe_rows,
+            }
+            report_path=home/"investigacoes"/(sha+".fusoes.json")
+            save_fusion_report(report_path,report)
+            with self.assertRaises(PermissionError):
+                catalog.review_fusion_batch(sha,expected_fingerprint=fp,acknowledgement="")
+            with self.assertRaises(ValueError):
+                catalog.review_fusion_batch(sha,expected_fingerprint="0"*64,
+                                            acknowledgement="CATALOGO REVISADO")
+            # Um banco divergente bloqueia toda a aprovação.
+            report["matching_banks"]=6
+            save_fusion_report(report_path,report)
+            with self.assertRaises(ValueError):
+                catalog.review_fusion_batch(sha,expected_fingerprint=fp,
+                                            acknowledgement="CATALOGO REVISADO")
+            report["matching_banks"]=7
+            save_fusion_report(report_path,report)
+            # Nunca aprovar se a ISO mudou depois da importação.
+            iso.write_bytes(b"tampered")
+            with self.assertRaises(ValueError):
+                catalog.review_fusion_batch(sha,expected_fingerprint=fp,
+                                            acknowledgement="CATALOGO REVISADO")
+            iso.write_bytes(b"test source")
+            stat=iso.stat()
+            entry["mtime_ns"]=stat.st_mtime_ns
+            atomic_json(catalog.registry_file,{"schema":1,"entries":[entry]})
+            result=catalog.review_fusion_batch(sha,expected_fingerprint=fp,
+                                               acknowledgement="CATALOGO REVISADO")
+            self.assertEqual(result["count"],80)
+            self.assertFalse(result["already_reviewed"])
+            approved=catalog.profile_for(entry)
+            self.assertEqual(len(approved["fusion_recipes"]),80)
+            self.assertTrue(approved["supported_features"]["fusions"])
+            self.assertEqual(approved["verified"]["fusoes"],"revisadas_usuario_lote")
+            self.assertEqual(approved["fusion_review"]["in_game_individually_verified"],0)
+            self.assertTrue((home/"profiles"/sha[:16]/"profile.json.bak.before_fusion_batch").exists())
+            self.assertTrue(catalog.current()["features"]["fusoes"])
+            repeat=catalog.review_fusion_batch(sha,expected_fingerprint=fp,
+                                               acknowledgement="CATALOGO REVISADO")
+            self.assertTrue(repeat["already_reviewed"])
+            self.assertEqual(repeat["count"],80)
+            # A verificação individual posterior pode promover SÓ essa receita.
+            first=recipe_rows[0]
+            catalog.confirm_fusion(sha,first["a"],first["b"],first["result"])
+            approved=catalog.profile_for(entry)
+            observed=[r for r in approved["fusion_recipes"]
+                      if r["validation"]=="observada_manualmente_no_jogo"]
+            self.assertEqual(len(observed),1)
+            self.assertEqual(approved["fusion_review"]["in_game_individually_verified"],1)
+            # Não libera ranks/score em outros mods.
+            self.assertFalse(catalog.current()["features"]["rank"])
+            self.assertFalse(catalog.current()["features"]["pontuacao"])
+
+    def test_batch_review_rejects_conflicting_symmetrical_fusion(self):
+        with tempfile.TemporaryDirectory() as folder:
+            home=Path(folder)
+            catalog=ModCatalog(home)
+            sha="d"*64
+            iso=home/"fm.iso"
+            iso.write_bytes(b"mock iso")
+            stat=iso.stat()
+            profile={
+                "rom_sha256":sha,"cards":[{"id":i,"name":str(i)} for i in range(1,723)],
+                "verified":{"cartas":"verificado","fusoes":"não_extraídas"},
+                "supported_features":{"cards":True,"fusions":False},
+                "fusion_recipes":[],
+            }
+            path=home/"profiles"/sha[:16]/"profile.json"
+            atomic_json(path,profile)
+            entry={"sha256":sha,"file_name":iso.name,"profile_path":str(path),
+                   "source_path":str(iso),"size":stat.st_size,"mtime_ns":stat.st_mtime_ns,
+                   "approved":True,"verified":profile["verified"],
+                   "features":supported_for_runtime(profile)}
+            atomic_json(catalog.registry_file,{"schema":1,"entries":[entry]})
+            decoded=decode_bank(make_bank())
+            recipes=list(decoded["recipes"])
+            recipes.append({"a":recipes[0]["b"],"b":recipes[0]["a"],"result":722})
+            # Even if the attacker updated the fingerprint and all 7 bank records
+            # to match, overlapping material pairs cannot have two results.
+            canonical=sorted(set((r["a"],r["b"],r["result"]) for r in recipes))
+            import hashlib
+            hash_value=hashlib.sha256(json.dumps(canonical,separators=(",",":")).encode("ascii")).hexdigest()
+            banks=[{"bank":i,"status":"decodificado","conflict_count":0,
+                    "unique_recipe_count":len(canonical),"recipelist_sha256":hash_value}
+                   for i in range(1,8)]
+            report={"rom_sha256":sha,"banks":banks,"valid_banks":7,
+                    "matching_banks":7,"divergent_banks":False,"bank_conflicts":0,
+                    "candidate_count":len(canonical),"candidate_fingerprint":hash_value,
+                    "candidates":recipes}
+            save_fusion_report(home/"investigacoes"/(sha+".fusoes.json"),report)
+            with self.assertRaises(ValueError):
+                catalog.review_fusion_batch(sha,expected_fingerprint=hash_value,
+                                            acknowledgement="CATALOGO REVISADO")
+            self.assertFalse(catalog.profile_for(entry)["supported_features"]["fusions"])
+
     def test_review_one_pair_only_without_enabling_all(self):
         with tempfile.TemporaryDirectory() as folder:
             catalog=ModCatalog(Path(folder))
