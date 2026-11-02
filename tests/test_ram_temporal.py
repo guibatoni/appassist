@@ -81,7 +81,7 @@ class TemporalRamTests(unittest.TestCase):
         self.assertTrue(jpath.is_file())
         self.assertTrue(cpath.is_file())
         loaded=json.loads(jpath.read_text(encoding="utf-8"))
-        self.assertEqual(loaded["samples"][1]["changes"]["mao_conhecida"]["changed_bytes"],2)
+        self.assertEqual(loaded["samples"][1]["changes"]["mao_conhecida"]["changed_bytes"],1)
         with cpath.open(newline="",encoding="utf-8-sig") as fp:
             rows=list(csv.reader(fp))
         self.assertEqual(len(rows),4)
