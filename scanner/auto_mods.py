@@ -9,10 +9,12 @@ assinaturas, parsers de estrutura, verificações cruzadas e perfis revisáveis.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import queue
 import threading
 import time
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -227,6 +229,136 @@ class ModCatalog:
                 active["fusion_revision"]=len(already)
                 atomic_json(self.active_file,active)
             return len(already)
+
+    def review_fusion_batch(self, rom_sha256: str, *,
+                            expected_fingerprint: str,
+                            acknowledgement: str) -> dict:
+        """Importa receitas revisadas explicitamente, vinculadas ao SHA da ISO.
+
+        Revisão visual do usuário != fusões verificadas no ePSXe.
+        Nenhuma aprovação é automática, nem é suficiente o Ollama concordar.
+        """
+        if acknowledgement != "CATALOGO REVISADO":
+            raise PermissionError("É necessária confirmação explícita do usuário")
+        with self._lock:
+            entries=self.list()
+            entry=next((e for e in entries if e.get("sha256")==rom_sha256),None)
+            if not entry or not entry.get("approved"):
+                raise ValueError("Ative primeiro o perfil correto na Biblioteca")
+            profile=self.profile_for(entry)
+            if not profile:
+                raise ValueError("Perfil de mod ausente ou inconsistente")
+            if (profile.get("verified",{}).get("cartas")!="verificado"
+                    or len(profile.get("cards",[]))!=722):
+                raise ValueError("Catálogo de 722 cartas ainda não validado")
+
+            source=Path(entry.get("source_path",""))
+            if not source.is_file():
+                raise ValueError("ISO original não encontrada para revalidar a assinatura do arquivo")
+            stat=source.stat()
+            if (stat.st_size!=entry.get("size")
+                    or stat.st_mtime_ns!=entry.get("mtime_ns")):
+                raise ValueError("Arquivo ISO alterado desde a importação; refaça a análise")
+            report=load_json(self.home/"investigacoes"/(rom_sha256+".fusoes.json"),{})
+            if report.get("rom_sha256")!=rom_sha256:
+                raise ValueError("Relatório de fusões pertence a outra ISO")
+            candidates=report.get("candidates")
+            if not isinstance(candidates,list) or not candidates:
+                raise ValueError("Relatório não contém receitas candidatas")
+            banks=report.get("banks")
+            if (not isinstance(banks,list) or len(banks)!=7
+                    or report.get("valid_banks")!=7
+                    or report.get("matching_banks")!=7
+                    or report.get("divergent_banks") is not False
+                    or report.get("bank_conflicts")!=0):
+                raise ValueError("Bancos de fusões divergentes ou incompletos; aprovação em lote bloqueada")
+            fingerprints={x.get("recipelist_sha256") for x in banks
+                          if x.get("status")=="decodificado"
+                          and x.get("conflict_count")==0}
+            fingerprint=report.get("candidate_fingerprint")
+            if (len(fingerprints)!=1 or fingerprint not in fingerprints
+                    or not isinstance(fingerprint,str)
+                    or fingerprint!=expected_fingerprint):
+                raise ValueError("Assinatura do conjunto de fusões mudou; revise novamente")
+            recipes=set()
+            symmetric={}
+            for row in candidates:
+                try:
+                    a,b,c=(int(row[k]) for k in ("a","b","result"))
+                except (KeyError,ValueError,TypeError) as exc:
+                    raise ValueError("Receita inválida no relatório") from exc
+                if not all(1<=v<=722 for v in (a,b,c)):
+                    raise ValueError("ID de fusão fora de 1..722")
+                key=(min(a,b),max(a,b))
+                if key in symmetric and symmetric[key]!=c:
+                    raise ValueError("Fusão conflitante para os mesmos materiais")
+                symmetric[key]=c
+                recipes.add((a,b,c))
+            canonical=sorted(recipes)
+            actual_hash=hashlib.sha256(json.dumps(canonical,separators=(",",":")).encode("ascii")).hexdigest()
+            if (actual_hash!=fingerprint or len(recipes)!=report.get("candidate_count")
+                    or any(b.get("unique_recipe_count")!=len(recipes) for b in banks)):
+                raise ValueError("Receitas não correspondem à assinatura dos sete bancos")
+
+            existing=profile.get("fusion_recipes",[])
+            verified_manually={}
+            for row in existing:
+                a,b,c=(int(row[k]) for k in ("a","b","result"))
+                key=(min(a,b),max(a,b))
+                if symmetric.get(key)!=c:
+                    raise ValueError("Receita já registrada diverge do conjunto; revisão individual necessária")
+                if row.get("validation")=="observada_manualmente_no_jogo":
+                    verified_manually[(a,b,c)]=dict(row)
+            previous_review=profile.get("fusion_review",{})
+            if (previous_review.get("candidate_fingerprint")==fingerprint
+                    and len(existing)==len(recipes)):
+                return {"count":len(recipes),"already_reviewed":True,
+                        "fingerprint":fingerprint}
+
+            reviewed=[]
+            for a,b,c in canonical:
+                record=verified_manually.get((a,b,c))
+                if record is None:
+                    record={"a":a,"b":b,"result":c,
+                            "validation":"revisada_usuario_em_lote",
+                            "fusion_candidate_fingerprint":fingerprint}
+                reviewed.append(record)
+            updated=dict(profile)
+            updated["fusion_recipes"]=reviewed
+            updated["supported_features"]=dict(profile.get("supported_features",{}),
+                                               fusions=True)
+            updated["verified"]=dict(profile.get("verified",{}),
+                                     fusoes="revisadas_usuario_lote")
+            updated["fusion_review"]={
+                "status":"revisado_usuario_nao_testado_individualmente",
+                "rom_sha256":rom_sha256,
+                "candidate_fingerprint":fingerprint,
+                "recipe_count":len(reviewed),
+                "in_game_individually_verified":len(verified_manually),
+                "reviewed_at":datetime.now(timezone.utc).isoformat(),
+            }
+            updated["notes"]=list(profile.get("notes",[]))+[
+                "Catálogo revisado visualmente pelo usuário; não equivale a teste de todas as fusões no jogo."
+            ]
+            path=Path(entry["profile_path"])
+            # Backup antes da primeira aprovação; não incluir ISO/saves.
+            backup=path.with_name(path.name+".bak.before_fusion_batch")
+            if not backup.exists():
+                shutil.copy2(path,backup)
+            atomic_json(path,updated)
+            entry["verified"]=updated["verified"]
+            entry["features"]=supported_for_runtime(updated)
+            atomic_json(self.registry_file,{"schema":1,"entries":entries})
+            active=load_json(self.active_file,{})
+            if active.get("sha256")==rom_sha256:
+                active["features"]=entry["features"]
+                active["fusion_revision"]=len(reviewed)
+                active["fusion_review_fingerprint"]=fingerprint
+                atomic_json(self.active_file,active)
+            return {"count":len(reviewed),"already_reviewed":False,
+                    "fingerprint":fingerprint,
+                    "in_game_verified":len(verified_manually),
+                    "backup":str(backup)}
 
     def current(self) -> dict | None:
         active = load_json(self.active_file, {})
