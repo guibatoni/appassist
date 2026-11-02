@@ -1,0 +1,1 @@
+Publicar v0.3.5 — IA Ollama local opt-in, Biblioteca de Mods, validação de hipóteses e perfis separados.
