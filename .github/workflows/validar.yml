@@ -1,0 +1,20 @@
+name: Validar Launcher
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  testes:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Testes do atualizador
+        run: python -m unittest discover -s tests -v
+      - name: Compilação de sintaxe
+        run: python -m compileall -q launcher.py launcher_core.py app tools tests
