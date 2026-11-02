@@ -9,13 +9,14 @@ import json
 import queue
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from auto_mods import DirectoryMonitor, ModCatalog, atomic_json, load_json
 from integracao_overlay import overlay_snapshot
 from integracao_overlay import OverlayProfileObserver
 from overlay_profile_bridge import apply_overlay_profile
 from investigador_iso import investigate
+from extrator_fusoes import analyze_fusion_banks, save_fusion_report
 from ia_local import analyse_with_local_ai, save_suggestion, DEFAULT_MODEL
 from overlay_card_labels import CardLabelSync
 
@@ -84,6 +85,11 @@ class BibliotecaMods(tk.Toplevel):
         self.ai_model=tk.StringVar(value=saved_settings.get("ai_model",DEFAULT_MODEL))
         self.card_query=tk.StringVar(value="")
         self.card_rows=[]
+        self.fusion_rows=[]
+        self.fusion_source_sha=None
+        self.fusion_query=tk.StringVar(value="")
+        self.fusion_count=tk.StringVar(value="Nenhuma candidata carregada")
+        self._fusion_filter_after=None
         self.card_count=tk.StringVar(value="0 cartas")
         self._card_filter_after=None
         self.status = tk.StringVar(value="Escolha uma pasta ou uma ISO/BIN para iniciar a análise.")
@@ -113,6 +119,7 @@ class BibliotecaMods(tk.Toplevel):
         ttk.Button(actions, text="Importar ISO/BIN", command=self.choose_file).pack(side="left", padx=(0,5))
         ttk.Button(actions, text="Atualizar lista", command=self.refresh).pack(side="left", padx=5)
         ttk.Button(actions, text="Investigar estrutura", command=self.investigate_selected).pack(side="left", padx=5)
+        ttk.Button(actions, text="Buscar fusões na ISO", command=self.search_fusions).pack(side="left", padx=5)
         ttk.Button(actions, text="IA local: investigar", command=self.ai_selected).pack(side="left", padx=5)
         ttk.Checkbutton(actions,text="IA automática (local)",variable=self.auto_ai,command=self.save_settings).pack(side="left",padx=5)
         ttk.Button(actions, text="Ativar perfil no overlay", command=self.activate).pack(side="right")
@@ -167,6 +174,32 @@ class BibliotecaMods(tk.Toplevel):
             table.configure(yscrollcommand=scroll.set)
             self.tabs.add(frame,text=name)
             self.tables[name]=table
+        # Os dados desta aba são CANDIDATAS extraídas do WA_MRG;
+        # não se confundem com a aba Fusões, que mostra só as confirmadas.
+        candidates_frame=ttk.Frame(self.tabs)
+        toolbar=ttk.Frame(candidates_frame)
+        toolbar.pack(fill="x",padx=4,pady=5)
+        ttk.Label(toolbar,text="Candidatas — buscar ID de material:").pack(side="left",padx=3)
+        ttk.Entry(toolbar,textvariable=self.fusion_query,width=13).pack(side="left",padx=3)
+        self.fusion_query.trace_add("write",lambda *_:self.schedule_fusion_filter())
+        ttk.Label(toolbar,textvariable=self.fusion_count).pack(side="left",padx=8)
+        ttk.Button(toolbar,text="Confirmar receita observada no jogo",
+                   command=self.confirm_selected_fusion).pack(side="right",padx=3)
+        area=ttk.Frame(candidates_frame)
+        area.pack(fill="both",expand=True)
+        self.fusion_candidates_table=ttk.Treeview(
+            area,columns=("a","b","result","evidencia"),show="headings",selectmode="browse")
+        for name,label,width in (
+            ("a","Material A",95),("b","Material B",95),
+            ("result","Resultado",105),("evidencia","Estado",240)):
+            self.fusion_candidates_table.heading(name,text=label)
+            self.fusion_candidates_table.column(name,width=width,anchor="w")
+        self.fusion_candidates_table.pack(side="left",fill="both",expand=True)
+        scroll=ttk.Scrollbar(area,orient="vertical",command=self.fusion_candidates_table.yview)
+        scroll.pack(side="right",fill="y")
+        self.fusion_candidates_table.configure(yscrollcommand=scroll.set)
+        self.tabs.add(candidates_frame,text="Candidatas (fusões)")
+
         ttk.Label(main, textvariable=self.status, wraplength=1020).pack(fill="x", pady=(8,0))
         ttk.Progressbar(main, variable=self.progress_var, maximum=100,
                         mode="determinate").pack(fill="x", pady=(4,0))
@@ -221,6 +254,11 @@ class BibliotecaMods(tk.Toplevel):
         self.info.configure(state="disabled")
         self.card_rows=sorted(model["cards"],key=lambda x: int(x.get("id") or 0))
         self.render_card_rows()
+        # Troca de mod NUNCA deve mostrar candidatas do perfil anterior.
+        candidate_sha=e["sha256"] if e else None
+        if candidate_sha!=self.fusion_source_sha:
+            self.fusion_source_sha=candidate_sha
+            self.load_fusion_candidates()
         rows={
             "Oponentes":[(c.get("id"),c.get("name")) for c in model["opponents"]],
             "Drops":[(d.get("opponent_id"),d.get("group"),d.get("card_id"),d.get("weight"),
@@ -248,6 +286,117 @@ class BibliotecaMods(tk.Toplevel):
             table.insert("","end",values=(row.get("id"),row.get("name"),
                                            row.get("atk"),row.get("def")))
         self.card_count.set(f"{len(matches)} de {len(self.card_rows)} cartas")
+
+    def load_fusion_candidates(self):
+        entry=self.selected()
+        path=(self.catalog.home/"investigacoes"/(entry["sha256"]+".fusoes.json")) if entry else None
+        report=load_json(path,{}) if path else {}
+        if not entry or report.get("rom_sha256")!=entry["sha256"]:
+            self.fusion_rows=[]
+            self.fusion_report={}
+        else:
+            self.fusion_rows=list(report.get("candidates",[]))
+            self.fusion_report=report
+        self.render_fusion_candidates()
+
+    def schedule_fusion_filter(self):
+        if self._fusion_filter_after is not None:
+            self.after_cancel(self._fusion_filter_after)
+        self._fusion_filter_after=self.after(180,self.render_fusion_candidates)
+
+    def render_fusion_candidates(self):
+        self._fusion_filter_after=None
+        table=self.fusion_candidates_table
+        table.delete(*table.get_children())
+        q=self.fusion_query.get().strip()
+        entries=self.fusion_rows
+        if q:
+            if q.isdecimal():
+                num=int(q)
+                entries=[r for r in entries if num in (r.get("a"),r.get("b"),r.get("result"))]
+            else:
+                entries=[]
+        # Manter a interface responsiva em mods com milhares de receitas.
+        # NUNCA ocultar o truncamento: mostrar a contagem completa.
+        page=entries[:750]
+        evidence=self.fusion_report.get("status","NÃO VALIDADA") if getattr(self,"fusion_report",None) else ""
+        for i,r in enumerate(page):
+            table.insert("","end",iid=str(i),values=(
+                r.get("a"),r.get("b"),r.get("result"),
+                "CANDIDATA — não validada"))
+        self.fusion_display_rows=page
+        self.fusion_count.set(
+            f"Mostrando {len(page)} de {len(entries)} candidatas; "
+            "pesquise um ID para localizar outras. "+
+            ("Bancos espelhados: "+str(self.fusion_report.get("matching_banks",0))
+             if getattr(self,"fusion_report",None) else "Execute Buscar fusões")
+        )
+
+    def search_fusions(self):
+        e=self.selected()
+        if not e:
+            return messagebox.showinfo("Fusões","Selecione uma ISO na lista.",parent=self)
+        path=Path(e["source_path"])
+        if not path.is_file():
+            return messagebox.showerror("ISO não encontrada",str(path),parent=self)
+        if getattr(self,"_fusion_busy",False):
+            self.status.set("Uma investigação de fusões já está em andamento.")
+            return
+        self._fusion_busy=True
+        self.status.set("Extraindo sete bancos de fusões de "+path.name+"...")
+        import threading
+        def work():
+            try:
+                report=analyze_fusion_banks(path,expected_size=e.get("size"),
+                    expected_mtime_ns=e.get("mtime_ns"))
+                report["rom_sha256"]=e["sha256"]
+                output=self.catalog.home/"investigacoes"/(e["sha256"]+".fusoes.json")
+                save_fusion_report(output,report)
+                self.events.put({"event":"fusoes_encontradas","file":path.name,
+                                 "sha256":e["sha256"],"report":report,"path":str(output)})
+            except Exception as exc:
+                self.events.put({"event":"erro","file":path.name,
+                                 "message":"Fusões: "+str(exc)})
+            finally:
+                self.events.put({"event":"fim_busca_fusoes"})
+        threading.Thread(target=work,daemon=True,name="busca-fusoes-rom").start()
+
+    def confirm_selected_fusion(self):
+        entry=self.selected()
+        selection=self.fusion_candidates_table.selection()
+        if not entry or not selection or not getattr(self,"fusion_display_rows",None):
+            return messagebox.showinfo("Validação","Selecione uma receita candidata.",parent=self)
+        if entry["sha256"]!=self.fusion_source_sha:
+            return messagebox.showwarning("Mod incorreto","As candidatas não pertencem ao perfil selecionado.",parent=self)
+        recipe=self.fusion_display_rows[int(selection[0])]
+        a,b,result=(int(recipe[k]) for k in ("a","b","result"))
+        observed=simpledialog.askinteger("Verificar no jogo",
+            f"Fusão candidata: #{a} + #{b} = #{result}\\n"
+            "Execute a fusão na ISO correspondente no emulador.\\n"
+            "Digite o ID do resultado que você realmente viu no duelo "
+            "(Cancelar não altera nada):",
+            minvalue=1,maxvalue=722,parent=self)
+        if observed is None:
+            return
+        if observed!=result:
+            self.status.set("A fusão observada divergiu da extração; não será ativada.")
+            return messagebox.showwarning("Divergência",
+                "Resultado observado difere do candidato; nenhuma receita foi ativada.",
+                parent=self)
+        if not messagebox.askyesno("Confirmar 1 fusão",
+            f"Você observou no jogo #{a} + #{b} = #{result}?\\n"
+            "Essa confirmação habilitará SOMENTE ESTA receita no overlay, "
+            "nunca o banco inteiro.",parent=self):
+            return
+        try:
+            number=self.catalog.confirm_fusion(entry["sha256"],a,b,result)
+            self.refresh()
+        except Exception as exc:
+            return messagebox.showerror("Falha de validação",str(exc),parent=self)
+        self.status.set(f"{number} fusão(ões) confirmada(s) individualmente para "+entry["file_name"])
+        messagebox.showinfo("Receita confirmada",
+            "Receita validada pelo usuário e vinculada ao SHA da ISO. "
+            "As demais candidatas continuam indisponíveis.",parent=self)
 
     def _monitor(self, folder=None):
         if self.monitor:
@@ -444,6 +593,16 @@ class BibliotecaMods(tk.Toplevel):
                         "Sugestões salvas em:\n"+evt["path"]+"\n\n"+
                         evt.get("summary","")[:650]+
                         "\n\nNenhum dado de jogo foi alterado pela IA.",parent=self)
+                elif k=="fusoes_encontradas":
+                    if self.fusion_source_sha==evt["sha256"]:
+                        self.load_fusion_candidates()
+                        self.tabs.select(self.fusion_candidates_table.master.master)
+                    self.status.set(
+                        f"{evt['file']}: {evt['report']['candidate_count']} candidatas, "+
+                        f"{evt['report']['matching_banks']} bancos coincidentes. "
+                        "Nenhuma foi ativada automaticamente.")
+                elif k=="fim_busca_fusoes":
+                    self._fusion_busy=False
                 elif k=="investigacao":
                     report=evt["report"]
                     messagebox.showinfo("Investigação concluída",
@@ -461,6 +620,8 @@ class BibliotecaMods(tk.Toplevel):
             self.after_cancel(self._after_id)
         if self._card_filter_after is not None:
             self.after_cancel(self._card_filter_after)
+        if self._fusion_filter_after is not None:
+            self.after_cancel(self._fusion_filter_after)
         self.stop_watch(persist=False)
         self.destroy()
 
