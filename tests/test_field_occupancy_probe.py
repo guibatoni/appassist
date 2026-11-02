@@ -63,7 +63,7 @@ class OccupancyProbeTests(unittest.TestCase):
         self.probe.capture_before(self.sha,291)
         self.reader.set_byte(self.addr,1)
         # Esse ID é apenas um histórico, que nao volta ao valor inicial.
-        self.reader.set_byte(self.selection_id,291)
+        self.reader.set_byte(self.selection_id,10)
         self.probe.capture_after(self.sha,user_slot=1)
         self.probe.capture_occupied_control(self.sha)
         self.reader.set_byte(self.addr,0)
@@ -79,7 +79,7 @@ class OccupancyProbeTests(unittest.TestCase):
         self.assertFalse(a["occupancy_verified"])
         self.assertFalse(report["duel_field_ram_verified"])
         self.assertFalse(report["fusion_catalog_changed"])
-        self.assertEqual(report["hypothetical_slot_probe"]["removed"][0]["u16_le"],291)
+        self.assertEqual(report["hypothetical_slot_probe"]["removed"][0]["u16_le"],10)
         self.probe.capture_vacant_control(self.sha)
         self.assertFalse(self.probe.report["occupancy_analysis"]["occupancy_verified"])
         report_json=path.read_text(encoding="utf-8")
