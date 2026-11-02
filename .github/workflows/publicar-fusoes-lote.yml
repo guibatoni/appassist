@@ -1,0 +1,120 @@
+name: Publicar Fusoes Revisadas em Lote MultiMod v0.4.3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scanner/RELEASE_V043.txt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-fusions-bulk-v043
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verificar sintaxe e testes
+        shell: bash
+        run: |
+          python -m compileall -q scanner tests
+          python -m unittest discover -s tests -v
+
+      - name: Montar patch incremental seguro
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, zipfile
+
+          sources = {
+            'app/tools/scanner_multiiso.py': 'scanner/scanner_multiiso.py',
+            'app/tools/importador_perfis.py': 'scanner/importador_perfis.py',
+            'app/tools/auto_mods.py': 'scanner/auto_mods.py',
+            'app/tools/gerenciador_mods.py': 'scanner/gerenciador_mods.py',
+            'app/tools/integracao_overlay.py': 'scanner/integracao_overlay.py',
+            'app/tools/overlay_profile_bridge.py': 'scanner/overlay_profile_bridge.py',
+            'app/tools/overlay_card_labels.py': 'scanner/overlay_card_labels.py',
+            'app/tools/investigador_iso.py': 'scanner/investigador_iso.py',
+            'app/tools/extrator_fusoes.py': 'scanner/extrator_fusoes.py',
+            'app/tools/ia_local.py': 'scanner/ia_local.py',
+            'app/tools/biblioteca_mods.py': 'scanner/biblioteca_mods.py',
+            'app/tools/instalar_biblioteca.py': 'scanner/instalar_biblioteca.py',
+            'app/tools/abrir_biblioteca.py': 'scanner/abrir_biblioteca.py',
+          }
+          def batch(script):
+              return script.replace('\n','\r\n').encode('utf-8')
+          b_launch = batch('''@echo off
+          setlocal
+          cd /d "%~dp0"
+          where py >nul 2>nul
+          if not errorlevel 1 (
+            py -3 "tools\\abrir_biblioteca.py"
+          ) else (
+            python "tools\\abrir_biblioteca.py"
+          )
+          if errorlevel 1 pause
+          ''')
+          b_hook = batch('''@echo off
+          setlocal
+          cd /d "%~dp0"
+          echo Iniciando integracao da Biblioteca de Mods no overlay...
+          where py >nul 2>nul
+          if not errorlevel 1 (
+            py -3 "tools\\instalar_biblioteca.py" --app "assistente_x15.py"
+          ) else (
+            python "tools\\instalar_biblioteca.py" --app "assistente_x15.py"
+          )
+          pause
+          ''')
+          files={dst:Path(src).read_bytes() for dst,src in sources.items()}
+          files['app/ABRIR_BIBLIOTECA_MODS.bat']=b_launch
+          files['app/INTEGRAR_BIBLIOTECA_MODS.bat']=b_hook
+          for name,data in files.items():
+              assert name.startswith('app/') and '..' not in Path(name).parts
+              assert not name.lower().endswith(('.bin','.iso','.cue','.mcr','.sav','.state'))
+              assert len(data)<1_000_000
+          records=[{'path':name,'size':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+                   for name,data in sorted(files.items())]
+          meta={'schema':1,'version':'0.4.3',
+                'notes':'Permite exportar 100% das fusões candidatas e aprovar explicitamente o lote revisado com auditoria SHA, sete bancos e backup.',
+                'files':records}
+          dist=Path('dist');dist.mkdir(exist_ok=True)
+          patch=dist/'patch.zip'
+          with zipfile.ZipFile(patch,'w',compression=zipfile.ZIP_DEFLATED) as z:
+              z.writestr('patch_manifest.json',json.dumps(meta,ensure_ascii=False,indent=2))
+              for name,data in sorted(files.items()): z.writestr(name,data)
+          with zipfile.ZipFile(patch) as z:
+              for name,data in files.items():
+                  assert z.read(name)==data
+              assert len(z.namelist())==len(files)+1
+          update={'schema':1,'version':'0.4.3','notes':meta['notes'],
+                  'patch_sha256':hashlib.sha256(patch.read_bytes()).hexdigest()}
+          (dist/'update-manifest.json').write_text(json.dumps(update,indent=2,ensure_ascii=False),
+                                                   encoding='utf-8')
+          print('Patch validado:',len(files),'arquivos.',patch.stat().st_size,'bytes')
+          PY
+
+      - name: Criar GitHub Release v0.4.3
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.4.3 >/dev/null 2>&1; then
+            echo "A Release v0.4.3 já existe; não a substituir automaticamente."
+            exit 0
+          fi
+          gh release create v0.4.3 dist/patch.zip dist/update-manifest.json \
+            --target "$GITHUB_SHA" \
+            --latest \
+            --title "Forbidden Memories MultiMod v0.4.3 - Aprovar Fusões Revisadas em Lote" \
+            --notes "Exporta todas as candidatas CSV e permite ativar o catálogo revisado por ação explícita com confirmação dupla, validação dos sete bancos, SHA da ISO e backup local. Revisão humana não equivale a validação individual no jogo. Testes sintéticos; sem ISOs ou saves."
