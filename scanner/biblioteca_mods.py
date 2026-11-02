@@ -14,6 +14,7 @@ from tkinter import filedialog, messagebox, ttk
 from auto_mods import DirectoryMonitor, ModCatalog, atomic_json, load_json
 from integracao_overlay import overlay_snapshot
 from investigador_iso import investigate
+from ia_local import analyse_with_local_ai, save_suggestion, DEFAULT_MODEL
 
 VERIFIED_LABELS = {
     "verificado": "✓ Confirmado",
@@ -53,7 +54,10 @@ class BibliotecaMods(tk.Toplevel):
         self.monitor = None
         self._after_id = None
         self.settings_file = self.catalog.home / "biblioteca_settings.json"
-        self.folder = tk.StringVar(value=load_json(self.settings_file, {}).get("folder", ""))
+        saved_settings=load_json(self.settings_file, {})
+        self.folder = tk.StringVar(value=saved_settings.get("folder", ""))
+        self.auto_ai=tk.BooleanVar(value=bool(saved_settings.get("auto_ai",False)))
+        self.ai_model=tk.StringVar(value=saved_settings.get("ai_model",DEFAULT_MODEL))
         self.status = tk.StringVar(value="Escolha uma pasta ou uma ISO/BIN para iniciar a análise.")
         self._build()
         self.refresh()
@@ -80,6 +84,8 @@ class BibliotecaMods(tk.Toplevel):
         ttk.Button(actions, text="Importar ISO/BIN", command=self.choose_file).pack(side="left", padx=(0,5))
         ttk.Button(actions, text="Atualizar lista", command=self.refresh).pack(side="left", padx=5)
         ttk.Button(actions, text="Investigar estrutura", command=self.investigate_selected).pack(side="left", padx=5)
+        ttk.Button(actions, text="IA local: investigar", command=self.ai_selected).pack(side="left", padx=5)
+        ttk.Checkbutton(actions,text="IA automática (local)",variable=self.auto_ai,command=self.save_settings).pack(side="left",padx=5)
         ttk.Button(actions, text="Ativar perfil no overlay", command=self.activate).pack(side="right")
 
         split = ttk.Panedwindow(main, orient="vertical")
@@ -193,6 +199,13 @@ class BibliotecaMods(tk.Toplevel):
                                       self.catalog,self.events.put,interval=4,quiet_seconds=5)
         self.monitor.start()
 
+    def save_settings(self):
+        atomic_json(self.settings_file,{
+            "folder":self.folder.get().strip(),
+            "auto_ai":bool(self.auto_ai.get()),
+            "ai_model":self.ai_model.get().strip() or DEFAULT_MODEL,
+        })
+
     def choose_folder(self):
         folder=filedialog.askdirectory(title="Selecionar pasta de ISOs",parent=self)
         if folder:
@@ -205,7 +218,7 @@ class BibliotecaMods(tk.Toplevel):
             messagebox.showwarning("Pasta inválida","Selecione uma pasta existente.",parent=self)
             return
         self._monitor(folder)
-        atomic_json(self.settings_file,{"folder":str(folder.resolve())})
+        self.save_settings()
         self.status.set("Monitoramento ativado: "+str(folder))
 
     def stop_watch(self):
@@ -246,6 +259,39 @@ class BibliotecaMods(tk.Toplevel):
                 self.events.put({"event":"erro","file":path.name,"message":str(exc)})
         threading.Thread(target=work,daemon=True,name="investigador-iso").start()
 
+    def ai_selected(self):
+        e=self.selected()
+        if not e:
+            return messagebox.showinfo("IA local","Selecione uma ISO já analisada.",parent=self)
+        self._launch_local_ai(e)
+
+    def _launch_local_ai(self,e):
+        p=self.catalog.profile_for(e)
+        if not p:
+            self.status.set("IA: perfil ainda não disponível para investigação.")
+            return
+        iso=Path(e.get("source_path",""))
+        if not iso.is_file():
+            self.status.set("IA: arquivo ISO não encontrado na pasta original.")
+            return
+        model=self.ai_model.get().strip() or DEFAULT_MODEL
+        self.save_settings()
+        self.status.set("IA local: preparando evidências para "+iso.name)
+        import threading
+        def task():
+            try:
+                evidence_path=self.catalog.home/"investigacoes"/(e["sha256"]+".json")
+                report=investigate(iso,p,evidence_path)
+                suggestion=analyse_with_local_ai(report,model=model)
+                output=self.catalog.home/"investigacoes"/(e["sha256"]+".ia.json")
+                save_suggestion(output,suggestion)
+                self.events.put({"event":"ia_concluida","file":iso.name,"path":str(output),
+                                 "summary":suggestion.get("resumo","")})
+            except Exception as exc:
+                self.events.put({"event":"erro","file":iso.name,
+                                 "message":"IA local: "+str(exc)})
+        threading.Thread(target=task,daemon=True,name="ia-local-investigacao").start()
+
     def activate(self):
         e=self.selected()
         if not e:
@@ -283,12 +329,21 @@ class BibliotecaMods(tk.Toplevel):
                 if k=="concluido":
                     self.refresh()
                     self.status.set("Análise concluída: "+evt.get("file",""))
+                    if self.auto_ai.get() and evt.get("level")!="conhecido_validado":
+                        entry=next((e for e in self.catalog.list() if e.get("sha256")==evt.get("sha256")),None)
+                        if entry:self._launch_local_ai(entry)
                 elif k=="erro":
                     self.status.set("Falha em "+evt.get("file","")+": "+evt.get("message",""))
                 elif k=="analisando":
                     self.status.set("Lendo ISO (somente leitura): "+evt.get("file",""))
                 elif k=="encontrado":
                     self.status.set("Nova ISO detectada: "+evt.get("file",""))
+                elif k=="ia_concluida":
+                    self.status.set("IA local: hipóteses salvas em "+evt["path"])
+                    messagebox.showinfo("IA local — não validado",
+                        "Sugestões salvas em:\n"+evt["path"]+"\n\n"+
+                        evt.get("summary","")[:650]+
+                        "\n\nNenhum dado de jogo foi alterado pela IA.",parent=self)
                 elif k=="investigacao":
                     report=evt["report"]
                     messagebox.showinfo("Investigação concluída",
