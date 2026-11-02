@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 
-from biblioteca_mods import preview_model
+from biblioteca_mods import preview_model, filter_cards
 from investigador_iso import fusion_triplet_hypotheses
 from instalar_biblioteca import patch_source, START
 from ia_local import minimal_evidence, validate_suggestion
@@ -32,6 +32,39 @@ class BibliotecaTests(unittest.TestCase):
         self.assertEqual(m["drops"],[])
         self.assertEqual(m["fusions"],[])
         self.assertFalse(m["rank_confirmed"])
+
+    def test_all_722_cards_visible_and_searchable(self):
+        # Regressão da interface antiga, que mostrava somente 180 IDs.
+        cards=[
+            {"id":i,"name":f"Carta Especial {i}" if i==722 else f"Carta {i}",
+             "atk":i*10,"def":i*10}
+            for i in range(1,723)
+        ]
+        profile={
+            "supported_features":{"cards":True,"opponents":False,
+                                  "drops":False,"fusions":False},
+            "cards":cards,
+            "drops":[{"card_id":100}],"fusion_recipes":[{"a":1,"b":2,"result":3}],
+        }
+        model=preview_model(profile)
+        self.assertEqual(len(model["cards"]),722)
+        self.assertEqual(model["cards"][-1]["id"],722)
+        self.assertEqual([c["id"] for c in filter_cards(model["cards"],"722")],[722])
+        self.assertEqual([c["id"] for c in filter_cards(model["cards"],"especial")],[722])
+        self.assertEqual(len(filter_cards(model["cards"],"")),722)
+        self.assertEqual(filter_cards(model["cards"],"999"),[])
+        self.assertEqual(model["drops"],[])
+        self.assertEqual(model["fusions"],[])
+
+    def test_verified_drops_not_silently_truncated(self):
+        profile={
+            "supported_features":{"cards":True,"drops":True,"fusions":False},
+            "cards":[{"id":i,"name":f"C{i}"} for i in range(1,723)],
+            "drops":[{"card_id":i%722+1} for i in range(3972)],
+        }
+        model=preview_model(profile)
+        self.assertEqual(len(model["drops"]),3972)
+        self.assertEqual(len(preview_model(profile,limit=180)["drops"]),180)
 
     def test_fusion_hypotheses_are_not_verified(self):
         # 30 triplas u16 são suficientes para gerar uma hipótese, nunca fato.
