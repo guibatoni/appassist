@@ -1,0 +1,98 @@
+name: Publicar Gerenciador MultiMod v0.3.3
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publicar-gerenciador.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-gerenciador-multimod
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validar codigo dos perfis e scanner
+        shell: pwsh
+        run: |
+          python -m compileall -q scanner tests
+          python -m unittest discover -s tests -v
+      - name: Preparar patch com arquivos permitidos
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          import hashlib,json,zipfile
+          sources = {
+              'app/tools/scanner_multiiso.py': 'scanner/scanner_multiiso.py',
+              'app/tools/importador_perfis.py': 'scanner/importador_perfis.py',
+              'app/tools/auto_mods.py': 'scanner/auto_mods.py',
+              'app/tools/gerenciador_mods.py': 'scanner/gerenciador_mods.py',
+              'app/tools/integracao_overlay.py': 'scanner/integracao_overlay.py',
+          }
+          bat = (
+              '@echo off\r\n'
+              'setlocal\r\n'
+              'cd /d "%~dp0"\r\n'
+              'where py >nul 2>nul\r\n'
+              'if not errorlevel 1 (\r\n'
+              '  py -3 "tools\\gerenciador_mods.py"\r\n'
+              ') else (\r\n'
+              '  python "tools\\gerenciador_mods.py"\r\n'
+              ')\r\n'
+              'if errorlevel 1 (\r\n'
+              '  echo Erro ao abrir o gerenciador. Instale Python 3.10+.\r\n'
+              '  pause\r\n'
+              ')\r\n'
+          ).encode('utf-8')
+          files = {dst: Path(src).read_bytes() for dst,src in sources.items()}
+          files['app/ABRIR_GERENCIADOR_MODS.bat'] = bat
+          files['app/tools/ABRIR_GERENCIADOR_MODS.bat'] = Path('scanner/ABRIR_GERENCIADOR_MODS.bat').read_bytes()
+          assert all(p.startswith('app/') and '..' not in Path(p).parts
+                     and not p.lower().endswith(('.iso','.bin','.mcr','.cue')) for p in files)
+          meta = {
+              'schema': 1,
+              'version': '0.3.3',
+              'notes': 'Gerenciador local de ISOs e perfis com confirmacao; sem alterar jogos ou saves.',
+              'files': [
+                  {'path': name, 'size': len(payload), 'sha256': hashlib.sha256(payload).hexdigest()}
+                  for name,payload in sorted(files.items())
+              ],
+          }
+          dist = Path('dist')
+          dist.mkdir(exist_ok=True)
+          patch = dist / 'patch.zip'
+          with zipfile.ZipFile(patch, 'w', compression=zipfile.ZIP_DEFLATED) as z:
+              z.writestr('patch_manifest.json', json.dumps(meta, ensure_ascii=False, indent=2))
+              for name,payload in sorted(files.items()):
+                  z.writestr(name,payload)
+          with zipfile.ZipFile(patch) as z:
+              for name,payload in files.items():
+                  assert z.read(name) == payload
+          manifest = {
+              'schema': 1,
+              'version': '0.3.3',
+              'notes': meta['notes'],
+              'patch_sha256': hashlib.sha256(patch.read_bytes()).hexdigest(),
+          }
+          (dist / 'update-manifest.json').write_text(
+              json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
+          print('Arquivos no patch:',len(files))
+          '@ | python -
+      - name: Publicar Release v0.3.3
+        shell: pwsh
+        env:
+          GH_TOKEN: \${{ github.token }}
+        run: |
+          gh release view v0.3.3 *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Host "Release existente"; exit 0 }
+          gh release create v0.3.3 dist/patch.zip dist/update-manifest.json --latest --title "MultiMod v0.3.3 - Gerenciador de Mod" --notes "Interface de deteccao, analise, perfis locais e confirmacao. O overlay ainda precisa ser conectado a integracao_overlay.py. Nenhum jogo, ISO ou save acompanha o patch."
