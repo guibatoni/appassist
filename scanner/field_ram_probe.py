@@ -82,19 +82,50 @@ def find_new_id_candidates(before: dict[int, bytes], after: dict[int, bytes],
     }
 
 
-class FieldMemoryProbe:
-    """Ferramenta de bancada: 3 estados de um monstro conhecido.
+def summarize_phase_changes(before: dict[int, bytes], after: dict[int, bytes]) -> dict:
+    """Diferenças por offset (sem bytes brutos), nunca prova de carta no campo."""
+    changed_total = 0
+    comparable = 0
+    changes_by_chunk = []
+    address_samples = []
+    for addr in sorted(set(before) | set(after)):
+        a, b = before.get(addr), after.get(addr)
+        if a is None or b is None or len(a) != CHUNK_SIZE or len(b) != CHUNK_SIZE:
+            continue
+        comparable += 1
+        changed = [i for i, (x, y) in enumerate(zip(a, b)) if x != y]
+        if changed:
+            changed_total += len(changed)
+            changes_by_chunk.append({
+                "chunk_start": f"0x{addr:08X}",
+                "changed_bytes": len(changed),
+            })
+            for off in changed[:max(0, 96 - len(address_samples))]:
+                address_samples.append(f"0x{addr + off:08X}")
+    return {
+        "comparable_chunks": comparable,
+        "changed_bytes": changed_total,
+        "changed_chunks": changes_by_chunk,
+        "changed_offsets_sample": address_samples,
+        "sample_truncated": changed_total > len(address_samples),
+        "proves_duel_field": False,
+    }
 
-    A) monstro ainda na mão, ausente da mesa (confirmado visualmente);
-    B) monstro invocado na mesa;
-    C) monstro removido da mesa (opcional).
+
+class FieldMemoryProbe:
+    """Bancada por fases; a mão pode atualizar somente após virar o turno.
+
+    ANTES -> PREPARADA (opcional) -> NA MESA -> MÃO ATUALIZADA (opcional)
+    -> REMOVIDA (opcional). As fases são observadas pelo usuário no jogo.
     """
 
     def __init__(self, reader_provider, home: Path):
         self.reader_provider=reader_provider
         self.home=Path(home)
         self.before=None
+        self.prepared=None
         self.after=None
+        self.refreshed=None
         self.report=None
         self.file=None
 
@@ -142,45 +173,114 @@ class FieldMemoryProbe:
         if target_id not in sample["hand_ids"]:
             raise ValueError("Carta escolhida não consta da mão; captura ANTES rejeitada")
         self.before={"snapshot":sample,"target_id":target_id}
+        self.prepared=None
         self.after=None
+        self.refreshed=None
         self.report=None
         self.file=None
         return self._public(sample)
 
-    def capture_after(self, sha: str) -> tuple[dict,Path]:
+    def _capture_same_session(self, sha: str) -> dict:
         if self.before is None:
-            raise RuntimeError("Primeiro capture o estado ANTES da invocação")
+            raise RuntimeError("Capture ANTES primeiro")
         sample=self._capture(sha)
         initial=self.before["snapshot"]
-        target=self.before["target_id"]
         if sample["sha"]!=initial["sha"] or sample["pid"]!=initial["pid"]:
             raise RuntimeError("ISO ou PID do ePSXe mudou; inicie outro diagnóstico")
-        if sample["hand_ids"].count(target)>=initial["hand_ids"].count(target):
-            raise RuntimeError("O ID escolhido não saiu da mão; confira a invocação antes de capturar")
+        return sample
+
+    def capture_prepared(self, sha: str, *, face_state: str | None = None) -> dict:
+        """Opcional: carta selecionada, orientação e Guardian Star já escolhidas;
+        ainda não colocada na mesa. Não confirma semanticamente essa fase.
+        """
+        if self.after is not None:
+            raise RuntimeError("A carta já foi registrada na mesa; reinicie o diagnóstico")
+        if face_state not in (None,"faceup","facedown"):
+            raise ValueError("Posição da face inválida")
+        sample=self._capture_same_session(sha)
+        initial=self.before["snapshot"]
+        self.prepared={"snapshot":sample,"face_state":face_state}
+        return {
+            **self._public(sample),
+            "phase":"PREPARADA_INFORMADA_PELO_USUARIO",
+            "changes_since_before":summarize_phase_changes(
+                initial["chunks"],sample["chunks"]),
+        }
+
+    def capture_after(self, sha: str, *,
+                      face_state: str | None = None,
+                      user_slot: int | None = None) -> tuple[dict,Path]:
+        """Captura IMEDIATAMENTE após posicionar a carta no campo.
+
+        Não exige que o ID suma da mão. O usuário comprovou que no ePSXe a
+        mão pode manter o ID até passar o turno e o controle voltar.
+        """
+        if self.before is None:
+            raise RuntimeError("Primeiro capture o estado ANTES da invocação")
+        if face_state not in (None,"faceup","facedown"):
+            raise ValueError("FaceUp ou FaceDown inválido")
+        if user_slot is not None and (
+                type(user_slot) is not int or not 1<=user_slot<=5):
+            raise ValueError("Slot observado deve estar entre 1 e 5")
+        sample=self._capture_same_session(sha)
+        initial=self.before["snapshot"]
+        target=self.before["target_id"]
         self.after=sample
-        candidates=find_new_id_candidates(initial["chunks"],sample["chunks"],target)
+        self.refreshed=None
+        reference=self.prepared["snapshot"] if self.prepared else initial
+        candidates=find_new_id_candidates(reference["chunks"],sample["chunks"],target)
+        target_remaining=sample["hand_ids"].count(target)
+        target_initial=initial["hand_ids"].count(target)
         report={
-            "schema":1,"type":"DIAGNOSTICO_CAMPO_RAM",
+            "schema":2,"type":"DIAGNOSTICO_CAMPO_RAM",
             "status":"HIPOTESES — NENHUM SLOT DO CAMPO VALIDADO",
             "rom_sha256_selected_manually":sample["sha"],
             "emulator_iso_verified":False,"pid":sample["pid"],
             "reference_card_id":target,
             "before":self._public(initial),
+            "after_preparation":(self._public(self.prepared["snapshot"])
+                                 if self.prepared else None),
             "after_summon":self._public(sample),
+            "after_hand_refresh":None,
             "after_removal":None,
+            "observed_by_user":{
+                "face_state":face_state or (self.prepared or {}).get("face_state"),
+                "slot_position_1_to_5":user_slot,
+                "summon_set_visible":True,
+                "guardian_star_selected":True,
+                "interpretation":"DECLARADO PELO USUARIO, NAO DETECTADO PELA RAM",
+            },
+            "hand_state_at_set":{
+                "target_count_before":target_initial,
+                "target_count_when_set":target_remaining,
+                "target_still_visible_in_hand_ram":target_remaining>0,
+                "hand_ids_identical_to_before":sample["hand_ids"]==initial["hand_ids"],
+                "hand_refresh_not_required":True,
+                "does_not_prove_field":True,
+            },
             "scan":{"address_start":f"0x{SEARCH_START:08X}",
                     "size_bytes":SEARCH_SIZE,"chunk_size":CHUNK_SIZE,
                     "purpose":"janela exploratoria em torno da mao conhecida"},
             "analysis":candidates,
+            "phase_differences":{
+                "before_to_preparation":(
+                    summarize_phase_changes(initial["chunks"],self.prepared["snapshot"]["chunks"])
+                    if self.prepared else None),
+                "reference_to_set":summarize_phase_changes(reference["chunks"],sample["chunks"]),
+                "before_to_set":summarize_phase_changes(initial["chunks"],sample["chunks"]),
+                "set_to_hand_refresh":None,
+                "set_to_removed":None,
+            },
             "duel_field_card_ids":None,
             "duel_field_ram_verified":False,
             "fusion_catalog_changed":False,
             "notes":[
-                "A carta que saiu da mão não comprova que entrou no campo; evento informado pelo usuário.",
-                "Um ID de dois bytes pode ocorrer em estruturas não relacionadas a cartas.",
-                "Somente uma área de 96 KiB próxima à mão foi pesquisada; "
-                "sem candidatos não significa que o campo não possa ser mapeado.",
+                "A carta pode estar visível na mesa e simultaneamente permanecer no bloco RAM da mão até outro turno.",
+                "Captura NA MESA feita após FaceUp/FaceDown, Guardian Star e colocação no slot.",
+                "A presença do ID uint16 em memória não comprova a ocupação do campo.",
+                "Endereço 0xBFF510 pode ser buffer adjacente à mão, não slot da mesa.",
                 "Nenhum dump bruto da memória é incluído neste relatório.",
+                "Todas as fases são anotações visuais do usuário, não verificações automáticas.",
             ],
         }
         folder=self.home/"diagnosticos_campo"/sample["sha"]
@@ -192,6 +292,31 @@ class FieldMemoryProbe:
         self.file=file
         return report,file
 
+    def capture_hand_refresh(self, sha: str) -> tuple[dict,Path]:
+        """Opcional: após encerrar o turno e reabrir o controle da mão."""
+        if self.after is None or self.report is None:
+            raise RuntimeError("Capture NA MESA antes de atualizar a mão")
+        sample=self._capture_same_session(sha)
+        target=self.before["target_id"]
+        before_count=self.before["snapshot"]["hand_ids"].count(target)
+        refreshed_count=sample["hand_ids"].count(target)
+        self.refreshed=sample
+        report=dict(self.report)
+        report["after_hand_refresh"]=self._public(sample)
+        report["hand_refresh_analysis"]={
+            "target_count_before":before_count,
+            "target_count_after_refresh":refreshed_count,
+            "target_count_decreased":refreshed_count<before_count,
+            "is_field_presence_evidence":False,
+        }
+        phases=dict(report["phase_differences"])
+        phases["set_to_hand_refresh"]=summarize_phase_changes(
+            self.after["chunks"],sample["chunks"])
+        report["phase_differences"]=phases
+        self._save(self.file,report)
+        self.report=report
+        return report,self.file
+
     @staticmethod
     def _save(path,report):
         tmp=path.with_name(path.name+".tmp")
@@ -201,18 +326,21 @@ class FieldMemoryProbe:
     def capture_removed(self, sha: str) -> tuple[dict,Path]:
         if self.before is None or self.after is None or self.report is None:
             raise RuntimeError("Capture ANTES e DEPOIS da invocação antes de registrar a remoção")
-        sample=self._capture(sha)
+        sample=self._capture_same_session(sha)
         initial=self.before["snapshot"]
-        if sample["sha"]!=initial["sha"] or sample["pid"]!=initial["pid"]:
-            raise RuntimeError("ISO ou processo ePSXe mudou; não é possível comparar")
         target=self.before["target_id"]
         # O usuário confirmou visualmente a remoção; os bytes são evidência
         # experimental e não atestam que houve realmente a remoção.
         report=dict(self.report)
         report["after_removal"]=self._public(sample)
+        reference=self.prepared["snapshot"] if self.prepared else initial
         report["analysis"]=find_new_id_candidates(
-            initial["chunks"],self.after["chunks"],target,
+            reference["chunks"],self.after["chunks"],target,
             after_removed=sample["chunks"])
+        phases=dict(report["phase_differences"])
+        phases["set_to_removed"]=summarize_phase_changes(
+            self.after["chunks"],sample["chunks"])
+        report["phase_differences"]=phases
         report["notes"]=report["notes"]+[
             "A remoção foi informada visualmente pelo usuário; "
             "o desaparecimento do padrão em RAM ainda não valida o slot."
