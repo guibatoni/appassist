@@ -22,6 +22,7 @@ from ia_local import analyse_with_local_ai, save_suggestion, DEFAULT_MODEL
 from overlay_card_labels import CardLabelSync
 from fusion_ram_probe import FusionMemoryProbe
 from ram_temporal import TemporalRamRecorder, MAX_SECONDS, ALLOWED_MARKERS
+from field_ram_probe import FieldMemoryProbe
 
 VERIFIED_LABELS = {
     "verificado": "✓ Confirmado",
@@ -78,6 +79,10 @@ class BibliotecaMods(tk.Toplevel):
         self.on_activate = on_activate
         self.ram_probe=ram_probe
         self.temporal=TemporalRamRecorder(ram_probe) if ram_probe is not None else None
+        self.field_probe=(FieldMemoryProbe(ram_probe.reader_provider, self.catalog.home)
+                          if ram_probe is not None else None)
+        self.field_target_id=tk.StringVar(value="291")
+        self.field_status=tk.StringVar(value="Campo ainda não mapeado. Inicie com carta na mão e ausente da mesa.")
         self._temporal_after_id=None
         self.temporal_interval=tk.StringVar(value="250")
         self.temporal_duration=tk.StringVar(value="45")
@@ -302,6 +307,36 @@ class BibliotecaMods(tk.Toplevel):
             "separar sugestões envolvendo cartas da mesa das combinações da mão. "
             "NENHUMA carta da mesa é inventada por heurística."
         ),wraplength=940,justify="left").pack(anchor="w")
+        ttk.Separator(field_page,orient="horizontal").pack(fill="x",pady=12)
+        ttk.Label(field_page,text="Diagnóstico restrito — 3 estados de uma carta conhecida",
+                  font=("Segoe UI",10,"bold")).pack(anchor="w",pady=5)
+        ttk.Label(field_page,text=(
+            "Investiga somente 96 KiB próximos à memória conhecida da mão. "
+            "É uma região HIPOTÉTICA; se nenhum ID aparecer, a região pode ser inadequada. "
+            "Nenhum dump bruto de memória será exportado."
+        ),wraplength=940,justify="left").pack(anchor="w",pady=(0,8))
+        target_row=ttk.Frame(field_page)
+        target_row.pack(fill="x",pady=(0,7))
+        ttk.Label(target_row,text="ID da carta que será invocada:").pack(side="left")
+        ttk.Entry(target_row,textvariable=self.field_target_id,width=8).pack(side="left",padx=8)
+        ttk.Label(target_row,text="Ex.: #291 da captura anterior; precisa estar na mão AGORA.").pack(side="left")
+        controls=ttk.Frame(field_page)
+        controls.pack(fill="x",pady=(0,9))
+        ttk.Button(controls,text="1. Capturar ANTES",
+                   command=self.capture_field_before).pack(side="left",padx=(0,6))
+        ttk.Button(controls,text="2. Capturar INVOCADA",
+                   command=self.capture_field_after).pack(side="left",padx=6)
+        ttk.Button(controls,text="3. Capturar REMOVIDA (opcional)",
+                   command=self.capture_field_removed).pack(side="left",padx=6)
+        ttk.Label(field_page,textvariable=self.field_status,
+                  wraplength=960,justify="left").pack(fill="x",pady=(5,8))
+        ttk.Label(field_page,text=(
+            "Faça UMA invocação entre 1 e 2. Confirme visualmente que o monstro está "
+            "no seu campo na etapa 2; se puder, remova-o do campo para a etapa 3. "
+            "Apenas ocorrências candidatas são salvas em "
+            "%LOCALAPPDATA%\\ForbiddenMemoriesMultiMod\\diagnosticos_campo\\<SHA>. "
+            "Nada é automaticamente reconhecido ou aprovado."
+        ),wraplength=945,justify="left").pack(anchor="w")
         self.tabs.add(field_page,text="Campo de duelo")
 
 
@@ -438,6 +473,76 @@ class BibliotecaMods(tk.Toplevel):
             self.status.set("Comparação de RAM salva em: "+str(path))
         except Exception as exc:
             messagebox.showwarning("Diagnóstico RAM",str(exc),parent=self)
+
+    def _field_selected_sha(self):
+        entry=self._active_rom_for_ram()
+        if self.field_probe is None:
+            raise RuntimeError("Leitor de campo experimental indisponível")
+        return entry["sha256"]
+
+    def capture_field_before(self):
+        try:
+            sha=self._field_selected_sha()
+            typed=self.field_target_id.get().strip()
+            if not typed.isdecimal() or not 1<=int(typed)<=722:
+                raise ValueError("Informe um ID válido entre 1 e 722")
+            target=int(typed)
+            confirmed=messagebox.askyesno(
+                "Captura experimental do campo",
+                f"A carta #{target:03d} está na sua MÃO e AINDA NÃO está no campo?\\n\\n"
+                "A pesquisa cobre apenas uma região limitada próxima à mão; "
+                "nenhuma carta da mesa será considerada validada.",
+                parent=self)
+            if not confirmed:return
+            snap=self.field_probe.capture_before(sha,target)
+            self.field_status.set(
+                f"ANTES registrada: PID {snap['pid']}; carta #{target:03d} na mão. "
+                f"{snap['readable_chunks']} blocos legíveis; "
+                f"{len(snap['unreadable_chunks'])} indisponíveis. "
+                "Agora invoque a carta e clique Capturar INVOCADA.")
+        except Exception as exc:
+            messagebox.showwarning("Investigação do campo",str(exc),parent=self)
+
+    def capture_field_after(self):
+        try:
+            sha=self._field_selected_sha()
+            if not messagebox.askyesno(
+                "Confirmar invocação",
+                "Você já invocou a carta informada e consegue vê-la no SEU campo? "
+                "A captura apenas procura padrões de bytes, não confirma slots.",
+                parent=self):
+                return
+            report,path=self.field_probe.capture_after(sha)
+            analysis=report["analysis"]
+            self.field_status.set(
+                f"INVOCADA registrada: {analysis['candidate_count_total']} ocorrências novas "
+                f"do ID #{report['reference_card_id']:03d} fora da mão, "
+                f"{analysis['chunks_compared']} blocos comparados. "
+                f"Arquivo: {path}. Isso NÃO comprova cartas no campo. "
+                "Opcional: remova a carta e clique REMOVIDA.")
+            self.status.set("Hipóteses de campo salvas em: "+str(path))
+        except Exception as exc:
+            messagebox.showwarning("Investigação do campo",str(exc),parent=self)
+
+    def capture_field_removed(self):
+        try:
+            sha=self._field_selected_sha()
+            if not messagebox.askyesno(
+                "Confirmar remoção",
+                "A carta investigada NÃO está mais no SEU campo? "
+                "Registrar somente se ela realmente saiu da mesa.",
+                parent=self):
+                return
+            report,path=self.field_probe.capture_removed(sha)
+            candidates=report["analysis"]["candidates"]
+            cleared=sum(x["disappeared_after_removal"] is True for x in candidates)
+            self.field_status.set(
+                f"REMOVIDA registrada: {cleared}/{len(candidates)} ocorrências "
+                f"desapareceram após a remoção, entre os candidatos exportados. "
+                f"Arquivo atualizado: {path}. Nenhum slot foi validado.")
+            self.status.set("Hipóteses com remoção salvas em: "+str(path))
+        except Exception as exc:
+            messagebox.showwarning("Investigação do campo",str(exc),parent=self)
 
     def start_temporal(self):
         try:
