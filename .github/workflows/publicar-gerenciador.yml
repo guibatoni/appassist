@@ -91,7 +91,7 @@ jobs:
       - name: Publicar Release v0.3.3
         shell: pwsh
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release view v0.3.3 *> $null
           if ($LASTEXITCODE -eq 0) { Write-Host "Release existente"; exit 0 }
