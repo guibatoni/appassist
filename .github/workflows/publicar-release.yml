@@ -1,0 +1,96 @@
+name: Publicar patch oficial
+
+on:
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: "Versão sem v (ex.: 0.3.1)"
+        required: true
+        default: "0.3.1"
+        type: string
+      novidades:
+        description: "Resumo das alterações"
+        required: true
+        default: "Atualização do Assistente MultiMod"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-multimod
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validar versão e presença de código
+        shell: bash
+        env:
+          VERSAO: ${{ inputs.versao }}
+        run: |
+          [[ "$VERSAO" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Versão inválida"; exit 1; }
+          test -f launcher_core.py
+          test -f tools/criar_patch.py
+          test -f app/assistente_x15.py
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSAO" >/dev/null 2>&1; then
+            echo "A versão v$VERSAO já existe"; exit 1
+          fi
+
+      - name: Testes unitários e sintaxe
+        run: |
+          python -m unittest discover -s tests -v
+          python -m compileall -q launcher.py launcher_core.py tools app tests
+
+      - name: Criar patch de código (sem ISOs, artes nem saves)
+        shell: bash
+        env:
+          VERSAO: ${{ inputs.versao }}
+          NOVIDADES: ${{ inputs.novidades }}
+        run: |
+          mkdir -p baseline dist_patch
+          python tools/criar_patch.py \
+            --old-app baseline \
+            --new-app app \
+            --version "$VERSAO" \
+            --notes "$NOVIDADES" \
+            --output dist_patch
+
+      - name: Validar formato e hashes do patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          from launcher_core import validate_patch, sha256_file
+          patch = Path('dist_patch/patch.zip')
+          manifest = json.loads(Path('dist_patch/update-manifest.json').read_text(encoding='utf-8'))
+          inner = validate_patch(patch)
+          assert inner['version'] == manifest['version']
+          assert sha256_file(patch) == manifest['patch_sha256']
+          assert all(f['path'].startswith('app/') for f in inner['files'])
+          print('Pacote válido:', len(inner['files']), 'arquivos', manifest['version'])
+          PY
+
+      - name: Publicar GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSAO: ${{ inputs.versao }}
+          NOVIDADES: ${{ inputs.novidades }}
+        run: |
+          gh release create "v$VERSAO" \
+            dist_patch/patch.zip \
+            dist_patch/update-manifest.json \
+            --title "Forbidden Memories MultiMod v$VERSAO" \
+            --notes "$NOVIDADES" \
+            --target "$GITHUB_SHA" \
+            --latest
