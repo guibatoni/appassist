@@ -323,7 +323,7 @@ class ModCatalog:
                 if symmetric.get(key)!=c:
                     raise ValueError("Receita já registrada diverge do conjunto; revisão individual necessária")
                 if row.get("validation")=="observada_manualmente_no_jogo":
-                    verified_manually[(a,b,c)]=dict(row)
+                    verified_manually[(key,c)]=dict(row)
             previous_review=profile.get("fusion_review",{})
             if (previous_review.get("candidate_fingerprint")==fingerprint
                     and len(existing)==len(recipes)):
@@ -332,14 +332,24 @@ class ModCatalog:
 
             reviewed=[]
             for a,b,c in canonical:
-                record=verified_manually.get((a,b,c))
+                record=verified_manually.get(((min(a,b),max(a,b)),c))
                 if record is None:
                     record={"a":a,"b":b,"result":c,
                             "validation":"revisada_usuario_em_lote",
                             "fusion_candidate_fingerprint":fingerprint}
                 reviewed.append(record)
             updated=dict(profile)
-            updated["fusion_recipes"]=reviewed
+            # Evitar registrar duas vezes uma fusão com os mesmos materiais
+            # em ordens inversas; conservar o registro observado no jogo.
+            dedup={}
+            for row in reviewed:
+                k=(min(int(row["a"]),int(row["b"])),
+                   max(int(row["a"]),int(row["b"])))
+                prev=dedup.get(k)
+                if prev is None or (row.get("validation")=="observada_manualmente_no_jogo"
+                                    and prev.get("validation")!="observada_manualmente_no_jogo"):
+                    dedup[k]=row
+            updated["fusion_recipes"]=list(dedup.values())
             updated["supported_features"]=dict(profile.get("supported_features",{}),
                                                fusions=True)
             updated["verified"]=dict(profile.get("verified",{}),
