@@ -1,0 +1,1 @@
+MultiMod v0.4.5: monitor temporal limitado da RAM do ePSXe, 200–1000 ms e até 90 segundos; marcações manuais, CSV/JSON, diagnóstico experimental e motor de sugestões mão + campo bloqueado enquanto IDs e slots do campo não forem validados. Não confirma fusões automaticamente nem modifica ISOs, saves, RAM ou Memory Cards.
