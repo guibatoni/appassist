@@ -86,6 +86,7 @@ class BibliotecaMods(tk.Toplevel):
         self.card_query=tk.StringVar(value="")
         self.card_rows=[]
         self.fusion_rows=[]
+        self.fusion_names={}
         self.fusion_source_sha=None
         self.fusion_query=tk.StringVar(value="")
         self.fusion_count=tk.StringVar(value="Nenhuma candidata carregada")
@@ -179,7 +180,7 @@ class BibliotecaMods(tk.Toplevel):
         candidates_frame=ttk.Frame(self.tabs)
         toolbar=ttk.Frame(candidates_frame)
         toolbar.pack(fill="x",padx=4,pady=5)
-        ttk.Label(toolbar,text="Candidatas — buscar ID de material:").pack(side="left",padx=3)
+        ttk.Label(toolbar,text="Candidatas — ID ou nome:").pack(side="left",padx=3)
         ttk.Entry(toolbar,textvariable=self.fusion_query,width=13).pack(side="left",padx=3)
         self.fusion_query.trace_add("write",lambda *_:self.schedule_fusion_filter())
         ttk.Label(toolbar,textvariable=self.fusion_count).pack(side="left",padx=8)
@@ -190,8 +191,8 @@ class BibliotecaMods(tk.Toplevel):
         self.fusion_candidates_table=ttk.Treeview(
             area,columns=("a","b","result","evidencia"),show="headings",selectmode="browse")
         for name,label,width in (
-            ("a","Material A",95),("b","Material B",95),
-            ("result","Resultado",105),("evidencia","Estado",240)):
+            ("a","Material A",200),("b","Material B",200),
+            ("result","Resultado",200),("evidencia","Estado",200)):
             self.fusion_candidates_table.heading(name,text=label)
             self.fusion_candidates_table.column(name,width=width,anchor="w")
         self.fusion_candidates_table.pack(side="left",fill="both",expand=True)
@@ -253,6 +254,7 @@ class BibliotecaMods(tk.Toplevel):
         self.info.insert("1.0","\n".join(lines))
         self.info.configure(state="disabled")
         self.card_rows=sorted(model["cards"],key=lambda x: int(x.get("id") or 0))
+        self.fusion_names={int(c["id"]):str(c["name"]) for c in model["cards"]}
         self.render_card_rows()
         # Troca de mod NUNCA deve mostrar candidatas do perfil anterior.
         candidate_sha=e["sha256"] if e else None
@@ -315,14 +317,20 @@ class BibliotecaMods(tk.Toplevel):
                 num=int(q)
                 entries=[r for r in entries if num in (r.get("a"),r.get("b"),r.get("result"))]
             else:
-                entries=[]
+                q=q.casefold()
+                entries=[r for r in entries if any(
+                    q in self.fusion_names.get(int(r.get(k,0)),"").casefold()
+                    for k in ("a","b","result")
+                )]
         # Manter a interface responsiva em mods com milhares de receitas.
         # NUNCA ocultar o truncamento: mostrar a contagem completa.
         page=entries[:750]
-        evidence=self.fusion_report.get("status","NÃO VALIDADA") if getattr(self,"fusion_report",None) else ""
         for i,r in enumerate(page):
+            def label(k):
+                cid=int(r[k])
+                return f"#{cid:03d} {self.fusion_names.get(cid,'?')}"
             table.insert("","end",iid=str(i),values=(
-                r.get("a"),r.get("b"),r.get("result"),
+                label("a"),label("b"),label("result"),
                 "CANDIDATA — não validada"))
         self.fusion_display_rows=page
         self.fusion_count.set(
@@ -371,8 +379,8 @@ class BibliotecaMods(tk.Toplevel):
         recipe=self.fusion_display_rows[int(selection[0])]
         a,b,result=(int(recipe[k]) for k in ("a","b","result"))
         observed=simpledialog.askinteger("Verificar no jogo",
-            f"Fusão candidata: #{a} + #{b} = #{result}\\n"
-            "Execute a fusão na ISO correspondente no emulador.\\n"
+            f"Fusão candidata: #{a} + #{b} = #{result}\n"
+            "Execute a fusão na ISO correspondente no emulador.\n"
             "Digite o ID do resultado que você realmente viu no duelo "
             "(Cancelar não altera nada):",
             minvalue=1,maxvalue=722,parent=self)
@@ -384,7 +392,7 @@ class BibliotecaMods(tk.Toplevel):
                 "Resultado observado difere do candidato; nenhuma receita foi ativada.",
                 parent=self)
         if not messagebox.askyesno("Confirmar 1 fusão",
-            f"Você observou no jogo #{a} + #{b} = #{result}?\\n"
+            f"Você observou no jogo #{a} + #{b} = #{result}?\n"
             "Essa confirmação habilitará SOMENTE ESTA receita no overlay, "
             "nunca o banco inteiro.",parent=self):
             return
@@ -601,6 +609,10 @@ class BibliotecaMods(tk.Toplevel):
                         f"{evt['file']}: {evt['report']['candidate_count']} candidatas, "+
                         f"{evt['report']['matching_banks']} bancos coincidentes. "
                         "Nenhuma foi ativada automaticamente.")
+                    if self.auto_ai.get() and evt["report"]["candidate_count"]>0:
+                        entry=next((x for x in self.catalog.list()
+                                    if x.get("sha256")==evt["sha256"]),None)
+                        if entry:self._launch_local_ai(entry)
                 elif k=="fim_busca_fusoes":
                     self._fusion_busy=False
                 elif k=="investigacao":
