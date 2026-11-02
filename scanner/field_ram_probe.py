@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fusion_ram_probe import decode_hand, FusionMemoryProbe
+from field_occupancy_probe import analyze_occupancy
 
 HAND_ADDR = 0xBFF484
 HAND_SIZE = 140
@@ -173,6 +174,9 @@ class FieldMemoryProbe:
         self.prepared=None
         self.after=None
         self.refreshed=None
+        self.occupied_control=None
+        self.removed_sample=None
+        self.vacant_control=None
         self.report=None
         self.file=None
 
@@ -223,6 +227,9 @@ class FieldMemoryProbe:
         self.prepared=None
         self.after=None
         self.refreshed=None
+        self.occupied_control=None
+        self.removed_sample=None
+        self.vacant_control=None
         self.report=None
         self.file=None
         return self._public(sample)
@@ -275,6 +282,9 @@ class FieldMemoryProbe:
         target=self.before["target_id"]
         self.after=sample
         self.refreshed=None
+        self.occupied_control=None
+        self.removed_sample=None
+        self.vacant_control=None
         reference=self.prepared["snapshot"] if self.prepared else initial
         candidates=find_new_id_candidates(reference["chunks"],sample["chunks"],target)
         target_remaining=sample["hand_ids"].count(target)
@@ -291,6 +301,14 @@ class FieldMemoryProbe:
             "after_summon":self._public(sample),
             "after_hand_refresh":None,
             "after_removal":None,
+            "after_occupied_control":None,
+            "after_vacant_control":None,
+            "occupancy_analysis":{
+                "status":"AGUARDANDO_REMOCAO",
+                "field_slot_verified":False,
+                "occupancy_verified":False,
+                "candidates":[],
+            },
             "hypothetical_slot_probe":{
                 "status":"PADRAO DE 28 BYTES NAO VALIDADO COMO CAMPO",
                 "hypothesis":"0xBFF510 + (slot - 1) * 28",
@@ -387,6 +405,59 @@ class FieldMemoryProbe:
         self.report=report
         return report,self.file
 
+    def _occupancy_analysis(self) -> dict:
+        """Cruza snapshots para gerar HIPÓTESES, nunca autoriza leitura do campo."""
+        if self.before is None or self.after is None or self.report is None:
+            raise RuntimeError("Capture ANTES e NA MESA antes de analisar ocupação")
+        observed_slot=self.report["observed_by_user"]["slot_position_1_to_5"]
+        if observed_slot is None:
+            # API antiga permitia capturar sem slot; não inventar posição.
+            return {
+                "status":"SEM_SLOT_DECLARADO",
+                "field_slot_verified":False,
+                "occupancy_verified":False,
+                "candidates":[],
+            }
+        return analyze_occupancy(
+            self.before["snapshot"]["chunks"],
+            self.after["chunks"],
+            self.removed_sample["chunks"] if self.removed_sample else None,
+            observed_slot=observed_slot,
+            prepared=self.prepared["snapshot"]["chunks"] if self.prepared else None,
+            occupied_control=(
+                self.occupied_control["chunks"] if self.occupied_control else None),
+            vacant_control=(
+                self.vacant_control["chunks"] if self.vacant_control else None),
+        )
+
+    def capture_occupied_control(self, sha: str) -> tuple[dict, Path]:
+        """Captura controle em que o MESMO monstro segue presente na mesa."""
+        if self.after is None or self.report is None:
+            raise RuntimeError("Capture NA MESA antes do controle OCUPADA")
+        if self.removed_sample is not None:
+            raise RuntimeError("A fase REMOVIDA já foi registrada; inicie novo teste")
+        sample=self._capture_same_session(sha)
+        self.occupied_control=sample
+        report=dict(self.report)
+        report["after_occupied_control"]=self._public(sample)
+        report["occupancy_analysis"]=self._occupancy_analysis()
+        self._save(self.file,report)
+        self.report=report
+        return report,self.file
+
+    def capture_vacant_control(self, sha: str) -> tuple[dict, Path]:
+        """Captura controle após REMOVIDA, com o mesmo slot ainda vazio."""
+        if self.removed_sample is None or self.report is None:
+            raise RuntimeError("Capture REMOVIDA antes de confirmar VAZIA ESTÁVEL")
+        sample=self._capture_same_session(sha)
+        self.vacant_control=sample
+        report=dict(self.report)
+        report["after_vacant_control"]=self._public(sample)
+        report["occupancy_analysis"]=self._occupancy_analysis()
+        self._save(self.file,report)
+        self.report=report
+        return report,self.file
+
     @staticmethod
     def _save(path,report):
         tmp=path.with_name(path.name+".tmp")
@@ -395,8 +466,11 @@ class FieldMemoryProbe:
 
     def capture_removed(self, sha: str) -> tuple[dict,Path]:
         if self.before is None or self.after is None or self.report is None:
-            raise RuntimeError("Capture ANTES e DEPOIS da invocação antes de registrar a remoção")
+            raise RuntimeError("Capture ANTES e NA MESA antes de registrar a remoção")
+        if self.removed_sample is not None:
+            raise RuntimeError("REMOVIDA já registrada; use VAZIA ESTÁVEL ou inicie novo teste")
         sample=self._capture_same_session(sha)
+        self.removed_sample=sample
         initial=self.before["snapshot"]
         target=self.before["target_id"]
         # O usuário confirmou visualmente a remoção; os bytes são evidência
@@ -414,6 +488,7 @@ class FieldMemoryProbe:
         phases["set_to_removed"]=summarize_phase_changes(
             self.after["chunks"],sample["chunks"])
         report["phase_differences"]=phases
+        report["occupancy_analysis"]=self._occupancy_analysis()
         report["notes"]=report["notes"]+[
             "A remoção foi informada visualmente pelo usuário; "
             "o desaparecimento do padrão em RAM ainda não valida o slot."
