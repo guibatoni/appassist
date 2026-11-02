@@ -1,0 +1,1 @@
+Release v0.3.9: corrigir exibição dos nomes no CompactPanel ao ativar perfil da Biblioteca, atualizar referências de cartas in-place e observar mudanças persistidas.
