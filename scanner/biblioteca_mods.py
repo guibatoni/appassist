@@ -395,16 +395,20 @@ class BibliotecaMods(tk.Toplevel):
         try:
             self.catalog.activate(e["sha256"],acknowledge_uncertainty=True)
             snapshot=overlay_snapshot(self.catalog)
-            if self.on_activate:
-                self.on_activate(snapshot)
+            visual_result=self.on_activate(snapshot) if self.on_activate else {}
         except Exception as exc:
             return messagebox.showerror("Ativação não concluída",str(exc),parent=self)
         self.refresh()
         self.status.set("Perfil confirmado: "+e["file_name"])
         has_cards=len(snapshot.get("cards",{}))
+        updated=(visual_result or {}).get("visual_labels_changed")
+        visual_status=(f"Rótulos atualizados no momento: {updated}.\n"
+                       if isinstance(updated,int) else
+                       "A atualização visual depende do painel do Assistente.\n")
         messagebox.showinfo("Perfil ativado",
             "Perfil confirmado:\n"+e["file_name"]+"\n\n"+
             f"{has_cards} cartas disponíveis no catálogo para leitura da mão.\n"+
+            visual_status+
             "A identificação automática da ISO ativa no ePSXe ainda não é garantida.\n"+
             "Ranqueamento e fusões não verificados permanecem desativados.",parent=self)
 
@@ -493,6 +497,7 @@ def ligar_ao_overlay(root, app=None, compact=None):
     def apply_snapshot(snapshot):
         summary=apply_overlay_profile(snapshot,app=app,compact=compact)
         renderer.use_snapshot(snapshot)
+        summary["visual_labels_changed"]=renderer.last_changed
         if summary.get("applied"):
             print("MultiMod: perfil carregado no overlay — "+
                   str(summary.get("profile_name",""))+
