@@ -55,7 +55,7 @@ class OccupancyProbeTests(unittest.TestCase):
         self.reader=ReadOnlyFake()
         self.sha="a"*64
         self.probe=FieldMemoryProbe(lambda:self.reader,self.home)
-        self.addr=0xBFF505
+        self.addr=0xBFF514
         self.volatile=0xBFF550
         self.selection_id=0xBFF510
 
