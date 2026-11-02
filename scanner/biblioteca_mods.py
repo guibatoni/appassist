@@ -508,6 +508,44 @@ def ligar_ao_overlay(root, app=None, compact=None):
     observer.start()
     renderer.start()
 
+    # assistente_x15.App.__init__ agenda initialize_profile após criar o
+    # hook (root.after(100)). Essa rotina pode substituir de novo self.cards
+    # por um perfil "unknown", mesmo com a Biblioteca já ativada. A cada
+    # 1,8 s verifique SOMENTE se o catálogo ativo sofreu esse sobrescrito;
+    # reaplique quando necessário. Não reinicie a mão todo ciclo.
+    def ensure_profile_current():
+        try:
+            if not root.winfo_exists():
+                return
+            current_snapshot=overlay_snapshot()
+            if current_snapshot.get("ready") and current_snapshot.get("features",{}).get("nomes_cartas"):
+                expected=current_snapshot.get("cards",{})
+                # Comparar também nomes, não apenas quantidade (mods podem
+                # conter as mesmas 722 IDs com nomes diferentes).
+                sample_keys=tuple(sorted(expected)[:3])+tuple(sorted(expected)[-3:])
+                def catalog_drift(holder):
+                    if holder is None:
+                        return False
+                    actual=getattr(holder,"cards",None)
+                    if not isinstance(actual,dict):
+                        return True
+                    if len(actual)!=len(expected):
+                        return True
+                    return any(actual.get(cid)!=expected[cid] for cid in sample_keys)
+                if catalog_drift(app) or catalog_drift(compact):
+                    print("MultiMod: catálogo do overlay alterado pelo perfil legado; restaurando perfil aprovado.",flush=True)
+                    apply_snapshot(current_snapshot)
+        except Exception as exc:
+            print("MultiMod: não foi possível verificar o catálogo ativo:",str(exc),flush=True)
+        finally:
+            try:
+                if root.winfo_exists():
+                    root.after(1800,ensure_profile_current)
+            except Exception:
+                pass
+
+    root.after(400,ensure_profile_current)
+
     current={"window":None}
     def show(_event=None):
         existing=current["window"]
