@@ -21,6 +21,7 @@ from extrator_fusoes import analyze_fusion_banks, save_fusion_report
 from ia_local import analyse_with_local_ai, save_suggestion, DEFAULT_MODEL
 from overlay_card_labels import CardLabelSync
 from fusion_ram_probe import FusionMemoryProbe
+from ram_temporal import TemporalRamRecorder, MAX_SECONDS, ALLOWED_MARKERS
 
 VERIFIED_LABELS = {
     "verificado": "✓ Confirmado",
@@ -76,6 +77,11 @@ class BibliotecaMods(tk.Toplevel):
         self.catalog = catalog or ModCatalog()
         self.on_activate = on_activate
         self.ram_probe=ram_probe
+        self.temporal=TemporalRamRecorder(ram_probe) if ram_probe is not None else None
+        self._temporal_after_id=None
+        self.temporal_interval=tk.StringVar(value="250")
+        self.temporal_duration=tk.StringVar(value="45")
+        self.temporal_status=tk.StringVar(value="Monitor inativo; cartas na mesa ainda não mapeadas.")
         self.ram_result_id=tk.StringVar(value="")
         self.ram_diag_status=tk.StringVar(value="Sem capturas. Selecione o perfil ativo no ePSXe.")
         self.events = queue.Queue()
@@ -234,6 +240,71 @@ class BibliotecaMods(tk.Toplevel):
         ),wraplength=990,justify="left").pack(anchor="w",pady=(0,8))
         self.tabs.add(diag,text="Diagnóstico RAM")
 
+        temporal_page=ttk.Frame(self.tabs,padding=12)
+        ttk.Label(temporal_page,text="Monitor temporal — RAM do ePSXe (somente leitura)",
+                  font=("Segoe UI",11,"bold")).pack(anchor="w",pady=5)
+        ttk.Label(temporal_page,
+                  text="Grava até 90 segundos em 4 regiões pequenas. Marca ações apenas "
+                       "por anotação manual; NÃO identifica fusões ou cartas da mesa automaticamente.",
+                  wraplength=970,justify="left").pack(anchor="w",pady=(0,12))
+        settings=ttk.Frame(temporal_page)
+        settings.pack(fill="x",pady=6)
+        ttk.Label(settings,text="Intervalo (ms):").pack(side="left")
+        ttk.Combobox(settings,values=("200","250","500","1000"),
+                     textvariable=self.temporal_interval,state="readonly",
+                     width=7).pack(side="left",padx=(5,18))
+        ttk.Label(settings,text="Duração máxima (s):").pack(side="left")
+        ttk.Combobox(settings,values=("15","30","45","60","90"),
+                     textvariable=self.temporal_duration,state="readonly",
+                     width=7).pack(side="left",padx=5)
+        controls=ttk.Frame(temporal_page)
+        controls.pack(fill="x",pady=12)
+        ttk.Button(controls,text="Iniciar gravação",command=self.start_temporal).pack(side="left",padx=4)
+        ttk.Button(controls,text="Parar e exportar JSON/CSV",
+                   command=self.stop_temporal).pack(side="left",padx=4)
+        ttk.Label(temporal_page,text="Marque a ação após executá-la no jogo. "
+                  "O horário do clique NÃO é o instante exato do evento.",
+                  wraplength=970,justify="left").pack(anchor="w",pady=(3,8))
+        marks=ttk.Frame(temporal_page)
+        marks.pack(fill="x",pady=5)
+        for marker,caption in (("fusao","Fusão"),("invocacao","Invocação"),
+                               ("ataque","Ataque"),("cancelamento","Cancelamento"),
+                               ("controle","Controle")):
+            ttk.Button(marks,text="Marcar "+caption,
+                       command=lambda m=marker:self.mark_temporal(m)
+                       ).pack(side="left",padx=3)
+        ttk.Label(temporal_page,textvariable=self.temporal_status,
+                  wraplength=980,justify="left").pack(fill="x",pady=14)
+        ttk.Label(temporal_page,text="Os arquivos são salvos em "
+                  "%LOCALAPPDATA%\\ForbiddenMemoriesMultiMod\\diagnosticos_temporais\\<SHA>. "
+                  "Use uma gravação por ação e envie o JSON para investigação.",
+                  wraplength=980,justify="left").pack(anchor="w")
+        self.tabs.add(temporal_page,text="Monitor temporal")
+
+        field_page=ttk.Frame(self.tabs,padding=12)
+        ttk.Label(field_page,text="Cartas no campo — investigação em preparação",
+                  font=("Segoe UI",11,"bold")).pack(anchor="w",pady=5)
+        ttk.Label(field_page,text=(
+            "Hoje validamos apenas os cinco IDs da mão em 0xBFF484. "
+            "Nenhum endereço de cartas no campo (monstros/magias, aliados/adversário) "
+            "foi comprovado para esta ISO. A leitura do campo permanece DESATIVADA."
+        ),wraplength=940,justify="left").pack(anchor="w",pady=(0,12))
+        ttk.Label(field_page,text=(
+            "Próximo procedimento: gravar uma sessão com o campo vazio, marcar "
+            "uma invocação, gravar o mesmo monstro no campo e, depois, "
+            "marcar sua remoção. Repetir com cartas diferentes e controles sem "
+            "alteração. Procuraremos IDs, posições, lado do jogador e estabilidade "
+            "dos endereços antes de sugerir fusões mão + campo."
+        ),wraplength=940,justify="left").pack(anchor="w",pady=(0,12))
+        ttk.Label(field_page,text=(
+            "Critério futuro: identificar ID e posição de forma independente, "
+            "conferir o perfil da ISO, usar somente receitas aprovadas e "
+            "separar sugestões envolvendo cartas da mesa das combinações da mão. "
+            "NENHUMA carta da mesa é inventada por heurística."
+        ),wraplength=940,justify="left").pack(anchor="w")
+        self.tabs.add(field_page,text="Campo de duelo")
+
+
 
         ttk.Label(main, textvariable=self.status, wraplength=1020).pack(fill="x", pady=(8,0))
         ttk.Progressbar(main, variable=self.progress_var, maximum=100,
@@ -367,6 +438,80 @@ class BibliotecaMods(tk.Toplevel):
             self.status.set("Comparação de RAM salva em: "+str(path))
         except Exception as exc:
             messagebox.showwarning("Diagnóstico RAM",str(exc),parent=self)
+
+    def start_temporal(self):
+        try:
+            entry=self._active_rom_for_ram()
+            if self.temporal is None:
+                raise RuntimeError("Monitor temporal indisponível neste modo")
+            initial=self.temporal.start(
+                entry["sha256"],interval_ms=int(self.temporal_interval.get()),
+                duration_seconds=int(self.temporal_duration.get()))
+            self.temporal_status.set(
+                f"Gravando. PID {initial['pid']}; 1 amostra. "
+                "Realize UMA ação no ePSXe, volte e marque o tipo de ação. "
+                "Depois clique Parar e exportar.")
+            self._temporal_schedule()
+        except Exception as exc:
+            messagebox.showwarning("Monitor temporal",str(exc),parent=self)
+
+    def _temporal_schedule(self):
+        if self.temporal is not None and self.temporal.active and self.winfo_exists():
+            self._temporal_after_id=self.after(
+                self.temporal.interval_ms,self._temporal_tick)
+
+    def _temporal_tick(self):
+        self._temporal_after_id=None
+        if self.temporal is None or not self.temporal.active:
+            return
+        try:
+            state=self.temporal.sample()
+            self.temporal_status.set(
+                f"Gravando: {state['samples']} amostras · "
+                f"{state['elapsed_ms']/1000:.1f}s · "
+                f"{len(self.temporal.markers)} marcações. "
+                "O monitor não confirma fusões nem identifica cartas da mesa.")
+            if state["finished_by_duration"] or state["finished_by_limit"]:
+                self.stop_temporal(
+                    reason="duracao" if state["finished_by_duration"] else "limite")
+            else:
+                self._temporal_schedule()
+        except Exception as exc:
+            self.stop_temporal(reason="erro",detail=str(exc))
+
+    def mark_temporal(self, label):
+        try:
+            if self.temporal is None:
+                raise RuntimeError("Monitor não está integrado ao Assistente")
+            marker=self.temporal.mark(label)
+            self.temporal_status.set(
+                f"Marcador '{marker['caption']}' adicionado em "
+                f"{marker['elapsed_ms']/1000:.1f}s (clique do usuário). "
+                f"Amostras: {len(self.temporal.samples)}.")
+        except Exception as exc:
+            messagebox.showwarning("Monitor temporal",str(exc),parent=self)
+
+    def stop_temporal(self, reason="manual", detail=""):
+        if self._temporal_after_id is not None:
+            try:self.after_cancel(self._temporal_after_id)
+            except tk.TclError:pass
+            self._temporal_after_id=None
+        if self.temporal is None or not self.temporal.active:
+            if reason=="manual":
+                messagebox.showinfo("Monitor temporal",
+                                    "Nenhuma gravação em andamento.",parent=self)
+            return
+        try:
+            report,json_path,csv_path=self.temporal.stop(reason=reason)
+            self.temporal_status.set(
+                f"Gravação finalizada ({reason}): {report['sample_count']} amostras, "
+                f"{len(report['markers'])} marcações. "
+                f"JSON: {json_path} | CSV: {csv_path}. "
+                "Nenhuma fusão confirmada automaticamente."
+                +(f" Erro durante leitura: {detail}" if detail else ""))
+            self.status.set("Relatórios temporais exportados para: "+str(json_path.parent))
+        except Exception as exc:
+            messagebox.showerror("Monitor temporal","Falha na exportação: "+str(exc),parent=self)
 
     def load_fusion_candidates(self):
         entry=self.selected()
@@ -809,6 +954,13 @@ class BibliotecaMods(tk.Toplevel):
         self._after_id=self.after(300,self._poll)
 
     def close(self):
+        # Encerrar a aquisição antes de destruir widgets; salvar diagnóstico parcial.
+        if self.temporal is not None and self.temporal.active:
+            self.stop_temporal(reason="fechar_janela")
+        if self._temporal_after_id is not None:
+            try:self.after_cancel(self._temporal_after_id)
+            except tk.TclError:pass
+            self._temporal_after_id=None
         if self._after_id is not None:
             self.after_cancel(self._after_id)
         if self._card_filter_after is not None:
