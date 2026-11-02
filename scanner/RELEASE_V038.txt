@@ -1,0 +1,1 @@
+MultiMod v0.3.8 — biblioteca de mods sem corte de 180 cards; 722 cartas completas por perfil, busca por ID/nome, contador, drops não truncados.
