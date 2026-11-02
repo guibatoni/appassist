@@ -1,0 +1,1 @@
+Release v0.4.0 — sincronizar nomes de cartas em widgets Label/Canvas do overlay legado com perfil ativado, atualizando rótulos recriados, revertendo na troca de mod.
