@@ -105,7 +105,7 @@ class ModCatalog:
             return None
         return profile
 
-    def analyse(self, path: Path, with_art: bool = False) -> dict:
+    def analyse(self, path: Path, with_art: bool = False, progress=None) -> dict:
         path = Path(path).resolve(strict=True)
         if not path.is_file() or path.suffix.lower() not in EXTENSIONS:
             raise ValueError("Selecione uma imagem .bin ou .iso")
@@ -117,7 +117,7 @@ class ModCatalog:
             if not with_art or (self.profile_for(old) or {}).get("supported_features", {}).get("art"):
                 return dict(old)
 
-        profile, profile_path = import_rom(path, self.home, art=with_art)
+        profile, profile_path = import_rom(path, self.home, art=with_art, progress=progress)
         after = path.stat()
         if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
             raise RuntimeError("Arquivo alterado durante a leitura; análise descartada")
@@ -243,7 +243,11 @@ class DirectoryMonitor:
                 return
             try:
                 self._emit("analisando", file=path.name)
-                entry = self.catalog.analyse(path)
+                def on_progress(stage, done, total):
+                    percent=round(done*100/total) if total else None
+                    self._emit("progresso", file=path.name, stage=stage, done=done,
+                               total=total, percent=percent)
+                entry = self.catalog.analyse(path, progress=on_progress)
                 self._emit("concluido", file=path.name, level=entry["level"], sha256=entry["sha256"])
             except Exception as exc:
                 self._emit("erro", file=path.name, message=str(exc))
