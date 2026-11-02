@@ -332,24 +332,16 @@ class ModCatalog:
 
             reviewed=[]
             for a,b,c in canonical:
-                record=verified_manually.get(((min(a,b),max(a,b)),c))
-                if record is None:
-                    record={"a":a,"b":b,"result":c,
-                            "validation":"revisada_usuario_em_lote",
-                            "fusion_candidate_fingerprint":fingerprint}
+                observation=verified_manually.get(((min(a,b),max(a,b)),c))
+                record={"a":a,"b":b,"result":c,
+                        "validation":("observada_manualmente_no_jogo" if observation
+                                      else "revisada_usuario_em_lote"),
+                        "fusion_candidate_fingerprint":fingerprint}
                 reviewed.append(record)
             updated=dict(profile)
-            # Evitar registrar duas vezes uma fusão com os mesmos materiais
-            # em ordens inversas; conservar o registro observado no jogo.
-            dedup={}
-            for row in reviewed:
-                k=(min(int(row["a"]),int(row["b"])),
-                   max(int(row["a"]),int(row["b"])))
-                prev=dedup.get(k)
-                if prev is None or (row.get("validation")=="observada_manualmente_no_jogo"
-                                    and prev.get("validation")!="observada_manualmente_no_jogo"):
-                    dedup[k]=row
-            updated["fusion_recipes"]=list(dedup.values())
+            # Manter a lista EXATAMENTE igual ao banco assinado, incluindo
+            # direções distintas, para preservar a assinatura e idempotência.
+            updated["fusion_recipes"]=reviewed
             updated["supported_features"]=dict(profile.get("supported_features",{}),
                                                fusions=True)
             updated["verified"]=dict(profile.get("verified",{}),
