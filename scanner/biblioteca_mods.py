@@ -556,9 +556,16 @@ class BibliotecaMods(tk.Toplevel):
                 user_slot=int(self.field_slot.get()))
             analysis=report["analysis"]
             still=report["hand_state_at_set"]["target_still_visible_in_hand_ram"]
+            # Leitura de uint16 apenas; nao confundir com card ID do slot real.
+            observed=report["observed_by_user"]["slot_position_1_to_5"]
+            raw=report["hypothetical_slot_probe"]["set"][observed-1]
+            suspect=(f"Candidato {raw['address']} = {raw['u16_le']} (NÃO validado). "
+                     if raw["u16_le"] is not None
+                     else "Candidato indisponível nesta captura. ")
             self.field_status.set(
                 f"NA MESA registrada: {analysis['candidate_count_total']} ocorrências "
                 f"novas do ID #{report['reference_card_id']:03d}. "
+                +suspect+
                 f"ID continua na RAM da mão: {'SIM (esperado neste estágio)' if still else 'NÃO'}. "
                 f"Arquivo: {path}. "
                 "Opcional: capture MÃO ATUALIZADA após o turno, depois REMOVIDA.")
