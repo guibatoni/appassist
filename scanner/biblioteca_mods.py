@@ -26,6 +26,7 @@ VERIFIED_LABELS = {
     "extraídas": "✓ Extraído",
     "não_extraídas": "— Não extraído",
     "não_identificado": "? Significado desconhecido",
+    "revisadas_usuario_lote": "✓ Revisadas pelo usuário (não testadas individualmente)",
     "pendente": "— Pendente",
 }
 TABLE_COLUMNS = ("arquivo", "status", "cartas", "drops", "fusoes")
@@ -184,6 +185,8 @@ class BibliotecaMods(tk.Toplevel):
         ttk.Entry(toolbar,textvariable=self.fusion_query,width=13).pack(side="left",padx=3)
         self.fusion_query.trace_add("write",lambda *_:self.schedule_fusion_filter())
         ttk.Label(toolbar,textvariable=self.fusion_count).pack(side="left",padx=8)
+        ttk.Button(toolbar,text="Aprovar lote revisado",
+                   command=self.approve_fusion_batch).pack(side="right",padx=3)
         ttk.Button(toolbar,text="Confirmar receita observada no jogo",
                    command=self.confirm_selected_fusion).pack(side="right",padx=3)
         area=ttk.Frame(candidates_frame)
@@ -296,9 +299,16 @@ class BibliotecaMods(tk.Toplevel):
         if not entry or report.get("rom_sha256")!=entry["sha256"]:
             self.fusion_rows=[]
             self.fusion_report={}
+            self.fusion_review_status=None
         else:
             self.fusion_rows=list(report.get("candidates",[]))
             self.fusion_report=report
+            profile=self.catalog.profile_for(entry) or {}
+            review=profile.get("fusion_review",{})
+            self.fusion_review_status=(
+                review.get("status") if review.get("candidate_fingerprint")==
+                report.get("candidate_fingerprint") else None
+            )
         self.render_fusion_candidates()
 
     def schedule_fusion_filter(self):
@@ -325,13 +335,15 @@ class BibliotecaMods(tk.Toplevel):
         # Manter a interface responsiva em mods com milhares de receitas.
         # NUNCA ocultar o truncamento: mostrar a contagem completa.
         page=entries[:750]
+        review_label=("REVISADA PELO USUÁRIO · não testada individualmente"
+                      if self.fusion_review_status else
+                      "CANDIDATA — não validada")
         for i,r in enumerate(page):
             def label(k):
                 cid=int(r[k])
                 return f"#{cid:03d} {self.fusion_names.get(cid,'?')}"
             table.insert("","end",iid=str(i),values=(
-                label("a"),label("b"),label("result"),
-                "CANDIDATA — não validada"))
+                label("a"),label("b"),label("result"),review_label))
         self.fusion_display_rows=page
         self.fusion_count.set(
             f"Mostrando {len(page)} de {len(entries)} candidatas; "
@@ -405,6 +417,59 @@ class BibliotecaMods(tk.Toplevel):
         messagebox.showinfo("Receita confirmada",
             "Receita validada pelo usuário e vinculada ao SHA da ISO. "
             "As demais candidatas continuam indisponíveis.",parent=self)
+
+    def approve_fusion_batch(self):
+        """Confirma em duas etapas antes de expor receitas ao overlay."""
+        entry=self.selected()
+        if not entry or entry.get("sha256")!=self.fusion_source_sha:
+            return messagebox.showwarning("Fusões","Selecione o mod correto.",parent=self)
+        report=getattr(self,"fusion_report",{})
+        count=len(getattr(self,"fusion_rows",[]))
+        fingerprint=report.get("candidate_fingerprint")
+        if count<50 or not fingerprint:
+            return messagebox.showwarning("Sem receitas revisáveis",
+                "Execute Buscar fusões na ISO e confira as candidatas primeiro.",
+                parent=self)
+        if not messagebox.askyesno("Aprovação de catálogo completo",
+            "ISO: "+entry.get("file_name","")+"\n"+
+            f"Fusões candidatas: {count}\n"+
+            f"Bancos coincidentes: {report.get('matching_banks',0)}/7\n"+
+            "SHA-256 da ISO: "+entry["sha256"]+"\n\n"+
+            "Você declarou ter revisado a lista. Este procedimento permite "
+            "usar TODAS essas receitas no overlay, mas NÃO prova que cada "
+            "uma foi reproduzida no ePSXe.\n\n"
+            "Deseja continuar? Nenhuma ROM ou save será alterado.",
+            parent=self):
+            return
+        typed=simpledialog.askstring("Confirmação explícita",
+            "Para ativar o catálogo revisado, digite exatamente:\n"
+            "CATALOGO REVISADO\n\n"
+            "Essa ação aprova as candidatas para uso no overlay, "
+            "sem marcá-las como verificadas individualmente no jogo.",
+            parent=self)
+        if typed!="CATALOGO REVISADO":
+            self.status.set("Aprovação cancelada: expressão de confirmação incorreta.")
+            return
+        try:
+            result=self.catalog.review_fusion_batch(
+                entry["sha256"],expected_fingerprint=fingerprint,
+                acknowledgement=typed)
+            self.refresh()
+            # Atualiza imediatamente o overlay somente se o perfil está
+            # efetivamente ativo; o observador também vê o registro atualizado.
+            current=self.catalog.current()
+            if current and current.get("sha256")==entry["sha256"] and self.on_activate:
+                self.on_activate(overlay_snapshot(self.catalog))
+        except Exception as exc:
+            return messagebox.showerror("Lote não aprovado",str(exc),parent=self)
+        total=result["count"]
+        self.status.set(f"{total} fusões revisadas do mod "+entry["file_name"]+
+                        " disponíveis no overlay. Não verificadas individualmente.")
+        messagebox.showinfo("Catálogo revisado",
+            f"{total} receitas vinculadas somente a esta ISO.\n"
+            "Status: revisadas pelo usuário; não testadas individualmente.\n"
+            "As ISOs, saves e Memory Cards não foram alterados.\n"
+            "Abra o overlay e confira as rotas da mão detectada.",parent=self)
 
     def _monitor(self, folder=None):
         if self.monitor:
