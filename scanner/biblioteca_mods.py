@@ -13,6 +13,8 @@ from tkinter import filedialog, messagebox, ttk
 
 from auto_mods import DirectoryMonitor, ModCatalog, atomic_json, load_json
 from integracao_overlay import overlay_snapshot
+from integracao_overlay import OverlayProfileObserver
+from overlay_profile_bridge import apply_overlay_profile
 from investigador_iso import investigate
 from ia_local import analyse_with_local_ai, save_suggestion, DEFAULT_MODEL
 
@@ -398,10 +400,12 @@ class BibliotecaMods(tk.Toplevel):
             return messagebox.showerror("Ativação não concluída",str(exc),parent=self)
         self.refresh()
         self.status.set("Perfil confirmado: "+e["file_name"])
+        has_cards=len(snapshot.get("cards",{}))
         messagebox.showinfo("Perfil ativado",
-            "Perfil salvo e notificação enviada ao overlay.\n"
-            "Recursos ainda desconhecidos permanecem indisponíveis.\n"
-            "Se seu overlay antigo não suportar recarga, reinicie-o.",parent=self)
+            "Perfil confirmado:\n"+e["file_name"]+"\n\n"+
+            f"{has_cards} cartas disponíveis no catálogo para leitura da mão.\n"+
+            "A identificação automática da ISO ativa no ePSXe ainda não é garantida.\n"+
+            "Ranqueamento e fusões não verificados permanecem desativados.",parent=self)
 
     def _poll(self):
         try:
@@ -470,41 +474,17 @@ def ligar_ao_overlay(root, app=None, compact=None):
     from tkinter import Misc
 
     def apply_snapshot(snapshot):
-        if not snapshot.get("ready"):
-            return
-        features=snapshot.get("features",{})
-        cards=snapshot["cards"] if features.get("nomes_cartas") else {}
-        recipes=snapshot["recipes"] if features.get("fusoes") else []
-        # Atualiza objetos de domínio sem falsear catálogos não reconhecidos.
-        if app is not None:
-            if hasattr(app,"apply_mod_profile"):
-                app.apply_mod_profile(snapshot)
-            else:
-                if hasattr(app,"cards"):app.cards=cards
-                if hasattr(app,"recipes"):app.recipes=recipes
-                if hasattr(app,"index"):
-                    idx={}
-                    for a,b,c in recipes:
-                        idx[(a,b)]=c
-                        idx[(b,a)]=c
-                    app.index=idx
-        if compact is not None:
-            if hasattr(compact,"cards"):compact.cards=cards
-            if hasattr(compact,"recipes"):compact.recipes=recipes
-            try:
-                from estrategia_x15 import Strategist
-                if hasattr(compact,"strategy"):
-                    compact.strategy=Strategist(cards,recipes)
-            except (ImportError,TypeError,ValueError):
-                pass
-            # Nunca reutilizar drops X15 para outro mod.
-            if hasattr(compact,"atlas") and not features.get("rank"):
-                compact.atlas={"opponents":[],"drops":[],"rankLabels":[]}
-            if hasattr(compact,"_active_profile"):
-                compact._active_profile=snapshot
-            else:
-                setattr(compact,"_active_profile",snapshot)
-        # A interface legacy pode exigir reinício para reprojetar abas já renderizadas.
+        summary=apply_overlay_profile(snapshot,app=app,compact=compact)
+        if summary.get("applied"):
+            print("MultiMod: perfil carregado no overlay — "+
+                  str(summary.get("profile_name",""))+
+                  " ("+str(summary.get("card_count",0))+" cartas).",flush=True)
+        return summary
+
+    # Persistir mudanças quando a Biblioteca grava perfil_ativo.json:
+    # o overlay reaplica o banco selecionado ao abrir e ao trocar de mod.
+    observer=OverlayProfileObserver(root,apply_snapshot)
+    observer.start()
 
     win_candidates=[]
     for attr in ("win","window","top","root","frame","master"):
@@ -536,4 +516,5 @@ def ligar_ao_overlay(root, app=None, compact=None):
         button.place(relx=0.995,rely=0.99,anchor="se")
     except tk.TclError:
         button=None
-    return {"open":show,"button":button,"callback":apply_snapshot}
+    return {"open":show,"button":button,"callback":apply_snapshot,
+            "observer":observer}
