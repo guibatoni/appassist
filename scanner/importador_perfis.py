@@ -153,11 +153,27 @@ def import_rom(path: Path, output: Path, art: bool = False, progress=None):
     fingerprint = sha256(path, progress=progress)
     tmp = output / "analises"
     result = process(path, tmp, art, digest=fingerprint, progress=progress)
-    safe_name = "".join(c if c.isalnum() or c in "_-" else "_" for c in path.stem)[:42]
-    extracted = tmp / (safe_name + "_" + fingerprint[:10])
-    if not extracted.exists():
-        raise RuntimeError("O scanner não encontrou a pasta correspondente ao SHA esperado.")
+    # Caminho canônico fornecido pelo scanner. Não reconstruir com outra
+    # normalização de nomes: espaços, pontos, acentos e colchetes divergem.
+    raw_extracted = result.get("resultado_dir")
+    if not raw_extracted:
+        raise RuntimeError("O scanner não informou o destino dos resultados.")
+    extracted = Path(raw_extracted).resolve()
+    if not extracted.is_relative_to(tmp.resolve()):
+        raise RuntimeError("O scanner retornou uma pasta fora do diretório de análise.")
+    report_file = extracted / "relatorio.json"
+    if not report_file.is_file():
+        raise RuntimeError("Relatório não encontrado na pasta devolvida pelo scanner.")
+    saved_result = json.loads(report_file.read_text(encoding="utf-8"))
+    if saved_result.get("sha256") != fingerprint or saved_result.get("arquivo") != path.name:
+        raise RuntimeError("A pasta de análise não corresponde à imagem selecionada.")
+    # Se a extração falhou, manter o diagnóstico e criar perfil sem tabelas.
+    # Nunca reutilizar nomes/drops de uma tentativa antiga.
     p = analyse(extracted, result, path)
+    if result.get("status") == "erro/estrutura incompatível":
+        p["notes"].append("Falha na leitura da ROM: " + str(result.get("problema","erro sem detalhes")))
+        p["scanner_error"] = str(result.get("problema","erro sem detalhes"))
+    p["scan_result_dir"] = str(extracted)
     profile_path = output / "profiles" / fingerprint[:16] / "profile.json"
     save_json(profile_path, p)
     return p, profile_path
