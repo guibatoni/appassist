@@ -1,0 +1,1 @@
+Hotfix v0.3.6: scanner em blocos, leitura parcial WA, único SHA-256, barra de progresso, importação individual sem varredura da pasta.
