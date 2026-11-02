@@ -76,10 +76,13 @@ def apply_overlay_profile(snapshot:dict, *, app=None, compact=None) -> dict:
                     recipes.append((a,b,c))
             except (ValueError,TypeError):
                 continue
+    # Formato do assistente_x15.App.refresh_hand():
+    # self.index[a] -> [(parceiro, resultado)].
+    # NÃO usar chaves (a,b): isso rompe a aba de fusões manual.
     index={}
     for a,b,c in recipes:
-        index[(a,b)]=c
-        index[(b,a)]=c
+        index.setdefault(a,[]).append((b,c))
+        if a!=b:index.setdefault(b,[]).append((a,c))
 
     # Priorizar o hook explícito quando o app sabe como reconstruir tudo.
     # Fallback precisa usar os mesmos dicts/listas que callbacks já capturaram.
@@ -93,6 +96,17 @@ def apply_overlay_profile(snapshot:dict, *, app=None, compact=None) -> dict:
     _replace_mapping(compact,"cards",cards)
     _replace_sequence(compact,"recipes",recipes)
     _replace_mapping(compact,"index",index)
+
+    # Atualizar também a aba técnica que mantém seu próprio índice de fusões.
+    live=getattr(app,"tab_live",None)
+    if live is not None:
+        by_pair={}
+        for a,b,c in recipes:
+            by_pair.setdefault(tuple(sorted((a,b))),set()).add(c)
+        if hasattr(live,"recipe_index"):
+            live.recipe_index=by_pair
+        if hasattr(live,"last_ids"):
+            live.last_ids=None
 
     strategy=getattr(compact,"strategy",None)
     if strategy is not None:
