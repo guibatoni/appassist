@@ -52,18 +52,22 @@ class BibliotecaMods(tk.Toplevel):
         self.on_activate = on_activate
         self.events = queue.Queue()
         self.monitor = None
+        self._manual_pending=set()
+        self.progress_var=tk.DoubleVar(value=0.0)
         self._after_id = None
         self.settings_file = self.catalog.home / "biblioteca_settings.json"
         saved_settings=load_json(self.settings_file, {})
         self.folder = tk.StringVar(value=saved_settings.get("folder", ""))
         self.auto_ai=tk.BooleanVar(value=bool(saved_settings.get("auto_ai",False)))
+        self.auto_watch=bool(saved_settings.get("auto_watch",False))
         self.ai_model=tk.StringVar(value=saved_settings.get("ai_model",DEFAULT_MODEL))
         self.status = tk.StringVar(value="Escolha uma pasta ou uma ISO/BIN para iniciar a análise.")
         self._build()
         self.refresh()
         self._poll()
         self.protocol("WM_DELETE_WINDOW", self.close)
-        if self.folder.get() and Path(self.folder.get()).is_dir():
+        # Só monitorar automaticamente caso o usuário tenha ativado essa opção.
+        if self.auto_watch and self.folder.get() and Path(self.folder.get()).is_dir():
             self.after(350, self.watch)
 
     def _build(self):
@@ -130,6 +134,8 @@ class BibliotecaMods(tk.Toplevel):
             self.tabs.add(frame,text=name)
             self.tables[name]=table
         ttk.Label(main, textvariable=self.status, wraplength=1020).pack(fill="x", pady=(8,0))
+        ttk.Progressbar(main, variable=self.progress_var, maximum=100,
+                        mode="determinate").pack(fill="x", pady=(4,0))
 
     def selected(self):
         selection = self.tree.selection()
@@ -202,6 +208,7 @@ class BibliotecaMods(tk.Toplevel):
     def save_settings(self):
         atomic_json(self.settings_file,{
             "folder":self.folder.get().strip(),
+            "auto_watch":self.auto_watch,
             "auto_ai":bool(self.auto_ai.get()),
             "ai_model":self.ai_model.get().strip() or DEFAULT_MODEL,
         })
@@ -218,6 +225,7 @@ class BibliotecaMods(tk.Toplevel):
             messagebox.showwarning("Pasta inválida","Selecione uma pasta existente.",parent=self)
             return
         self._monitor(folder)
+        self.auto_watch=True
         self.save_settings()
         self.status.set("Monitoramento ativado: "+str(folder))
 
@@ -225,6 +233,8 @@ class BibliotecaMods(tk.Toplevel):
         if self.monitor:
             self.monitor.stop()
             self.monitor=None
+        self.auto_watch=False
+        self.save_settings()
         self.status.set("Monitoramento interrompido.")
 
     def choose_file(self):
@@ -232,10 +242,33 @@ class BibliotecaMods(tk.Toplevel):
             title="Importar ISO ou BIN",filetypes=[("Imagens de disco","*.iso *.bin")],parent=self)
         if not filename:return
         image=Path(filename)
-        if self.monitor is None:
-            self._monitor(image.parent)
-        self.monitor.scan_file(image)
-        self.status.set("Enviado para análise: "+image.name)
+        # Importar UM arquivo não ativa a varredura de toda a pasta de ROMs.
+        if self.monitor is not None:
+            self.monitor.scan_file(image)
+            self.status.set("Arquivo colocado na fila de monitoramento: "+image.name)
+            return
+        key=str(image.resolve())
+        if key in self._manual_pending:
+            self.status.set("Este arquivo já está sendo analisado: "+image.name)
+            return
+        self._manual_pending.add(key)
+        self.progress_var.set(0.0)
+        self.status.set("Análise individual iniciada: "+image.name)
+        import threading
+        def task():
+            try:
+                self.events.put({"event":"analisando","file":image.name})
+                def progress(stage,done,total):
+                    self.events.put({"event":"progresso","file":image.name,
+                                     "stage":stage,"percent":round(done*100/total) if total else None})
+                entry=self.catalog.analyse(image,progress=progress)
+                self.events.put({"event":"concluido","file":image.name,
+                                 "level":entry["level"],"sha256":entry["sha256"]})
+            except Exception as exc:
+                self.events.put({"event":"erro","file":image.name,"message":str(exc)})
+            finally:
+                self.events.put({"event":"import_done","file":image.name,"key":key})
+        threading.Thread(target=task,daemon=True,name="importar-rom").start()
 
     def investigate_selected(self):
         e=self.selected()
@@ -328,12 +361,21 @@ class BibliotecaMods(tk.Toplevel):
                 k=evt.get("event")
                 if k=="concluido":
                     self.refresh()
+                    self.progress_var.set(100.0)
                     self.status.set("Análise concluída: "+evt.get("file",""))
                     if self.auto_ai.get() and evt.get("level")!="conhecido_validado":
                         entry=next((e for e in self.catalog.list() if e.get("sha256")==evt.get("sha256")),None)
                         if entry:self._launch_local_ai(entry)
                 elif k=="erro":
                     self.status.set("Falha em "+evt.get("file","")+": "+evt.get("message",""))
+                elif k=="import_done":
+                    self._manual_pending.discard(evt["key"])
+                elif k=="progresso":
+                    pc=evt.get("percent")
+                    if isinstance(pc,(int,float)):
+                        self.progress_var.set(max(0,min(100,pc)))
+                    extra=(" ("+str(pc)+"%)") if isinstance(pc,(int,float)) and pc>0 else ""
+                    self.status.set(evt.get("file","")+" — "+evt.get("stage","Lendo ISO")+extra)
                 elif k=="analisando":
                     self.status.set("Lendo ISO (somente leitura): "+evt.get("file",""))
                 elif k=="encontrado":
