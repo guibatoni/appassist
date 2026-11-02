@@ -46,6 +46,21 @@ class ProfileBridgeTests(unittest.TestCase):
         self.assertEqual(compact.atlas["rankLabels"],[])
         self.assertFalse(result["iso_active_in_emulator_verified"])
 
+    def test_confirmed_recipe_updates_app_and_live_indexes(self):
+        cards={1:{"name":"A","atk":100,"def":100},
+               2:{"name":"B","atk":200,"def":200},
+               3:{"name":"C","atk":300,"def":300}}
+        live=SimpleNamespace(recipe_index={},last_ids=(1,2))
+        app=SimpleNamespace(cards={},recipes=[],index={},tab_live=live)
+        compact=SimpleNamespace(cards={},recipes=[],strategy=None,atlas={})
+        profile=snap("d"*64,"FM 13",cards,recipes=[(1,2,3)])
+        apply_overlay_profile(profile,app=app,compact=compact)
+        self.assertEqual(app.index[1],[(2,3)])
+        self.assertEqual(app.index[2],[(1,3)])
+        self.assertEqual(live.recipe_index[(1,2)],{3})
+        self.assertIsNone(live.last_ids)
+        self.assertEqual(compact.recipes,[(1,2,3)])
+
     def test_compact_panel_tick_cache_resets_when_catalog_changes(self):
         # O painel real usa self.last/self.last_pid como condição para
         # redesenhar StringVar da mão. ID e PID continuam iguais ao ativar mod.
