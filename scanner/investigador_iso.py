@@ -134,6 +134,7 @@ def investigate(rom_path: Path, profile: dict,
     # de triplas no executável. O catálogo candidato nunca é ativado aqui.
     try:
         fusion=analyze_fusion_banks(rom_path)
+        fusion["rom_sha256"]=profile.get("rom_sha256")
         report["candidates"]["fusion_bank_summary"]={
             k:v for k,v in fusion.items() if k not in ("candidates","banks")
         }
