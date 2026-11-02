@@ -27,19 +27,37 @@ VERIFIED_LABELS = {
 TABLE_COLUMNS = ("arquivo", "status", "cartas", "drops", "fusoes")
 
 
-def preview_model(profile: dict, limit: int = 180) -> dict:
-    """Modelo de prévia limitado — não usar tabelas sem supported_features."""
+def preview_model(profile: dict, limit: int | None = None) -> dict:
+    """Dados validados para a UI. Sem limite por padrão: 722 cartas ficam acessíveis.
+
+    limit é mantido apenas para consumidores que escolham paginação explícita.
+    Nunca importa dados marcados como não verificados.
+    """
     features = profile.get("supported_features", {})
-    cards = list(profile.get("cards", []))[:limit] if features.get("cards") else []
-    opponents = list(profile.get("opponents", [])) if features.get("opponents") else []
-    drops = list(profile.get("drops", []))[:limit] if features.get("drops") else []
-    fusions = list(profile.get("fusion_recipes", []))[:limit] if features.get("fusions") else []
+    def visible(key, enabled):
+        if not enabled:
+            return []
+        records = list(profile.get(key, []))
+        return records[:max(0, limit)] if limit is not None else records
     return {
-        "cards": cards, "opponents": opponents, "drops": drops, "fusions": fusions,
+        "cards": visible("cards", features.get("cards")),
+        "opponents": visible("opponents", features.get("opponents")),
+        "drops": visible("drops", features.get("drops")),
+        "fusions": visible("fusion_recipes", features.get("fusions")),
         "rank_confirmed": bool(features.get("ranks")),
         "scoring_confirmed": bool(features.get("scoring")),
         "profile_name": profile.get("name", ""),
     }
+
+
+def filter_cards(cards: list, query: str) -> list:
+    """Busca local por ID numérico exato ou parte do nome, sem tocar na ISO."""
+    value = query.strip().casefold()
+    if not value:
+        return list(cards)
+    if value.isdecimal():
+        return [card for card in cards if str(card.get("id", "")) == value]
+    return [card for card in cards if value in str(card.get("name", "")).casefold()]
 
 
 class BibliotecaMods(tk.Toplevel):
@@ -61,6 +79,10 @@ class BibliotecaMods(tk.Toplevel):
         self.auto_ai=tk.BooleanVar(value=bool(saved_settings.get("auto_ai",False)))
         self.auto_watch=bool(saved_settings.get("auto_watch",False))
         self.ai_model=tk.StringVar(value=saved_settings.get("ai_model",DEFAULT_MODEL))
+        self.card_query=tk.StringVar(value="")
+        self.card_rows=[]
+        self.card_count=tk.StringVar(value="0 cartas")
+        self._card_filter_after=None
         self.status = tk.StringVar(value="Escolha uma pasta ou uma ISO/BIN para iniciar a análise.")
         self._build()
         self.refresh()
@@ -123,12 +145,21 @@ class BibliotecaMods(tk.Toplevel):
         }
         for name,fields in specs.items():
             frame = ttk.Frame(self.tabs)
-            table = ttk.Treeview(frame, columns=fields, show="headings")
+            if name == "Cartas":
+                search=ttk.Frame(frame)
+                search.pack(fill="x", padx=4, pady=(4,3))
+                ttk.Label(search,text="Buscar ID ou nome:").pack(side="left",padx=(0,5))
+                ttk.Entry(search,textvariable=self.card_query).pack(side="left",fill="x",expand=True)
+                ttk.Label(search,textvariable=self.card_count).pack(side="right",padx=(10,0))
+                self.card_query.trace_add("write",lambda *_:self.schedule_card_filter())
+            body=ttk.Frame(frame)
+            body.pack(fill="both",expand=True)
+            table = ttk.Treeview(body, columns=fields, show="headings")
             for c in fields:
                 table.heading(c,text=c.title())
                 table.column(c,width=110 if c!="nome" else 280,anchor="w")
             table.pack(side="left",fill="both",expand=True)
-            scroll = ttk.Scrollbar(frame, orient="vertical", command=table.yview)
+            scroll = ttk.Scrollbar(body, orient="vertical", command=table.yview)
             scroll.pack(side="right",fill="y")
             table.configure(yscrollcommand=scroll.set)
             self.tabs.add(frame,text=name)
@@ -185,18 +216,35 @@ class BibliotecaMods(tk.Toplevel):
         self.info.delete("1.0","end")
         self.info.insert("1.0","\n".join(lines))
         self.info.configure(state="disabled")
+        self.card_rows=sorted(model["cards"],key=lambda x: int(x.get("id") or 0))
+        self.render_card_rows()
         rows={
-            "Cartas":[(c.get("id"),c.get("name"),c.get("atk"),c.get("def")) for c in model["cards"]],
             "Oponentes":[(c.get("id"),c.get("name")) for c in model["opponents"]],
             "Drops":[(d.get("opponent_id"),d.get("group"),d.get("card_id"),d.get("weight"),
                        d.get("probability_percent")) for d in model["drops"]],
             "Fusões":[(f.get("a"),f.get("b"),f.get("result")) for f in model["fusions"]],
         }
-        for key,table in self.tables.items():
+        for key,vals_rows in rows.items():
+            table=self.tables[key]
             table.delete(*table.get_children())
-            for vals in rows[key]:
+            for vals in vals_rows:
                 table.insert("","end",values=vals)
         self.status.set((e["file_name"]+": dados disponíveis para revisão.") if e else "Selecione um mod.")
+
+    def schedule_card_filter(self):
+        if self._card_filter_after is not None:
+            self.after_cancel(self._card_filter_after)
+        self._card_filter_after=self.after(150,self.render_card_rows)
+
+    def render_card_rows(self):
+        self._card_filter_after=None
+        table=self.tables["Cartas"]
+        table.delete(*table.get_children())
+        matches=filter_cards(self.card_rows,self.card_query.get())
+        for row in matches:
+            table.insert("","end",values=(row.get("id"),row.get("name"),
+                                           row.get("atk"),row.get("def")))
+        self.card_count.set(f"{len(matches)} de {len(self.card_rows)} cartas")
 
     def _monitor(self, folder=None):
         if self.monitor:
@@ -402,6 +450,8 @@ class BibliotecaMods(tk.Toplevel):
     def close(self):
         if self._after_id is not None:
             self.after_cancel(self._after_id)
+        if self._card_filter_after is not None:
+            self.after_cancel(self._card_filter_after)
         self.stop_watch(persist=False)
         self.destroy()
 
