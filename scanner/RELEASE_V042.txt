@@ -1,0 +1,1 @@
+v0.4.2 — analisar sete bancos de fusões WA_MRG, comparar hashes, mostrar candidatas por ISO, assistência Ollama local opcional e validação individual no jogo. Não modifica ISOs nem habilita candidatos automaticamente.
