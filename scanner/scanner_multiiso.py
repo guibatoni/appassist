@@ -23,10 +23,21 @@ RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 
 
-def sha256(path:Path):
+def sha256(path:Path, progress=None):
+    """SHA-256 em streaming, uma vez por ISO; progresso a cada ~32 MB."""
     h=hashlib.sha256()
+    total=path.stat().st_size
+    count=0
+    next_report=32*1024*1024
     with path.open('rb') as f:
-        while b:=f.read(4*1024*1024):h.update(b)
+        while True:
+            block=f.read(8*1024*1024)
+            if not block:break
+            h.update(block)
+            count+=len(block)
+            if progress and (count>=next_report or count>=total):
+                progress("Identificando ISO (SHA-256)",count,total)
+                next_report=count+32*1024*1024
     return h.hexdigest()
 
 class Disc:
@@ -45,17 +56,31 @@ class Disc:
         self.f.seek(lba*self.sector+off+1)
         return self.f.read(5)
     def read(self,lba:int,length:int):
-        if length<0 or length>self.size:raise ValueError('Tamanho de leitura inválido')
+        """Lê setores em lote; evita centenas de milhares de seek/read de 2 KiB."""
+        if lba<0 or length<0 or length>self.size:
+            raise ValueError('Intervalo de leitura inválido')
+        sectors=(length+2047)//2048
+        if sectors and (lba+sectors)*self.sector>self.size:
+            raise ValueError('Leitura além do fim do disco')
+        if not length:return b''
+        self.f.seek(lba*self.sector)
         out=bytearray()
-        while len(out)<length:
-            now=(lba*self.sector+self.offset)
-            self.f.seek(now)
-            count=min(2048,length-len(out))
-            chunk=self.f.read(count)
-            if len(chunk)!=count:raise ValueError('Fim inesperado do disco')
-            out.extend(chunk)
-            lba+=1
-        return bytes(out)
+        remaining=sectors
+        while remaining:
+            n=min(remaining,2048)  # <= ~4.8 MB de dados físicos por lote
+            raw=self.f.read(n*self.sector)
+            if len(raw)!=n*self.sector:
+                raise ValueError('Fim inesperado do disco')
+            if self.sector==2048:
+                out.extend(raw)
+            else:
+                mv=memoryview(raw)
+                for i in range(n):
+                    begin=i*self.sector+self.offset
+                    out.extend(mv[begin:begin+2048])
+                mv.release()
+            remaining-=n
+        return bytes(out[:length])
     @staticmethod
     def _records(data):
         at=0
@@ -88,10 +113,12 @@ class Disc:
                 else:found[p]=(entry_lba,nbytes)
         walk('',start,size,0)
         return found
-    def get(self,name):
+    def get(self,name,limit_bytes=None):
         name=name.upper()
         if name not in self.files:raise KeyError(f'Arquivo ausente: {name}')
         lba,size=self.files[name]
+        if limit_bytes is not None:
+            size=min(size,max(0,int(limit_bytes)))
         return self.read(lba,size)
     def close(self):self.f.close()
 
@@ -180,12 +207,14 @@ def write_csv(path,rows):
     with path.open('w',newline='',encoding='utf-8-sig') as f:
         w=csv.DictWriter(f,fieldnames=list(rows[0]));w.writeheader();w.writerows(rows)
 
-def process(path,output,with_art=False):
-    info={'arquivo':path.name,'tamanho':path.stat().st_size,'sha256':sha256(path),'status':'não validado'}
+def process(path,output,with_art=False,digest=None,progress=None):
+    info={'arquivo':path.name,'tamanho':path.stat().st_size,
+          'sha256':digest or sha256(path,progress=progress),'status':'não validado'}
     key=re.sub(r'[^a-zA-Z0-9_-]+','_',path.stem)[:42]+'_'+info['sha256'][:10]
     dest=output/key;dest.mkdir(parents=True,exist_ok=True)
     disc=None
     try:
+        if progress:progress("Lendo índice ISO9660",0,1)
         disc=Disc(path);info['tipo_setor']=disc.sector
         info['arquivos_discos']=[{'nome':n,'lba':lba,'tamanho':sz} for n,(lba,sz) in sorted(disc.files.items())]
         sl_names=[n for n in disc.files if re.fullmatch(r'SL[UP][A-Z0-9_\.]+',n)]
@@ -193,17 +222,32 @@ def process(path,output,with_art=False):
         wa_names=[n for n in disc.files if n.endswith('WA_MRG.MRG')]
         if not sl_names or not wa_names:
             raise ValueError(f'Layout FM PS1 incompleto; executáveis={sl_names}, WA={wa_names}')
-        sl=disc.get(sl_names[0]);wa=disc.get(wa_names[0])
+        # Cartas e artes conhecidas estão antes de ~16 MB dentro do WA.
+        # Não carregar centenas de MB sem necessidade.
+        wa_required=max(
+            WA_OPP_BASE+(OPP_COUNT-1)*WA_OPP_STEP+3*WA_RANK_STRIDE+WA_ARRAY_BYTES,
+            ((CARD_COUNT-1)*WA_CARD_SECTORS+WA_CARD_SECTOR_START)*2048+0x2840,
+        )
+        if progress:progress("Lendo executável do jogo",0,1)
+        sl=disc.get(sl_names[0])
+        if progress:progress("Lendo tabelas necessárias do WA_MRG",0,1)
+        wa=disc.get(wa_names[0],limit_bytes=wa_required)
         info['executavel']=sl_names[0]
         info['hash_executavel']=hashlib.sha256(sl).hexdigest()
-        info['hash_wa']=hashlib.sha256(wa).hexdigest()
+        info['wa_prefix_bytes']=len(wa)
+        info['wa_total_bytes']=disc.files[wa_names[0]][1]
+        info['hash_wa_prefix']=hashlib.sha256(wa).hexdigest()
+        # SHA-256 do contêiner COMPLETO não foi calculado; não rotular prefixo como hash inteiro.
+        info['hash_wa']=None
         info['versao_conhecida']='Remaster X15 1.2.1' if info['sha256']==X15_SHA else 'desconhecida — não atribuir dados X15'
+        if progress:progress("Decodificando cartas e adversários",0,1)
         opponents,cards,nomes_status=decode_names(sl)
         info['nomes_status']=nomes_status
         if opponents:
             write_csv(dest/'oponentes.csv',opponents)
             write_csv(dest/'cartas.csv',cards)
             info['oponentes']=len(opponents);info['cartas']=len(cards)
+        if progress:progress("Validando pesos das tabelas de drops",0,1)
         drops,drop_status=decode_drops(wa,RANKS if info['sha256']==X15_SHA else None)
         info['rotulos_ranks_confirmados']=info['sha256']==X15_SHA
         info['drops_status']=drop_status
@@ -224,6 +268,7 @@ def process(path,output,with_art=False):
     finally:
         if disc:disc.close()
     (dest/'relatorio.json').write_text(json.dumps(info,ensure_ascii=False,indent=2),encoding='utf8')
+    if progress:progress("Análise concluída",1,1)
     return info
 
 def main():
