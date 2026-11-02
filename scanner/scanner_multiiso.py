@@ -212,6 +212,13 @@ def process(path,output,with_art=False,digest=None,progress=None):
           'sha256':digest or sha256(path,progress=progress),'status':'não validado'}
     key=re.sub(r'[^a-zA-Z0-9_-]+','_',path.stem)[:42]+'_'+info['sha256'][:10]
     dest=output/key;dest.mkdir(parents=True,exist_ok=True)
+    # Contrato de dados: o scanner é a única fonte do caminho da extração.
+    # O importador NÃO deve tentar reconstruir esse nome a partir da ISO.
+    info['resultado_dir']=str(dest.resolve())
+    # Não reaproveitar CSVs desatualizados de uma tentativa anterior.
+    for previous in ('cartas.csv','oponentes.csv','drops_por_oponente.csv',
+                     'decks.csv','validacao_pesos.csv'):
+        (dest/previous).unlink(missing_ok=True)
     disc=None
     try:
         if progress:progress("Lendo índice ISO9660",0,1)
