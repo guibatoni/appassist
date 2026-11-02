@@ -1,0 +1,1 @@
+MultiMod v0.4.3 — exportação CSV de todas as fusões, aprovação humana explícita do lote por ROM SHA, sete bancos coincidentes e comprovante de revisão (sem presumir testes in-game). Preserva ISOs/saves e faz backup do perfil.
