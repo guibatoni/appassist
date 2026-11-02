@@ -84,6 +84,7 @@ class BibliotecaMods(tk.Toplevel):
         self.field_target_id=tk.StringVar(value="291")
         self.field_face=tk.StringVar(value="faceup")
         self.field_slot=tk.StringVar(value="1")
+        self.field_expand=tk.BooleanVar(value=False)  # 1 MiB somente por escolha explícita
         self.field_status=tk.StringVar(value="Campo ainda não mapeado. Inicie com carta na mão e ausente da mesa.")
         self._temporal_after_id=None
         self.temporal_interval=tk.StringVar(value="250")
@@ -313,9 +314,9 @@ class BibliotecaMods(tk.Toplevel):
         ttk.Label(field_page,text="Diagnóstico por fases — preparação, mesa e atualização da mão",
                   font=("Segoe UI",10,"bold")).pack(anchor="w",pady=5)
         ttk.Label(field_page,text=(
-            "Investiga somente 96 KiB próximos à memória conhecida da mão. "
-            "É uma região HIPOTÉTICA; se nenhum ID aparecer, a região pode ser inadequada. "
-            "Nenhum dump bruto de memória será exportado."
+            "Monitor de ocupação experimental: compara slot VAZIO → OCUPADO → REMOVIDO. "
+            "Pode usar controles opcionais para excluir bytes voláteis. "
+            "Nenhuma ocorrência valida automaticamente o campo ou libera fusões."
         ),wraplength=940,justify="left").pack(anchor="w",pady=(0,8))
         target_row=ttk.Frame(field_page)
         target_row.pack(fill="x",pady=(0,7))
@@ -330,31 +331,41 @@ class BibliotecaMods(tk.Toplevel):
         ttk.Label(options,text="Slot observado (1 a 5):").pack(side="left")
         ttk.Combobox(options,values=("1","2","3","4","5"),state="readonly",
                      textvariable=self.field_slot,width=4).pack(side="left",padx=5)
+        ttk.Checkbutton(options,text="Ampliar 96 KiB → 1 MiB (experimental)",
+                        variable=self.field_expand).pack(side="left",padx=12)
         controls=ttk.Frame(field_page)
-        controls.pack(fill="x",pady=(0,9))
-        ttk.Button(controls,text="1. ANTES",
+        controls.pack(fill="x",pady=(0,6))
+        ttk.Button(controls,text="1. ANTES (slot vazio)",
                    command=self.capture_field_before).pack(side="left",padx=(0,6))
         ttk.Button(controls,text="2. PREPARADA (opcional)",
                    command=self.capture_field_prepared).pack(side="left",padx=5)
         ttk.Button(controls,text="3. NA MESA",
                    command=self.capture_field_after).pack(side="left",padx=5)
-        ttk.Button(controls,text="4. MÃO ATUALIZADA (opcional)",
+        ttk.Button(controls,text="4. OCUPADA (controle)",
+                   command=self.capture_field_occupied_control).pack(side="left",padx=5)
+        controls2=ttk.Frame(field_page)
+        controls2.pack(fill="x",pady=(0,9))
+        ttk.Button(controls2,text="5. REMOVIDA (slot vazio)",
+                   command=self.capture_field_removed).pack(side="left",padx=(0,6))
+        ttk.Button(controls2,text="6. VAZIA (controle)",
+                   command=self.capture_field_vacant_control).pack(side="left",padx=5)
+        ttk.Button(controls2,text="7. MÃO ATUALIZADA (opcional)",
                    command=self.capture_field_refresh).pack(side="left",padx=5)
-        ttk.Button(controls,text="5. REMOVIDA (opcional)",
-                   command=self.capture_field_removed).pack(side="left",padx=5)
         ttk.Label(field_page,textvariable=self.field_status,
                   wraplength=960,justify="left").pack(fill="x",pady=(5,8))
         ttk.Label(field_page,text=(
-            "1 ANTES: carta na mão e fora da mesa. 2 PREPARADA (opcional): "
-            "selecione FaceUp/FaceDown e Guardian Star, mas ainda não SETE. "
-            "3 NA MESA: imediatamente após a carta aparecer no slot, SEM passar o turno. "
-            "4 MÃO ATUALIZADA (opcional): depois que o controle do turno voltar e "
-            "a mão se atualizar. 5 REMOVIDA (opcional): após retirar a carta da mesa. "
-            "A fase 3 NÃO exige que o ID tenha saído da RAM da mão. "
-            "JSON de hipóteses em "
-            "%LOCALAPPDATA%\\ForbiddenMemoriesMultiMod\\diagnosticos_campo\\<SHA>. "
-            "Nenhuma posição da mesa é validada automaticamente."
-        ),wraplength=950,justify="left").pack(anchor="w")
+            "Faça uma captura ANTES somente com a posição escolhida VAZIA. "
+            "PREPARADA (opcional) após escolher FaceUp/FaceDown e Guardian Star. "
+            "NA MESA assim que colocar a carta, antes do turno. "
+            "OCUPADA (controle): sem retirar nem alterar a carta, repita a leitura. "
+            "REMOVIDA: depois que a carta realmente sair do campo. "
+            "VAZIA (controle): capture novamente sem alterar o slot vazio. "
+            "MÃO ATUALIZADA pode ocorrer quando o turno mudar, em qualquer ordem "
+            "posterior à captura NA MESA. "
+            "Na região ampliada, somente o mesmo ePSXe é lido, sem dump bruto. "
+            "Seleção de escopo só tem efeito após novo ANTES. "
+            "A saída mantém hipóteses sem validar endereços."
+        ),wraplength=960,justify="left").pack(anchor="w")
         self.tabs.add(field_page,text="Campo de duelo")
 
 
@@ -507,11 +518,18 @@ class BibliotecaMods(tk.Toplevel):
             target=int(typed)
             confirmed=messagebox.askyesno(
                 "Captura experimental do campo",
-                f"A carta #{target:03d} está na sua MÃO e AINDA NÃO está no campo?\\n\\n"
-                "A pesquisa cobre apenas uma região limitada próxima à mão; "
-                "nenhuma carta da mesa será considerada validada.",
+                f"A carta #{target:03d} está na MÃO e o slot {self.field_slot.get()} "
+                "está VAZIO na mesa?\\n\\n"
+                "Não avance se houver outro monstro no mesmo slot. "
+                "A varredura usa 96 KiB ou 1 MiB, conforme sua seleção, "
+                "mas nenhum byte será tratado como slot comprovado.",
                 parent=self)
             if not confirmed:return
+            if self.field_probe is None:
+                raise RuntimeError("Leitor RAM não disponível")
+            self.field_probe=FieldMemoryProbe(
+                self.field_probe.reader_provider,self.catalog.home,
+                expanded=bool(self.field_expand.get()))
             snap=self.field_probe.capture_before(sha,target)
             self.field_status.set(
                 f"ANTES registrada: PID {snap['pid']}; carta #{target:03d} na mão. "
@@ -568,10 +586,51 @@ class BibliotecaMods(tk.Toplevel):
                 +suspect+
                 f"ID continua na RAM da mão: {'SIM (esperado neste estágio)' if still else 'NÃO'}. "
                 f"Arquivo: {path}. "
-                "Opcional: capture MÃO ATUALIZADA após o turno, depois REMOVIDA.")
+                "Opcional: OCUPADA (controle), depois REMOVIDA e VAZIA (controle).")
             self.status.set("Hipóteses de campo salvas em: "+str(path))
         except Exception as exc:
             messagebox.showwarning("Investigação do campo",str(exc),parent=self)
+
+    def capture_field_occupied_control(self):
+        try:
+            sha=self._field_selected_sha()
+            if not messagebox.askyesno(
+                "Controle com a carta ainda na mesa",
+                "A mesma carta continua fisicamente no mesmo slot? "
+                "Capture sem invocar, atacar, mover, destruir ou passar o turno "
+                "entre NA MESA e este controle sempre que possível.",
+                parent=self):
+                return
+            report,path=self.field_probe.capture_occupied_control(sha)
+            self.field_status.set(
+                f"OCUPADA (controle) registrada. "
+                f"Arquivo atualizado: {path}. Agora capture REMOVIDA "
+                "quando o monstro efetivamente sair da mesa.")
+            self.status.set("Controle de ocupação salvo: "+str(path))
+        except Exception as exc:
+            messagebox.showwarning("Investigação da ocupação",str(exc),parent=self)
+
+    def capture_field_vacant_control(self):
+        try:
+            sha=self._field_selected_sha()
+            if not messagebox.askyesno(
+                "Controle de slot vazio",
+                "O slot da carta permanece VAZIO desde a última REMOVIDA? "
+                "Evite outras ações entre as capturas. "
+                "O controle pode eliminar candidatos instáveis.",
+                parent=self):
+                return
+            report,path=self.field_probe.capture_vacant_control(sha)
+            analysis=report["occupancy_analysis"]
+            self.field_status.set(
+                f"VAZIA (controle) registrada: {analysis['matched_total']} "
+                "bytes correlacionados restantes, "
+                f"{analysis['reversible_total']} reversíveis; "
+                f"{analysis['discarded_due_to_unstable_controls']} descartados "
+                f"por controles instáveis. Não comprova nenhum slot. JSON: {path}")
+            self.status.set("Controle de slot vazio salvo: "+str(path))
+        except Exception as exc:
+            messagebox.showwarning("Investigação da ocupação",str(exc),parent=self)
 
     def capture_field_refresh(self):
         try:
@@ -605,10 +664,14 @@ class BibliotecaMods(tk.Toplevel):
             report,path=self.field_probe.capture_removed(sha)
             candidates=report["analysis"]["candidates"]
             cleared=sum(x["disappeared_after_removal"] is True for x in candidates)
+            occupancy=report["occupancy_analysis"]
             self.field_status.set(
-                f"REMOVIDA registrada: {cleared}/{len(candidates)} ocorrências "
-                f"desapareceram após a remoção, entre os candidatos exportados. "
-                f"Arquivo atualizado: {path}. Nenhum slot foi validado.")
+                f"REMOVIDA: {cleared}/{len(candidates)} IDs novos desapareceram; "
+                f"{occupancy.get('matched_total',0)} bytes correlacionados com "
+                f"entrada/saída, dos quais {occupancy.get('reversible_total',0)} "
+                f"retornaram ao valor anterior. "
+                f"Arquivo: {path}. Opcional: 6. VAZIA (controle). "
+                "Nenhum slot foi validado.")
             self.status.set("Hipóteses com remoção salvas em: "+str(path))
         except Exception as exc:
             messagebox.showwarning("Investigação do campo",str(exc),parent=self)
