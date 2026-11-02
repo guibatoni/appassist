@@ -148,11 +148,11 @@ def save_json(path: Path, obj):
     tmp.replace(path)
 
 
-def import_rom(path: Path, output: Path, art: bool = False):
-    # Scanner padrão mantém o arquivo de entrada em modo somente leitura.
-    fingerprint = sha256(path)
+def import_rom(path: Path, output: Path, art: bool = False, progress=None):
+    # Hash uma única vez; processamento reutiliza a assinatura calculada.
+    fingerprint = sha256(path, progress=progress)
     tmp = output / "analises"
-    result = process(path, tmp, art)
+    result = process(path, tmp, art, digest=fingerprint, progress=progress)
     safe_name = "".join(c if c.isalnum() or c in "_-" else "_" for c in path.stem)[:42]
     extracted = tmp / (safe_name + "_" + fingerprint[:10])
     if not extracted.exists():
