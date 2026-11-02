@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 from field_ram_probe import (
-    CHUNK_SIZE, HAND_ADDR, SEARCH_START, SEARCH_SIZE, FieldMemoryProbe,
+    CHUNK_SIZE, HAND_ADDR, SEARCH_START, SEARCH_SIZE, EXPANDED_START, EXPANDED_SIZE, FieldMemoryProbe,
     find_new_id_candidates
 )
 
@@ -136,6 +136,30 @@ class FieldRamTests(unittest.TestCase):
             self.probe.capture_prepared(self.sha)
         with self.assertRaises(ValueError):
             self.probe.capture_after(self.sha,user_slot=6)
+
+    def test_expanded_scan_is_opt_in_bounded_and_read_only(self):
+        self.assertEqual(EXPANDED_SIZE,1024*1024)
+        self.assertLessEqual(EXPANDED_START,SEARCH_START)
+        expanded=FieldMemoryProbe(lambda:self.reader,Path(self.temp.name),expanded=True)
+        # O leitor simulado não oferece toda a área de 1 MiB.
+        # Blocos indisponíveis devem ser registrados, não inventados.
+        first=expanded.capture_before(self.sha,291)
+        self.assertEqual(first["readable_chunks"],SEARCH_SIZE//CHUNK_SIZE)
+        self.assertEqual(len(first["unreadable_chunks"]),
+                         EXPANDED_SIZE//CHUNK_SIZE-SEARCH_SIZE//CHUNK_SIZE)
+        self.reader.hand=make_hand([159,16,635,192,10])
+        report,path=expanded.capture_after(self.sha,user_slot=1)
+        self.assertTrue(path.is_file())
+        self.assertEqual(report["scan"]["mode"],"AMPLIADA_1MIB")
+        self.assertEqual(report["scan"]["size_bytes"],EXPANDED_SIZE)
+        self.assertEqual(report["analysis"]["chunks_compared"],SEARCH_SIZE//CHUNK_SIZE)
+        self.assertFalse(report["duel_field_ram_verified"])
+        self.assertIsNone(report["duel_field_card_ids"])
+        self.assertFalse(report["fusion_catalog_changed"])
+        self.assertNotIn('"hex"',path.read_text(encoding="utf-8"))
+        self.assertTrue(all(size in (140,CHUNK_SIZE) for _,size in self.reader.calls))
+        with self.assertRaises(ValueError):
+            FieldMemoryProbe(lambda:self.reader,Path(self.temp.name),expanded="sim")
 
     def test_same_pid_sha_must_remain(self):
         self.probe.capture_before(self.sha,291)
