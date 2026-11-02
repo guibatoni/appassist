@@ -20,6 +20,7 @@ from investigador_iso import investigate
 from extrator_fusoes import analyze_fusion_banks, save_fusion_report
 from ia_local import analyse_with_local_ai, save_suggestion, DEFAULT_MODEL
 from overlay_card_labels import CardLabelSync
+from fusion_ram_probe import FusionMemoryProbe
 
 VERIFIED_LABELS = {
     "verificado": "✓ Confirmado",
@@ -67,13 +68,16 @@ def filter_cards(cards: list, query: str) -> list:
 
 
 class BibliotecaMods(tk.Toplevel):
-    def __init__(self, parent, on_activate=None, catalog=None):
+    def __init__(self, parent, on_activate=None, catalog=None, ram_probe=None):
         super().__init__(parent)
         self.title("Biblioteca de Mods — Forbidden Memories MultiMod")
         self.geometry("1120x750")
         self.minsize(850, 580)
         self.catalog = catalog or ModCatalog()
         self.on_activate = on_activate
+        self.ram_probe=ram_probe
+        self.ram_result_id=tk.StringVar(value="")
+        self.ram_diag_status=tk.StringVar(value="Sem capturas. Selecione o perfil ativo no ePSXe.")
         self.events = queue.Queue()
         self.monitor = None
         self._manual_pending=set()
@@ -207,6 +211,30 @@ class BibliotecaMods(tk.Toplevel):
         self.fusion_candidates_table.configure(yscrollcommand=scroll.set)
         self.tabs.add(candidates_frame,text="Candidatas (fusões)")
 
+        diag=ttk.Frame(self.tabs,padding=12)
+        ttk.Label(diag,text="Diagnóstico RAM de fusões — SOMENTE LEITURA",
+                  font=("Segoe UI",11,"bold")).pack(anchor="w",pady=5)
+        ttk.Label(diag,text=(
+            "Captura duas amostras curtas da memória do ePSXe. "
+            "Não confirma fusões automaticamente; registra apenas diferenças "
+            "para descobrir onde o jogo guarda materiais e resultado."
+        ),wraplength=990,justify="left").pack(anchor="w",pady=(0,10))
+        row=ttk.Frame(diag)
+        row.pack(fill="x",pady=(0,10))
+        ttk.Button(row,text="1. Capturar ANTES",command=self.capture_ram_before).pack(side="left",padx=4)
+        ttk.Button(row,text="2. Capturar DEPOIS",command=self.capture_ram_after).pack(side="left",padx=4)
+        ttk.Label(row,text="ID do resultado visto (opcional):").pack(side="left",padx=(20,4))
+        ttk.Entry(row,textvariable=self.ram_result_id,width=7).pack(side="left")
+        ttk.Label(diag,textvariable=self.ram_diag_status,wraplength=990,
+                  justify="left").pack(fill="x",pady=8)
+        ttk.Label(diag,text=(
+            "Procedimento: durante o duelo, antes da fusão, clique Capturar ANTES; "
+            "execute uma fusão real no jogo e, após ela, clique Capturar DEPOIS. "
+            "O resultado salvo é experimental; nenhuma receita será aprovada."
+        ),wraplength=990,justify="left").pack(anchor="w",pady=(0,8))
+        self.tabs.add(diag,text="Diagnóstico RAM")
+
+
         ttk.Label(main, textvariable=self.status, wraplength=1020).pack(fill="x", pady=(8,0))
         ttk.Progressbar(main, variable=self.progress_var, maximum=100,
                         mode="determinate").pack(fill="x", pady=(4,0))
@@ -294,6 +322,51 @@ class BibliotecaMods(tk.Toplevel):
             table.insert("","end",values=(row.get("id"),row.get("name"),
                                            row.get("atk"),row.get("def")))
         self.card_count.set(f"{len(matches)} de {len(self.card_rows)} cartas")
+
+    def _active_rom_for_ram(self):
+        entry=self.selected()
+        if not entry:
+            raise ValueError("Selecione uma ISO na Biblioteca primeiro")
+        active=self.catalog.current()
+        if not active or active.get("sha256")!=entry.get("sha256"):
+            raise ValueError("Ative este perfil no overlay antes do diagnóstico")
+        if self.ram_probe is None:
+            raise RuntimeError("Diagnóstico requer Biblioteca integrada ao Assistente, não janela independente")
+        return entry
+
+    def capture_ram_before(self):
+        try:
+            entry=self._active_rom_for_ram()
+            snap=self.ram_probe.capture_before(entry["sha256"])
+            ids=", ".join(f"#{i:03d}" for i in snap["hand_ids"])
+            self.ram_diag_status.set(
+                "Captura ANTES concluída (somente leitura). "+
+                f"ePSXe PID {snap['pid']}; mão: {ids}. "+
+                "Agora realize uma fusão no jogo e clique Capturar DEPOIS.")
+            self.status.set("Diagnóstico RAM: captura ANTES armazenada apenas em memória.")
+        except Exception as exc:
+            messagebox.showwarning("Diagnóstico RAM",str(exc),parent=self)
+
+    def capture_ram_after(self):
+        try:
+            entry=self._active_rom_for_ram()
+            observed=self.ram_result_id.get().strip()
+            if observed and (not observed.isdecimal() or not 1<=int(observed)<=722):
+                raise ValueError("Resultado observado deve ser um ID entre 1 e 722")
+            result,path=self.ram_probe.capture_after(
+                entry["sha256"],
+                observed_result_id=int(observed) if observed else None)
+            changes=", ".join(
+                f"{name}: {data['changed_bytes']} bytes"
+                for name,data in result["diff"].items()
+                if data.get("changed_bytes") is not None)
+            self.ram_diag_status.set(
+                "CAPTURA EXPERIMENTAL SALVA — não comprova fusão. "+
+                f"PID {result['pid']}; alterações: {changes or 'nenhuma região comparável'}. "+
+                f"Arquivo: {path}")
+            self.status.set("Comparação de RAM salva em: "+str(path))
+        except Exception as exc:
+            messagebox.showwarning("Diagnóstico RAM",str(exc),parent=self)
 
     def load_fusion_candidates(self):
         entry=self.selected()
@@ -746,9 +819,9 @@ class BibliotecaMods(tk.Toplevel):
         self.destroy()
 
 
-def abrir_biblioteca(parent, on_activate=None, catalog=None):
+def abrir_biblioteca(parent, on_activate=None, catalog=None, ram_probe=None):
     """Abre janela dentro do mesmo processo Tkinter do overlay."""
-    return BibliotecaMods(parent,on_activate=on_activate,catalog=catalog)
+    return BibliotecaMods(parent,on_activate=on_activate,catalog=catalog,ram_probe=ram_probe)
 
 
 def ligar_ao_overlay(root, app=None, compact=None):
@@ -827,6 +900,12 @@ def ligar_ao_overlay(root, app=None, compact=None):
 
     root.after(400,ensure_profile_current)
 
+    # Rastreio de RAM sem hooks adicionais no app legado.
+    catalog=ModCatalog()
+    ram_probe=FusionMemoryProbe(
+        (lambda: compact.get_reader()) if compact is not None
+        and callable(getattr(compact,"get_reader",None)) else (lambda: None),
+        catalog.home)
     current={"window":None}
     def show(_event=None):
         existing=current["window"]
@@ -834,7 +913,8 @@ def ligar_ao_overlay(root, app=None, compact=None):
             existing.lift()
             existing.focus_force()
         else:
-            current["window"]=abrir_biblioteca(surface,on_activate=apply_snapshot)
+            current["window"]=abrir_biblioteca(surface,on_activate=apply_snapshot,
+                                               catalog=catalog,ram_probe=ram_probe)
         return "break"
     root.bind_all("<Control-Shift-M>",show,add="+")
     root.bind_all("<Control-Shift-m>",show,add="+")
@@ -846,4 +926,4 @@ def ligar_ao_overlay(root, app=None, compact=None):
     except tk.TclError:
         button=None
     return {"open":show,"button":button,"callback":apply_snapshot,
-            "observer":observer,"renderer":renderer}
+            "observer":observer,"renderer":renderer,"ram_probe":ram_probe}
