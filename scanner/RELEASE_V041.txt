@@ -1,0 +1,1 @@
+MultiMod v0.4.1 — corrigir cache da mão (last/last_pid) no tick real do painel_compacto.py e recuperação automática do catálogo após inicialização do perfil legado. Sem alterar ISOs/saves.
