@@ -5,6 +5,7 @@ A análise ocorre em segundo plano. Dados incertos não são ativados.
 """
 from __future__ import annotations
 
+import csv
 import json
 import queue
 import tkinter as tk
@@ -187,6 +188,8 @@ class BibliotecaMods(tk.Toplevel):
         ttk.Label(toolbar,textvariable=self.fusion_count).pack(side="left",padx=8)
         ttk.Button(toolbar,text="Aprovar lote revisado",
                    command=self.approve_fusion_batch).pack(side="right",padx=3)
+        ttk.Button(toolbar,text="Exportar lista completa CSV",
+                   command=self.export_all_fusion_candidates).pack(side="right",padx=3)
         ttk.Button(toolbar,text="Confirmar receita observada no jogo",
                    command=self.confirm_selected_fusion).pack(side="right",padx=3)
         area=ttk.Frame(candidates_frame)
@@ -418,6 +421,37 @@ class BibliotecaMods(tk.Toplevel):
             "Receita validada pelo usuário e vinculada ao SHA da ISO. "
             "As demais candidatas continuam indisponíveis.",parent=self)
 
+    def export_all_fusion_candidates(self):
+        """Exporta TODAS as candidatas, inclusive as ocultas pela prévia de 750."""
+        entry=self.selected()
+        if (not entry or entry["sha256"]!=self.fusion_source_sha
+                or not getattr(self,"fusion_rows",None)):
+            return messagebox.showwarning("Exportação",
+                "Selecione uma ISO e execute Buscar fusões na ISO.",parent=self)
+        destination=filedialog.asksaveasfilename(
+            parent=self,title="Exportar todas as fusões candidatas",
+            initialfile="fusoes_candidatas_"+entry["sha256"][:12]+".csv",
+            defaultextension=".csv",filetypes=[("CSV","*.csv")])
+        if not destination:return
+        try:
+            with Path(destination).open("w",newline="",encoding="utf-8-sig") as handle:
+                writer=csv.writer(handle)
+                writer.writerow(["SHA256_ISO","Material_A_ID","Material_A_Nome",
+                                 "Material_B_ID","Material_B_Nome",
+                                 "Resultado_ID","Resultado_Nome","Evidencia"])
+                for row in self.fusion_rows:
+                    a,b,c=(int(row[k]) for k in ("a","b","result"))
+                    writer.writerow([
+                        entry["sha256"],a,self.fusion_names.get(a,""),
+                        b,self.fusion_names.get(b,""),c,self.fusion_names.get(c,""),
+                        "revisada_usuario_lote" if self.fusion_review_status else
+                        "candidata_nao_validada"])
+        except OSError as exc:
+            return messagebox.showerror("Exportação falhou",str(exc),parent=self)
+        self.status.set(
+            f"Exportadas {len(self.fusion_rows)} candidatas para revisão completa: "+
+            str(destination))
+
     def approve_fusion_batch(self):
         """Confirma em duas etapas antes de expor receitas ao overlay."""
         entry=self.selected()
@@ -435,8 +469,10 @@ class BibliotecaMods(tk.Toplevel):
             f"Fusões candidatas: {count}\n"+
             f"Bancos coincidentes: {report.get('matching_banks',0)}/7\n"+
             "SHA-256 da ISO: "+entry["sha256"]+"\n\n"+
-            "Você declarou ter revisado a lista. Este procedimento permite "
-            "usar TODAS essas receitas no overlay, mas NÃO prova que cada "
+            "A tela mostra no máximo 750 linhas por vez. Confirme que revisou "
+            "também as demais (use Exportar lista completa CSV).\n\n"
+            "Este procedimento permite usar TODAS essas receitas no overlay, "
+            "mas NÃO prova que cada "
             "uma foi reproduzida no ePSXe.\n\n"
             "Deseja continuar? Nenhuma ROM ou save será alterado.",
             parent=self):
@@ -632,7 +668,8 @@ class BibliotecaMods(tk.Toplevel):
             f"{has_cards} cartas disponíveis no catálogo para leitura da mão.\n"+
             visual_status+
             "A identificação automática da ISO ativa no ePSXe ainda não é garantida.\n"+
-            "Ranqueamento e fusões não verificados permanecem desativados.",parent=self)
+            "Fusões não revisadas permanecem desativadas; "
+            "fusões revisadas podem ser usadas com indicação de sua origem.",parent=self)
 
     def _poll(self):
         try:
