@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 from field_ram_probe import (
     CHUNK_SIZE, HAND_ADDR, SEARCH_START, SEARCH_SIZE, EXPANDED_START, EXPANDED_SIZE, FieldMemoryProbe,
+    HYPOTHESIS_FIRST_SLOT_ID_ADDR, HYPOTHESIS_SLOT_STRIDE, hypothetical_slot_u16_values,
     find_new_id_candidates
 )
 
@@ -160,6 +161,44 @@ class FieldRamTests(unittest.TestCase):
         self.assertTrue(all(size in (140,CHUNK_SIZE) for _,size in self.reader.calls))
         with self.assertRaises(ValueError):
             FieldMemoryProbe(lambda:self.reader,Path(self.temp.name),expanded="sim")
+
+    def test_slot_stride_candidate_values_in_each_phase_unverified(self):
+        slot1=HYPOTHESIS_FIRST_SLOT_ID_ADDR
+        slot2=slot1+HYPOTHESIS_SLOT_STRIDE
+        self.assertEqual(slot1,0xBFF510)
+        self.assertEqual(slot2,0xBFF52C)
+        def update(addr, number):
+            base=addr & ~(CHUNK_SIZE-1)
+            off=addr-base
+            self.reader.chunks[base][off:off+2]=struct.pack("<H",number)
+        update(slot1,291)
+        self.probe.capture_before(self.sha,291)
+        update(slot2,65)
+        prep=self.probe.capture_prepared(self.sha)
+        self.assertEqual(prep["hypothetical_slot_values"][0]["u16_le"],291)
+        self.assertEqual(prep["hypothetical_slot_values"][1]["u16_le"],65)
+        report,path=self.probe.capture_after(self.sha,user_slot=2)
+        slotprobe=report["hypothetical_slot_probe"]
+        self.assertFalse(slotprobe["field_slot_verified"])
+        self.assertTrue(slotprobe["does_not_confirm_occupancy"])
+        self.assertEqual(slotprobe["before"][0]["u16_le"],291)
+        self.assertEqual(slotprobe["before"][1]["u16_le"],0)
+        self.assertEqual(slotprobe["prepared"][1]["u16_le"],65)
+        self.assertEqual(slotprobe["set"][1]["u16_le"],65)
+        self.assertEqual(slotprobe["set"][1]["address"],"0x00BFF52C")
+        self.assertTrue(slotprobe["set"][1]["plausible_card_id"])
+        update(slot2,0)
+        report,path=self.probe.capture_removed(self.sha)
+        self.assertEqual(report["hypothetical_slot_probe"]["removed"][1]["u16_le"],0)
+        self.assertFalse(report["duel_field_ram_verified"])
+        self.assertNotIn('"hex"',path.read_text(encoding="utf-8"))
+
+    def test_hypothetical_slot_unreadable_is_not_invented(self):
+        values=hypothetical_slot_u16_values({})
+        self.assertEqual(len(values),5)
+        self.assertTrue(all(x["u16_le"] is None for x in values))
+        self.assertTrue(all(x["plausible_card_id"] is None for x in values))
+        self.assertTrue(all(x["field_slot_verified"] is False for x in values))
 
     def test_same_pid_sha_must_remain(self):
         self.probe.capture_before(self.sha,291)
