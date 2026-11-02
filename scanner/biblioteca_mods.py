@@ -491,6 +491,7 @@ class BibliotecaMods(tk.Toplevel):
                 entry["sha256"],expected_fingerprint=fingerprint,
                 acknowledgement=typed)
             self.refresh()
+            self.load_fusion_candidates()
             # Atualiza imediatamente o overlay somente se o perfil está
             # efetivamente ativo; o observador também vê o registro atualizado.
             current=self.catalog.current()
