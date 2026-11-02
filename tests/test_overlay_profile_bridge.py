@@ -46,6 +46,55 @@ class ProfileBridgeTests(unittest.TestCase):
         self.assertEqual(compact.atlas["rankLabels"],[])
         self.assertFalse(result["iso_active_in_emulator_verified"])
 
+    def test_compact_panel_tick_cache_resets_when_catalog_changes(self):
+        # O painel real usa self.last/self.last_pid como condição para
+        # redesenhar StringVar da mão. ID e PID continuam iguais ao ativar mod.
+        class TextVar:
+            def __init__(self,value=""):
+                self.value=value
+            def set(self,value):
+                self.value=value
+            def get(self):
+                return self.value
+        cards={123:{"name":"Carta #123 (ID somente)","atk":None,
+                    "def":None,"type_id":None}}
+        labels=[TextVar("Carta #123 (ID somente)")]
+        compact=SimpleNamespace(cards=cards,recipes=[],last=[123],last_pid=2824,
+                                profile_has_cards=False,profile_has_fusions=False,
+                                hand=labels,game_line=TextVar("JOGO: Desconhecido"),
+                                atlas={})
+        app=SimpleNamespace(cards=cards,recipes=[],index={})
+        result=apply_overlay_profile(snap("a"*64,"FM Original",{
+            123:{"name":"Nome real ID 123","atk":1800,"def":900,"type_id":0}
+        }),app=app,compact=compact)
+        self.assertTrue(result["applied"])
+        self.assertIsNone(compact.last)
+        self.assertIsNone(compact.last_pid)
+        self.assertTrue(compact.profile_has_cards)
+        self.assertFalse(compact.profile_has_fusions)
+        self.assertIn("ISO no ePSXe NÃO confirmada",compact.game_line.get())
+
+        # Replica a condição EXATA do tick do painel_compacto.py:
+        ids=[123]
+        pid=2824
+        if compact.last != ids or compact.last_pid != pid:
+            compact.last=list(ids)
+            compact.last_pid=pid
+            for n,cid in enumerate(ids):
+                labels[n].set(compact.cards[cid]["name"])
+        self.assertEqual(labels[0].get(),"Nome real ID 123")
+
+    def test_switch_to_another_mod_invalidates_hand_again(self):
+        compact=SimpleNamespace(cards={},recipes=[],last=[547],last_pid=101,atlas={})
+        apply_overlay_profile(snap("a"*64,"Primeiro",{547:{"name":"Nome A","atk":1000,"def":1000}}),
+                              compact=compact)
+        compact.last=[547]
+        compact.last_pid=101
+        apply_overlay_profile(snap("b"*64,"Segundo",{547:{"name":"Nome B","atk":1000,"def":1000}}),
+                              compact=compact)
+        self.assertIsNone(compact.last)
+        self.assertEqual(compact.cards[547]["name"],"Nome B")
+
     def test_switching_mods_removes_stale_names(self):
         original={722:{"name":"Outra carta"}}
         compact=SimpleNamespace(cards=original,recipes=[],atlas={})
