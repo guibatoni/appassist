@@ -1,0 +1,78 @@
+name: Publicar Scanner MultiISO 0.3.2
+on:
+  push:
+    branches: [main]
+    paths: [scanner/scanner_multiiso.py.gz]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: scanner-v0.3.2
+  cancel-in-progress: false
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Extrair fonte e validar
+        shell: bash
+        run: |
+          python - <<'PY'
+          import gzip,hashlib,py_compile
+          from pathlib import Path
+          b=gzip.decompress(Path('scanner/scanner_multiiso.py.gz').read_bytes())
+          assert hashlib.sha256(b).hexdigest()=='6dd82868f4a9fc19a679ed6c54a01209f54f77efe766195063d05939df928cab'
+          p=Path('scanner/scanner_multiiso.py')
+          p.write_bytes(b)
+          py_compile.compile(str(p),doraise=True)
+          PY
+          python scanner/scanner_multiiso.py --help
+      - name: Gerar patch validado
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,zipfile
+          s=Path('scanner/scanner_multiiso.py').read_bytes()
+          bat=('@echo off\r\nsetlocal\r\ncd /d "%~dp0"\r\n'
+               'set /p "ISOS=Pasta com as ISOs (.bin/.iso): "\r\n'
+               'if not defined ISOS exit /b 1\r\n'
+               'py -3 "tools\\scanner_multiiso.py" --entrada "%ISOS%" --saida "analises_multimod"\r\n'
+               'pause\r\n').encode('utf-8')
+          Path('scanner/ABRIR_SCANNER_MULTIISO.bat').write_bytes(bat)
+          paths={'app/tools/scanner_multiiso.py':s, 'app/ABRIR_SCANNER_MULTIISO.bat':bat}
+          records=[{'path':n,'size':len(b),'sha256':hashlib.sha256(b).hexdigest()} for n,b in paths.items()]
+          meta={'schema':1,'version':'0.3.2','notes':'Scanner MultiISO em lote para ISOs locais, leitura somente','files':records}
+          Path('dist').mkdir(exist_ok=True)
+          with zipfile.ZipFile('dist/patch.zip','w',compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr('patch_manifest.json',json.dumps(meta,ensure_ascii=False,indent=2))
+            for n,b in paths.items(): z.writestr(n,b)
+          with zipfile.ZipFile('dist/patch.zip') as z:
+            for n,b in paths.items(): assert z.read(n)==b
+          manifest={'schema':1,'version':'0.3.2','notes':meta['notes'],
+                    'patch_sha256':hashlib.sha256(Path('dist/patch.zip').read_bytes()).hexdigest()}
+          Path('dist/update-manifest.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False))
+          PY
+      - name: Commitar código-fonte legível
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scanner/scanner_multiiso.py scanner/ABRIR_SCANNER_MULTIISO.bat
+          if ! git diff --cached --quiet; then
+            git commit -m "feat(scanner): fonte Python revisável"
+            git push
+          fi
+      - name: Criar Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.3.2 >/dev/null 2>&1; then
+            echo "v0.3.2 já publicada"
+            exit 0
+          fi
+          gh release create v0.3.2 dist/patch.zip dist/update-manifest.json --latest \
+            --title "MultiMod v0.3.2 - Scanner MultiISO" \
+            --notes "Patch incremental para ISOs locais. Não distribui imagens do jogo ou arquivos pessoais."
