@@ -169,6 +169,65 @@ class ModCatalog:
             atomic_json(self.active_file, active)
             return active
 
+    def confirm_fusion(self, rom_sha256: str, a: int, b: int, result: int) -> int:
+        """Confirma UMA receita observada no jogo, nunca o banco inteiro.
+
+        A seleção de uma hipótese não constitui validação. A interface deve
+        pedir ao usuário o ID do resultado que ele observou em duelo real.
+        """
+        a,b,result=(int(a),int(b),int(result))
+        if not all(1<=v<=722 for v in (a,b,result)):
+            raise ValueError("ID fora do catálogo 1..722")
+        with self._lock:
+            entries=self.list()
+            entry=next((e for e in entries if e.get("sha256")==rom_sha256),None)
+            if not entry:
+                raise ValueError("ISO não cadastrada")
+            profile=self.profile_for(entry)
+            if not profile:
+                raise ValueError("Perfil inexistente ou inválido")
+            path=Path(entry["profile_path"])
+            if not path.is_file():
+                raise ValueError("Perfil indisponível")
+            verified=profile.get("verified",{})
+            catalog=profile.get("cards",[])
+            if verified.get("cartas")!="verificado" or len(catalog)!=722:
+                raise ValueError("Cartas ainda não validadas para este mod")
+            pending=self.home/"investigacoes"/(rom_sha256+".fusoes.json")
+            report=load_json(pending,{})
+            if (report.get("rom_sha256")!=rom_sha256
+                    or not report.get("candidate_fingerprint")):
+                raise ValueError("Relatório de fusões ausente, antigo ou incompatível com a ROM")
+            proposed={tuple(int(c[k]) for k in ("a","b","result"))
+                      for c in report.get("candidates",[])}
+            if (a,b,result) not in proposed:
+                raise ValueError("Receita não consta da análise da ISO selecionada")
+            already=profile.setdefault("fusion_recipes",[])
+            key=(min(a,b),max(a,b))
+            for r in already:
+                if (min(int(r["a"]),int(r["b"])),max(int(r["a"]),int(r["b"])))==key:
+                    if int(r["result"])!=result:
+                        raise ValueError("Fusão incompatível com outra já confirmada")
+                    return len(already)
+            already.append({"a":a,"b":b,"result":result,
+                            "validation":"observada_manualmente_no_jogo",
+                            "fusion_candidate_fingerprint":report["candidate_fingerprint"]})
+            profile["supported_features"]["fusions"]=True
+            profile["verified"]["fusoes"]=f"parcial_usuario_{len(already)}"
+            profile.setdefault("notes",[]).append(
+                "Fusões são confirmadas individualmente pelo usuário durante o duelo."
+            )
+            atomic_json(path,profile)
+            entry["verified"]=profile["verified"]
+            entry["features"]=supported_for_runtime(profile)
+            atomic_json(self.registry_file,{"schema":1,"entries":entries})
+            active=load_json(self.active_file,{})
+            if active.get("sha256")==rom_sha256:
+                active["features"]=entry["features"]
+                active["fusion_revision"]=len(already)
+                atomic_json(self.active_file,active)
+            return len(already)
+
     def current(self) -> dict | None:
         active = load_json(self.active_file, {})
         row = next((e for e in self.list() if e.get("sha256") == active.get("sha256")), None)
