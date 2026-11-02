@@ -12,6 +12,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 from biblioteca_mods import preview_model
 from investigador_iso import fusion_triplet_hypotheses
 from instalar_biblioteca import patch_source, START
+from ia_local import minimal_evidence, validate_suggestion
 
 
 class BibliotecaTests(unittest.TestCase):
@@ -43,6 +44,19 @@ class BibliotecaTests(unittest.TestCase):
 
     def test_random_noise_gives_no_fusions(self):
         self.assertEqual(fusion_triplet_hypotheses(b"\xff"*1200),[])
+
+    def test_ai_proposals_never_change_verified_data(self):
+        report={"file":"teste.iso","hash_rom":"a"*64,
+                "candidates":{"fusion_tables_u16":[{"offset":120,"entries":35,"source_file":"SLUS_014.11"}]},
+                "uncertainties":[{"field":"fusoes","status":"não_extraídas"}]}
+        evidence=minimal_evidence(report)
+        response={"resumo":"Estrutura potencial", "prioridades":["Verificar com o jogo"],
+                  "indices_candidatos_fusao":[0,99,True,"0"],
+                  "alertas":["Não foi validada"]}
+        filtered=validate_suggestion(response,evidence)
+        self.assertEqual(filtered["indices_candidatos_fusao"],[0])
+        self.assertFalse(filtered["verified_data_changed"])
+        self.assertIn("NÃO VALIDADO",filtered["status"])
 
     def test_installer_injects_once_after_compact_panel(self):
         source = (
