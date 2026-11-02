@@ -210,6 +210,21 @@ class ModCatalog:
                 if (min(int(r["a"]),int(r["b"])),max(int(r["a"]),int(r["b"])))==key:
                     if int(r["result"])!=result:
                         raise ValueError("Fusão incompatível com outra já confirmada")
+                    if r.get("validation")!="observada_manualmente_no_jogo":
+                        # Uma revisão em lote pode depois receber confirmação
+                        # mais forte ao observar esta receita no próprio jogo.
+                        r["validation"]="observada_manualmente_no_jogo"
+                        review=profile.get("fusion_review")
+                        if isinstance(review,dict):
+                            review["in_game_individually_verified"]=sum(
+                                item.get("validation")=="observada_manualmente_no_jogo"
+                                for item in already
+                            )
+                        atomic_json(path,profile)
+                        active=load_json(self.active_file,{})
+                        if active.get("sha256")==rom_sha256:
+                            active["fusion_revision"]=int(active.get("fusion_revision",0))+1
+                            atomic_json(self.active_file,active)
                     return len(already)
             already.append({"a":a,"b":b,"result":result,
                             "validation":"observada_manualmente_no_jogo",
