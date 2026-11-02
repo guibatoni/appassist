@@ -24,6 +24,7 @@ SYSTEM=(
     "Responda em JSON estrito com campos: resumo (string), "
     "prioridades (array de strings), "
     "indices_candidatos_fusao (array de índices inteiros das candidatas disponíveis), "
+    "bancos_prioritarios (array de números inteiros de 1 a 7), "
     "alertas (array de strings). "
     "Não forneça comandos para modificar a ISO nem executar programas."
 )
@@ -42,6 +43,21 @@ def minimal_evidence(report: dict) -> dict:
             "index":i, "source":str(x.get("source_file",""))[:120],
             "offset":x.get("offset"),"entries":x.get("entries"),
         } for i,x in enumerate(candidates[:12])],
+        "fusion_banks":{
+            "status":report.get("candidates",{}).get("fusion_bank_summary",{}).get("status"),
+            "valid_banks":report.get("candidates",{}).get("fusion_bank_summary",{}).get("valid_banks"),
+            "matching_banks":report.get("candidates",{}).get("fusion_bank_summary",{}).get("matching_banks"),
+            "divergent_banks":report.get("candidates",{}).get("fusion_bank_summary",{}).get("divergent_banks"),
+            "candidate_count":report.get("candidates",{}).get("fusion_bank_summary",{}).get("candidate_count"),
+            "banks":[{
+                "bank":b.get("bank"),"wa_offset":b.get("wa_offset"),
+                "status":b.get("status"),"problem":str(b.get("problem",""))[:150],
+                "unique_recipe_count":b.get("unique_recipe_count"),
+                "recipelist_sha256":b.get("recipelist_sha256"),
+                "conflict_count":b.get("conflict_count"),
+            } for b in report.get("candidates",{}).get("fusion_bank_summary",{}).get("banks",[])[:7]],
+            "examples":report.get("candidates",{}).get("fusion_preview",[])[:8],
+        },
     }
 
 
@@ -57,12 +73,20 @@ def validate_suggestion(raw: dict, evidence: dict) -> dict:
     idx=raw.get("indices_candidatos_fusao",[])
     if not isinstance(idx,list):idx=[]
     selected=[int(i) for i in idx if type(i) is int and i in existing][:8]
+    banks=evidence.get("fusion_banks",{}).get("banks",[])
+    available={b.get("bank") for b in banks if b.get("status")=="decodificado"}
+    priorities=raw.get("bancos_prioritarios",[])
+    if not isinstance(priorities,list):priorities=[]
+    suggested_banks=list(dict.fromkeys(
+        b for b in priorities if type(b) is int and b in available
+    ))[:7]
     return {
         "status":"SOMENTE HIPÓTESES — NÃO VALIDADO",
         "source":"LLM LOCAL — Ollama",
         "resumo":str(raw.get("resumo",""))[:1200],
         "prioridades":clean_strings("prioridades",8),
         "indices_candidatos_fusao":selected,
+        "bancos_prioritarios":suggested_banks,
         "alertas":clean_strings("alertas",8),
         "verified_data_changed":False,
     }
