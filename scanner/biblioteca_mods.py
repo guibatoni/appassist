@@ -229,12 +229,13 @@ class BibliotecaMods(tk.Toplevel):
         self.save_settings()
         self.status.set("Monitoramento ativado: "+str(folder))
 
-    def stop_watch(self):
+    def stop_watch(self, *, persist=True):
         if self.monitor:
             self.monitor.stop()
             self.monitor=None
-        self.auto_watch=False
-        self.save_settings()
+        if persist:
+            self.auto_watch=False
+            self.save_settings()
         self.status.set("Monitoramento interrompido.")
 
     def choose_file(self):
@@ -401,7 +402,7 @@ class BibliotecaMods(tk.Toplevel):
     def close(self):
         if self._after_id is not None:
             self.after_cancel(self._after_id)
-        self.stop_watch()
+        self.stop_watch(persist=False)
         self.destroy()
 
 
