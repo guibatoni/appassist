@@ -1,0 +1,1 @@
+MultiMod v0.4.4 — diagnóstico experimental por RAM do ePSXe: capturar antes/depois da fusão, comparar 4 regiões pequenas, anotar resultado observado, salvar JSON por SHA/PID, sem confirmar receitas automaticamente e sem alterar ISOs/saves.
