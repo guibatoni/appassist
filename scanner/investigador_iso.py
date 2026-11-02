@@ -10,6 +10,7 @@ import struct
 from pathlib import Path
 
 from scanner_multiiso import Disc
+from extrator_fusoes import analyze_fusion_banks, save_fusion_report
 
 
 def fusion_triplet_hypotheses(data: bytes, *, max_scan_bytes: int = 4_000_000,
@@ -129,6 +130,37 @@ def investigate(rom_path: Path, profile: dict,
     finally:
         if disc is not None:
             disc.close()
+    # Formato real de fusão do WA_MRG, distinto das hipóteses genéricas
+    # de triplas no executável. O catálogo candidato nunca é ativado aqui.
+    try:
+        fusion=analyze_fusion_banks(rom_path)
+        report["candidates"]["fusion_bank_summary"]={
+            k:v for k,v in fusion.items() if k not in ("candidates","banks")
+        }
+        report["candidates"]["fusion_bank_summary"]["banks"]=fusion["banks"]
+        report["candidates"]["fusion_preview"]=fusion["candidates"][:8]
+        report["evidence"].append({
+            "type":"fusion_wa_mrg",
+            "valid_banks":fusion["valid_banks"],
+            "matching_banks":fusion["matching_banks"],
+            "divergent_banks":fusion["divergent_banks"],
+            "candidate_count":fusion["candidate_count"],
+        })
+        if output_path:
+            fusion_path=Path(output_path).with_suffix(".fusoes.json")
+            save_fusion_report(fusion_path,fusion)
+            report["fusion_candidate_path"]=str(fusion_path)
+        report["recommendations"].append(
+            "Banco de fusões decodificado estruturalmente não equivale a "
+            "fusões confirmadas. Compare resultados reais no duelo antes "
+            "de liberar qualquer receita ao overlay."
+        )
+    except Exception as exc:
+        report["uncertainties"].append({
+            "field":"fusoes_wa_mrg","status":"não_extraídas",
+            "reason":type(exc).__name__+": "+str(exc)
+        })
+
     report["recommendations"].append(
         "Uma ROM nova gera um perfil distinto por SHA-256. "
         "Dados sem evidências ficam desativados."
