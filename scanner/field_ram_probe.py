@@ -21,6 +21,14 @@ CHUNK_SIZE = 4096
 SEARCH_START = (HAND_ADDR & ~(CHUNK_SIZE - 1)) - 8 * CHUNK_SIZE
 SEARCH_SIZE = 24 * CHUNK_SIZE  # 96 KiB máximo; não é varredura de processo completo.
 MAX_CANDIDATES = 150
+# Investigação AMPLIADA manual: 1 MiB do MESMO processo ePSXe, sem dump.
+# Inclui endereços de interesse B483A2, B5B21E, BFF484 e C02D00.
+# Não corresponde a um mapa confirmado do campo.
+EXPANDED_START = 0xB40000
+EXPANDED_SIZE = 0x100000  # 1 MiB, 256 chunks de 4096 bytes
+assert EXPANDED_SIZE == 256 * CHUNK_SIZE
+assert EXPANDED_START <= SEARCH_START
+assert SEARCH_START + SEARCH_SIZE <= EXPANDED_START + EXPANDED_SIZE
 
 
 def find_new_id_candidates(before: dict[int, bytes], after: dict[int, bytes],
@@ -105,6 +113,8 @@ def summarize_phase_changes(before: dict[int, bytes], after: dict[int, bytes]) -
     return {
         "comparable_chunks": comparable,
         "changed_bytes": changed_total,
+        "hotspot_chunks": sorted(changes_by_chunk,
+                                 key=lambda c: (-c["changed_bytes"], c["chunk_start"]))[:12],
         "changed_chunks": changes_by_chunk,
         "changed_offsets_sample": address_samples,
         "sample_truncated": changed_total > len(address_samples),
@@ -119,9 +129,14 @@ class FieldMemoryProbe:
     -> REMOVIDA (opcional). As fases são observadas pelo usuário no jogo.
     """
 
-    def __init__(self, reader_provider, home: Path):
+    def __init__(self, reader_provider, home: Path, *, expanded: bool = False):
         self.reader_provider=reader_provider
         self.home=Path(home)
+        if type(expanded) is not bool:
+            raise ValueError("expanded deve ser booleano")
+        self.expanded=expanded
+        self.search_start=EXPANDED_START if expanded else SEARCH_START
+        self.search_size=EXPANDED_SIZE if expanded else SEARCH_SIZE
         self.before=None
         self.prepared=None
         self.after=None
@@ -144,7 +159,7 @@ class FieldMemoryProbe:
             raise RuntimeError("Mão de cinco cartas inválida; capture durante um duelo")
         chunks={}
         errors=[]
-        for addr in range(SEARCH_START,SEARCH_START+SEARCH_SIZE,CHUNK_SIZE):
+        for addr in range(self.search_start,self.search_start+self.search_size,CHUNK_SIZE):
             try:
                 block=reader.read(addr,CHUNK_SIZE)
                 if not isinstance(block,bytes) or len(block)!=CHUNK_SIZE:
@@ -258,9 +273,10 @@ class FieldMemoryProbe:
                 "hand_refresh_not_required":True,
                 "does_not_prove_field":True,
             },
-            "scan":{"address_start":f"0x{SEARCH_START:08X}",
-                    "size_bytes":SEARCH_SIZE,"chunk_size":CHUNK_SIZE,
-                    "purpose":"janela exploratoria em torno da mao conhecida"},
+            "scan":{"address_start":f"0x{self.search_start:08X}",
+                    "size_bytes":self.search_size,"chunk_size":CHUNK_SIZE,
+                    "mode":"AMPLIADA_1MIB" if self.expanded else "RESTRITA_96KIB",
+                    "purpose":"faixa experimental no processo ePSXe; NAO e mapa de campo"},
             "analysis":candidates,
             "phase_differences":{
                 "before_to_preparation":(
@@ -280,6 +296,10 @@ class FieldMemoryProbe:
                 "A presença do ID uint16 em memória não comprova a ocupação do campo.",
                 "Endereço 0xBFF510 pode ser buffer adjacente à mão, não slot da mesa.",
                 "Nenhum dump bruto da memória é incluído neste relatório.",
+                "A faixa ampliada de 1 MiB não equivale a uma varredura integral "
+                "da RAM do ePSXe nem garante cobrir o campo.",
+                "Contagens de bytes podem mudar por efeitos, animação e outras "
+                "ações do jogo e não comprovam o campo.",
                 "Todas as fases são anotações visuais do usuário, não verificações automáticas.",
             ],
         }
