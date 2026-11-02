@@ -120,9 +120,32 @@ def apply_overlay_profile(snapshot:dict, *, app=None, compact=None) -> dict:
         elif atlas is not None:
             setattr(compact,"atlas",empty)
 
-    # Guardar o estado para as abas que consultam o perfil ativo.
+    # PONTO DECISIVO DO PAINEL COMPACTO:
+    # painel_compacto.CompactPanel.tick só atualiza os StringVar hand[n] quando
+    # self.last != ids ou self.last_pid != rd.pid. Ao trocar o catálogo,
+    # os IDs/PID NÃO mudam, então invalidar explicitamente o cache é necessário.
     if compact is not None:
         setattr(compact,"_active_profile",snapshot)
+        if hasattr(compact,"profile_has_cards"):
+            compact.profile_has_cards=bool(cards)
+        if hasattr(compact,"profile_has_fusions"):
+            compact.profile_has_fusions=bool(recipes)
+        if hasattr(compact,"last"):
+            compact.last=None
+        if hasattr(compact,"last_pid"):
+            compact.last_pid=None
+
+        # Distinguir catálogo selecionado de ROM efetivamente detectada.
+        game_line=getattr(compact,"game_line",None)
+        if cards and callable(getattr(game_line,"set",None)):
+            game_line.set("CATÁLOGO: "+str(snapshot.get("profile_name","Mod local"))+
+                          " · seleção manual; ISO no ePSXe NÃO confirmada")
+        if callable(getattr(compact,"refresh_collection",None)):
+            try:
+                compact.refresh_collection()
+            except (AttributeError,ValueError,TypeError,KeyError):
+                pass
+
     if app is not None:
         setattr(app,"_active_mod_profile",snapshot)
 
