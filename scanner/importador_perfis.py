@@ -16,6 +16,7 @@ from scanner_multiiso import process, sha256, X15_SHA
 from card_catalog import enrich_cards, attach_effect_manifest, effect_sidecar_path, category_summary
 from mod_effects_iso import extract_embedded_effects
 from dueltrace_rank_profiles import rank_profile_for_image
+from dueltrace_rank_system import CLASSIC_RANKS
 
 SCHEMA = 1
 LABELS_X15 = ["Z-POW", "S-POW", "S-TEC"]
@@ -148,8 +149,7 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
             "categories": card_ok,
             "effects": effects_info["count"] > 0,
         },
-        "rank_labels": LABELS_X15 if known_x15 else list(
-            __import__("dueltrace_rank_system").CLASSIC_RANKS),
+        "rank_labels": LABELS_X15 if known_x15 else list(CLASSIC_RANKS),
         "rank_system":("x15" if known_x15 else "classic"),
         "rank_system_verification":("sha_x15_confirmado" if known_x15
                                     else "layout_original_presumido"),
