@@ -32,7 +32,7 @@ class DropRankEvidenceTests(unittest.TestCase):
             r["suspectedMappings"]["Z-POW"]["group"],
             "TABELA_1_RANK_DESCONHECIDO")
         self.assertEqual(r["usable"],2)
-        self.assertIn("manuais",r["note"])
+        self.assertIn("registros fornecidos",r["note"])
 
     def test_single_opponent_is_not_enough_and_duplicate_duel_ignored(self):
         p=fake_profile()
