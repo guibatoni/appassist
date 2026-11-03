@@ -57,6 +57,14 @@ class WAAssetTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             assets.decode_hand_frame(b"",0)
 
+    def test_original_ps1_zero_palette_index_is_transparent(self):
+        wa=bytearray(synthetic_wa())
+        # Paleta da moldura de monstros: cor 0 da CLUT = transparente.
+        struct.pack_into("<H",wa,assets.DUEL_CLUT_START+256*2,0)
+        frame=assets.decode_hand_frame(bytes(wa),0)
+        self.assertEqual(frame.getpixel((0,0))[3],0)
+        self.assertEqual(frame.getpixel((2,0))[3],255)
+
     def test_large_and_small_art_exact_offsets_and_palette(self):
         wa=synthetic_wa()
         large,base=assets._large(wa,1)
