@@ -4,7 +4,7 @@ import Image from "next/image"
 import {useEffect, useState} from "react"
 import {ChevronLeft, ChevronRight, Database, RefreshCcw, Search, ShieldCheck} from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi} from "@/lib/desktop"
-import type {DropsPage, DropRow} from "@/lib/desktop"
+import type {DropsPage, DropRow, DuelEvidence} from "@/lib/desktop"
 
 function DropArtwork({sha,id,name}:{sha:string|null;id:number;name:string}) {
   const [source,setSource]=useState<"frame"|"art"|"none">("frame")
@@ -53,6 +53,13 @@ export function DropsPage({sha}:{sha:string|null}) {
   const [result,setResult]=useState<DropsPage|null>(null)
   const [loading,setLoading]=useState(false)
   const [error,setError]=useState<string|null>(null)
+  const [duelEvidence,setDuelEvidence]=useState<DuelEvidence|null>(null)
+  const [obsOpponent,setObsOpponent]=useState(0)
+  const [obsRank,setObsRank]=useState("Z-POW")
+  const [obsCard,setObsCard]=useState("")
+  const [obsPoints,setObsPoints]=useState("")
+  const [obsBusy,setObsBusy]=useState(false)
+  const [obsError,setObsError]=useState<string|null>(null)
   const pageSize=36
 
   // Nunca reutilizar filtros de um mod em outro perfil SHA.
@@ -64,6 +71,11 @@ export function DropsPage({sha}:{sha:string|null}) {
     setCardType("")
     setOffset(0)
     setResult(null)
+    setDuelEvidence(null)
+    setObsOpponent(0)
+    setObsCard("")
+    setObsPoints("")
+    setObsError(null)
   },[sha])
 
   useEffect(()=>{
@@ -82,6 +94,35 @@ export function DropsPage({sha}:{sha:string|null}) {
     },200)
     return()=>{mounted=false;window.clearTimeout(timer)}
   },[sha,opponent,group,query,offset,sort,cardType,revision])
+
+  useEffect(()=>{
+    let active=true
+    const api=desktopApi()
+    if(api)void api.get_duel_evidence().then(data=>{
+      if(active)setDuelEvidence(data)
+    }).catch(()=>{if(active)setDuelEvidence(null)})
+    return()=>{active=false}
+  },[sha,revision])
+  const saveObservation=async()=>{
+    const id=Number(obsCard),points=obsPoints.trim()?Number(obsPoints):null
+    if(!Number.isInteger(obsOpponent)||obsOpponent<1||!Number.isInteger(id)||id<1||id>722||
+      (points!==null&&(!Number.isInteger(points)||points<0||points>300))){
+      setObsError("Selecione o oponente, ID de carta válido e pontuação entre 0 e 300.")
+      return
+    }
+    const api=desktopApi()
+    if(!api)return
+    setObsBusy(true)
+    setObsError(null)
+    try{
+      const report=await api.record_duel_result(obsOpponent,obsRank,id,points)
+      setDuelEvidence(report)
+      setObsCard("")
+      setObsPoints("")
+    }catch(e){
+      setObsError(e instanceof Error?e.message:"Falha ao registrar duelo observado.")
+    }finally{setObsBusy(false)}
+  }
 
   const options=result?.opponents??[]
   const rankGroups=result?.groups??[]
@@ -159,6 +200,55 @@ export function DropsPage({sha}:{sha:string|null}) {
           </div>
         </div>
       </>}
+    </section>
+    <section className="panel rounded-xl p-4">
+      <h2 className="font-display text-xl font-semibold text-gold">Conferir drops obtidos em duelo</h2>
+      <p className="mt-1 text-sm text-muted">Após o duelo, registre o RANK e o ID da carta exibidos no jogo. O DUELTRACE compara com os três bancos do oponente da ISO ativa, sem copiar dados de outros mods.</p>
+      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <label className="flex flex-col gap-1 text-xs text-muted">Oponente do duelo
+          <select className="field px-3 py-2 text-sm" value={obsOpponent}
+            onChange={e=>setObsOpponent(Number(e.target.value))}>
+            <option value={0}>Selecione o oponente</option>
+            {options.map(o=><option key={o.id} value={o.id}>#{o.id} {o.name}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted">RANK observado
+          <select className="field px-3 py-2 text-sm" value={obsRank}
+            onChange={e=>setObsRank(e.target.value)}>
+            {["Z-POW","S-POW","S-TEC"].map(v=><option key={v} value={v}>{v}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted">ID da carta recebida
+          <input type="number" min={1} max={722} value={obsCard}
+            onChange={e=>setObsCard(e.target.value)} className="field px-3 py-2 text-sm"
+            placeholder="Ex.: 123"/>
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted">Pontos exibidos (opcional)
+          <input type="number" min={0} max={300} value={obsPoints}
+            onChange={e=>setObsPoints(e.target.value)} className="field px-3 py-2 text-sm"
+            placeholder="Ex.: 95"/>
+        </label>
+        <button type="button" disabled={obsBusy||!result?.available||!desktopApi()}
+          className="btn-gold self-end disabled:opacity-40" onClick={()=>void saveObservation()}>
+          {obsBusy?"Registrando…":"Registrar resultado"}
+        </button>
+      </div>
+      {obsError&&<p className="mt-2 text-sm text-danger" role="alert">{obsError}</p>}
+      <div className="mt-3 text-xs text-muted">
+        Registros locais: {duelEvidence?.observations??0} · Evidências discriminantes:
+        {" "}{duelEvidence?.usable??0} · Ambíguas: {duelEvidence?.ambiguous??0}
+        {" "}· Divergentes: {duelEvidence?.inconsistent??0}
+      </div>
+      {duelEvidence?.suspectedMappings&&Object.entries(duelEvidence.suspectedMappings).length>0&&
+        <div className="mt-3 rounded-lg border border-gold/30 bg-background/40 p-3 text-xs text-gold">
+          Correspondência sugerida por observações manuais (não comprovada pela execução MIPS):
+          {Object.entries(duelEvidence.suspectedMappings).map(([rank,m])=>
+            <p key={rank} className="mt-1">{rank}: {m.group} · {m.observations} duelos, {m.opponents} oponentes</p>)}
+        </div>}
+      {duelEvidence?.mismatches?.length ? <p className="mt-3 text-xs text-danger">
+        Atenção: {duelEvidence.mismatches.length} divergência(s) entre os drops registrados e as tabelas do WA. Confira o mod ativo, o oponente e o RANK observado.
+      </p>:null}
+      <p className="mt-2 text-xs text-muted">Esses registros são relatos manuais de cada duelo. Eles não confirmam sozinhos as instruções MIPS executadas ou a fórmula de RANK.</p>
     </section>
     <section className="panel rounded-xl p-4">
       <h2 className="font-display text-xl font-semibold text-gold">Pontos de RANK</h2>
