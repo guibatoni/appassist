@@ -1,11 +1,9 @@
-"""Extração conservadora de tabelas de pontos RANK do WA_MRG.MRG.
+"""Reconhecimento automático (e conservador) de tabelas de pontos RANK.
 
-O relatório forense X15 (29/10/2026) localizou 40 cópias de uma tabela de
-10 critérios * 5 faixas * (limiar u16 + pontos i16), de 200 bytes cada.
-A SHA da tabela é verificável independentemente da identidade da ISO.
-Para um mod desconhecido, a TABELA pode ser decodificada, mas a rotina
-MIPS que a utiliza, as bonificações, os rótulos e a posição na RAM NÃO
-podem ser considerados verificados sem uma auditoria do executável.
+Busca estruturas de 10 critérios × 5 pares <limiar u16, pontos i16> em
+qualquer offset de WA_MRG.MRG, não apenas no endereço X15. Requer 40 blocos
+com conteúdos idênticos e espaçamento de três setores PS1. Isso valida a
+estrutura dos pontos, NÃO demonstra que o executável MIPS a utilize.
 """
 from __future__ import annotations
 
@@ -13,7 +11,7 @@ import hashlib
 import struct
 from collections import Counter
 
-BLOCK_FIRST_SECTOR = 7475
+BLOCK_FIRST_SECTOR = 7475        # Endereço do X15: somente referência forense
 BLOCK_SECTORS = 3
 SECTOR = 2048
 BLOCK_COUNT = 40
@@ -22,25 +20,30 @@ ROW_COUNT = 10
 BANDS_PER_ROW = 5
 RECORD_SIZE = 4
 TABLE_SIZE = ROW_COUNT * BANDS_PER_ROW * RECORD_SIZE
+STRIDE = BLOCK_SECTORS * SECTOR
 KNOWN_X15_TABLE_SHA256 = "dffacc55349f6b565d9e9a70db20ce9fe5f5ef5702a5bcc7c35926b764af28e0"
 KNOWN_X15_SLUS_SHA256 = "67ef6a3f7999bc4b0e09f773b07ee1c5da829a4d4686f1f2f6c8d4e2d6425bec"
-
 X15_RULE_NAMES = (
     "turns", "effective_attacks", "defense_wins", "face_down",
     "spells", "traps", "cards_used", "remaining_lp", "fusions", "equips",
 )
 MAX_WA_BYTES = 96 * 1024 * 1024
+MAX_ANCHORS = 250_000  # limite de CPU para mods malformados
+LEGACY_OFFSET = BLOCK_FIRST_SECTOR * SECTOR + POINT_TABLE_OFFSET
+LAST_BAND_OFFSET = (BANDS_PER_ROW - 1) * RECORD_SIZE
 
 
 def _empty(status: str, *, message: str) -> dict:
     return {
         "status": status, "available": False, "rules": {},
-        "runtime_verified": False, "table_sha256": None,
+        "runtime_verified": False, "binary_verified": False,
+        "structure_verified": False, "table_sha256": None,
         "table_count": 0, "identical_copies": 0,
         "source": "DATA/WA_MRG.MRG", "first_offset": None,
         "criterion_names_verified": False,
         "base_points": None, "lp_victory_bonus": None,
         "slus_sha256": None, "note": message,
+        "method": "automatic_stride_scan",
     }
 
 
@@ -70,76 +73,125 @@ def _decode_table(data: bytes) -> list[list[tuple[int, int]]] | None:
     return rows
 
 
+def _candidate_positions(wa: bytes):
+    """Âncora binária barata: o quinto limite de cada critério é 0x7FFF."""
+    offset = 0
+    seen = 0
+    needed = STRIDE * (BLOCK_COUNT - 1) + TABLE_SIZE
+    while True:
+        pos = wa.find(b"\xff\x7f", offset)
+        if pos < 0:
+            return
+        offset = pos + 2
+        seen += 1
+        if seen > MAX_ANCHORS:
+            raise OverflowError("Limite de busca das estruturas RANK excedido")
+        start = pos - LAST_BAND_OFFSET
+        if start < 0 or start % 4 != 0 or start + needed > len(wa):
+            continue
+        if all(wa[start + LAST_BAND_OFFSET + row * BANDS_PER_ROW * RECORD_SIZE:
+                  start + LAST_BAND_OFFSET + row * BANDS_PER_ROW * RECORD_SIZE + 2]
+               == b"\xff\x7f" for row in range(ROW_COUNT)):
+            yield start
+
+
+def _identical_repetitions(wa: bytes, offset: int, baseline: bytes) -> int:
+    identical = 0
+    for i in range(BLOCK_COUNT):
+        start = offset + i * STRIDE
+        if wa[start:start + TABLE_SIZE] == baseline:
+            identical += 1
+    return identical
+
+
+def _legacy_diagnostic(wa: bytes) -> dict:
+    """Preserva explicação específica para mods parcialmente alterados."""
+    last = LEGACY_OFFSET + (BLOCK_COUNT - 1)*STRIDE + TABLE_SIZE
+    if len(wa) < last:
+        return _empty("layout_unknown", message="WA não contém layout conhecido de 40 blocos.")
+    samples = [wa[LEGACY_OFFSET + i*STRIDE:
+                  LEGACY_OFFSET + i*STRIDE + TABLE_SIZE]
+               for i in range(BLOCK_COUNT)]
+    digests = [hashlib.sha256(t).hexdigest() for t in samples]
+    unique, identical = Counter(digests).most_common(1)[0]
+    if (identical > 1 and identical < BLOCK_COUNT
+            and _decode_table(samples[digests.index(unique)]) is not None):
+        result = _empty(
+            "divergent_rank_tables",
+            message="Existem tabelas RANK diferentes entre os 40 duelistas; "
+                    "não é seguro usar uma pontuação única para todos.")
+        result.update(table_count=BLOCK_COUNT, identical_copies=identical)
+        return result
+    return _empty("rank_table_unrecognized",
+                  message="Nenhuma tabela de RANK completa e repetida foi identificada.")
+
+
 def extract_rank_table(wa: bytes, *, slus: bytes | None = None,
                        rom_sha256: str | None = None,
                        known_rom_sha256: str | None = None) -> dict:
-    """Nunca usa offsets de outras ISOs se as 40 cópias não forem consistentes.
-
-    O teste structural identifica valores de um candidato, não prova que o
-    executável tenha a mesma rotina, nem que o rank final seja este modelo.
-    """
+    """Detecta estrutura por conteúdo; nunca presume pontos de outros mods."""
     if not isinstance(wa, bytes) or not 0 < len(wa) <= MAX_WA_BYTES:
         return _empty("invalid_wa", message="WA indisponível ou acima do limite seguro.")
-    last = (BLOCK_FIRST_SECTOR + (BLOCK_COUNT-1)*BLOCK_SECTORS)*SECTOR
-    last += POINT_TABLE_OFFSET + TABLE_SIZE
-    if len(wa) < last:
-        return _empty("layout_unknown", message="WA não contém os 40 registros no layout conhecido.")
+    matches = []
+    try:
+        for start in _candidate_positions(wa):
+            table = wa[start:start + TABLE_SIZE]
+            rules = _decode_table(table)
+            if rules is None:
+                continue
+            if _identical_repetitions(wa, start, table) == BLOCK_COUNT:
+                matches.append((start, table, rules))
+                if len(matches) > 1:
+                    return _empty(
+                        "ambiguous_rank_tables",
+                        message="Há mais de uma estrutura RANK completa. "
+                                "É necessária análise adicional para escolher.")
+    except OverflowError:
+        return _empty("rank_scan_limit",
+                      message="ISO apresenta padrões demais; busca interrompida por segurança.")
 
-    offsets = [
-        (BLOCK_FIRST_SECTOR+i*BLOCK_SECTORS)*SECTOR+POINT_TABLE_OFFSET
-        for i in range(BLOCK_COUNT)
-    ]
-    tables = [wa[pos:pos+TABLE_SIZE] for pos in offsets]
-    digests = [hashlib.sha256(table).hexdigest() for table in tables]
-    counts = Counter(digests)
-    most_common, identical = counts.most_common(1)[0]
-    if identical != BLOCK_COUNT:
-        out = _empty("divergent_rank_tables",
-                     message="As 40 cópias não coincidem; não atribuir regras de RANK.")
-        out.update(table_count=BLOCK_COUNT, identical_copies=identical)
-        return out
+    if not matches:
+        return _legacy_diagnostic(wa)
 
-    parsed = _decode_table(tables[0])
-    if parsed is None:
-        return _empty("rank_table_unrecognized",
-                      message="Limiar/pontos incompatíveis com o formato documentado.")
-
-    slus_digest = hashlib.sha256(slus).hexdigest() if isinstance(slus, bytes) else None
-    known_iso = (isinstance(rom_sha256, str)
-                 and isinstance(known_rom_sha256, str)
+    first, table, parsed = matches[0]
+    table_sha = hashlib.sha256(table).hexdigest()
+    slus_digest = hashlib.sha256(slus).hexdigest() if isinstance(slus,bytes) else None
+    known_iso = (isinstance(rom_sha256,str) and isinstance(known_rom_sha256,str)
                  and rom_sha256.lower() == known_rom_sha256.lower())
-    known_binary = (known_iso
-                    and slus_digest == KNOWN_X15_SLUS_SHA256
-                    and most_common == KNOWN_X15_TABLE_SHA256)
-    known_content = most_common == KNOWN_X15_TABLE_SHA256
-
+    known_binary = (
+        known_iso and first == LEGACY_OFFSET
+        and slus_digest == KNOWN_X15_SLUS_SHA256
+        and table_sha == KNOWN_X15_TABLE_SHA256
+    )
     names = X15_RULE_NAMES if known_binary else tuple(
-        f"criterion_{i:02d}" for i in range(1, ROW_COUNT+1))
+        f"criterion_{i:02d}" for i in range(1, ROW_COUNT + 1))
     return {
         "status": ("known_x15_verified_binary" if known_binary
                    else "candidate_table_repeated_40x"),
         "available": True,
-        "rules": {
-            name: [{"below": below, "points": points} for below,points in steps]
-            for name,steps in zip(names,parsed)
-        },
+        "structure_verified": True,
+        "binary_verified": known_binary,
+        # Mantido por compatibilidade com perfis v0.7.5; não é prova de duelo real.
         "runtime_verified": known_binary,
-        "table_sha256": most_common,
+        "table_sha256": table_sha,
         "table_count": BLOCK_COUNT,
-        "identical_copies": identical,
+        "identical_copies": BLOCK_COUNT,
         "source": "DATA/WA_MRG.MRG",
-        "first_offset": offsets[0],
-        "first_sector": BLOCK_FIRST_SECTOR,
+        "first_offset": first,
+        "first_sector": first // SECTOR,
         "criterion_names_verified": known_binary,
-        "known_x15_table_content": known_content,
+        "known_x15_table_content": table_sha == KNOWN_X15_TABLE_SHA256,
         "base_points": 50 if known_binary else None,
         "lp_victory_bonus": 2 if known_binary else None,
         "slus_sha256": slus_digest,
-        "note": ("40 cópias coincidem, SLUS e SHA da ISO conferidos com o "
-                 "relatório forense X15. RAM ainda requer calibração local."
-                 if known_binary else
-                 "Foram extraídos 10 critérios e 5 faixas por critério de 40 "
-                 "cópias idênticas do WA. Não foi comprovado que a rotina "
-                 "MIPS desta ISO use essas regras, nem os nomes ou bônus. "
-                 "Exibindo apenas os índices e pontos candidatos."),
+        "method": "automatic_stride_scan",
+        "layout_moved": first != LEGACY_OFFSET,
+        "note": (
+            "Tabela WA, executável SLUS e SHA da imagem conferem com a perícia "
+            "X15. A leitura de RANK na RAM ainda requer teste em duelo real."
+            if known_binary else
+            "Foram reconhecidas automaticamente 40 cópias idênticas dos "
+            "10 critérios de pontos no WA, inclusive quando deslocados do "
+            "offset padrão. O uso da tabela pelo SLUS e os nomes dos "
+            "critérios ainda NÃO foram confirmados neste mod."),
     }
