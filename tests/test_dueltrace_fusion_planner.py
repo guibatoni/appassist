@@ -115,7 +115,7 @@ class FusionChainPlannerTests(unittest.TestCase):
         a=plan_fusion_chains([1,2,3,4,5],idx,cards)
         b=plan_fusion_chains([1,2,3,4,5],idx,cards)
         self.assertEqual(a,b)
-        self.assertEqual([row["result"] for row in a["routes"]],[20,21])
+        self.assertEqual([row["result"] for row in a["routes"]],[20,10,11,21])
 
     def test_individually_tested_steps_do_not_certify_whole_chain(self):
         idx=build_fusion_index([
@@ -134,7 +134,9 @@ class FusionChainPlannerTests(unittest.TestCase):
         only_five=plan_fusion_chains([1,2,3,4,5],idx,cards,
                                       min_cards=5,max_cards=5)
         self.assertEqual([row["result"] for row in only_five["routes"]],[40])
-        for bad in ({"min_cards":2},{"max_cards":6},{"limit":0},
+        with_pairs=plan_fusion_chains([1,2,3,4,5],idx,cards)
+        self.assertTrue(any(row["cards_consumed"]==2 for row in with_pairs["routes"]))
+        for bad in ({"min_cards":1},{"max_cards":6},{"limit":0},
                     {"max_states":99},{"min_cards":3.5}):
             with self.assertRaises(ValueError):
                 plan_fusion_chains([1,2,3,4,5],idx,cards,**bad)
