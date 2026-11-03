@@ -12,7 +12,7 @@ HAND_END = HAND_START + 140
 # Um único bloco adicional é lido quando o escopo normal é 96 KiB.
 FOCUS_CHUNK = 0xC39000
 FOCUS_FROM = 0xC39000
-FOCUS_TO = 0xC39400  # 1 KiB, dentro de um único bloco de 4 KiB.
+FOCUS_TO = 0xC39A00  # 2,5 KiB, dentro de um bloco de 4 KiB.
 FOCUS_MAX_CHANGES = 64
 SLOT_ID_START = 0xBFF510
 SLOT_ID_STRIDE = 28
@@ -27,6 +27,7 @@ WATCH_ADDRESSES = (
     0xC393A3,                           # slot 2, carta #291
     0xC3920C, 0xC39353, 0xC39374,
     0xC393D0, 0xC393D1,                # slot 1, carta #291
+    0xC393FA, 0xC39822,               # v0.4.12: prioritários, ainda não validados
 )
 assert len(set(WATCH_ADDRESSES)) == len(WATCH_ADDRESSES)
 assert all(not HAND_START <= address < HAND_END for address in WATCH_ADDRESSES)
