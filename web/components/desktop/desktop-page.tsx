@@ -284,44 +284,90 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
   </>
 }
 
-function Fusions({sha}:{sha:string|null}) {
+function FusionIllustration({id,name,sha,card,role}:{
+  id:number;name:string;sha:string|null;card:LocalCard|null;role:string
+}) {
+  const displayed:LocalCard=card??{
+    id,name,type:"",attribute:"",category:"Não identificada",
+    atk:null,def:null,effect:null,effectSource:null
+  }
+  return <div className="flex min-w-0 flex-col items-center gap-1.5" title={name}>
+    <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{role}</span>
+    <div className="w-16 sm:w-20">
+      <CardThumbnail key={String(sha)+"-"+id} card={displayed} sha={sha}/>
+    </div>
+    <span className="text-center text-[11px] font-semibold text-gold">#{id}</span>
+    <span className="line-clamp-2 min-h-8 break-words text-center text-xs font-medium text-foreground">{name}</span>
+  </div>
+}
+
+function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [query,setQuery]=useState("")
   const [offset,setOffset]=useState(0)
   const [records,setRecords]=useState<FusionPage|null>(null)
   const [error,setError]=useState<string|null>(null)
+  const cardsById=useMemo(()=>new Map(cards.map(c=>[c.id,c])),[cards])
+  const pageSize=12
   useEffect(()=>{
     let mounted=true
+    setRecords(null)
     const id=window.setTimeout(async()=>{
       const api=desktopApi()
       if(!api){if(mounted)setRecords(null);return}
-      try{const x=await api.get_fusions(query,offset,80);if(mounted){setRecords(x);setError(null)}}
-      catch(e){if(mounted)setError(e instanceof Error?e.message:"Falha ao carregar fusões")}
-    },230)
+      try{
+        const result=await api.get_fusions(query,offset,pageSize)
+        if(mounted){setRecords(result);setError(null)}
+      }catch(e){if(mounted)setError(e instanceof Error?e.message:"Falha ao carregar fusões")}
+    },220)
     return()=>{mounted=false;window.clearTimeout(id)}
   },[sha,query,offset])
   return <>
-    <Heading title="Fusões" subtitle="Catálogo do mod ativo, com resultados e origem identificados"/>
+    <Heading title="Biblioteca de Fusões" subtitle="Imagem, nome e ID de cada material e resultado — somente receitas do mod ativo"/>
     <section className="panel rounded-xl p-4">
-      <label className="field flex items-center gap-2 px-3 py-2"><Search className="size-4 text-primary"/>
-        <input className="w-full bg-transparent outline-none" placeholder="Pesquisar material, resultado ou ID"
-          value={query} onChange={e=>{setQuery(e.target.value);setOffset(0)}}/>
-      </label>
-      {error&&<p className="mt-2 text-sm text-danger">{error}</p>}
-      <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[610px] text-left text-sm">
-        <thead className="border-b border-primary/40 text-gold"><tr><th className="p-2">Material A</th><th className="p-2">Material B</th><th className="p-2">Resultado</th><th className="p-2">ATK</th><th className="p-2">Origem</th></tr></thead>
-        <tbody>{records?.rows.map((r,i)=><tr key={String(i)+"-"+r.a+"-"+r.b} className="border-b border-line/30 hover:bg-primary/5">
-          <td className="p-2">#{r.a} {r.nameA}</td><td className="p-2">#{r.b} {r.nameB}</td>
-          <td className="p-2 font-semibold text-primary">#{r.result} {r.nameResult}</td>
-          <td className="p-2">{r.atk??"—"}</td><td className="p-2 text-xs text-muted">{sourceLabel(r.source)}</td></tr>)}</tbody>
-      </table></div>
-      {!records?.rows.length&&<Empty>Não há fusões confirmadas para mostrar no perfil ou na pesquisa atual.</Empty>}
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <p className="text-sm text-muted">{records?.total??0} receitas</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="field flex min-w-56 flex-1 items-center gap-2 px-3 py-2">
+          <Search className="size-4 text-primary"/>
+          <input className="w-full bg-transparent outline-none" placeholder="Pesquisar material, resultado ou ID"
+            value={query} onChange={e=>{setQuery(e.target.value);setOffset(0)}}/>
+        </label>
+        <span className="text-xs text-muted">{records?.total??0} receitas</span>
+      </div>
+      {error&&<p className="mt-3 text-sm text-danger" role="alert">{error}</p>}
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        {records?.rows.map((r,i)=><article key={r.a+"-"+r.b+"-"+r.result+"-"+i}
+          className="rounded-xl border border-line/80 bg-gradient-to-br from-panel-strong/90 via-[#0b1a35] to-background p-3 shadow-[inset_0_1px_0_rgb(245_184_61/0.09)] transition-colors hover:border-primary/60">
+          <div className="grid grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)_24px_minmax(0,1fr)] items-start gap-1">
+            <FusionIllustration id={r.a} name={r.nameA} card={cardsById.get(r.a)??null} sha={sha} role="Material A"/>
+            <span className="pt-14 text-center font-display text-xl font-bold text-primary" aria-hidden>+</span>
+            <FusionIllustration id={r.b} name={r.nameB} card={cardsById.get(r.b)??null} sha={sha} role="Material B"/>
+            <span className="pt-14 text-center font-display text-xl font-bold text-gold" aria-hidden>→</span>
+            <FusionIllustration id={r.result} name={r.nameResult} card={cardsById.get(r.result)??null} sha={sha} role="Resultado"/>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/50 pt-2">
+            <span className="text-xs text-muted">{sourceLabel(r.source)}</span>
+            <span className="text-sm font-semibold tabular-nums text-primary">ATK {r.atk??"—"}</span>
+          </div>
+        </article>)}
+      </div>
+      {records&&!records.rows.length&&<Empty>Não há fusões cadastradas para esta pesquisa e este mod.</Empty>}
+      {!records&&!error&&<p className="py-4 text-center text-sm text-muted">Carregando receitas do perfil ativo…</p>}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted">
+          {records?.total?String(offset+1)+"–"+Math.min(offset+pageSize,records.total)+" de "+records.total:"Nenhuma receita"}
+        </p>
         <div className="flex gap-2">
-          <button type="button" className="btn-ghost disabled:opacity-30" disabled={offset===0} onClick={()=>setOffset(x=>Math.max(0,x-80))}><ChevronLeft className="size-4"/>Anterior</button>
-          <button type="button" className="btn-ghost disabled:opacity-30" disabled={offset+80>=(records?.total??0)} onClick={()=>setOffset(x=>x+80)}>Próxima<ChevronRight className="size-4"/></button>
+          <button type="button" className="btn-ghost disabled:opacity-30" disabled={offset===0}
+            onClick={()=>setOffset(x=>Math.max(0,x-pageSize))}>
+            <ChevronLeft className="size-4"/> Anterior
+          </button>
+          <button type="button" className="btn-ghost disabled:opacity-30" disabled={offset+pageSize>=(records?.total??0)}
+            onClick={()=>setOffset(x=>x+pageSize)}>Próxima <ChevronRight className="size-4"/></button>
         </div>
       </div>
+      <p className="mt-3 text-xs text-muted">
+        As imagens só aparecem quando o scanner extraiu PNGs da ISO ativa.
+        Na ausência de arte, mostramos um cartão simbólico; nenhuma imagem é inventada.
+      </p>
     </section>
   </>
 }
@@ -341,6 +387,6 @@ export function DesktopPage({page}:{page:Page}) {
     {page==="inicio"&&<Home sha={state?.activeSha??null}/>}
     {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>}
     {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}
-    {page==="fusoes"&&<Fusions sha={state?.activeSha??null}/>}
+    {page==="fusoes"&&<Fusions sha={state?.activeSha??null} cards={state?.cards??[]}/>}
   </div>
 }
