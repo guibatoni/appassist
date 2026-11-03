@@ -108,7 +108,7 @@ export function UpdateChecker() {
       <RefreshCw className={"size-4 text-primary" + (checking ? " animate-spin" : "")} />
       <span>{checking ? "Verificando…" : automaticNotice ? "Nova versão disponível" : "Verificar atualizações"}</span>
       {automaticNotice && <span aria-label="Atualização identificada"
-        className="size-2 animate-pulse rounded-full bg-gold"/>
+        className="size-2 animate-pulse rounded-full bg-gold"/>}
     </button>
     {visible &&
       <section className="absolute right-0 top-full z-50 mt-2 w-[min(90vw,370px)] rounded-xl border border-gold/40 bg-[#0a1a31] p-4 text-sm text-foreground shadow-[0_12px_36px_rgba(0,0,0,.65)]"
