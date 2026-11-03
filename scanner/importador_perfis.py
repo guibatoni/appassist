@@ -149,7 +149,7 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
             "effects": effects_info["count"] > 0,
         },
         "rank_labels": LABELS_X15 if known_x15 else None,
-        "rank_points": rank_profile_for_image(result["sha256"]),
+        "rank_points": rank_profile_for_image(result["sha256"],result.get("rank_analysis")),
         "drops_provenance": {"source": result.get("drops_source") or "DATA/WA_MRG.MRG",
                              "opponent_names_source": result.get("executavel"),
                              "table_count": len(checks) if weights_ok else 0,
