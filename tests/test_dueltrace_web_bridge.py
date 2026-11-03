@@ -19,6 +19,7 @@ from auto_mods import ModCatalog, atomic_json, supported_for_runtime
 from dueltrace_web_bridge import DueltraceWebBridge
 from dueltrace_web_desktop import local_handler, trusted_window_url
 from dueltrace_web_security import ProtectedDesktopApi
+from scanner_multiiso import X15_SHA
 
 
 class BridgeTests(unittest.TestCase):
@@ -110,6 +111,52 @@ class BridgeTests(unittest.TestCase):
             self.bridge.activate_mod(self.sha,False)
         self.assertEqual(self.bridge.activate_mod(self.sha,True)["activeSha"],self.sha)
 
+    def test_rank_is_disabled_for_unrecognized_sha_without_ram_access(self):
+        probe=Mock()
+        self.bridge._rank_reader=probe
+        result=self.bridge.get_rank()
+        self.assertFalse(result["ready"])
+        self.assertEqual(result["state"],"unsupported")
+        self.assertIsNone(result["score"])
+        probe.assert_not_called()
+
+    def test_rank_requires_lp_confirmation_and_resets_on_new_duel(self):
+        sha=X15_SHA
+        path=self.home/"profiles"/sha[:16]/"profile.json"
+        profile={**self.profile,"rom_sha256":sha}
+        atomic_json(path,profile)
+        entry={**self.entry,"sha256":sha,"profile_path":str(path)}
+        atomic_json(self.catalog.registry_file,{"schema":1,"entries":[entry]})
+        atomic_json(self.catalog.active_file,{"sha256":sha})
+        counters={"turns":1,"effective_attacks":0,"defense_wins":0,"face_down":0,
+                  "spells":0,"traps":0,"fusions":0,"equips":0,
+                  "remaining_lp":8000,"cards_used":0}
+        reader=Mock(return_value={"ready":True,"status":"Candidato estável",
+                                  "pid":1234,"counters":counters})
+        self.bridge._rank_reader=reader
+        before=self.bridge.get_rank()
+        self.assertEqual(before["state"],"needs_lp_confirmation")
+        self.assertIsNone(before["score"])
+        bad=self.bridge.confirm_rank_lp(5000)
+        self.assertEqual(bad["state"],"lp_mismatch")
+        self.assertIsNone(bad["score"])
+        with self.assertRaises(ValueError):
+            self.bridge.confirm_rank_lp(-1)
+        calibrated=self.bridge.confirm_rank_lp(8000)
+        self.assertTrue(calibrated["ready"])
+        self.assertFalse(calibrated["final"])
+        self.assertEqual(calibrated["category"],"Z-POW")
+        counters["turns"]=2
+        self.assertTrue(self.bridge.get_rank()["ready"])
+        counters["turns"]=0  # reinício da partida
+        self.assertEqual(self.bridge.get_rank()["state"],"needs_lp_confirmation")
+        self.bridge.confirm_rank_lp(8000)
+        reader.return_value={"ready":False,"status":"Emulador fechado",
+                             "pid":1234,"counters":None}
+        disconnected=self.bridge.get_rank()
+        self.assertIsNone(disconnected["score"])
+        self.assertEqual(disconnected["state"],"unavailable")
+
     def test_native_api_requires_capability_for_all_privileged_calls(self):
         secret="S"*43
         protected=ProtectedDesktopApi(self.bridge,secret)
@@ -117,6 +164,8 @@ class BridgeTests(unittest.TestCase):
             ("get_state",()),
             ("get_hand",()),
             ("get_fusions",("",0,10)),
+            ("get_rank",()),
+            ("confirm_rank_lp",(8000,)),
             ("activate_mod",(self.sha,False)),
             ("import_iso",()),
             ("configure_epsxe",()),
