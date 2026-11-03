@@ -23,6 +23,7 @@ function DropCard({row,sha,rankConfirmed}:{row:DropRow;sha:string|null;rankConfi
     <div className="min-w-0 flex-1">
       <p className="text-xs text-gold">#{row.cardId} · {row.group}{!rankConfirmed?" (grupo bruto)":""}</p>
       <p className="mt-1 truncate font-semibold text-white" title={row.cardName}>{row.cardName}</p>
+      {row.category==="Monstros"&&<p className="mt-1 text-xs tabular-nums text-primary">ATK {row.atk??"—"} · DEF {row.def??"—"}</p>}
       <p className="mt-1 text-xs text-muted">{row.opponentName}</p>
       {row.sourceOffset&&<p className="mt-1 text-[10px] text-muted">WA offset: {row.sourceOffset}</p>}
     </div>
