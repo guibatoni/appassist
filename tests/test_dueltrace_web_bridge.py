@@ -16,7 +16,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 
 from auto_mods import ModCatalog, atomic_json, supported_for_runtime
 from dueltrace_web_bridge import DueltraceWebBridge
-from dueltrace_web_desktop import local_handler
+from dueltrace_web_desktop import local_handler, trusted_window_url
+from dueltrace_web_security import ProtectedDesktopApi
 
 
 class BridgeTests(unittest.TestCase):
@@ -107,6 +108,41 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             self.bridge.activate_mod(self.sha,False)
         self.assertEqual(self.bridge.activate_mod(self.sha,True)["activeSha"],self.sha)
+
+    def test_native_api_requires_capability_for_all_privileged_calls(self):
+        secret="S"*43
+        protected=ProtectedDesktopApi(self.bridge,secret)
+        for method,params in (
+            ("get_state",()),
+            ("get_hand",()),
+            ("get_fusions",("",0,10)),
+            ("activate_mod",(self.sha,False)),
+            ("import_iso",()),
+            ("configure_epsxe",()),
+            ("start_game",()),
+        ):
+            with self.subTest(method=method):
+                for credential in ("",None,"incorrect"):
+                    with self.assertRaises(PermissionError):
+                        getattr(protected,method)(credential,*params)
+        self.assertEqual(protected.get_state(secret)["activeSha"],self.sha)
+        self.assertEqual(len(protected.get_hand(secret)["hand"]),5)
+
+    def test_capability_only_injected_into_exact_loopback_origin(self):
+        origin="http://127.0.0.1:49321/"
+        self.assertTrue(trusted_window_url(origin,origin))
+        self.assertTrue(trusted_window_url(origin+"biblioteca/",origin))
+        for candidate in (
+            "https://127.0.0.1:49321/",
+            "http://localhost:49321/",
+            "http://127.0.0.1:49322/",
+            "http://evil.example/",
+            "http://evil.example@127.0.0.1:49321/",
+            "http://127.0.0.1:49321/#evil",
+            "not-a-url",None,
+        ):
+            with self.subTest(candidate=candidate):
+                self.assertFalse(trusted_window_url(candidate,origin))
 
     def test_web_without_native_picker_does_not_open_arbitrary_path(self):
         with self.assertRaises(RuntimeError):
