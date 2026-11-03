@@ -147,7 +147,8 @@ class RankTableTests(unittest.TestCase):
             report=forensic.extract_rank_table(bytes(sample_wa()),slus=fake_exe,
                                               rom_sha256=X15_SHA,
                                               known_rom_sha256=X15_SHA)
-        self.assertTrue(report["runtime_verified"])
+        self.assertFalse(report["runtime_verified"])
+        self.assertTrue(report["binary_verified"])
         self.assertTrue(report["criterion_names_verified"])
         self.assertEqual(report["rules"]["turns"][0],{"below":5,"points":12})
         self.assertEqual(rank_profile_for_image(X15_SHA,report)["base_points"],50)
