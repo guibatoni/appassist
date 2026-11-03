@@ -183,24 +183,35 @@ def decode_drops(wa,rank_names=None):
     return {'drops':rows,'decks':deck,'verificacao':check,'codificacoes':sorted(set(encodings))},'117/117 tabelas validadas; soma 2048 por tabela'
 
 def art_extract(wa,cards,dest):
-    try:from PIL import Image
-    except ImportError:return 0,'Pillow não instalada; use pip install pillow'
+    """Exporta artes somente do layout conhecido, com erro explicativo."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return 0, "Pillow indisponível: nenhuma arte exportada"
     dest.mkdir(parents=True,exist_ok=True)
     n=0
     for card in cards:
-        base=((card['id']-1)*7+WA_CARD_SECTOR_START)*2048
-        if base+0x2840>len(wa):break
+        cid=int(card['id'])
+        base=((cid-1)*7+WA_CARD_SECTOR_START)*2048
+        if base+0x2840>len(wa):
+            return n, (f"Arquivo WA_MRG insuficiente para a arte ID {cid}; "
+                       f"exportadas {n}/{len(cards)} imagens")
         raw_pixels=wa[base:base+0x2640]
-        if len(raw_pixels)!=102*96:break
-        palette_raw=struct.unpack_from('<256H',wa,base+0x2640)
-        pal=[]
-        for v in palette_raw:
-            pal.extend([(v&31)*255//31,((v>>5)&31)*255//31,((v>>10)&31)*255//31])
-        img=Image.frombytes('P',(102,96),raw_pixels)
-        img.putpalette(pal)
-        img.save(dest/f"{card['id']:03d}.png",optimize=True)
-        n+=1
-    return n,'artes 8 bpp com paleta BGR555'
+        if len(raw_pixels)!=102*96:
+            return n, f"Pixels incompletos na arte ID {cid}; exportadas {n}/{len(cards)}"
+        try:
+            palette_raw=struct.unpack_from('<256H',wa,base+0x2640)
+            pal=[]
+            for value in palette_raw:
+                pal.extend([(value&31)*255//31,((value>>5)&31)*255//31,
+                            ((value>>10)&31)*255//31])
+            img=Image.frombytes('P',(102,96),raw_pixels)
+            img.putpalette(pal)
+            img.save(dest/f"{cid:03d}.png",optimize=True)
+            n+=1
+        except (OSError,ValueError,struct.error) as exc:
+            return n, f"Falha na arte ID {cid}: {type(exc).__name__}: {str(exc)[:130]}"
+    return n, f"{n}/{len(cards)} imagens exportadas no layout 8 bpp BGR555"
 
 def write_csv(path,rows):
     if not rows:return
@@ -209,7 +220,8 @@ def write_csv(path,rows):
 
 def process(path,output,with_art=False,digest=None,progress=None):
     info={'arquivo':path.name,'tamanho':path.stat().st_size,
-          'sha256':digest or sha256(path,progress=progress),'status':'não validado'}
+          'sha256':digest or sha256(path,progress=progress),'status':'não validado',
+          'art_requested':bool(with_art)}
     key=re.sub(r'[^a-zA-Z0-9_-]+','_',path.stem)[:42]+'_'+info['sha256'][:10]
     dest=output/key;dest.mkdir(parents=True,exist_ok=True)
     # Contrato de dados: o scanner é a única fonte do caminho da extração.
@@ -262,10 +274,14 @@ def process(path,output,with_art=False,digest=None,progress=None):
             info['tabelas_drops']=len(drops['verificacao']);info['drops']=len(drops['drops'])
             for keyname,filename in [('drops','drops_por_oponente.csv'),('decks','decks.csv'),('verificacao','validacao_pesos.csv')]:write_csv(dest/filename,drops[keyname])
             info['codificacao_drops']=drops['codificacoes']
-        if with_art and opponents:
-            count,desc=art_extract(wa,cards,dest/'artes_722')
-            info['artes_extraidas']=count
-            info['artes_obs']=desc
+        if with_art:
+            if opponents:
+                count,desc=art_extract(wa,cards,dest/'artes_722')
+                info['artes_extraidas']=count
+                info['artes_obs']=desc
+            else:
+                info['artes_extraidas']=0
+                info['artes_obs']="O scanner não reconheceu uma tabela de cartas compatível com a extração de artes."
         if opponents and drops:
             info['status']='validado: nomes e drops'
         elif opponents:info['status']='parcial: nomes/cartas identificados; drops sem validação'
