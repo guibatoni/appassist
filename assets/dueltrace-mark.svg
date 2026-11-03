@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+<title id="title">DUELTRACE</title>
+<desc id="desc">Triângulo ciano, olho dourado e núcleo luminoso sobre fundo azul-escuro.</desc>
+<defs>
+ <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#081324"/><stop offset="1" stop-color="#0D3150"/></linearGradient>
+ <linearGradient id="blue" x1="0" x2="1"><stop stop-color="#1E93F0"/><stop offset=".48" stop-color="#56E6FF"/><stop offset="1" stop-color="#018BC1"/></linearGradient>
+ <linearGradient id="gold" x1="0" x2="1"><stop stop-color="#C08438"/><stop offset=".5" stop-color="#FFE2A0"/><stop offset="1" stop-color="#BB853B"/></linearGradient>
+ <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect x="4" y="4" width="248" height="248" rx="48" fill="url(#bg)" stroke="url(#gold)" stroke-width="5"/>
+<path d="M47 53H209L128 217Z" fill="#041322" stroke="url(#blue)" stroke-width="9" stroke-linejoin="round" filter="url(#glow)"/>
+<path d="M74 75H182L128 182Z" fill="none" stroke="#3FBBD9" stroke-width="2" opacity=".62"/>
+<path d="M72 120Q128 67 184 120Q128 169 72 120Z" fill="#081629" stroke="url(#gold)" stroke-width="7" stroke-linejoin="round"/>
+<circle cx="128" cy="120" r="22" fill="#073E62" stroke="url(#blue)" stroke-width="6"/>
+<circle cx="128" cy="120" r="11" fill="#ECFBFF" filter="url(#glow)"/>
+<path d="M128 143L117 172" stroke="url(#gold)" stroke-width="6" stroke-linecap="round"/>
+</svg>
