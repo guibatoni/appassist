@@ -73,6 +73,10 @@ class DueltraceWebBridge:
                     if item.get("description_source") else None,
                 "descriptionSource": str(item["description_source"])[:130]
                     if item.get("description_source") else None,
+                "effectHint":str(item.get("effect_hint_text") or "")[:400]
+                    if item.get("effect_hint_source") else None,
+                "effectHintSource":str(item.get("effect_hint_source") or "")[:130]
+                    if item.get("effect_hint_source") else None,
             })
         return sorted(prepared,key=lambda x:x["id"])
 
@@ -86,6 +90,8 @@ class DueltraceWebBridge:
             "cards":summary.get("cards_total",0),
             "fusions":summary.get("fusion_count",0),
             "effects":summary.get("effect_count",0),
+            "descriptions":int(profile.get("description_audit",{}).get("recognized",0))
+                if profile else 0,
             "requiresReview":summary.get("requires_review",True),
             "verified":summary.get("validated",{}),
         }
