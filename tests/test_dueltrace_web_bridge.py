@@ -167,7 +167,7 @@ class BridgeTests(unittest.TestCase):
             "candidates":[{"pc":"0x80012040","score":12,"file_offset":0x840}]}
         atomic_json(self.profile_path,self.profile)
         trace=self.home/"meu-duelo.log"
-        trace.write_text("\\n".join(
+        trace.write_text("\n".join(
             [f"PC=0x{0x80012000+(i%17)*4:08X}" for i in range(120)]))
         self.bridge._file_picker=lambda kind: [str(trace)] if kind=="trace" else []
         response=self.bridge.import_rank_trace()
