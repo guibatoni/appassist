@@ -80,60 +80,117 @@ class QuickTile(tk.Canvas):
 
     def _draw(self):
         self.delete("all")
-        w, h = max(self.winfo_width(), 80), max(self.winfo_height(), 80)
-        self.create_rectangle(2, 2, w-3, h-3,
-                              fill=blend(PANEL, PANEL_ALT, self._hover),
-                              outline=blend(BORDER, self.accent, self._hover),
-                              width=2)
-        self.create_line(12, h-7, w-12, h-7, fill=self.accent, width=2)
-        self.create_text(w/2, 27, text=self.symbol, fill=self.accent,
-                         font=("Segoe UI Symbol", 25))
-        self.create_text(w/2, 61, text=self.caption, fill=TEXT,
-                         width=w-14, font=("Segoe UI Semibold", 10))
-        self.create_text(w/2, 86, text=self.subtitle, fill=MUTED,
-                         width=w-15, font=("Segoe UI", 8))
+        w,h = max(self.winfo_width(),80),max(self.winfo_height(),80)
+        accent = self.accent
+        hover = self._hover
+        self.create_rectangle(1,1,w-2,h-2,
+                              outline=blend(BORDER,accent,.4+hover*.55),width=2)
+        for y in range(4,h-4,3):
+            t=(y-4)/max(1,h-8)
+            base=blend(blend(PANEL_ALT,accent,hover*.13),BACKGROUND,t*.80)
+            self.create_line(4,y,w-5,y,fill=base,width=3)
+        self.create_line(12,5,w-12,5,fill=blend(BLUE,accent,.5+hover*.5),width=2)
+        self.create_line(11,h-7,w-11,h-7,fill=blend(BORDER,accent,.6+hover*.4),width=2)
+        self.create_line(6,13,6,h-12,fill=blend(BORDER,accent,hover),width=1)
+        self.create_line(w-7,13,w-7,h-12,fill=blend(BORDER,accent,hover),width=1)
+        self.create_text(w/2,26,text=self.symbol,fill=accent,
+                         font=("Segoe UI Symbol",26))
+        self.create_text(w/2,62,text=self.caption,fill=TEXT,
+                         width=w-12,font=("Segoe UI Semibold",10))
+        self.create_text(w/2,87,text=self.subtitle,fill=MUTED,
+                         width=w-12,font=("Segoe UI",8))
 
 
 class HeroArt(tk.Canvas):
-    """Arte original com geometria egípcia abstrata e cartas holográficas."""
-    def __init__(self, parent, *, width=350, height=190):
-        super().__init__(parent, width=width, height=height, bg=PANEL,
-                         bd=0, highlightthickness=0)
-        self.bind("<Configure>", lambda _: self._draw())
+    """Cena premium original: pirâmide, horizonte, órbitas e cartas holográficas.
+
+    Arte independente das ilustrações do jogo; não representa cartas reais.
+    Ajusta-se de 190 px (lateral) até o banner da página inicial.
+    """
+    def __init__(self,parent,*,width=350,height=190):
+        super().__init__(parent,width=width,height=height,bd=0,
+                         highlightthickness=0,bg=PANEL)
+        self.bind("<Configure>",lambda _:self._draw())
         self._draw()
 
     def _draw(self):
         self.delete("all")
-        w, h = max(250, self.winfo_width()), max(150, self.winfo_height())
-        cx, cy = w*0.52, h*0.53
-        # Linhas douradas e azuis lembram arquitetura egípcia e circuitos.
+        w=max(110,self.winfo_width())
+        h=max(105,self.winfo_height())
+        scale=min(w/350,h/190)
+        accent_top="#0A3154"
+        for y in range(0,h,3):
+            t=y/max(1,h-1)
+            shade=blend(accent_top,"#031224",min(1,t*.94))
+            self.create_rectangle(0,y,w,y+3,outline=shade,fill=shade)
+        cx=w*.52
+        horizon=h*.76
+        # Arquitetura antiga abstrata no horizonte.
+        for side in (-1,1):
+            x=cx+side*w*.36
+            self.create_polygon(x-30*scale,horizon,x,h*.27,
+                                x+30*scale,horizon,
+                                fill=blend(PANEL,GOLD,.12),
+                                outline=blend(BORDER,GOLD,.32),width=1)
+        # Pirâmide e linhas luminosas.
+        self.create_polygon(cx-100*scale,horizon,cx,h*.05,
+                            cx+100*scale,horizon,fill="#0C2441",
+                            outline=GOLD,width=max(1,int(2*scale)))
+        self.create_polygon(cx,h*.05,cx+100*scale,horizon,cx,horizon,
+                            fill="#0D3753",outline="")
+        self.create_line(cx,h*.05,cx,horizon,fill=blend(GOLD,BLUE,.55),width=2)
+        for depth in (1,.79,.58):
+            dy=(horizon-h*.05)*depth+h*.05
+            side=100*scale*depth
+            self.create_line(cx-side,dy,cx+side,dy,
+                             fill=blend(BORDER,GOLD,.27),width=1)
+        # Energia circular na base, anéis em perspectiva.
         for i in range(6):
-            y = h*(i+1)/7
-            self.create_line(0, y, w, y-14, fill=blend(PANEL, BORDER, .35))
-        for j in range(4):
-            m = j*12
-            self.create_oval(cx-120+m, cy-63+m/2, cx+120-m, cy+63-m/2,
-                             outline=blend(BLUE, PANEL, j*.19), width=2)
-        self.create_polygon(cx-63, h-13, cx, 15, cx+63, h-13,
-                            outline=GOLD, fill=PANEL_ALT, width=2)
-        self.create_polygon(cx-43, h-19, cx, 43, cx+43, h-19,
-                            outline=BLUE, fill=PANEL, width=2)
-        # Cartões são símbolos abstratos, não imagens ou dados de cartas.
-        for offset, angle_color in ((-106, GOLD), (4, BLUE), (114, GOLD)):
-            x = cx+offset
-            height = h*.48
-            top = h*.26 if offset != 4 else h*.18
-            self.create_rectangle(x-32, top, x+32, top+height,
-                                  outline=angle_color, fill=SIDEBAR, width=3)
-            self.create_rectangle(x-24, top+8, x+24, top+height-13,
-                                  outline=BORDER, fill=PANEL_ALT, width=1)
-            self.create_oval(x-14, top+27, x+14, top+55,
-                             outline=angle_color, width=2)
-            self.create_polygon(x-8, top+50, x, top+30, x+8, top+50,
-                                fill=angle_color, outline="")
-        self.create_line(8, h-6, w-8, h-6, fill=GOLD, width=2)
-        self.create_text(cx, h-18, text="DUELTRACE  /  MULTIMOD",
-                         fill=GOLD, font=("Segoe UI Semibold", 9))
+            rw=(w*.38)-i*7*scale
+            rh=(h*.20)-i*3*scale
+            if rw>3 and rh>3:
+                self.create_oval(cx-rw,h*.60-rh,cx+rw,h*.60+rh,
+                                 outline=blend(BLUE,GOLD,i*.14),width=1+int(i==0))
+        # Fachos orbitais assimétricos em composição cinematográfica.
+        for j in range(6):
+            yy=h*.17+j*h*.12
+            self.create_line(0,yy,w,yy-6*scale,
+                             fill=blend(PANEL_ALT,BLUE,.07+(j%2)*.04))
+        colors=(BLUE,"#45DAB5","#9885FF","#F78BD3",GOLD)
+        symbols=("◇","✧","◎","⌑","⬡")
+        large=w>=260
+        offsets=(-2,-1,0,1,2) if large else (-1,0,1)
+        spread=55*scale if large else 46*scale
+        for idx,k in enumerate(offsets):
+            x=cx+k*spread
+            center=(k==0)
+            cw=(55 if center else 45)*scale
+            ch=(93 if center else 77)*scale
+            top=h*(.14 if center else .27)
+            # Pequeno brilho antes da borda de cada carta.
+            color=colors[(k+2)%5]
+            self.create_rectangle(x-cw/2-2,top-2,x+cw/2+2,top+ch+2,
+                                  outline=blend(color,GOLD,.22),width=2)
+            self.create_rectangle(x-cw/2,top,x+cw/2,top+ch,
+                                  fill="#041629",outline=color,width=2)
+            self.create_rectangle(x-cw/2+5*scale,top+7*scale,
+                                  x+cw/2-5*scale,top+ch-12*scale,
+                                  fill="#0B2E4C",outline=blend(color,BLUE,.42))
+            # Ícone original, evita imagens e nomes de cartas falsos.
+            self.create_text(x,top+ch*.46,text=symbols[(k+2)%5],
+                             fill=color,font=("Segoe UI Symbol",max(9,int(27*scale))))
+            self.create_line(x-cw/2+8*scale,top+ch-7*scale,
+                             x+cw/2-8*scale,top+ch-7*scale,fill=GOLD,width=1)
+        # Estrelas de luz estáticas e linhas de acabamento.
+        for fx,fy in ((.1,.17),(.84,.18),(.73,.75),(.21,.67),(.54,.07),(.93,.60)):
+            sx,sy=w*fx,h*fy
+            self.create_line(sx-4*scale,sy,sx+4*scale,sy,fill=GOLD,width=1)
+            self.create_line(sx,sy-4*scale,sx,sy+4*scale,fill=GOLD,width=1)
+        self.create_line(0,h-4,w,h-4,fill=GOLD,width=2)
+        self.create_line(0,h-8,w,h-8,fill=BLUE,width=1)
+        if large:
+            self.create_text(cx,h-15,text="DUELTRACE  •  MULTIMOD COMPANION",
+                             fill=GOLD,font=("Segoe UI Semibold",max(8,int(9*scale))))
 
 
 class CardArt(tk.Canvas):
@@ -167,8 +224,14 @@ class CardArt(tk.Canvas):
     def _draw(self):
         self.delete("all")
         w, h = max(self.winfo_width(), 150), max(self.winfo_height(), 170)
-        self.create_rectangle(4, 4, w-5, h-5, fill=SIDEBAR, outline=BORDER, width=2)
-        self.create_rectangle(11, 11, w-12, h-12, fill=PANEL_ALT, outline=GOLD, width=1)
+        self.create_rectangle(3,3,w-4,h-4,fill=SIDEBAR,outline=GOLD,width=2)
+        for y in range(6,h-7,4):
+            t=y/max(1,h)
+            color=blend(PANEL_ALT,"#041224",t)
+            self.create_line(7,y,w-8,y,fill=color,width=4)
+        self.create_rectangle(11,11,w-12,h-12,outline=BLUE,width=1)
+        self.create_line(16,15,w-16,15,fill=GOLD,width=2)
+        self.create_line(16,h-15,w-16,h-15,fill=GOLD,width=2)
         card = self.card
         if not card:
             self.create_text(w/2, h*.43, text="◇", fill=BLUE,
