@@ -7,6 +7,8 @@ passam por pywebview JS API na janela local; não existe rota HTTP de escrita.
 from __future__ import annotations
 
 import http.server
+import json
+import secrets
 import re
 import sys
 import threading
@@ -14,8 +16,25 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from dueltrace_web_bridge import DueltraceWebBridge
+from dueltrace_web_security import ProtectedDesktopApi
 
 ART_PATTERN=re.compile(r"^/__art__/([0-9a-f]{64})/([0-9]{1,3})\.png$")
+
+
+def trusted_window_url(current_url: str | None, base_url: str) -> bool:
+    """A capacidade JS só pode ser injetada na porta desta execução."""
+    if not isinstance(current_url,str) or not current_url:
+        return False
+    try:
+        current=urlsplit(current_url)
+        base=urlsplit(base_url)
+        return (current.scheme==base.scheme=="http"
+                and current.hostname==base.hostname=="127.0.0.1"
+                and current.port==base.port
+                and not current.username and not current.password
+                and not current.fragment)
+    except ValueError:
+        return False
 
 
 def assets_path() -> Path:
@@ -168,6 +187,8 @@ def main():
 
     static=assets_path()
     bridge=DueltraceWebBridge()
+    token=secrets.token_urlsafe(32)
+    api=ProtectedDesktopApi(bridge,token)
     handler=local_handler(static,bridge)
     server=http.server.ThreadingHTTPServer(("127.0.0.1",0),handler)
     server.daemon_threads=True
@@ -178,8 +199,21 @@ def main():
     try:
         window=webview.create_window(
             "DUELTRACE — MultiMod Companion | Interface v0",
-            url=url,js_api=bridge,width=1450,height=870,
+            url=url,js_api=api,width=1450,height=870,
             min_size=(1100,700),background_color="#040a1a")
+        def secure_loaded(window):
+            current=window.get_current_url()
+            if trusted_window_url(current,url):
+                # Uma navegação externa cria outro contexto JS e não recebe token.
+                script=("Object.defineProperty(window,'__DUELTRACE_TOKEN__', "
+                        +json.dumps({"value":token,"writable":False,
+                                     "configurable":False,"enumerable":False})
+                        +")")
+                window.run_js(script)
+            else:
+                # Recupera a interface se alguma ação tentar sair da origem local.
+                window.load_url(url)
+        window.events.loaded+=secure_loaded
         def pick_file(kind):
             file_types=(
                 ("Imagens de jogo (*.iso;*.bin)",)
