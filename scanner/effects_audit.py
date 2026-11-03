@@ -16,7 +16,7 @@ SIGNALS=("EFFECT","CARD","SPELL","MAGIC","SCRIPT","MECHANIC","DESCRI",
          "HINT","GUIDE","RULE","ABILIT","DECK","MONSTER")
 TOKENS=re.compile(rb"\b(?:attack|defense|destroy|restore|tribute|summon|equip|effect|"
                   rb"graveyard|field|damage|increase|decrease|defesa|ataque|"
-                  rb"efeito|invocar|cemit[eé]rio|destr[uó]i|dano)\b",re.I)
+                  rb"efeito|invocar|cemiterio|destruir|dano)\b",re.I)
 RUNS=re.compile(rb"[\x20-\x7e]{20,240}")
 MAX_FILES=100
 MAX_SAMPLE_BYTES=1_800_000
