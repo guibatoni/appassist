@@ -19,6 +19,14 @@ Estado em novembro de 2026: **WebUI v0 é prévia experimental; não substitui a
 - O Windows Defender examina o executável e o ZIP; se não estiver disponível ou se detectar ameaça, o pipeline bloqueia a publicação.
 - Hashes SHA-256 do pacote e do executável são registrados junto a um relatório de auditoria.
 
+## Resultado da primeira validação automatizada
+- Suíte Python Windows: 155 testes aprovados (um teste de GUI ignorado pelo ambiente).
+- Python: pip-audit não encontrou vulnerabilidades conhecidas na compilação.
+- JavaScript: sem alertas altos/críticos, mas 16 alertas moderados na árvore de ferramentas de desenvolvimento ESLint/minimatch. Não chamamos isso de zero vulnerabilidades no projeto inteiro.
+- Nova etapa separada bloqueia alertas moderados ou superiores nas dependências JavaScript de produção.
+- Microsoft Defender: varredura do pacote concluída no GitHub Actions sem ameaças conhecidas detectadas.
+- Aplicativo continua sem assinatura digital e ainda requer validação com WebView2/ePSXe reais.
+
 ## Limitações
 Uma compilação bem-sucedida não garante segurança. Antivírus não detecta todas as ameaças.
 SHA-256 prova integridade de bytes frente a um hash confiável, não autentica autoria.
