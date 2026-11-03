@@ -327,3 +327,236 @@ class DueltraceDesktop(tk.Tk):
         self.effect_box.delete("1.0","end")
         self.effect_box.insert("1.0",effect+"\n\n"+origin)
         self.effect_box.configure(state="disabled")
+
+    def _page_fusoes(self,page):
+        root=tk.Frame(page,background=BACKGROUND)
+        root.pack(fill="both",expand=True,padx=20,pady=19)
+        self._label(root,"Fusões",
+                    "Receitas ligadas ao mod selecionado, sem probabilidades inventadas.")
+        _,profile=self._profile()
+        valid=bool(profile and profile.get("supported_features",{}).get("fusions"))
+        recipes=profile.get("fusion_recipes",[]) if valid else []
+        panel=Panel(root);panel.pack(fill="both",expand=True)
+        text_label(panel,"BANCO DE FUSÕES DO PERFIL",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
+        tree=self._table(panel,("a","b","result","origin"),
+                         (("a","Material A",120),("b","Material B",120),
+                          ("result","Resultado",120),("origin","Procedência",300)))
+        cards={c["id"]:c.get("name",str(c["id"])) for c in (profile or {}).get("cards",[])}
+        for row in recipes:
+            try:
+                a,b,result=(int(row[k]) for k in ("a","b","result"))
+            except (KeyError,TypeError,ValueError):
+                continue
+            tree.insert("","end",values=(f"#{a} {cards.get(a,'')}",
+                                                 f"#{b} {cards.get(b,'')}",
+                                                 f"#{result} {cards.get(result,'')}",
+                                                 row.get("validation","origem não informada")))
+        text_label(panel,f"{len(recipes)} receitas disponíveis no perfil. "
+                         "As hipóteses ainda não revisadas não aparecem como válidas.",
+                   color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(9,7))
+        self._action(panel,"Abrir ferramentas avançadas",self.open_advanced,
+                     accent=GOLD,width=242).pack(anchor="w")
+
+    def _page_overlay(self,page):
+        root=tk.Frame(page,background=BACKGROUND)
+        root.pack(fill="both",expand=True,padx=20,pady=19)
+        self._label(root,"Overlay de Duelo",
+                    "Prévia do perfil ligado ao overlay. A ROM ativa no emulador não é verificada aqui.")
+        report=overlay_snapshot(self.catalog)
+        left=Panel(root);left.pack(fill="x",pady=9)
+        if report.get("ready"):
+            text_label(left,"● PERFIL ATIVO",color=GREEN,size=14,strong=True,bg=PANEL).pack(anchor="w")
+            text_label(left,report.get("profile_name","Mod"),
+                       color=GOLD,size=17,strong=True,bg=PANEL).pack(anchor="w",pady=12)
+            flags=report.get("features",{})
+            for name,field in (("Cartas e nomes","nomes_cartas"),
+                               ("Categorias","categorias"),
+                               ("Efeitos com origem","efeitos"),
+                               ("Fusões revisadas","fusoes")):
+                status="Disponível" if flags.get(field) else "Não validado ou indisponível"
+                text_label(left,f"{name}: {status}",color=TEXT,size=11,bg=PANEL).pack(anchor="w",pady=4)
+        else:
+            text_label(left,"Nenhum perfil pronto para overlay",
+                       color=GOLD,size=16,strong=True,bg=PANEL).pack(anchor="w",pady=9)
+            text_label(left,"Escolha e ative um perfil na Biblioteca de Mods.",
+                       color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(0,11))
+        self._action(left,"Selecionar perfil",lambda:self.go("mods")).pack(anchor="w",pady=6)
+        info=Panel(root);info.pack(fill="x",pady=8)
+        text_label(info,"Leitura de cartas no campo: não validada. "
+                        "Fusões envolvendo a mesa continuam desativadas.",
+                   color=MUTED,size=11,bg=PANEL).pack(anchor="w")
+
+    def _page_diagnostico(self,page):
+        root=tk.Frame(page,background=BACKGROUND)
+        root.pack(fill="both",expand=True,padx=20,pady=19)
+        self._label(root,"Diagnóstico",
+                    "Ferramentas técnicas de investigação, somente leitura e sem acesso presumido ao campo.")
+        panel=Panel(root);panel.pack(fill="x",pady=8)
+        text_label(panel,"MODO AVANÇADO",color=BLUE,size=14,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(panel,"RAM experimental, leitor temporal e revisão de fusões "
+                         "permanecem disponíveis na Biblioteca técnica. "
+                         "O reconhecimento de cartas no campo não foi validado.",
+                   color=TEXT,size=11,bg=PANEL).pack(anchor="w",pady=(10,15))
+        self._action(panel,"Abrir diagnóstico avançado",self.open_advanced,
+                     accent=GOLD,width=247).pack(anchor="w")
+        text_label(root,"Nenhuma barra de utilização ou porcentagem de confiança "
+                        "é exibida sem medição real.",color=MUTED,size=10).pack(anchor="w",pady=18)
+
+    def _page_configuracoes(self,page):
+        root=tk.Frame(page,background=BACKGROUND)
+        root.pack(fill="both",expand=True,padx=20,pady=19)
+        self._label(root,"Configurações",
+                    "Preferências locais. Nenhum arquivo de jogo será modificado.")
+        panel=Panel(root);panel.pack(fill="x",pady=8)
+        text_label(panel,"PASTA DE MODS",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
+        ttk.Entry(panel,textvariable=self.folder,width=80,
+                  style="DT.TEntry").pack(fill="x",pady=(12,10))
+        self._action(panel,"Escolher pasta",self.choose_folder).pack(anchor="w")
+        option=Panel(root);option.pack(fill="x",pady=8)
+        tk.Checkbutton(option,text="Ao iniciar, analisar automaticamente a pasta salva",
+                       variable=self.auto_start,command=self._save_settings,
+                       bg=PANEL,fg=TEXT,activebackground=PANEL,
+                       activeforeground=TEXT,selectcolor=PANEL_ALT,
+                       font=("Segoe UI",11)).pack(anchor="w",pady=5)
+        text_label(option,"Análise automática usa parsers locais e cache; "
+                          "um modelo Ollama é opcional e não valida dados desconhecidos.",
+                   color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(2,8))
+        self._action(option,"Abrir ajustes avançados",self.open_advanced,
+                     width=245).pack(anchor="w")
+
+    def _save_settings(self):
+        atomic_json(self.settings_path,{
+            "schema":1,"folder":self.folder.get(),
+            "auto_scan_on_start":bool(self.auto_start.get())
+        })
+
+    def choose_folder(self):
+        folder=filedialog.askdirectory(parent=self,title="Selecione a pasta de mods",
+                                       initialdir=self.folder.get() or str(Path.home()))
+        if not folder:return
+        self.folder.set(folder)
+        self._save_settings()
+        self.go("mods")
+        self.scan_folder()
+
+    def choose_file(self):
+        filename=filedialog.askopenfilename(
+            parent=self,title="Escolha a ISO/BIN do seu mod",
+            filetypes=(("Imagens de PS1","*.iso *.bin"),("ISO","*.iso"),
+                       ("BIN","*.bin")))
+        if not filename:return
+        self.go("mods")
+        self._start_worker(Path(filename))
+
+    def scan_folder(self):
+        if self.busy:return
+        folder=Path(self.folder.get())
+        if not folder.is_dir():
+            self.status.set("Selecione uma pasta de mods nas Configurações.")
+            return
+        self._save_settings()
+        self._start_worker(folder,all_images=True)
+
+    def _start_worker(self,path,*,all_images=False):
+        if self.busy:return
+        self.busy=True
+        self.header_status.configure(text="●  Analisando…",fg=GOLD)
+        self.status.set(f"Analisando {path.name} (somente leitura)…")
+        def emit(e):self.inbox.put(e)
+        def worker():
+            try:
+                if all_images:
+                    self.autopilot.analyze_folder(path,callback=emit)
+                else:
+                    result=self.autopilot.analyze_file(
+                        path,progress=lambda stage,done,total:
+                        emit({"event":"progress","stage":stage,"done":done,"total":total}))
+                    emit({"event":"done","result":result})
+            except (OSError,RuntimeError,ValueError) as exc:
+                emit({"event":"error","message":str(exc)[:250]})
+            finally:
+                emit({"event":"finished"})
+        threading.Thread(target=worker,daemon=True,name="dueltrace-autopilot").start()
+
+    def _poll_events(self):
+        try:
+            while True:
+                event=self.inbox.get_nowait()
+                kind=event.get("event")
+                if kind=="found":
+                    self.status.set("Detectado: "+event.get("file",""))
+                elif kind=="progress":
+                    stage=event.get("stage","Analisando")
+                    total=event.get("total") or 0
+                    done=event.get("done") or 0
+                    percent=f" — {round(done*100/total)}%" if total else ""
+                    self.status.set(stage+percent)
+                elif kind=="done":
+                    summary=event.get("result",{})
+                    if summary.get("sha256") and not self.selected_sha:
+                        self.selected_sha=summary["sha256"]
+                    self.status.set("Perfil analisado: "+summary.get("name","Mod"))
+                    self._refresh_mods()
+                elif kind=="error":
+                    self.status.set("Análise incompleta: "+event.get("message","Erro"))
+                elif kind=="finished":
+                    self.busy=False
+                    self.header_status.configure(text="●  Sistema local",fg=GREEN)
+                    self._refresh_mods()
+        except queue.Empty:
+            pass
+        if self.winfo_exists():self.after(160,self._poll_events)
+
+    def activate_selected(self):
+        entry=self._selected_entry()
+        if not entry:
+            messagebox.showinfo("Ativar perfil",
+                "Selecione um mod cadastrado na lista.",parent=self)
+            return
+        review=entry.get("level")!="conhecido_validado"
+        if review:
+            if entry.get("level")=="desconhecido":
+                messagebox.showwarning("Estrutura não reconhecida",
+                    "Não é possível ativar automaticamente este mod. "
+                    "Os dados da estrutura precisam ser investigados.",
+                    parent=self)
+                return
+            if not messagebox.askyesno("Perfil parcialmente reconhecido",
+                "Este mod possui dados parciais. Somente recursos identificados "
+                "serão ativados; ranks, fusões e efeitos desconhecidos ficam "
+                "indisponíveis. Deseja ativar este perfil mesmo assim?",
+                parent=self):
+                return
+        try:
+            self.catalog.activate(entry["sha256"],
+                                  acknowledge_uncertainty=review)
+        except (ValueError,PermissionError,OSError) as exc:
+            messagebox.showerror("Falha ao ativar perfil",str(exc),parent=self)
+            return
+        self.status.set("Perfil ativo: "+entry.get("file_name",""))
+        self.go("inicio")
+        messagebox.showinfo("Perfil ativado",
+            "O perfil foi enviado ao DUELTRACE. "
+            "Isso não inicia o ePSXe nem confirma qual ISO ele está executando.",
+            parent=self)
+
+    def open_advanced(self):
+        if self._legacy_window and self._legacy_window.winfo_exists():
+            self._legacy_window.lift()
+            self._legacy_window.focus_set()
+            return
+        from biblioteca_mods import BibliotecaMods
+        self._legacy_window=BibliotecaMods(self,catalog=self.catalog)
+        self._legacy_window.lift()
+
+    def _close(self):
+        self._save_settings()
+        self.destroy()
+
+
+def main():
+    DueltraceDesktop().mainloop()
+
+
+if __name__=="__main__":
+    main()
