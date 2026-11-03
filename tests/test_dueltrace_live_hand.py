@@ -101,6 +101,32 @@ class HandFusionTests(unittest.TestCase):
             self.assertIsNone(result["hand_ids"])
             self.assertEqual(kernel.closed,[99])
 
+    def test_process_preference_is_not_silently_replaced(self):
+        result=read_hand_from_epsxe(
+            preferred_pid=4321,kernel=FakeKernel(fake_hand([1,2,3,4,5])),
+            pids=[1234])
+        self.assertFalse(result["ready"])
+        self.assertIsNone(result["hand_ids"])
+        self.assertIsNone(result["pid"])
+
+    def test_second_snapshot_changed_during_read_is_discarded(self):
+        kernel=FakeKernel(fake_hand([1,2,3,4,5]))
+        first=fake_hand([1,2,3,4,5])
+        changed=fake_hand([1,2,6,4,5])
+        samples=iter((first,changed))
+        def read_different(_handle,_addr,buffer,_size,nread):
+            blob=next(samples)
+            ctypes.memmove(buffer,blob,len(blob))
+            ctypes.cast(nread,ctypes.POINTER(ctypes.c_size_t)).contents.value=len(blob)
+            return True
+        kernel.ReadProcessMemory.side_effect=read_different
+        result=read_hand_from_epsxe(kernel=kernel,pids=[1234])
+        self.assertFalse(result["ready"])
+        self.assertIsNone(result["hand_ids"])
+        self.assertIn("transição",result["status"])
+        self.assertEqual(kernel.ReadProcessMemory.call_count,2)
+        self.assertEqual(kernel.closed,[99])
+
     def test_process_ambiguity_does_not_guess(self):
         result=read_hand_from_epsxe(kernel=FakeKernel(fake_hand([1]*5)),
                                     pids=[10,11])
