@@ -6,6 +6,7 @@ ferramentas avançadas. A análise é local e roda fora da thread da interface.
 """
 from __future__ import annotations
 
+import os
 import queue
 import threading
 import subprocess
@@ -16,7 +17,9 @@ from tkinter import ttk, filedialog, messagebox
 
 from auto_mods import ModCatalog, atomic_json, load_json
 from card_catalog import CARD_CATEGORIES
-from mod_autopilot import ModAutopilot, profile_summary
+from mod_autopilot import ModAutopilot, profile_summary, discover_images
+from dueltrace_intelligence import MultiModIntelligence
+from ia_local import DEFAULT_MODEL
 from integracao_overlay import overlay_snapshot
 from dueltrace_brand import apply_window_icon
 from dueltrace_visuals import HeroArt, QuickTile, CardArt, CategoryMeters, NAV_SYMBOLS
@@ -33,10 +36,13 @@ PAGES=(
 )
 
 
+USER_PAGES=tuple(p for p in PAGES if p[1] in ("inicio","mods","cartas","fusoes"))
+
+
 class DueltraceDesktop(tk.Tk):
-    def __init__(self, *, catalog=None):
+    def __init__(self, *, catalog=None, developer=False):
         super().__init__()
-        self.title("DUELTRACE — MultiMod Companion · v0.5.3")
+        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.0")
         self.geometry("1480x900")
         self.minsize(1160,770)
         self.configure(background=BACKGROUND)
@@ -44,12 +50,20 @@ class DueltraceDesktop(tk.Tk):
         except tk.TclError:pass
         setup_theme(self)
         self.catalog=catalog or ModCatalog()
+        self.developer=bool(developer)
+        self.pages=PAGES if self.developer else USER_PAGES
         self.autopilot=ModAutopilot(self.catalog)
+        self.intelligence=MultiModIntelligence(self.catalog)
         self.settings_path=self.catalog.home/"dueltrace_desktop_settings.json"
         settings=load_json(self.settings_path,{})
         older=load_json(self.catalog.home/"biblioteca_settings.json",{})
         self.folder=tk.StringVar(value=settings.get("folder") or older.get("folder",""))
         self.auto_start=tk.BooleanVar(value=settings.get("auto_scan_on_start",True))
+        self.ai_enabled=tk.BooleanVar(value=settings.get("ollama_auto",True))
+        self.art_enabled=tk.BooleanVar(value=settings.get("extract_local_art",True))
+        self.ai_model=tk.StringVar(value=settings.get("ollama_model",DEFAULT_MODEL))
+        self.intelligence_note=tk.StringVar(value="Análise de evidências disponível · Ollama opcional")
+        self.last_intelligence={}
         self.status=tk.StringVar(value="Pronto — selecione uma ISO/BIN ou uma pasta de mods.")
         self.selected_sha=None
         self.inbox=queue.Queue()
@@ -64,7 +78,7 @@ class DueltraceDesktop(tk.Tk):
         self.after(140,self._poll_events)
         if self.auto_start.get() and self.folder.get() and Path(self.folder.get()).is_dir():
             self.after(650,self.scan_folder)
-        for index,(_,key) in enumerate(PAGES,1):
+        for index,(_,key) in enumerate(self.pages,1):
             self.bind_all(f"<Control-Key-{index}>",lambda _e,k=key:self.go(k))
         self.protocol("WM_DELETE_WINDOW",self._close)
 
@@ -93,7 +107,7 @@ class DueltraceDesktop(tk.Tk):
         sidebar.pack_propagate(False)
         text_label(sidebar,"EXPLORAR",color=GOLD,size=10,strong=True,
                    bg=SIDEBAR).pack(anchor="w",padx=18,pady=(27,14))
-        for name,key in PAGES:
+        for name,key in self.pages:
             symbol=NAV_SYMBOLS.get(key,"◇")
             button=NeonButton(sidebar,f"{symbol}  {name}",
                               lambda p=key:self.go(p),width=194,height=47)
@@ -186,8 +200,10 @@ class DueltraceDesktop(tk.Tk):
             ("Configurações","Preferências locais","⚙","configuracoes"),
         )
         for caption,subtitle,symbol,key in shortcuts:
+            if key not in {x[1] for x in self.pages}:
+                continue
             item=QuickTile(tiles,caption,subtitle,symbol,
-                           lambda k=key:self.go(k),width=140,height=106,
+                           lambda k=key:self.go(k),width=192 if not self.developer else 140,height=106,
                            accent=GOLD if key=="fusoes" else BLUE)
             item.pack(side="left",fill="x",expand=True,padx=3)
         lower=tk.Frame(body,background=BACKGROUND)
@@ -219,8 +235,9 @@ class DueltraceDesktop(tk.Tk):
                        color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(0,10))
         self._action(left,"Ativar ou trocar mod",lambda:self.go("mods"),
                      accent=GOLD,width=198).pack(anchor="w",pady=(2,8))
-        self._action(left,"Abrir Assistente Clássico",self.open_legacy,
-                     width=215).pack(anchor="w",pady=(0,10))
+        if self.developer:
+            self._action(left,"Abrir Assistente Clássico",self.open_legacy,
+                         width=215).pack(anchor="w",pady=(0,10))
         text_label(left,f"MODS CADASTRADOS  {len(entries)}",color=MUTED,
                    size=10,bg=PANEL).pack(anchor="w",pady=3)
         text_label(left,f"PERFIS VALIDADOS  {sum(e.get('level')=='conhecido_validado' for e in entries)}",
@@ -312,6 +329,7 @@ class DueltraceDesktop(tk.Tk):
         entry,profile=self._profile()
         cards=profile.get("cards",[]) if profile and profile.get("supported_features",{}).get("cards") else []
         self.visible_cards=list(cards)
+        self.art_root=profile.get("art_root") if profile and profile.get("supported_features",{}).get("art") else None
         toolbar=Panel(root);toolbar.pack(fill="x",pady=(0,12))
         self.card_query_var=tk.StringVar()
         self.card_category_var=tk.StringVar(value="Todas")
@@ -342,7 +360,7 @@ class DueltraceDesktop(tk.Tk):
         text_label(detail,"CARTA SELECIONADA",color=BLUE,size=12,strong=True,bg=PANEL).pack(anchor="w")
         self.card_art=CardArt(detail,width=265,height=230)
         self.card_art.pack(fill="x",pady=(8,6))
-        text_label(detail,"Prévia simbólica · sem arte extraída da ISO",
+        text_label(detail,"Arte local quando extraída; prévia simbólica nos demais casos",
                    color=MUTED,size=8,bg=PANEL).pack(anchor="w",pady=(0,7))
         self.card_title=text_label(detail,"Selecione uma carta",color=GOLD,size=12,strong=True,bg=PANEL)
         self.card_title.pack(anchor="w",pady=(15,10))
@@ -386,7 +404,7 @@ class DueltraceDesktop(tk.Tk):
         if not ids:return
         card=next((x for x in self.visible_cards if str(x.get("id"))==ids[0]),None)
         if not card:return
-        self.card_art.set_card(card)
+        self.card_art.set_card(card,self.art_root)
         self.card_title.configure(text=f"#{card['id']}  {card.get('name','')}")
         self.card_details.configure(text=(
             f"Categoria: {card.get('category','Não identificado')}\n"
@@ -509,7 +527,10 @@ class DueltraceDesktop(tk.Tk):
     def _save_settings(self):
         atomic_json(self.settings_path,{
             "schema":1,"folder":self.folder.get(),
-            "auto_scan_on_start":bool(self.auto_start.get())
+            "auto_scan_on_start":bool(self.auto_start.get()),
+            "ollama_auto":bool(self.ai_enabled.get()),
+            "extract_local_art":bool(self.art_enabled.get()),
+            "ollama_model":self.ai_model.get().strip() or DEFAULT_MODEL
         })
 
     def choose_folder(self):
@@ -659,7 +680,7 @@ class DueltraceDesktop(tk.Tk):
 
 
 def main():
-    DueltraceDesktop().mainloop()
+    DueltraceDesktop(developer="--developer" in sys.argv or os.environ.get("DUELTRACE_DEV_MODE")=="1").mainloop()
 
 
 if __name__=="__main__":
