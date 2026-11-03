@@ -138,6 +138,7 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
                 sha = preview.get("head_sha")
                 if (type(run_id) is not int or not 0 < run_id < 10**15
                         or branch not in (
+                            "security/dueltrace-trusted-distribution-v073",
                             "feature/dueltrace-v073-assets-hardening",
                             "fix/dueltrace-v073-preview-update-button")
                         or not isinstance(sha, str)
@@ -145,7 +146,7 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
                         or preview.get("page") !=
                         f"https://github.com/guibatoni/appassist/actions/runs/{run_id}"):
                     raise ValueError("Build Preview com origem inválida.")
-                result["latestPreview"] = f"v{CURRENT_VERSION} Preview"
+                result["latestPreview"] = f"v{CURRENT_VERSION} Preview (não assinado)"
                 result["previewRunId"] = run_id
                 result["previewPage"] = preview["page"]
                 result["previewBranch"] = branch
@@ -166,7 +167,7 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
                     result["updateAvailable"] = True
                     result["message"] = (
                         "Existe um build Preview mais recente, aprovado nos "
-                        "testes Windows. Abra a página do build para baixar "
+                         "
                         "manualmente o pacote em Artifacts."
                     )
                 elif current < parse_version(CURRENT_VERSION):
