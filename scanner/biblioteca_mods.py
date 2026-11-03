@@ -85,6 +85,7 @@ class BibliotecaMods(tk.Toplevel):
         self.field_face=tk.StringVar(value="faceup")
         self.field_slot=tk.StringVar(value="1")
         self.field_expand=tk.BooleanVar(value=False)  # 1 MiB somente por escolha explícita
+        self.field_focus=tk.BooleanVar(value=True)  # mais um bloco de 4 KiB se escopo de 96 KiB
         self.field_status=tk.StringVar(value="Campo ainda não mapeado. Inicie com carta na mão e ausente da mesa.")
         self._temporal_after_id=None
         self.temporal_interval=tk.StringVar(value="250")
@@ -333,6 +334,10 @@ class BibliotecaMods(tk.Toplevel):
                      textvariable=self.field_slot,width=4).pack(side="left",padx=5)
         ttk.Checkbutton(options,text="Ampliar 96 KiB → 1 MiB (experimental)",
                         variable=self.field_expand).pack(side="left",padx=12)
+        ttk.Checkbutton(field_page,text=(
+            "Monitor direcionado: IDs de 28 B e candidatos C39000–C39400 "
+            "(+4 KiB se escolher 96 KiB)"),
+            variable=self.field_focus).pack(anchor="w",pady=(0,7))
         controls=ttk.Frame(field_page)
         controls.pack(fill="x",pady=(0,6))
         ttk.Button(controls,text="1. ANTES (slot vazio)",
@@ -351,6 +356,12 @@ class BibliotecaMods(tk.Toplevel):
                    command=self.capture_field_vacant_control).pack(side="left",padx=5)
         ttk.Button(controls2,text="7. MÃO ATUALIZADA (opcional)",
                    command=self.capture_field_refresh).pack(side="left",padx=5)
+        negative=ttk.Frame(field_page)
+        negative.pack(fill="x",pady=(0,7))
+        ttk.Label(negative,text="Teste NEGATIVO (alternativa a 3. NA MESA):").pack(
+            side="left",padx=(0,8))
+        ttk.Button(negative,text="3X. CANCELADA — sem invocar",
+                   command=self.capture_field_cancelled).pack(side="left")
         ttk.Label(field_page,textvariable=self.field_status,
                   wraplength=960,justify="left").pack(fill="x",pady=(5,8))
         ttk.Label(field_page,text=(
@@ -363,8 +374,11 @@ class BibliotecaMods(tk.Toplevel):
             "MÃO ATUALIZADA pode ocorrer quando o turno mudar, em qualquer ordem "
             "posterior à captura NA MESA. "
             "Na região ampliada, somente o mesmo ePSXe é lido, sem dump bruto. "
-            "Seleção de escopo só tem efeito após novo ANTES. "
-            "A saída mantém hipóteses sem validar endereços."
+            "Teste negativo: ANTES → PREPARADA → cancelar a escolha NO JOGO "
+            "sem colocar a carta no campo → 3X CANCELADA; gera um JSON separado. "
+            "Apos CANCELADA, clique novamente em ANTES para realizar uma invocacao real. "
+            "Monitor direcionado e escopo so mudam no proximo ANTES. "
+            "Todos os enderecos seguem NAO VALIDADOS."
         ),wraplength=960,justify="left").pack(anchor="w")
         self.tabs.add(field_page,text="Campo de duelo")
 
@@ -529,13 +543,16 @@ class BibliotecaMods(tk.Toplevel):
                 raise RuntimeError("Leitor RAM não disponível")
             self.field_probe=FieldMemoryProbe(
                 self.field_probe.reader_provider,self.catalog.home,
-                expanded=bool(self.field_expand.get()))
-            snap=self.field_probe.capture_before(sha,target)
+                expanded=bool(self.field_expand.get()),
+                focused=bool(self.field_focus.get()))
+            snap=self.field_probe.capture_before(
+                sha,target,user_slot=int(self.field_slot.get()))
             self.field_status.set(
                 f"ANTES registrada: PID {snap['pid']}; carta #{target:03d} na mão. "
                 f"{snap['readable_chunks']} blocos legíveis; "
                 f"{len(snap['unreadable_chunks'])} indisponíveis. "
-                "Agora prepare a carta (fase 2 opcional), SETE no campo e capture 3. NA MESA SEM passar o turno.")
+                "Prepare a carta e escolha: 3. NA MESA (invocar de verdade) OU "
+                "3X. CANCELADA (cancelar sem invocar).")
         except Exception as exc:
             messagebox.showwarning("Investigação do campo",str(exc),parent=self)
 
@@ -554,9 +571,39 @@ class BibliotecaMods(tk.Toplevel):
             self.field_status.set(
                 f"PREPARADA registrada: {diff['changed_bytes']} bytes alterados "
                 f"na região experimental. Agora POSICIONE a carta no slot e "
-                "clique imediatamente 3. NA MESA, sem passar o turno.")
+                "clique 3. NA MESA se invocar OU cancele a selecao no jogo e "
+                "clique 3X. CANCELADA. Nao use os dois caminhos na mesma captura.")
         except Exception as exc:
             messagebox.showwarning("Investigação do campo",str(exc),parent=self)
+
+    def capture_field_cancelled(self):
+        """Controle negativo isolado de uma invocacao real."""
+        try:
+            sha=self._field_selected_sha()
+            if not messagebox.askyesno(
+                "Teste NEGATIVO — selecao cancelada",
+                "Voce capturou 1. ANTES e 2. PREPARADA e DEPOIS CANCELOU "
+                "a selecao no jogo, sem colocar a carta em nenhum slot? "
+                "O slot escolhido continua vazio? "
+                "Nao use esta captura se a carta chegou a entrar no campo. "
+                "Esta sessao termina aqui; para invocar de verdade, "
+                "inicie outro teste em 1. ANTES.",
+                parent=self):
+                return
+            report,path=self.field_probe.capture_cancelled(
+                sha,user_slot=int(self.field_slot.get()))
+            a=report["negative_control_analysis"]
+            self.field_status.set(
+                f"CANCELADA (sem invocar) registrada: "
+                f"{a['prepared_changes']} bytes mudaram em PREPARADA, "
+                f"{a['restored_after_cancel']} voltaram ao estado inicial, "
+                f"{a['persisted_after_cancel']} persistiram. "
+                f"Arquivo: {path}. Para nova invocacao, clique 1. ANTES. "
+                "Nenhuma carta do campo foi detectada.")
+            self.status.set("Controle negativo de cancelamento salvo: "+str(path))
+        except Exception as exc:
+            messagebox.showwarning(
+                "Controle negativo de campo",str(exc),parent=self)
 
     def capture_field_after(self):
         try:
