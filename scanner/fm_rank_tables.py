@@ -169,6 +169,10 @@ def extract_rank_table(wa: bytes, *, slus: bytes | None = None,
         "status": ("known_x15_verified_binary" if known_binary
                    else "candidate_table_repeated_40x"),
         "available": True,
+        "rules": {
+            name: [{"below": below, "points": points} for below,points in steps]
+            for name,steps in zip(names,parsed)
+        },
         "structure_verified": True,
         "binary_verified": known_binary,
         # Assinaturas confirmam arquivos, não resultados executados no ePSXe.
