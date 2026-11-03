@@ -201,6 +201,7 @@ class BridgeTests(unittest.TestCase):
             ("open_updates_page",()),
             ("get_hand",()),
             ("get_fusions",("",0,10)),
+            ("get_drops",(0,"","",0,10)),
             ("get_rank",()),
             ("confirm_rank_lp",(8000,)),
             ("activate_mod",(self.sha,False)),
