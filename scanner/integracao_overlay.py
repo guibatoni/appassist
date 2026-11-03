@@ -55,6 +55,14 @@ def overlay_snapshot(catalog: ModCatalog | None = None) -> dict:
                     "name": str(c["name"]),
                     "atk": int(c["atk"]), "def": int(c["def"]),
                     "type_id": c.get("type_id"),
+                    "category":(c.get("category") if features.get("categorias")
+                                else "Não identificado"),
+                    "type_label":(c.get("type_label") if features.get("categorias")
+                                  else None),
+                    "effect_text":(c.get("effect_text") if features.get("efeitos")
+                                   and c.get("effect_source") else None),
+                    "effect_source":(c.get("effect_source") if features.get("efeitos")
+                                     else None),
                 }
             except (KeyError, ValueError, TypeError):
                 continue
