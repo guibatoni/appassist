@@ -19,6 +19,7 @@ from dueltrace_web_bridge import DueltraceWebBridge
 from dueltrace_web_security import ProtectedDesktopApi
 
 ART_PATTERN=re.compile(r"^/__art__/([0-9a-f]{64})/([0-9]{1,3})\.png$")
+CARD_PATTERN=re.compile(r"^/__card__/([0-9a-f]{64})/([0-9]{1,3})\.png$")
 
 
 def trusted_window_url(current_url: str | None, base_url: str) -> bool:
@@ -94,7 +95,7 @@ def local_handler(directory: Path, bridge: DueltraceWebBridge):
             clean=self._valid_path()
             if clean is None:
                 return
-            if clean.startswith("/__art__/"):
+            if clean.startswith(("/__art__/","/__card__/")):
                 self.send_error(405,"Operação não suportada")
                 return
             return super().do_HEAD()
@@ -122,8 +123,10 @@ def local_handler(directory: Path, bridge: DueltraceWebBridge):
             clean=self._valid_path()
             if clean is None:
                 return
-            match=ART_PATTERN.fullmatch(clean)
-            if clean.startswith("/__art__/") and match is None:
+            raw_match=ART_PATTERN.fullmatch(clean)
+            composite_match=CARD_PATTERN.fullmatch(clean)
+            match=raw_match or composite_match
+            if clean.startswith(("/__art__/","/__card__/")) and match is None:
                 self.send_error(404,"Imagem não encontrada")
                 return
             if match:
@@ -139,7 +142,11 @@ def local_handler(directory: Path, bridge: DueltraceWebBridge):
                     if not root.is_relative_to(allowed):
                         self.send_error(404)
                         return
-                    image=(root/"artes_722"/f"{int(cid):03d}.png").resolve(strict=True)
+                    if composite_match and not profile.get("supported_features",{}).get("composed_cards"):
+                        self.send_error(404)
+                        return
+                    folder="cartas_com_moldura" if composite_match else "artes_722"
+                    image=(root/folder/f"{int(cid):03d}.png").resolve(strict=True)
                     if not image.is_relative_to(root) or image.stat().st_size>1_000_000:
                         self.send_error(404)
                         return
