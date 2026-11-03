@@ -132,6 +132,10 @@ export type RankPoints = {
   base_points: number | null
   lp_victory_bonus: number | null
   final_rank: boolean
+  runtime_verified?: boolean
+  criterion_names_verified?: boolean
+  table_count?: number
+  table_sha256?: string | null
   note: string
 }
 
