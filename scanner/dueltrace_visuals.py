@@ -7,6 +7,7 @@ Os contadores e estados vêm exclusivamente do perfil real do scanner.
 from __future__ import annotations
 
 import tkinter as tk
+from pathlib import Path
 
 from dueltrace_theme import (
     BACKGROUND, SIDEBAR, PANEL, PANEL_ALT, BORDER,
@@ -136,16 +137,31 @@ class HeroArt(tk.Canvas):
 
 
 class CardArt(tk.Canvas):
-    """Prévia conceitual: nenhum sprite ou arte de ROM é representado."""
+    """Prévia da arte local extraída quando disponível; senão usa símbolo."""
     def __init__(self, parent, *, width=244, height=235):
         super().__init__(parent, width=width, height=height, bg=PANEL,
                          bd=0, highlightthickness=0)
         self.card = None
+        self.art_root = None
+        self._card_photo = None
         self.bind("<Configure>", lambda _: self._draw())
         self._draw()
 
-    def set_card(self, card: dict | None):
+    def set_card(self, card: dict | None, art_root: str | None = None):
         self.card = card
+        self.art_root = art_root
+        self._card_photo = None
+        if card is not None and art_root:
+            try:
+                cid = int(card.get("id", 0))
+                directory = Path(art_root).resolve(strict=True)
+                artwork = (directory / f"{cid:03d}.png").resolve(strict=True)
+                if (1 <= cid <= 722 and artwork.is_relative_to(directory)
+                        and artwork.stat().st_size <= 1_000_000):
+                    raw = tk.PhotoImage(file=str(artwork))
+                    self._card_photo = raw.zoom(2, 2) if raw.width() <= 110 else raw
+            except (OSError, ValueError, tk.TclError):
+                self._card_photo = None
         self._draw()
 
     def _draw(self):
@@ -163,19 +179,24 @@ class CardArt(tk.Canvas):
         category = str(card.get("category") or "Não identificado")
         accent = category_color(category)
         symbol = CATEGORY_SYMBOLS.get(category, "?")
-        for i in range(5):
-            inset = 20+i*9
-            self.create_oval(inset, h*.15+inset*.25, w-inset,
-                             h*.73-inset*.25,
-                             outline=blend(accent, PANEL_ALT, i*.18), width=2)
-        self.create_text(w/2, h*.42, text=symbol, fill=accent,
-                         font=("Segoe UI Symbol", 62))
+        if self._card_photo is not None:
+            self.create_rectangle(w/2-108, h*.42-102, w/2+108, h*.42+102,
+                                  outline=accent, width=2)
+            self.create_image(w/2, h*.42, image=self._card_photo)
+        else:
+            for i in range(5):
+                inset = 20+i*9
+                self.create_oval(inset, h*.15+inset*.25, w-inset,
+                                 h*.73-inset*.25,
+                                 outline=blend(accent, PANEL_ALT, i*.18), width=2)
+            self.create_text(w/2, h*.42, text=symbol, fill=accent,
+                             font=("Segoe UI Symbol", 62))
         self.create_text(w/2, 26, text=f"ID #{card.get('id','?')}",
                          fill=GOLD, font=("Segoe UI Semibold", 10))
         self.create_text(w/2, h*.77, text=str(card.get("name") or "Sem nome"),
                          width=w-38, fill=TEXT,
                          font=("Segoe UI Semibold", 11))
-        self.create_text(w/2, h*.91, text=f"{category} · prévia simbólica",
+        self.create_text(w/2, h*.91, text=f"{category} · {'arte local' if self._card_photo else 'símbolo'}",
                          width=w-20, fill=MUTED, font=("Segoe UI", 9))
 
 
