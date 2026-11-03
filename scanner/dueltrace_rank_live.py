@@ -136,3 +136,69 @@ def read_rank_candidate(*, preferred_pid=None, kernel=None, pids=None) -> dict:
                 "pid":pid,"counters":a}
     finally:
         kernel.CloseHandle(handle)
+
+
+def read_rank_from_verified_binding(binding: dict, *, preferred_pid=None,
+                                    kernel=None, pids=None) -> dict:
+    """Lê endereço HOST do ePSXe, somente se o binding foi validado por SHA.
+
+    A validação integral do binding deve ser feita pelo chamador com o
+    perfil ativo. Não confundir endereços MIPS com endereços do ePSXe.
+    """
+    from dueltrace_rank_profile_live import read_counters_from_record
+    if not isinstance(binding, dict):
+        raise ValueError("Binding de mod inválido.")
+    addr=binding.get("record_address")
+    size=binding.get("record_length")
+    if (type(addr) is not int or not 0x10000 <= addr <= 0xFFFFFFFF
+            or type(size) is not int or not 28 <= size <= 256):
+        raise ValueError("Endereço host ou tamanho de registro inválido.")
+    if sys.platform != "win32" and kernel is None:
+        return {"ready":False, "status":"RANK exige Windows/ePSXe",
+                "pid":None, "counters":None}
+    kernel=kernel or _windows_kernel32()
+    candidates=discover_epsxe_pids(kernel) if pids is None else list(pids)
+    if preferred_pid is not None:
+        if preferred_pid not in candidates:
+            return {"ready":False,"status":"ePSXe selecionado não encontrado",
+                    "pid":None,"counters":None}
+        pid=preferred_pid
+    elif len(candidates)==1:
+        pid=candidates[0]
+    else:
+        return {"ready":False,
+                "status":"ePSXe não encontrado ou múltiplos processos",
+                "pid":None,"counters":None}
+    kernel.OpenProcess.argtypes=[wintypes.DWORD,wintypes.BOOL,wintypes.DWORD]
+    kernel.OpenProcess.restype=wintypes.HANDLE
+    kernel.ReadProcessMemory.argtypes=[
+        wintypes.HANDLE,ctypes.c_void_p,ctypes.c_void_p,
+        ctypes.c_size_t,ctypes.POINTER(ctypes.c_size_t)]
+    kernel.ReadProcessMemory.restype=wintypes.BOOL
+    kernel.CloseHandle.argtypes=[wintypes.HANDLE]
+    kernel.CloseHandle.restype=wintypes.BOOL
+    handle=kernel.OpenProcess(PROCESS_QUERY_INFORMATION|PROCESS_VM_READ,False,pid)
+    if not handle:
+        return {"ready":False,"status":"Leitura RAM bloqueada",
+                "pid":pid,"counters":None}
+    try:
+        def sample():
+            out=ctypes.create_string_buffer(size)
+            n=ctypes.c_size_t()
+            ok=kernel.ReadProcessMemory(handle,ctypes.c_void_p(addr),out,
+                                        size,ctypes.byref(n))
+            if not ok or n.value!=size:
+                return None
+            try:
+                return read_counters_from_record(out.raw,binding)
+            except (ValueError,KeyError,TypeError):
+                return None
+        a=sample()
+        b=sample()
+        if a is None or b!=a:
+            return {"ready":False,"status":"Amostras RAM instáveis ou inválidas",
+                    "pid":pid,"counters":None}
+        return {"ready":True,"status":"Contadores de mod lidos (em calibração)",
+                "pid":pid,"counters":a}
+    finally:
+        kernel.CloseHandle(handle)
