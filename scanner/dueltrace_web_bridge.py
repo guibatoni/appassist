@@ -101,9 +101,9 @@ class DueltraceWebBridge:
         """Consulta somente o endpoint público de releases, sob demanda."""
         return check_for_updates()
 
-    def open_updates_page(self):
-        """Abre no navegador padrão apenas a página oficial de releases."""
-        if not open_official_releases():
+    def open_updates_page(self, run_id=None):
+        """Abre no navegador padrão releases ou o build Preview oficial."""
+        if not open_official_releases(run_id):
             raise RuntimeError("Não foi possível abrir o navegador padrão.")
         return {"opened":True}
 

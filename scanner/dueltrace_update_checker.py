@@ -12,6 +12,8 @@ import urllib.error
 import urllib.request
 import webbrowser
 
+from dueltrace_preview_updates import fetch_latest_preview, installed_preview_build_id
+
 CURRENT_VERSION = "0.7.3"
 CURRENT_CHANNEL = "preview"
 RELEASE_API = "https://api.github.com/repos/guibatoni/appassist/releases/latest"
@@ -58,8 +60,8 @@ def fetch_stable_release() -> dict:
     return data
 
 
-def check_for_updates(*, fetcher=None, current_version=CURRENT_VERSION,
-                      channel=CURRENT_CHANNEL) -> dict:
+def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=None,
+                      current_version=CURRENT_VERSION, channel=CURRENT_CHANNEL) -> dict:
     """Compara com release estável, sem assumir que snapshots de CI são releases."""
     current = parse_version(current_version)
     if current is None or channel not in ("preview", "stable"):
@@ -68,6 +70,11 @@ def check_for_updates(*, fetcher=None, current_version=CURRENT_VERSION,
         "currentVersion": current_version,
         "channel": channel,
         "latestStable": None,
+        "latestPreview": None,
+        "previewRunId": None,
+        "previewPage": None,
+        "previewBranch": None,
+        "previewBuildSha": None,
         "releasePage": RELEASE_PAGE,
         "status": "unavailable",
         "updateAvailable": False,
@@ -117,9 +124,90 @@ def check_for_updates(*, fetcher=None, current_version=CURRENT_VERSION,
             "Não foi possível consultar o GitHub. Confira a internet ou tente "
             "novamente; nenhuma alteração foi realizada."
         )
+    # As versões Preview são compiladas no Actions, não em releases/latest.
+    # Se um teste fornecer apenas o fetcher estável, não consulte a rede
+    # indiretamente durante os testes. Em produção, ambos são consultados.
+    if channel == "preview" and (preview_fetcher is not None or fetcher is None):
+        try:
+            preview = (preview_fetcher or fetch_latest_preview)()
+            if preview is not None:
+                if not isinstance(preview, dict):
+                    raise ValueError("Dados Preview inválidos.")
+                run_id = preview.get("run_id")
+                branch = preview.get("branch")
+                sha = preview.get("head_sha")
+                if (type(run_id) is not int or not 0 < run_id < 10**15
+                        or branch not in (
+                            "feature/dueltrace-v073-assets-hardening",
+                            "fix/dueltrace-v073-preview-update-button")
+                        or not isinstance(sha, str)
+                        or not re.fullmatch(r"[0-9a-f]{40}", sha)
+                        or preview.get("page") !=
+                        f"https://github.com/guibatoni/appassist/actions/runs/{run_id}"):
+                    raise ValueError("Build Preview com origem inválida.")
+                result["latestPreview"] = f"v{CURRENT_VERSION} Preview"
+                result["previewRunId"] = run_id
+                result["previewPage"] = preview["page"]
+                result["previewBranch"] = branch
+                result["previewBuildSha"] = sha[:10]
+                installed = (installed_run_id if installed_run_id is not None
+                             else installed_preview_build_id())
+                if result["status"] == "update_available":
+                    # Uma release estável numericamente mais nova prevalece.
+                    pass
+                elif type(installed) is int and installed >= run_id:
+                    result["status"] = "preview_current"
+                    result["message"] = (
+                        "Este pacote Preview já é igual ou mais recente que "
+                        "o último build Windows aprovado."
+                    )
+                elif type(installed) is int and 0 < installed < run_id:
+                    result["status"] = "preview_update_available"
+                    result["updateAvailable"] = True
+                    result["message"] = (
+                        "Existe um build Preview mais recente, aprovado nos "
+                        "testes Windows. Abra a página do build para baixar "
+                        "manualmente o pacote em Artifacts."
+                    )
+                elif current < parse_version(CURRENT_VERSION):
+                    result["status"] = "preview_update_available"
+                    result["updateAvailable"] = True
+                    result["message"] = (
+                        "Uma versão Preview mais recente está disponível no "
+                        "GitHub Actions. Baixe o pacote Windows em Artifacts."
+                    )
+                else:
+                    result["status"] = "preview_build_unknown"
+                    result["message"] = (
+                        "Há um build Preview aprovado no GitHub Actions. "
+                        "Esta instalação não registra seu número de build; "
+                        "confira a página para comparar e atualizar manualmente."
+                    )
+            elif result["status"] == "unavailable" and not result["latestStable"]:
+                result["message"] = (
+                    "Nenhum pacote Preview foi identificado. Use os links "
+                    "oficiais do GitHub para verificar manualmente."
+                )
+        except (OSError, ValueError, TypeError, UnicodeError,
+                urllib.error.URLError, json.JSONDecodeError):
+            # Se a API de Actions falhar, preserve a comparação estável.
+            result["previewStatus"] = "unavailable"
+            if result["status"] == "unavailable":
+                result["message"] = (
+                    "A consulta automática falhou. Você ainda pode abrir "
+                    "as versões e builds no GitHub manualmente."
+                )
     return result
 
 
-def open_official_releases() -> bool:
-    """Somente o domínio/página oficial; abre navegador padrão, sem executar ZIP."""
-    return bool(webbrowser.open(RELEASE_PAGE, new=2))
+def open_official_releases(run_id: int | None = None) -> bool:
+    """Abre apenas releases ou um ID numérico de Actions do repositório oficial."""
+    if run_id is not None:
+        if type(run_id) is not int or not 0 <= run_id < 10**15:
+            raise ValueError("ID do build inválido.")
+        url = (f"https://github.com/guibatoni/appassist/actions/runs/{run_id}"
+               if run_id else
+               "https://github.com/guibatoni/appassist/actions/workflows/validar-webui-desktop.yml")
+    else:
+        url = RELEASE_PAGE
+    return bool(webbrowser.open(url, new=2))

@@ -26,9 +26,9 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.check_updates()
 
-    def open_updates_page(self, credential):
+    def open_updates_page(self, credential, run_id=None):
         self._authorize(credential)
-        return self._bridge.open_updates_page()
+        return self._bridge.open_updates_page(run_id)
 
     def get_state(self, credential):
         self._authorize(credential)

@@ -35,21 +35,21 @@ export function UpdateChecker() {
     }
   }
 
-  const openOfficialPage = async () => {
+  const openOfficialPage = async (runId?: number) => {
     const api = desktopApi()
     if (!api) return
     setOpening(true)
     try {
-      await api.open_updates_page()
+      await api.open_updates_page(runId)
       setProblem(null)
     } catch {
-      setProblem("Não foi possível abrir o navegador padrão. Acesse github.com/guibatoni/appassist/releases.")
+      setProblem("Não foi possível abrir o navegador padrão. Acesse github.com/guibatoni/appassist/actions ou /releases.")
     } finally {
       setOpening(false)
     }
   }
 
-  const available = result?.status === "update_available"
+  const available = result?.updateAvailable === true
   return <div className="relative">
     <button type="button"
       className="btn-ghost inline-flex items-center gap-2 rounded-lg border border-primary/30 px-3 py-2 text-xs font-semibold transition-colors hover:border-primary hover:text-white disabled:cursor-wait disabled:opacity-60"
@@ -79,21 +79,27 @@ export function UpdateChecker() {
                   <span>Instalada: <strong className="text-white">v{result.currentVersion} {result.channel === "preview" ? "Preview" : "Estável"}</strong></span>
                 </div>
                 <p className="mt-1 text-xs text-muted">Última estável: <strong className="text-white">{result.latestStable ?? "Indisponível"}</strong></p>
+                <p className="mt-1 text-xs text-muted">Preview Windows: <strong className="text-white">{result.previewRunId ? `Build #${result.previewRunId} · ${result.previewBuildSha ?? "SHA indisponível"}` : "Não identificado"}</strong></p>
                 <p className={"mt-3 flex items-start gap-2 text-sm " + (available ? "text-gold" : "text-foreground/85")}>
                   {available ? <Download className="size-5 shrink-0"/> : <CheckCircle2 className="size-5 shrink-0 text-primary"/>}
                   {result.message}
                 </p>
-                {result.status !== "unavailable" &&
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => void openOfficialPage(result.previewRunId ?? 0)}
+                      disabled={opening} className="btn-gold inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50">
+                      {opening ? "Abrindo…" : (result.previewRunId != null ? "Abrir pacote Preview" : "Ver builds Preview")} <ArrowUpRight className="size-4"/>
+                    </button>
                   <button type="button" onClick={() => void openOfficialPage()}
-                    disabled={opening} className="btn-gold mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50">
-                    {opening ? "Abrindo…" : "Ver versões oficiais"} <ArrowUpRight className="size-4"/>
-                  </button>}
+                    disabled={opening} className="btn-ghost inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50">
+                    Ver versões estáveis <ArrowUpRight className="size-4"/>
+                  </button>
+                </div>
               </> :
               <p className="text-muted">Nenhuma consulta realizada.</p>}
         </div>
         <p className="mt-3 border-t border-line/50 pt-2 text-xs text-muted">
-          A verificação não instala nem executa arquivos. Prévias do GitHub Actions
-          não são atualizações oficiais.
+          Não instala nem executa arquivos. Builds Preview aprovados ficam em
+          GitHub Actions → Artifacts e podem exigir login no GitHub.
         </p>
       </section>}
   </div>
