@@ -61,6 +61,10 @@ def mod_diagnostic(entry: dict, profile: dict | None, *,
         "art": art,
         "iso_files": len(indexed),
         "ai": str(info.get("ai") or "sem análise recente")[:80],
+        "fusion_review":str((profile.get("fusion_review") or {}).get("status")
+                             or "sem banco importado")[:120],
+        "effect_scan":str((info.get("effects_audit") or {}).get("status")
+                           or "sem auditoria recente")[:100],
         "verified": {k: str(verified.get(k, "não informado"))[:100]
                      for k in ("cartas", "oponentes", "tabelas_drops", "fusoes",
                                "efeitos", "artes")},
@@ -94,6 +98,10 @@ def format_diagnostic(item: dict) -> str:
         lines.append(f"Diagnóstico de artes: {art['description']}")
     lines.extend([
         f"Ollama: {item['ai']} (hipóteses não validam tabelas)",
+        f"Origem das fusões: {item['fusion_review']}",
+        f"Auditoria de efeitos: {item['effect_scan']}",
+        "Fusões estruturais podem ser usadas no assistente, mas não",
+        "representam testes individuais realizados no ePSXe.",
         "",
         "Critérios do scanner:",
     ])
