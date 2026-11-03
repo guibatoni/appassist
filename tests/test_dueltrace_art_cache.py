@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 
-from auto_mods import ART_PARSER_REVISION, ModCatalog, atomic_json
+from auto_mods import ART_PARSER_REVISION, DISC_METADATA_REVISION, ModCatalog, atomic_json
 
 
 class ArtAttemptCacheTests(unittest.TestCase):
@@ -31,6 +31,7 @@ class ArtAttemptCacheTests(unittest.TestCase):
             profile={
                 "rom_sha256":sha,
                 "scan_result_dir":str(scan),
+                "disc_metadata_revision":DISC_METADATA_REVISION,
                 "supported_features":{"art":False},
                 "verified":{"cartas":"pendente"},
             }
