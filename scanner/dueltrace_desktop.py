@@ -593,6 +593,14 @@ class DueltraceDesktop(tk.Tk):
         def emit(e):self.inbox.put(e)
         def worker():
             try:
+                art_available=with_art
+                if with_art:
+                    try:
+                        import PIL  # noqa: F401 — dependência opcional
+                    except ImportError:
+                        art_available=False
+                        emit({"event":"intelligence",
+                              "message":"Pillow não instalada; artes não extraídas. Catálogo continua."})
                 paths=discover_images(path) if all_images else [Path(path)]
                 if not paths:
                     emit({"event":"intelligence","message":"Nenhuma ISO/BIN na pasta selecionada."})
@@ -600,7 +608,7 @@ class DueltraceDesktop(tk.Tk):
                     emit({"event":"found","file":image.name,"index":index,"total":len(paths)})
                     try:
                         result=self.autopilot.analyze_file(
-                            image, with_art=with_art,
+                            image, with_art=art_available,
                             progress=lambda stage,done,total:
                             emit({"event":"progress","stage":stage,"done":done,"total":total}))
                         emit({"event":"done","result":result})
