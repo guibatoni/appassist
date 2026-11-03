@@ -8,10 +8,13 @@ API HTTP aberta para comandos. As imagens são lidas localmente.
 from __future__ import annotations
 
 import threading
+import re
+from uuid import uuid4
+from datetime import datetime, timezone
 from pathlib import Path
 from time import monotonic
 
-from auto_mods import ModCatalog, load_json
+from auto_mods import ModCatalog, load_json, atomic_json
 from mod_autopilot import ModAutopilot, profile_summary
 from dueltrace_intelligence import MultiModIntelligence
 from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
@@ -24,6 +27,9 @@ from dueltrace_rank_profile_live import (
 )
 from epsxe_launcher import launch_epsxe
 from dueltrace_drops import get_drop_catalog
+from dueltrace_drop_rank_evidence import rank_drop_report, LABELS
+from dueltrace_mips_duel_trace import inspect_duel_mips_trace, MAX_TRACE_BYTES
+from dueltrace_library_sort import validate_sort,matches_type,sort_key
 from dueltrace_update_checker import (
     check_for_updates, open_official_releases, fetch_stable_release, CURRENT_VERSION
 )
@@ -43,6 +49,7 @@ class DueltraceWebBridge:
         self._rank_mod_reader = rank_mod_reader or read_rank_from_verified_binding
         self._rank_calibration = None
         self._rank_last_turns = None
+        self._rank_last_snapshot = None
         self._process = None
         self._lock = threading.RLock()
         self._fusion_cache_key = None
@@ -246,6 +253,7 @@ class DueltraceWebBridge:
                     self._rank_last_turns[0]==(sha,pid) and
                     turns < self._rank_last_turns[1]):
                 self._rank_calibration=None  # novo duelo ou contador reiniciado
+                self._rank_last_snapshot=None
             self._rank_last_turns=((sha,pid),turns)
             calibrated=(self._rank_calibration is not None and
                 self._rank_calibration["sha"]==sha and
@@ -271,6 +279,11 @@ class DueltraceWebBridge:
                     if compatible else
                     "Projeção se vencer por LP; resultado e mapeamento RAM "
                     "não verificados no jogo.")
+            self._rank_last_snapshot={
+                "rom_sha256":sha,"pid":pid,"monotonic_at":monotonic(),
+                "score":result["score"],"category":result["category"],
+                "counters":visible_counters.copy(),
+            }
             return {"ready":True,"state":"provisional",
                     "status":status,
                     "candidateLp":counters[binding["life_points_criterion"]] if binding else counters["remaining_lp"],
@@ -291,6 +304,7 @@ class DueltraceWebBridge:
             turns_key=binding["turns_criterion"] if binding else "turns"
             if sample["counters"][lp_key]!=life_points:
                 self._rank_calibration=None
+                self._rank_last_snapshot=None
                 return {"ready":False,"state":"lp_mismatch",
                     "status":"LP do jogo divergentes do candidato RAM. Contador não habilitado.",
                     "candidateLp":sample["counters"][lp_key],
@@ -299,21 +313,23 @@ class DueltraceWebBridge:
             self._rank_last_turns=((sha,sample["pid"]),sample["counters"][turns_key])
             return self.get_rank()
 
-    def get_fusions(self, query="", offset=0, limit=100):
+    def get_fusions(self, query="", offset=0, limit=100,
+                    sort="id", card_type=""):
+        """Filtro aplicado ao RESULTADO da fusão e antes da paginação."""
         if type(query) is not str or len(query)>100:
             raise ValueError("Consulta inválida")
         if type(offset) is not int or offset<0 or offset>1000000:
             raise ValueError("Página inválida")
         if type(limit) is not int or not 1<=limit<=150:
             raise ValueError("Limite inválido")
+        validate_sort(sort,card_type)
         with self._lock:
             active,entry,profile=self._active()
             if not profile or not profile.get("supported_features",{}).get("fusions"):
-                return {"total":0,"offset":0,"rows":[]}
+                return {"total":0,"offset":offset,"rows":[]}
             cards={c["id"]:c for c in self._cards(profile)}
             q=query.strip().casefold()
             rows=[]
-            total=0
             for item in profile.get("fusion_recipes",[]):
                 try:
                     a,b,result=(int(item[k]) for k in ("a","b","result"))
@@ -321,27 +337,197 @@ class DueltraceWebBridge:
                     continue
                 if not all(1<=v<=722 for v in (a,b,result)):
                     continue
+                dest=cards.get(result,{})
+                if not matches_type(dest,card_type):
+                    continue
                 names=[cards.get(cid,{}).get("name") or f"Carta #{cid}"
                        for cid in (a,b,result)]
                 if q and not any(q in text.casefold() or q==str(cid)
                                  for text,cid in zip(names,(a,b,result))):
                     continue
-                if total>=offset and len(rows)<limit:
-                    rows.append({"a":a,"b":b,"result":result,
-                                 "nameA":names[0],"nameB":names[1],
-                                 "nameResult":names[2],
-                                 "atk":cards.get(result,{}).get("atk"),
-                                 "source":str(item.get("validation") or "Não informada")})
-                total+=1
-            return {"total":total,"offset":offset,"rows":rows}
+                rows.append({
+                    "a":a,"b":b,"result":result,
+                    "nameA":names[0],"nameB":names[1],
+                    "nameResult":names[2],
+                    "atk":dest.get("atk"),"def":dest.get("def"),
+                    "type":dest.get("type") or dest.get("category") or "",
+                    "source":str(item.get("validation") or "Não informada"),
+                })
+            if sort=="id":
+                rows.sort(key=lambda row:(row["result"],row["a"],row["b"]))
+            else:
+                rows.sort(key=lambda row:(
+                    sort_key(cards.get(row["result"]),row["result"],
+                             row["nameResult"],sort),
+                    row["a"],row["b"]))
+            total=len(rows)
+            return {"total":total,"offset":offset,"rows":rows[offset:offset+limit]}
 
-    def get_drops(self, opponent_id=0, group="", query="", offset=0, limit=36):
+    def get_drops(self, opponent_id=0, group="", query="", offset=0, limit=36,
+                  sort="id", card_type=""):
         """Consulta exclusivamente tabelas validadas do perfil ISO ativo."""
         with self._lock:
             _active, _entry, profile = self._active()
             return get_drop_catalog(
                 profile, opponent_id=opponent_id, group=group,
-                query=query, offset=offset, limit=limit)
+                query=query, offset=offset, limit=limit,
+                sort=sort,card_type=card_type)
+
+    def _trace_results_path(self, sha):
+        if type(sha) is not str or not re.fullmatch("[0-9a-f]{64}",sha):
+            raise ValueError("SHA da ISO inválido")
+        return self.catalog.home / "rank_observations" / (sha+".mips.json")
+
+    def get_rank_trace_status(self):
+        with self._lock:
+            active,entry,profile=self._active()
+            sha=active.get("sha256")
+            if not profile or not isinstance(sha,str):
+                return {"available":False,"records":0,"last":None}
+            data=load_json(self._trace_results_path(sha),{})
+            records=data.get("records",[]) if isinstance(data,dict) else []
+            observations=load_json(self._observations_path(sha),{})
+            duels={r.get("duel_id"):r for r in observations.get("observations",[])
+                   if isinstance(r,dict)} if isinstance(observations,dict) else {}
+            linked=0
+            for record in records:
+                if not isinstance(record,dict) or not record.get("executionEvidence"):
+                    continue
+                duel=duels.get(record.get("duel_id"))
+                snap=duel.get("rank_snapshot") if isinstance(duel,dict) else None
+                if (isinstance(snap,dict) and
+                        duel.get("victory_type")=="lp" and
+                        type(duel.get("observed_points")) is int and
+                        duel["observed_points"]==snap.get("projected_score") and
+                        duel.get("observed_rank")==snap.get("projected_rank")):
+                    linked+=1
+            return {"available":True,"records":len(records),
+                    "correlatedDuels":linked,
+                    "rankRoutineConfirmed":False,
+                    "last":records[-1] if records else None}
+
+    def import_rank_trace(self, duel_id=None):
+        """Lê log do depurador durante duelo; não importa código do jogo."""
+        if self._file_picker is None:
+            raise RuntimeError("Importação de trace disponível somente no Windows.")
+        if duel_id is not None and (type(duel_id) is not str or
+                                    not re.fullmatch("[0-9a-f-]{36}",duel_id)):
+            raise ValueError("Identificador do duelo inválido.")
+        files=self._file_picker("trace")
+        if not files:
+            return {"cancelled":True}
+        path=Path(files[0]).expanduser().resolve(strict=True)
+        if path.suffix.casefold() not in (".log",".txt"):
+            raise ValueError("Selecione um log de execução MIPS .log ou .txt.")
+        if not 0<path.stat().st_size<=MAX_TRACE_BYTES:
+            raise ValueError("Log de execução vazio ou acima de 8 MiB.")
+        with self._lock:
+            active,entry,profile=self._active()
+            sha=active.get("sha256")
+            if not profile or not sha:
+                raise ValueError("Selecione um mod antes de validar a execução.")
+            if duel_id is not None:
+                obs=load_json(self._observations_path(sha),{})
+                valid=obs.get("observations",[]) if isinstance(obs,dict) else []
+                if not any(isinstance(x,dict) and x.get("duel_id")==duel_id and
+                           x.get("rom_sha256")==sha for x in valid):
+                    raise ValueError("O duelo selecionado não pertence à ISO ativa.")
+            report=inspect_duel_mips_trace(
+                path.read_bytes(),profile.get("rank_mips_evidence"))
+            if not report["available"]:
+                return {"cancelled":False,**report}
+            result={
+                "record_id":str(uuid4()),
+                "duel_id":duel_id,
+                "created_at":datetime.now(timezone.utc).isoformat(),
+                "source":"trace_exportado_do_emulador",
+                "status":report["status"],
+                "executionEvidence":report["executionEvidence"],
+                "executedCandidates":report["executedCandidates"],
+                "instructionSamples":report["instructionSamples"],
+                "distinctPCs":report["distinctPCs"],
+                "rankRoutineConfirmed":False,
+                "traceSha256":report["traceSha256"],
+                "note":report["note"],
+            }
+            dest=self._trace_results_path(sha)
+            prior=load_json(dest,{})
+            records=list(prior.get("records",[])) if isinstance(prior,dict) else []
+            records.append(result)
+            atomic_json(dest,{"schema":1,"rom_sha256":sha,"records":records[-50:]})
+            return {"cancelled":False,**result}
+
+    def _observations_path(self, sha):
+        if type(sha) is not str or not re.fullmatch("[0-9a-f]{64}",sha):
+            raise ValueError("SHA da ISO inválido")
+        return self.catalog.home / "rank_observations" / (sha+".json")
+
+    def get_duel_evidence(self):
+        """Apenas dados locais da ISO ativa, sem arquivo de jogo ou RAM bruta."""
+        with self._lock:
+            active,entry,profile=self._active()
+            sha=active.get("sha256")
+            if profile is None or not isinstance(sha,str):
+                return rank_drop_report(None,[])
+            raw=load_json(self._observations_path(sha),{})
+            observations=(raw.get("observations",[]) if isinstance(raw,dict) else [])
+            return rank_drop_report(profile,observations)
+
+    def record_duel_result(self, opponent_id, observed_rank, card_id,
+                           observed_points=None, victory_type="unknown"):
+        """Registra recompensa e nota VISTAS pelo jogador, jamais auto-verificadas.
+
+        A projeção do snapshot anterior não se torna verdade de treinamento:
+        fica explicitamente marcada como previsão para futura comparação.
+        """
+        if type(victory_type) is not str or victory_type not in ("lp","deckout","other","unknown"):
+            raise ValueError("Resultado de vitória inválido.")
+        if type(opponent_id) is not int or not 1<=opponent_id<=39:
+            raise ValueError("Selecione um oponente válido (1–39).")
+        if type(card_id) is not int or not 1<=card_id<=722:
+            raise ValueError("Informe o ID da carta recebida (1–722).")
+        if type(observed_rank) is not str or observed_rank not in LABELS:
+            raise ValueError("RANK observado inválido.")
+        if observed_points is not None and (type(observed_points) is not int
+                                             or not 0<=observed_points<=300):
+            raise ValueError("Pontuação observada inválida.")
+        with self._lock:
+            active,entry,profile=self._active()
+            sha=active.get("sha256")
+            if not profile or not profile.get("supported_features",{}).get("drops"):
+                raise ValueError("Carregue uma ISO com drops validados.")
+            # Validação estrutural de todos os pesos antes de salvar relatos.
+            catalog=get_drop_catalog(profile,limit=1)
+            if not catalog["available"]:
+                raise ValueError("Tabelas de drops não validadas para esta ISO.")
+            if opponent_id not in {o["id"] for o in catalog["opponents"]}:
+                raise ValueError("Oponente não identificado na ISO.")
+            path=self._observations_path(sha)
+            raw=load_json(path,{})
+            observations=list(raw.get("observations",[])) if isinstance(raw,dict) else []
+            if len(observations)>=500:
+                observations=observations[-499:]
+            snapshot=self._rank_last_snapshot
+            estimate=None
+            if (isinstance(snapshot,dict) and snapshot.get("rom_sha256")==sha
+                    and monotonic()-snapshot.get("monotonic_at",-1e9)<600):
+                estimate={"projected_score":snapshot.get("score"),
+                          "projected_rank":snapshot.get("category"),
+                          "counters":snapshot.get("counters"),
+                          "comparison_status":"projection_not_final"}
+            observation={
+                "duel_id":str(uuid4()),"rom_sha256":sha,
+                "opponent_id":opponent_id,"observed_rank":observed_rank,
+                "card_id":card_id,"observed_points":observed_points,
+                "victory_type":victory_type,
+                "recorded_at":datetime.now(timezone.utc).isoformat(),
+                "source":"manual_game_observation",
+                "rank_snapshot":estimate,
+            }
+            observations.append(observation)
+            atomic_json(path,{"schema":1,"rom_sha256":sha,
+                              "observations":observations})
+            return rank_drop_report(profile,observations)
 
     def activate_mod(self, sha, acknowledge=False):
         if not isinstance(sha,str) or len(sha)!=64:

@@ -50,14 +50,33 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.confirm_rank_lp(life_points)
 
-    def get_fusions(self, credential, query="", offset=0, limit=100):
+    def get_fusions(self, credential, query="", offset=0, limit=100,
+                    sort="id", card_type=""):
         self._authorize(credential)
-        return self._bridge.get_fusions(query,offset,limit)
+        return self._bridge.get_fusions(query,offset,limit,sort,card_type)
 
     def get_drops(self, credential, opponent_id=0, group="", query="",
-                  offset=0, limit=36):
+                  offset=0, limit=36, sort="id", card_type=""):
         self._authorize(credential)
-        return self._bridge.get_drops(opponent_id,group,query,offset,limit)
+        return self._bridge.get_drops(opponent_id,group,query,offset,limit,sort,card_type)
+
+    def get_rank_trace_status(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_rank_trace_status()
+
+    def import_rank_trace(self, credential, duel_id=None):
+        self._authorize(credential)
+        return self._bridge.import_rank_trace(duel_id)
+
+    def get_duel_evidence(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_duel_evidence()
+
+    def record_duel_result(self, credential, opponent_id, observed_rank,
+                           card_id, observed_points=None, victory_type="unknown"):
+        self._authorize(credential)
+        return self._bridge.record_duel_result(
+            opponent_id,observed_rank,card_id,observed_points,victory_type)
 
     def activate_mod(self, credential, sha, acknowledge=False):
         self._authorize(credential)

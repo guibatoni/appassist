@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from scanner_multiiso import X15_SHA
+from dueltrace_library_sort import validate_sort,card_type_value,matches_type,sort_key
 
 EXPECTED_OPPONENTS = 39
 EXPECTED_TABLES = 117
@@ -21,7 +22,9 @@ def _integer(value):
 
 def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
                      group: str = "", query: str = "",
-                     offset: int = 0, limit: int = 36) -> dict:
+                     offset: int = 0, limit: int = 36,
+                     sort: str = "id", card_type: str = "") -> dict:
+    validate_sort(sort,card_type)
     if type(opponent_id) is not int or not 0 <= opponent_id <= EXPECTED_OPPONENTS:
         raise ValueError("Oponente inválido")
     if type(group) is not str or len(group) > 80:
@@ -37,6 +40,7 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         "available": False, "status": "Dados de drops ainda não validados nesta ISO",
         "total": 0, "offset": offset, "rows": [], "opponents": [], "groups": [],
         "rankLabelsVerified": False, "weightTotal": WEIGHT_TOTAL,
+        "cardTypes": [], "sort": sort, "cardType": card_type,
         "source": "DATA/WA_MRG.MRG + SLUS_014.11",
         "rankPoints": (profile.get("rank_points", {}) if isinstance(profile,dict) else {}),
     }
@@ -81,6 +85,8 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
     }
     if group and group not in raw_groups:
         raise ValueError("Grupo de drop não pertence ao mod ativo.")
+    card_types=sorted({card_type_value(card) for card in cards_by_id.values()
+                       if card_type_value(card)},key=str.casefold)
 
     totals = defaultdict(int)
     seen = set()
@@ -117,6 +123,8 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         if group and rank != group:
             continue
         card=cards_by_id.get(cid,{})
+        if not matches_type(card,card_type):
+            continue
         name = card.get("name") or f"Carta #{cid}"
         if text and text not in name.casefold() and text != str(cid):
             continue
@@ -127,15 +135,22 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
             "opponentId": oid, "opponentName": opponents[oid],
             "group": rank, "cardId": cid, "cardName": name,
             "category":card.get("category") or "Não identificada",
+            "cardType":card_type_value(card),
             "atk":card.get("atk") if type(card.get("atk")) is int else None,
             "def":card.get("def") if type(card.get("def")) is int else None,
             "weight": weight,
             "chancePercent": round(weight * 100 / WEIGHT_TOTAL, 6),
             "sourceOffset": offset_repr,
         })
-    matched.sort(key=lambda row: (
-        row["opponentId"], raw_groups.index(row["group"]),
-        -row["weight"], row["cardId"]))
+    if sort=="id":
+        matched.sort(key=lambda row: (
+            row["opponentId"],raw_groups.index(row["group"]),
+            row["cardId"]))
+    else:
+        matched.sort(key=lambda row: (
+            sort_key(cards_by_id.get(row["cardId"]),row["cardId"],
+                     row["cardName"],sort),
+            row["opponentId"],raw_groups.index(row["group"])))
     image_sha = profile.get("rom_sha256")
     is_known = (isinstance(image_sha, str) and image_sha.lower() == X15_SHA.lower()
                 and profile.get("verified", {}).get("nomes_dos_ranks") == "verificado")
@@ -147,5 +162,6 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         "total": len(matched), "rows": matched[offset:offset+limit],
         "opponents": [{"id": key, "name": opponents[key]} for key in sorted(opponents)],
         "groups": list(raw_groups),
+        "cardTypes": card_types,
         "rankLabelsVerified": is_known,
     }

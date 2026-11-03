@@ -112,6 +112,14 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             protected.get_drops("not-authorized",2,groups[1],"",0,20)
         self.assertEqual(protected.get_drops("x"*64,2,groups[1],"",0,20)["total"],1)
+        with self.assertRaises(PermissionError):
+            protected.record_duel_result("invalid",2,"Z-POW",2,95)
+        evidence=protected.record_duel_result("x"*64,2,"Z-POW",2,95)
+        self.assertEqual(evidence["observations"],1)
+        evidence=protected.record_duel_result("x"*64,3,"Z-POW",2,94)
+        self.assertEqual(evidence["observations"],2)
+        self.assertEqual(evidence["suspectedMappings"]["Z-POW"]["group"],groups[1])
+        self.assertEqual(protected.get_duel_evidence("x"*64)["observations"],2)
 
     def test_live_hand_uses_existing_fusion_engine(self):
         result=self.bridge.get_hand()
@@ -138,6 +146,37 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(self.bridge.get_fusions("Fusão avançada",0,20)["total"],1)
         with self.assertRaises(ValueError):
             self.bridge.get_fusions("",0,100000)
+
+    def test_fusions_sort_type_filter_and_page_stay_consistent(self):
+        self.profile["cards"][5]["type_label"]="Dragão"
+        self.profile["cards"][6]["type_label"]="Mago"
+        atomic_json(self.profile_path,self.profile)
+        sorted_rows=self.bridge.get_fusions("",0,1,"atk")
+        self.assertEqual(sorted_rows["total"],2)
+        self.assertEqual(sorted_rows["rows"][0]["result"],8)
+        self.assertEqual(self.bridge.get_fusions("",1,1,"atk")["rows"][0]["result"],7)
+        selected=self.bridge.get_fusions("",0,20,"name","Dragão")
+        self.assertEqual(selected["total"],1)
+        self.assertEqual(selected["rows"][0]["result"],7)
+        with self.assertRaises(ValueError):
+            self.bridge.get_fusions("",0,20,"nonsense")
+
+    def test_import_emulator_mips_log_is_local_and_sha_scoped(self):
+        self.profile["rank_mips_evidence"]={
+            "available":True,
+            "candidates":[{"pc":"0x80012040","score":12,"file_offset":0x840}]}
+        atomic_json(self.profile_path,self.profile)
+        trace=self.home/"meu-duelo.log"
+        trace.write_text("\n".join(
+            [f"PC=0x{0x80012000+(i%17)*4:08X}" for i in range(120)]))
+        self.bridge._file_picker=lambda kind: [str(trace)] if kind=="trace" else []
+        response=self.bridge.import_rank_trace()
+        self.assertFalse(response["cancelled"])
+        self.assertTrue(response["executionEvidence"])
+        self.assertFalse(response["rankRoutineConfirmed"])
+        self.assertEqual(self.bridge.get_rank_trace_status()["records"],1)
+        self.assertNotIn(str(trace),str(self.bridge.get_rank_trace_status()))
+        trace.unlink()
 
     def test_partial_profile_needs_manual_acknowledgement(self):
         self.entry["level"]="parcial_revisar"
@@ -274,6 +313,10 @@ class BridgeTests(unittest.TestCase):
             ("get_hand",()),
             ("get_fusions",("",0,10)),
             ("get_drops",(0,"","",0,10)),
+            ("get_duel_evidence",()),
+            ("get_rank_trace_status",()),
+            ("import_rank_trace",()),
+            ("record_duel_result",(1,"Z-POW",1,None)),
             ("get_rank",()),
             ("confirm_rank_lp",(8000,)),
             ("activate_mod",(self.sha,False)),
