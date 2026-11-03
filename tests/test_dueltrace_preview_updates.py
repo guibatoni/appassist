@@ -56,7 +56,7 @@ class PreviewUpdaterTests(unittest.TestCase):
                    return_value=None):
             data=check_for_updates(
                 fetcher=lambda:stable(),preview_fetcher=lambda:preview(120),
-                current_version="0.7.4")
+                current_version="0.7.5")
         self.assertEqual(data["status"],"preview_build_unknown")
         self.assertFalse(data["updateAvailable"])
         self.assertEqual(data["previewRunId"],120)
@@ -90,7 +90,7 @@ class PreviewUpdaterTests(unittest.TestCase):
             calls.append(url)
             if "/actions/runs?" in url:
                 return {"workflow_runs": [newest] if
-                        "preview-update-button" in url else [older]}
+                        "v075-rank-forensics" in url else [older]}
             if "/202/artifacts?" in url:
                 return {"artifacts":[{"name":previews.ARTIFACT_NAME,"expired":False}]}
             raise AssertionError(url)
@@ -105,12 +105,41 @@ class PreviewUpdaterTests(unittest.TestCase):
             if "/actions/runs?" in url:
                 return {"workflow_runs":[run(202,conclusion="failure"),
                                          run(201)] if
-                        "preview-update-button" in url else []}
+                        "v075-rank-forensics" in url else []}
             if "/201/artifacts?" in url:
                 return {"artifacts":[{"name":previews.ARTIFACT_NAME,"expired":True}]}
             raise AssertionError(url)
         with patch.object(previews,"_get_json",side_effect=get_json):
             self.assertIsNone(previews.fetch_latest_preview())
+
+    def test_older_branch_does_not_cause_downgrade(self):
+        old={**preview(100000),"branch":previews.PREVIEW_BRANCHES[1],
+             "version":"0.7.4"}
+        data=check_for_updates(
+            fetcher=lambda:stable(),preview_fetcher=lambda:old,
+            current_version="0.7.5",installed_run_id=100)
+        self.assertEqual(data["status"],"preview_older")
+        self.assertFalse(data["updateAvailable"])
+        self.assertEqual(data["previewVersion"],"0.7.4")
+
+    def test_version_forgery_not_accepted(self):
+        payload={**preview(220),"version":"9.9.9"}
+        data=check_for_updates(fetcher=lambda:stable(),
+                               preview_fetcher=lambda:payload)
+        self.assertIsNone(data["previewRunId"])
+        self.assertEqual(data["previewStatus"],"unavailable")
+
+    def test_release_has_no_automatic_unsigned_install_action(self):
+        result=check_for_updates(fetcher=lambda:stable(),
+                                 preview_fetcher=lambda:preview(300),
+                                 installed_run_id=100)
+        self.assertTrue(result["updateAvailable"])
+        self.assertFalse(result["automaticInstallReady"])
+        self.assertNotIn("download_url",result)
+
+    def test_pull_request_run_is_not_publisher_preview(self):
+        forged={**run(202),"event":"pull_request"}
+        self.assertFalse(previews._accepted_run(forged,previews.PREVIEW_BRANCHES[0]))
 
     def test_build_identity_read_from_embedded_metadata(self):
         with tempfile.TemporaryDirectory() as folder:
