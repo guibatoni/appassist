@@ -60,6 +60,14 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_drops(opponent_id,group,query,offset,limit,sort,card_type)
 
+    def get_rank_trace_status(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_rank_trace_status()
+
+    def import_rank_trace(self, credential):
+        self._authorize(credential)
+        return self._bridge.import_rank_trace()
+
     def get_duel_evidence(self, credential):
         self._authorize(credential)
         return self._bridge.get_duel_evidence()
