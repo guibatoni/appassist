@@ -43,8 +43,8 @@ class DueltraceDesktop(tk.Tk):
     def __init__(self, *, catalog=None, developer=False):
         super().__init__()
         self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.0")
-        self.geometry("1480x900")
-        self.minsize(1160,770)
+        self.geometry("1360x780")
+        self.minsize(1100,690)
         self.configure(background=BACKGROUND)
         try:apply_window_icon(self)
         except tk.TclError:pass
