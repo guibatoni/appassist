@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Callable
 
 from importador_perfis import import_rom
-from scanner_multiiso import X15_SHA, ART_PARSER_REVISION
+from scanner_multiiso import X15_SHA, ART_PARSER_REVISION, DISC_METADATA_REVISION
 from card_catalog import effect_sidecar_path
 
 EXTENSIONS = frozenset({".iso", ".bin"})
@@ -134,16 +134,20 @@ class ModCatalog:
                 and old.get("mtime_ns") == before.st_mtime_ns
                 and tuple(old.get("effects_manifest_signature", ())) == effect_signature):
             profile=self.profile_for(old) or {}
-            if not with_art or profile.get("supported_features", {}).get("art"):
-                return dict(old)
+            if profile.get("disc_metadata_revision")==DISC_METADATA_REVISION:
+                if not with_art or profile.get("supported_features", {}).get("art"):
+                    return dict(old)
             scan_dir=profile.get("scan_result_dir")
             meta=load_json(Path(scan_dir) / "relatorio.json", {}) if scan_dir else {}
             # Não reescanear toda a ISO a cada abertura após uma tentativa
             # sem sucesso. Nova revisão ou 'Reanalisar' invalida este cache.
-            if (meta.get("art_requested") is True
+            if (profile.get("disc_metadata_revision")==DISC_METADATA_REVISION
+                    and meta.get("art_requested") is True
                     and meta.get("art_parser_revision") == ART_PARSER_REVISION):
                 return dict(old)
 
+        if previous_profile and previous_profile.get("supported_features",{}).get("art"):
+            with_art=True
         profile, profile_path = import_rom(path, self.home, art=with_art, progress=progress)
         # Reanálises não podem apagar confirmações individuais feitas em duelo.
         # O catálogo estrutural é recalculado pela etapa de investigação.
