@@ -94,6 +94,12 @@ class DueltraceWebBridge:
                                 if c.get("description_text") and c.get("description_source")]),
             "framedCards":(profile or {}).get("graphic_assets",{}).get("composed_cards",0),
             "frameStyles":(profile or {}).get("graphic_assets",{}).get("frames",0),
+            "opponents":len((profile or {}).get("opponents",[]))
+                if (profile or {}).get("supported_features",{}).get("opponents") else 0,
+            "dropEntries":len((profile or {}).get("drops",[]))
+                if (profile or {}).get("supported_features",{}).get("drops") else 0,
+            "dropTables":(profile or {}).get("drops_provenance",{}).get("table_count",0)
+                if (profile or {}).get("supported_features",{}).get("drops") else 0,
             "requiresReview":summary.get("requires_review",True),
             "verified":summary.get("validated",{}),
         }
@@ -327,6 +333,10 @@ class DueltraceWebBridge:
                 "artCount":graphic.get("art_count",0),
                 "thumbnailCount":graphic.get("thumbnails",0),
                 "framedCards":graphic.get("composed_cards",0),
+                "opponentCount":len((profile or {}).get("opponents",[]))
+                    if (profile or {}).get("supported_features",{}).get("opponents") else 0,
+                "dropEntries":len((profile or {}).get("drops",[]))
+                    if (profile or {}).get("supported_features",{}).get("drops") else 0,
                 "frameStyles":graphic.get("frames",0),
                 "descriptionCount":provenance.get("descriptions_attached",0),
                 "effectTexts":provenance.get("effect_descriptions_attached",0),
