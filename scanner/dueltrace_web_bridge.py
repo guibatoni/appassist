@@ -105,6 +105,9 @@ class DueltraceWebBridge:
                 if (profile or {}).get("supported_features",{}).get("drops") else 0,
             "dropTables":(profile or {}).get("drops_provenance",{}).get("table_count",0)
                 if (profile or {}).get("supported_features",{}).get("drops") else 0,
+            "rankDetected":(profile or {}).get("rank_points",{}).get("available") is True,
+            "rankBinaryVerified":(profile or {}).get("rank_points",{}).get("binary_verified") is True,
+            "rankOffset":(profile or {}).get("rank_points",{}).get("first_offset"),
             "requiresReview":summary.get("requires_review",True),
             "verified":summary.get("validated",{}),
         }

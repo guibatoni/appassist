@@ -145,14 +145,24 @@ export function DropsPage({sha}:{sha:string|null}) {
       {rankRules&&rank&&"note" in rank?<>
         <p className="mt-2 text-sm text-muted">{rank.note}</p>
         <p className="mt-2 text-xs font-semibold text-gold">
-          {rank.runtime_verified
-            ? "Modelo de referência X15 identificado por SHA; a RAM ainda exige validação"
-            : "Tabela candidata extraída do WA · execução MIPS ainda não confirmada"}
+          {rank.binary_verified
+            ? "Modelo X15 verificado por hashes da ISO, do SLUS e da tabela · duelo ainda não confirmado"
+            : rank.structure_verified
+              ? "Pontos extraídos automaticamente de 40 cópias do WA · rotina MIPS ainda não verificada"
+              : "Análise preliminar · pontuação do duelo ainda não confirmada"}
         </p>
         {rank.base_points!==null&&rank.lp_victory_bonus!==null&&
           <p className="mt-1 text-xs text-primary">Base: {rank.base_points} · Bônus por vitória LP: +{rank.lp_victory_bonus}</p>}
         {rank.table_count&&
-          <p className="mt-1 text-xs text-muted">Cópias estruturais validadas: {rank.table_count} · SHA: {rank.table_sha256?.slice(0,16)??"—"}…</p>}
+          <p className="mt-1 text-xs text-muted">
+            Cópias estruturais validadas: {rank.table_count}
+            {typeof rank.first_offset==="number"&&
+              <> · Offset identificado: 0x{rank.first_offset.toString(16).toUpperCase()}</>}
+            {rank.layout_moved&&" · Layout diferente do X15"}
+            {typeof rank.repeat_stride==="number"&&
+              <> · Espaçamento: {rank.repeat_stride} bytes</>}
+            {" · SHA: "}{rank.table_sha256?.slice(0,16)??"—"}…
+          </p>}
         <div className="mt-4 grid gap-2 md:grid-cols-2">
           {Object.entries(rankRules).map(([name,thresholds])=><div key={name}
             className="rounded-lg border border-line/60 bg-background/40 p-3">

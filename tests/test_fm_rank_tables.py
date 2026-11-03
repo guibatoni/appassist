@@ -59,6 +59,70 @@ class RankTableTests(unittest.TestCase):
         self.assertFalse(output["runtime_verified"])
         self.assertIsNone(output["lp_victory_bonus"])
 
+    def test_automatically_finds_relocated_rank_table_without_fixed_offset(self):
+        # Um mod pode deslocar o banco WA sem alterar as regras do duelo.
+        original=sample_wa()
+        shifted=bytearray(len(original)+4096)
+        moved=forensic.LEGACY_OFFSET+512
+        for i in range(forensic.BLOCK_COUNT):
+            old=forensic.LEGACY_OFFSET+i*forensic.STRIDE
+            new=moved+i*forensic.STRIDE
+            shifted[new:new+forensic.TABLE_SIZE]=original[old:old+forensic.TABLE_SIZE]
+        report=forensic.extract_rank_table(bytes(shifted),slus=b"MOD",
+                                           rom_sha256="c"*64,
+                                           known_rom_sha256=X15_SHA)
+        self.assertTrue(report["available"])
+        self.assertEqual(report["first_offset"],moved)
+        self.assertTrue(report["layout_moved"])
+        self.assertEqual(report["method"],"automatic_stride_scan")
+        self.assertFalse(report["binary_verified"])
+        self.assertEqual(report["rules"]["criterion_07"][0]["points"],15)
+
+    def test_infers_modified_duelist_block_stride(self):
+        # Um mod pode mudar a dimensão de cada registro de duelista.
+        step=8192
+        start=forensic.LEGACY_OFFSET+2
+        size=start+forensic.BLOCK_COUNT*step+2048
+        wa=bytearray(size)
+        table=reference_table()
+        for i in range(forensic.BLOCK_COUNT):
+            pos=start+i*step
+            wa[pos:pos+len(table)]=table
+        result=forensic.extract_rank_table(bytes(wa),slus=b"MOD",
+                                           rom_sha256="b"*64,
+                                           known_rom_sha256=X15_SHA)
+        self.assertTrue(result["available"])
+        self.assertEqual(result["first_offset"],start)
+        self.assertEqual(result["repeat_stride"],8192)
+        self.assertTrue(result["layout_moved"])
+        self.assertFalse(result["binary_verified"])
+        self.assertEqual(result["rules"]["criterion_01"][0],
+                         {"below":5,"points":12})
+
+    def test_rejects_two_independent_valid_scoring_tables(self):
+        first=sample_wa()
+        second_start=forensic.LEGACY_OFFSET+(forensic.BLOCK_COUNT+4)*forensic.STRIDE
+        blob=bytearray(second_start+forensic.BLOCK_COUNT*forensic.STRIDE+
+                       forensic.TABLE_SIZE+2048)
+        blob[:len(first)]=first
+        altered=bytearray(reference_table())
+        struct.pack_into("<h",altered,2,7)
+        for i in range(forensic.BLOCK_COUNT):
+            pos=second_start+i*forensic.STRIDE
+            blob[pos:pos+forensic.TABLE_SIZE]=altered
+        report=forensic.extract_rank_table(bytes(blob),slus=b"MOD")
+        self.assertFalse(report["available"])
+        self.assertEqual(report["status"],"ambiguous_rank_tables")
+
+    def test_first_anchor_not_equal_to_a_full_valid_table(self):
+        wa=bytearray(sample_wa())
+        for i in range(forensic.BLOCK_COUNT):
+            pos=forensic.LEGACY_OFFSET+i*forensic.STRIDE
+            # último limiar preservado, mas a segunda faixa é inválida.
+            struct.pack_into("<H",wa,pos+4,1)
+        report=forensic.extract_rank_table(bytes(wa),slus=b"MOD")
+        self.assertFalse(report["available"])
+
     def test_mutated_valid_points_are_detected_without_copying_x15(self):
         table=bytearray(reference_table())
         struct.pack_into("<h",table,2,7)
@@ -104,7 +168,8 @@ class RankTableTests(unittest.TestCase):
             report=forensic.extract_rank_table(bytes(sample_wa()),slus=fake_exe,
                                               rom_sha256=X15_SHA,
                                               known_rom_sha256=X15_SHA)
-        self.assertTrue(report["runtime_verified"])
+        self.assertFalse(report["runtime_verified"])
+        self.assertTrue(report["binary_verified"])
         self.assertTrue(report["criterion_names_verified"])
         self.assertEqual(report["rules"]["turns"][0],{"below":5,"points":12})
         self.assertEqual(rank_profile_for_image(X15_SHA,report)["base_points"],50)

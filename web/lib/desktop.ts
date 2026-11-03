@@ -49,6 +49,9 @@ export type LocalMod = {
   opponents?: number
   dropEntries?: number
   dropTables?: number
+  rankDetected?: boolean
+  rankBinaryVerified?: boolean
+  rankOffset?: number | null
   requiresReview: boolean
 }
 
@@ -133,6 +136,12 @@ export type RankPoints = {
   lp_victory_bonus: number | null
   final_rank: boolean
   runtime_verified?: boolean
+  binary_verified?: boolean
+  structure_verified?: boolean
+  method?: string | null
+  first_offset?: number | null
+  repeat_stride?: number | null
+  layout_moved?: boolean
   criterion_names_verified?: boolean
   table_count?: number
   table_sha256?: string | null

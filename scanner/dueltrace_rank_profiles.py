@@ -28,13 +28,19 @@ def rank_profile_for_image(rom_sha256: str, analysis: dict | None = None) -> dic
                 "lp_victory_bonus": None, "final_rank": False,
                 "note": "Não foi possível validar a tabela do WA nesta ISO."
             }
-        verified=(analysis.get("runtime_verified") is True
+        verified=(analysis.get("binary_verified") is True
                   and isinstance(rom_sha256,str)
                   and rom_sha256.casefold()==X15_SHA
                   and analysis.get("status")=="known_x15_verified_binary")
         return {
             "available": True,
-            "runtime_verified": verified,
+            "runtime_verified": False,
+            "binary_verified": verified,
+            "structure_verified": analysis.get("structure_verified") is True,
+            "first_offset": analysis.get("first_offset"),
+            "repeat_stride": analysis.get("repeat_stride"),
+            "method": analysis.get("method"),
+            "layout_moved": analysis.get("layout_moved") is True,
             "status": ("modelo_validado_para_sha_exato" if verified else
                        "tabela_wa_extraida_execucao_nao_confirmada"),
             "source":analysis.get("source","DATA/WA_MRG.MRG"),
@@ -61,6 +67,8 @@ def rank_profile_for_image(rom_sha256: str, analysis: dict | None = None) -> dic
         }
     return {
         "available": True,
+        "runtime_verified": False,
+        "binary_verified": True,
         "status": "modelo_validado_para_sha_exato",
         "source": "SLUS_014.11; modelo previamente validado apenas para ISO SHA X15",
         "rules": {
