@@ -105,6 +105,7 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
         "assignmentCount":(1 if known and not conflicts
                            else solver["consistentAssignments"]),
         "mappingConsistency":("identidade_sha_conhecida" if known and not conflicts
+                              else "inconsistent_known_mapping" if known and conflicts
                               else solver["status"]),
         "rankMappings":({x:{"group":x,"status":"identidade_iso_conhecida"}
                          for x in LABELS} if known else {}),
