@@ -98,10 +98,14 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
         "observations":len(unique),"lastDuelId":last_duel_id,
         "usable":sum(len(x) for x in candidate.values()),
         "ambiguous":ambiguous,"inconsistent":len(conflicts),
-        "mappingHypotheses":solver["candidateAssignments"],
-        "possibleGroups":solver["possibleGroups"],
-        "assignmentCount":solver["consistentAssignments"],
-        "mappingConsistency":solver["status"],
+        "mappingHypotheses":([{label:label for label in LABELS}]
+                              if known and not conflicts else solver["candidateAssignments"]),
+        "possibleGroups":({label:[label] for label in LABELS}
+                          if known and not conflicts else solver["possibleGroups"]),
+        "assignmentCount":(1 if known and not conflicts
+                           else solver["consistentAssignments"]),
+        "mappingConsistency":("identidade_sha_conhecida" if known and not conflicts
+                              else solver["status"]),
         "rankMappings":({x:{"group":x,"status":"identidade_iso_conhecida"}
                          for x in LABELS} if known else {}),
         "suspectedMappings":({} if known else inferred),
