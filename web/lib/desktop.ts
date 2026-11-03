@@ -159,6 +159,15 @@ export type MipsTraceResult = {
   status: string
   records?: number
   correlatedDuels?: number
+  tableReadReports?: number
+  rankTableEvidence?: {
+    status:string
+    tableReadsObserved:boolean
+    matchedPairs:number
+    memoryEvents:number
+    candidateWindows:Array<{candidatePC:string;matchedPairs:number;memoryBaseCandidate:string}>
+    rankRoutineConfirmed:boolean
+  }
   duel_id?: string | null
   record_id?: string
   executionEvidence?: boolean
@@ -178,6 +187,9 @@ export type DuelEvidence = {
   ambiguous: number
   inconsistent: number
   rankMappings: Record<string,{group:string;status:string}>
+  assignmentCount?: number
+  mappingConsistency?: string
+  possibleGroups?: Record<string,string[]>
   suspectedMappings: Record<string,{group:string;observations:number;opponents:number;status:string}>
   mismatches: Array<{duelId?:string;rank?:string;opponentId?:number;cardId?:number;reason:string}>
   scoreComparisons: {compared:number;exact:number;different:number;status:string}
