@@ -49,6 +49,7 @@ def inspect_rank_memory_trace(trace: bytes, rank_points: dict | None,
         return _empty("mips_candidates_missing")
     rows=rank_points["rules"]
     known_pairs=set()
+    pair_positions=defaultdict(list)
     for bands in rows.values():
         if not isinstance(bands,list):
             return _empty("invalid_rank_table")
@@ -61,6 +62,14 @@ def inspect_rank_memory_trace(trace: bytes, rank_points: dict | None,
             if not 0<=limit<=32767 or not -32768<=score<=32767:
                 return _empty("invalid_rank_table")
             known_pairs.add((limit,score))
+    # Ordem dos pares no perfil é a mesma dos 10 critérios × 5 faixas
+    # extraídos pelo decoder. Cada par ocupa exatamente 4 bytes.
+    index=0
+    table_length=sum(len(b) for b in rows.values())*4
+    for bands in rows.values():
+        for pair in bands:
+            pair_positions[(pair["below"],pair["points"])].append(index)
+            index+=1
     if len(known_pairs)<MIN_PAIRS:
         return _empty("insufficient_unique_rule_pairs")
     windows=[]
@@ -102,23 +111,36 @@ def inspect_rank_memory_trace(trace: bytes, rank_points: dict | None,
                 seen[start][column][address].add(value)
     found=[]
     for start,fields in seen.items():
-        pairs=set()
-        match_addrs=[]
+        # O mesmo deslocamento RAM-base deve explicar todos os pares.
+        # Correspondências isoladas por valor são insuficientes.
+        possible_bases=defaultdict(lambda:{"indices":set(),"pairs":set(),
+                                           "addresses":set()})
         for addr,limits in fields["limit"].items():
             scores=fields["score"].get(addr+2,set())
             valid={(limit,score) for limit in limits for score in scores
                    if (limit,score) in known_pairs}
-            if valid:
-                pairs.update(valid)
-                match_addrs.append(addr)
-        if len(pairs)>=MIN_PAIRS and len(set(match_addrs))>=MIN_PAIRS:
+            for pair in valid:
+                for index in pair_positions[pair]:
+                    base=addr-4*index
+                    if (base<0x80000000 or
+                            base+table_length>0x80200000):
+                        continue
+                    sample=possible_bases[base]
+                    sample["indices"].add(index)
+                    sample["addresses"].add(addr)
+                    sample["pairs"].add(pair)
+        for base,sample in possible_bases.items():
+            if (len(sample["indices"])<MIN_PAIRS or
+                    len(sample["addresses"])<MIN_PAIRS or
+                    len(sample["pairs"])<MIN_PAIRS):
+                continue
             found.append({
                 "candidatePC":f"0x{start:08X}",
-                "matchedPairs":len(pairs),
-                "distinctTableAddresses":len(set(match_addrs)),
+                "matchedPairs":len(sample["pairs"]),
+                "distinctTableAddresses":len(sample["addresses"]),
                 "valuePairs":[{"threshold":limit,"points":score}
-                              for limit,score in sorted(pairs)[:12]],
-                "memoryBaseCandidate":f"0x{min(match_addrs):08X}",
+                              for limit,score in sorted(sample["pairs"])[:12]],
+                "memoryBaseCandidate":f"0x{base:08X}",
                 "status":"table_value_reads_corroborated",
             })
     found.sort(key=lambda row:(-row["matchedPairs"],row["candidatePC"]))
