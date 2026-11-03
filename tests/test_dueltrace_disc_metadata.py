@@ -14,7 +14,8 @@ from dueltrace_disc_metadata import (
     CARD_COUNT,DESC_POINTERS,DESC_DATA,DESC_BANK_END,FONT_GLYPHS,
     WA_FRAME_CLUT_BASE,FRAME_VARIANTS,
     _decode_psx_text,extract_descriptions,inspect_frame_palettes,
-    effect_hint_from_description,
+    effect_hint_from_description, supplemental_card_stats,
+    EXTRA_STATS_PACKED, EXTRA_LEVEL_ATTRIBUTE,
 )
 
 
@@ -41,6 +42,20 @@ def synthetic_wa():
 
 
 class DiscMetadataTests(unittest.TestCase):
+    def test_supplemental_stats_are_extracted_from_exact_card_id(self):
+        blob=bytearray(EXTRA_LEVEL_ATTRIBUTE+CARD_COUNT+2)
+        cid=2
+        packed=(5<<22)|(3<<18)
+        struct.pack_into("<I",blob,EXTRA_STATS_PACKED+(cid-1)*4,packed)
+        blob[EXTRA_LEVEL_ATTRIBUTE+(cid-1)]=(7<<4)|8
+        result=supplemental_card_stats(bytes(blob),cid)
+        self.assertEqual(result,{"level":8,"attribute_id":7,
+                                 "guardian_star_1":5,"guardian_star_2":3})
+        with self.assertRaises(ValueError):
+            supplemental_card_stats(bytes(blob),723)
+        with self.assertRaises(ValueError):
+            supplemental_card_stats(b"short",1)
+
     def test_slus_extracts_722_texts_with_id_and_provenance(self):
         extracted,report=extract_descriptions(synthetic_slus())
         self.assertEqual(len(extracted),722)
