@@ -50,6 +50,10 @@ def minimal_evidence(report: dict) -> dict:
             "iso_files_indexed": (report.get("inventory") or {}).get("iso_files_indexed",0),
         },
         "file_inventory_sample": (report.get("inventory") or {}).get("files_sample",[])[:40],
+        "card_samples": (report.get("inventory") or {}).get("card_samples",[])[:16],
+        "effect_samples": (report.get("inventory") or {}).get("effect_samples",[])[:8],
+        "opponent_samples": (report.get("inventory") or {}).get("opponent_samples",[])[:12],
+        "drop_samples": (report.get("inventory") or {}).get("drop_samples",[])[:12],
         "uncertainties":report.get("uncertainties",[])[:15],
         "evidence":report.get("evidence",[])[:20],
         "fusion_hypotheses":[{
