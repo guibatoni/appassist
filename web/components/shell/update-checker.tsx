@@ -98,8 +98,9 @@ export function UpdateChecker() {
               <p className="text-muted">Nenhuma consulta realizada.</p>}
         </div>
         <p className="mt-3 border-t border-line/50 pt-2 text-xs text-muted">
-          Não instala nem executa arquivos. Builds Preview aprovados ficam em
-          GitHub Actions → Artifacts e podem exigir login no GitHub.
+          Prévia experimental NÃO ASSINADA. Um antivírus sem detecções não garante
+          segurança. Não ignore bloqueios do Chrome/Windows. Builds de teste
+          ficam no GitHub Actions → Artifacts e podem exigir login.
         </p>
       </section>}
   </div>
