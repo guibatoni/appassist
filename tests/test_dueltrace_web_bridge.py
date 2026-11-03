@@ -203,7 +203,10 @@ class BridgeTests(unittest.TestCase):
         check.assert_called_once_with()
         with patch("dueltrace_web_bridge.open_official_releases",return_value=True) as opener:
             self.assertEqual(self.bridge.open_updates_page(),{"opened":True})
-            opener.assert_called_once_with()
+            opener.assert_called_once_with(None)
+        with patch("dueltrace_web_bridge.open_official_releases",return_value=True) as opener:
+            self.assertEqual(self.bridge.open_updates_page(41696820609),{"opened":True})
+            opener.assert_called_once_with(41696820609)
 
 
     def test_capability_only_injected_into_exact_loopback_origin(self):
