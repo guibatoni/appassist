@@ -30,6 +30,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.open_updates_page(run_id)
 
+    def install_signed_update(self, credential):
+        self._authorize(credential)
+        return self._bridge.install_signed_update()
+
     def get_state(self, credential):
         self._authorize(credential)
         return self._bridge.get_state()
