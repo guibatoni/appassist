@@ -21,7 +21,7 @@ WA_CARD_SECTOR_START=722
 WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
-ART_PARSER_REVISION=4  # extração completa com proveniência de drops e arte por ID
+ART_PARSER_REVISION=5  # integra decodificação forense das 40 tabelas WA RANK
 
 
 def sha256(path:Path, progress=None):
@@ -288,6 +288,9 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['hash_wa_prefix']=hashlib.sha256(wa).hexdigest()
         info['hash_wa']=hashlib.sha256(wa).hexdigest() if len(wa)==wa_size else None
         info['wa_lido_integralmente']=len(wa)==wa_size
+        from fm_rank_tables import extract_rank_table
+        info['rank_analysis']=extract_rank_table(
+            wa,slus=sl,rom_sha256=info['sha256'],known_rom_sha256=X15_SHA)
         info['versao_conhecida']='Remaster X15 1.2.1' if info['sha256']==X15_SHA else 'desconhecida — não atribuir dados X15'
         if progress:progress("Decodificando cartas e adversários",0,1)
         opponents,cards,nomes_status=decode_names(sl)

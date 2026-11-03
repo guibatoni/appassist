@@ -21,7 +21,12 @@ from dueltrace_rank_live import (model_available, read_rank_candidate,
                                  project_lp_win_rank)
 from epsxe_launcher import launch_epsxe
 from dueltrace_drops import get_drop_catalog
-from dueltrace_update_checker import check_for_updates, open_official_releases
+from dueltrace_update_checker import (
+    check_for_updates, open_official_releases, fetch_stable_release, CURRENT_VERSION
+)
+from dueltrace_signed_install import (
+    trusted_installer_ready, select_signed_installer, install_new_release
+)
 
 
 class DueltraceWebBridge:
@@ -105,8 +110,22 @@ class DueltraceWebBridge:
         }
 
     def check_updates(self):
-        """Consulta somente o endpoint público de releases, sob demanda."""
-        return check_for_updates()
+        """Detecta Preview e release estável; instalador somente com confiança."""
+        status=check_for_updates()
+        if trusted_installer_ready() and status.get("status")=="update_available":
+            try:
+                release=fetch_stable_release()
+                candidate=select_signed_installer(release,CURRENT_VERSION)
+                if candidate is not None:
+                    status["automaticInstallReady"]=True
+                    status["automaticInstallReason"]="Instalador oficial assinado disponível."
+            except (OSError,ValueError,TypeError):
+                pass
+        return status
+
+    def install_signed_update(self):
+        """Somente após autorização explícita do usuário na WebUI."""
+        return install_new_release(data_home=self.catalog.home)
 
     def open_updates_page(self, run_id=None):
         """Abre no navegador padrão releases ou o build Preview oficial."""
