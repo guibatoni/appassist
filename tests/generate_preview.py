@@ -36,11 +36,24 @@ def main():
             p=home/"profiles"/sha[:16]/"profile.json"
             fake_cards=([{"id":n,"name":f"CARTA TESTE {n}",
                           "atk":n*400,"def":n*200} for n in range(1,6)]
-                        + [{"id":200,"name":"RESULTADO SINTÉTICO",
-                            "atk":2800,"def":1900}]) if number==3 else []
-            fake_fusions=([{"a":1,"b":2,"result":200,
-                             "validation":"extraida_sete_bancos_consistentes"}]
-                          if number==3 else [])
+                        + [{"id":200,"name":"FUSÃO TESTE 1",
+                            "atk":1800,"def":1900},
+                           {"id":201,"name":"FUSÃO TESTE 2",
+                            "atk":2300,"def":1900},
+                           {"id":202,"name":"FUSÃO TESTE 3",
+                            "atk":2800,"def":1900},
+                           {"id":203,"name":"FUSÃO TESTE FINAL",
+                            "atk":3200,"def":2000}]) if number==3 else []
+            fake_fusions=([
+                {"a":1,"b":2,"result":200,
+                 "validation":"extraida_sete_bancos_consistentes"},
+                {"a":200,"b":3,"result":201,
+                 "validation":"extraida_sete_bancos_consistentes"},
+                {"a":201,"b":4,"result":202,
+                 "validation":"extraida_sete_bancos_consistentes"},
+                {"a":202,"b":5,"result":203,
+                 "validation":"extraida_sete_bancos_consistentes"},
+            ] if number==3 else [])
             atomic_json(p,{
                 "rom_sha256":sha,"name":name,
                 "supported_features":{"cards":number==3,"effects":False,
@@ -75,6 +88,14 @@ def main():
                 print("Prévia inicial de dados sintéticos:",dest.resolve())
             except OSError as exc:
                 print(f"Prévia Inicial indisponível: {exc}")
+            app._set_home_fusion_mode("chains")
+            app.update_idletasks()
+            dest=Path("dist")/"DUELTRACE-PREVIA-ROTAS-TESTE.png"
+            try:
+                ImageGrab.grab(bbox=(x,y,x+w,y+h)).save(dest)
+                print("Prévia de cadeias sintéticas:",dest.resolve())
+            except OSError as exc:
+                print(f"Prévia Rotas indisponível: {exc}")
             app.go("mods")
             # Desenho nativo de componentes e transições após navegação.
             for _ in range(8):

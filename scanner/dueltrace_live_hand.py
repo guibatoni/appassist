@@ -131,7 +131,10 @@ def read_hand_from_epsxe(*, preferred_pid: int | None=None,
     candidates=discover_epsxe_pids(kernel) if pids is None else list(pids)
     if not candidates:
         return {"ready":False,"status":"ePSXe não encontrado","hand_ids":None,"pid":None}
-    if preferred_pid in candidates:
+    if preferred_pid is not None:
+        if preferred_pid not in candidates:
+            return {"ready":False,"status":"Processo ePSXe iniciado não encontrado",
+                    "hand_ids":None,"pid":None}
         pid=preferred_pid
     elif len(candidates)==1:
         pid=candidates[0]
@@ -154,18 +157,26 @@ def read_hand_from_epsxe(*, preferred_pid: int | None=None,
         return {"ready":False,"status":"Acesso de leitura negado ao ePSXe",
                 "hand_ids":None,"pid":pid}
     try:
-        buffer=ctypes.create_string_buffer(HAND_BYTES)
-        read=ctypes.c_size_t(0)
-        ok=kernel.ReadProcessMemory(handle,ctypes.c_void_p(HAND_ADDRESS),
-                                    buffer,HAND_BYTES,ctypes.byref(read))
-        if not ok or read.value != HAND_BYTES:
-            return {"ready":False,"status":"Não foi possível ler a região da mão",
+        def read_sample():
+            buffer=ctypes.create_string_buffer(HAND_BYTES)
+            read=ctypes.c_size_t(0)
+            ok=kernel.ReadProcessMemory(handle,ctypes.c_void_p(HAND_ADDRESS),
+                                        buffer,HAND_BYTES,ctypes.byref(read))
+            if not ok or read.value != HAND_BYTES:
+                return None
+            return decode_hand(buffer.raw)
+
+        # Duas amostras consecutivas evitam mostrar uma mão parcialmente
+        # atualizada pelo jogo durante a leitura, sem acessar outras áreas RAM.
+        first=read_sample()
+        if first is None:
+            return {"ready":False,"status":"Mão indisponível ou fora de duelo",
                     "hand_ids":None,"pid":pid}
-        cards=decode_hand(buffer.raw)
-        if cards is None:
-            return {"ready":False,"status":"Aguardando duelo: mão ainda não validada",
+        second=read_sample()
+        if second is None or second != first:
+            return {"ready":False,"status":"Mão em transição — aguardando estabilidade",
                     "hand_ids":None,"pid":pid}
-        return {"ready":True,"status":"Mão lida ao vivo (estrutura validada)",
-                "hand_ids":cards,"pid":pid}
+        return {"ready":True,"status":"Mão estável: duas leituras válidas",
+                "hand_ids":second,"pid":pid}
     finally:
         kernel.CloseHandle(handle)
