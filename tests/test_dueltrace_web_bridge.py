@@ -35,10 +35,13 @@ class BridgeTests(unittest.TestCase):
         self.profile={
             "rom_sha256":self.sha,
             "scan_result_dir":str(self.analysis),
+            "disc_metadata_revision":1,
+            "frame_palettes":{"normal":{"accent":"#d8a241","wa_offset":11910000,"source":"WA_MRG.MRG:CLUT_campo_normal"}},
             "supported_features":{"cards":True,"art":True,"fusions":True},
             "verified":{"cartas":"verificado"},
             "cards":[
                 {"id":1,"name":"Carta comprovada","atk":1250,"def":1000,
+                 "description":"Texto extraído da ISO","description_source":"SLUS_014.11:tabela_descricoes",
                  "effect_text":"Texto inventado sem fonte"},
                 {"id":2,"name":"Outra carta","atk":300,"def":800,
                  "effect_text":"Efeito com fonte","effect_source":"ROM-offset-auditado"},
@@ -73,10 +76,25 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(snapshot["activeName"],"Local Test.iso")
         self.assertEqual(snapshot["fusionCount"],2)
         self.assertEqual(snapshot["cards"][0]["name"],"Carta comprovada")
+        self.assertEqual(snapshot["cards"][0]["description"],"Texto extraído da ISO")
+        self.assertEqual(snapshot["cards"][0]["descriptionSource"],"SLUS_014.11:tabela_descricoes")
+        self.assertEqual(snapshot["framePalettes"]["normal"]["accent"],"#d8a241")
         self.assertIsNone(snapshot["cards"][0]["effect"])
         self.assertEqual(snapshot["cards"][1]["effect"],"Efeito com fonte")
         self.assertEqual(snapshot["cards"][1]["effectSource"],"ROM-offset-auditado")
         self.assertNotIn("source_path",str(snapshot))
+
+    def test_explicit_reanalysis_checks_matching_iso_sha(self):
+        from unittest.mock import patch
+        rom=self.home/"rom.iso"
+        rom.write_bytes(b"FAKE_BINARY_FOR_MOCK_ONLY")
+        with patch.object(self.catalog,"analyse",return_value={"sha256":self.sha}) as scan:
+            result=self.bridge.reanalyze_mod(self.sha)
+        self.assertEqual(result["activeSha"],self.sha)
+        scan.assert_called_once_with(rom.resolve(),with_art=True,force=True)
+        with patch.object(self.catalog,"analyse",return_value={"sha256":"b"*64}):
+            with self.assertRaises(RuntimeError):
+                self.bridge.reanalyze_mod(self.sha)
 
     def test_live_hand_uses_existing_fusion_engine(self):
         result=self.bridge.get_hand()
@@ -162,6 +180,7 @@ class BridgeTests(unittest.TestCase):
         protected=ProtectedDesktopApi(self.bridge,secret)
         for method,params in (
             ("get_state",()),
+            ("reanalyze_mod",(self.sha,)),
             ("check_updates",()),
             ("open_updates_page",()),
             ("get_hand",()),
