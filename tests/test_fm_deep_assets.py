@@ -111,6 +111,29 @@ class WAAssetTests(unittest.TestCase):
             self.assertIn('"thumbnail_matches_record": true',manifest)
             self.assertIn('"rom_sha256": "cccc',manifest)
 
+    def test_frame_palette_selected_by_card_id_type_not_name(self):
+        # Carta #1 é monstro, #2 magia, com a mesma arte sintética.
+        # O índice da moldura deve obedecer ao tipo lido para aquele ID.
+        import json
+        wa=bytearray(synthetic_wa())
+        struct.pack_into("<H",wa,assets.DUEL_CLUT_START+2*256*2+2,0x03E0)
+        cards=[{"id":1,"type_id":0,"nome":"Qualquer"},
+               {"id":2,"type_id":20,"nome":"Qualquer"}]
+        with tempfile.TemporaryDirectory() as temp:
+            with patch.object(assets,"CARD_COUNT",2):
+                report=assets.extract_asset_pack(bytes(wa),cards,Path(temp),
+                                                 rom_sha256="d"*64)
+            self.assertEqual(report["composed_count"],2)
+            manifest=json.loads((Path(temp)/"recursos_wa.json").read_text("utf-8"))
+            self.assertEqual([x["id"] for x in manifest["records"]],[1,2])
+            self.assertEqual([x["frame_palette"] for x in manifest["records"]],[0,1])
+            self.assertEqual([x["frame_selected_by"] for x in manifest["records"]],
+                             ["SLUS.type_id","SLUS.type_id"])
+            from PIL import Image
+            with Image.open(Path(temp)/"cartas_com_moldura"/"001.png") as a, \\
+                 Image.open(Path(temp)/"cartas_com_moldura"/"002.png") as b:
+                self.assertNotEqual(a.getpixel((1,0)),b.getpixel((1,0)))
+
     def test_mismatched_duplicate_does_not_invalidate_real_assets(self):
         wa=bytearray(synthetic_wa())
         # Mod pode alterar uma cópia da miniatura sem perder a arte original.
