@@ -19,6 +19,7 @@ from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
 from dueltrace_fusion_planner import plan_fusion_chains
 from dueltrace_rank_live import (model_available, read_rank_candidate,
                                  project_lp_win_rank)
+from scanner_multiiso import DISC_METADATA_REVISION
 from epsxe_launcher import launch_epsxe
 from dueltrace_update_checker import check_for_updates, open_official_releases
 
@@ -272,12 +273,39 @@ class DueltraceWebBridge:
                 total+=1
             return {"total":total,"offset":offset,"rows":rows}
 
+    def reanalyze_mod(self, sha):
+        """Reabre os arquivos da ISO local por escolha do usuário, sem upload."""
+        if not isinstance(sha,str) or len(sha)!=64:
+            raise ValueError("SHA de mod inválido")
+        with self._lock:
+            entry=next((e for e in self.catalog.list()
+                        if e.get("sha256")==sha),None)
+            if entry is None:
+                raise ValueError("Mod não cadastrado")
+            source=Path(entry.get("source_path","")).resolve(strict=True)
+            updated=self.catalog.analyse(source,with_art=True,force=True)
+            if updated.get("sha256")!=sha:
+                raise RuntimeError("Arquivo ISO mudou: verifique e importe como novo mod.")
+            self._fusion_cache_key=None
+            return self.get_state()
+
     def activate_mod(self, sha, acknowledge=False):
         if not isinstance(sha,str) or len(sha)!=64:
             raise ValueError("Identificador de mod inválido")
         if type(acknowledge) is not bool:
             raise ValueError("Confirmação inválida")
-        self.catalog.activate(sha,acknowledge_uncertainty=acknowledge)
+        with self._lock:
+            entry=next((e for e in self.catalog.list()
+                        if e.get("sha256")==sha),None)
+            if entry is None:
+                raise ValueError("Mod não cadastrado")
+            profile=self.catalog.profile_for(entry)
+            if profile and profile.get("disc_metadata_revision")!=DISC_METADATA_REVISION:
+                source=Path(entry.get("source_path","")).resolve(strict=True)
+                updated=self.catalog.analyse(source,with_art=True)
+                if updated.get("sha256")!=sha:
+                    raise RuntimeError("Arquivo ISO alterado desde o cadastro.")
+            self.catalog.activate(sha,acknowledge_uncertainty=acknowledge)
         self._fusion_cache_key=None
         self._rank_calibration=None
         self._rank_last_turns=None
