@@ -20,10 +20,10 @@ DESCRIPTION_BANK=0x1B0800
 DESCRIPTION_BANK_END=0x1C0800
 GLYPHS_OFFSET=0x1C9800
 GLYPHS_COUNT=93
-MAX_RAW_BYTES=192
+MAX_RAW_BYTES=384
 MAX_TEXT_CHARS=550
-VALID_THRESHOLD=500
-EFFECT_MARKER=re.compile(r"(?:<\s*effect\s*>|<\s*efeito\s*>|\[\s*effect\s*\]|\[\s*efeito\s*\])",re.I)
+VALID_THRESHOLD=400  # Remaster X15 real tem 497 textos e 225 entradas vazias
+EFFECT_MARKER=re.compile(r"(?:<|\\[|《|〈|【)\\s*(?:effect|efeito)\\s*(?:>|\\]|》|〉|】)",re.I)
 
 
 def _glyphs(sl:bytes)->list[str]:
