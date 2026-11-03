@@ -161,6 +161,23 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.bridge.get_fusions("",0,20,"nonsense")
 
+    def test_import_emulator_mips_log_is_local_and_sha_scoped(self):
+        self.profile["rank_mips_evidence"]={
+            "available":True,
+            "candidates":[{"pc":"0x80012040","score":12,"file_offset":0x840}]}
+        atomic_json(self.profile_path,self.profile)
+        trace=self.home/"meu-duelo.log"
+        trace.write_text("\\n".join(
+            [f"PC=0x{0x80012000+(i%17)*4:08X}" for i in range(120)]))
+        self.bridge._file_picker=lambda kind: [str(trace)] if kind=="trace" else []
+        response=self.bridge.import_rank_trace()
+        self.assertFalse(response["cancelled"])
+        self.assertTrue(response["executionEvidence"])
+        self.assertFalse(response["rankRoutineConfirmed"])
+        self.assertEqual(self.bridge.get_rank_trace_status()["records"],1)
+        self.assertNotIn(str(trace),str(self.bridge.get_rank_trace_status()))
+        trace.unlink()
+
     def test_partial_profile_needs_manual_acknowledgement(self):
         self.entry["level"]="parcial_revisar"
         atomic_json(self.catalog.registry_file,{"schema":1,"entries":[self.entry]})
