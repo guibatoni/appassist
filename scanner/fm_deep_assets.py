@@ -180,13 +180,21 @@ def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
             })
         except (OSError,ValueError,struct.error) as exc:
             warnings.append(f"ID {cid}: {str(exc)[:120]}")
-    # Miniaturas repetidas divergentes são uma característica auditável do\n    # mod, não tornam inválidas as imagens extraídas com sucesso.\n    unmatched=good_thumb-duplicate\n    if unmatched:\n        warnings.append(f"{unmatched} miniaturas diferem da cópia no registro; ambas as origens foram auditadas")\n    report={\n        "revision":ASSET_REVISION,"rom_sha256":rom_sha256,
+    # Miniaturas repetidas divergentes são uma característica auditável do
+    # mod, não tornam inválidas as imagens extraídas com sucesso.
+    unmatched=good_thumb-duplicate
+    if unmatched:
+        warnings.append(f"{unmatched} miniaturas diferem da cópia no registro; ambas as origens foram auditadas")
+    report={
+        "revision":ASSET_REVISION,"rom_sha256":rom_sha256,
         "source":wa_name,"source_bytes":len(wa),
         "source_sha256":hashlib.sha256(wa).hexdigest(),
         "art_count":good_art,"thumbnail_count":good_thumb,
         "frame_count":len(frames),"composed_count":composed,
-        "thumbnail_duplicate_matches":duplicate,\n        "thumbnail_duplicate_mismatches":unmatched,
-        "status":"completo" if good_art==good_thumb==composed==CARD_COUNT\n                 and len(frames)==6 else "parcial",
+        "thumbnail_duplicate_matches":duplicate,
+        "thumbnail_duplicate_mismatches":unmatched,
+        "status":"completo" if good_art==good_thumb==composed==CARD_COUNT
+                 and len(frames)==6 else "parcial",
         "warnings":warnings[:80],"records":metadata,
     }
     temp=out/"recursos_wa.json.tmp"
