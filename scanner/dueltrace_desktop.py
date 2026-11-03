@@ -303,7 +303,7 @@ class DueltraceDesktop(tk.Tk):
                      accent=GOLD,width=146).pack(side="left",padx=(0,7))
         self._action(toolbar,"Escanear pasta",self.choose_folder,
                      width=127).pack(side="left",padx=(0,7))
-        self._action(toolbar,"Reanalisar",self.scan_folder,
+        self._action(toolbar,"Reanalisar",self.reanalyze_selected,
                      width=123).pack(side="left")
         self._action(toolbar,"Ativar perfil",self.activate_selected,
                      accent=GOLD,width=135).pack(side="right")
@@ -702,16 +702,26 @@ class DueltraceDesktop(tk.Tk):
         self.go("mods")
         self._start_worker(Path(filename))
 
-    def scan_folder(self):
+    def scan_folder(self, *, force=False):
         if self.busy:return
         folder=Path(self.folder.get())
         if not folder.is_dir():
             self.status.set("Selecione uma pasta de mods nas Configurações.")
             return
         self._save_settings()
-        self._start_worker(folder,all_images=True)
+        self._start_worker(folder,all_images=True,force=force)
 
-    def _start_worker(self,path,*,all_images=False):
+    def reanalyze_selected(self):
+        """Reprocessa explicitamente a ISO selecionada, mesmo com cache."""
+        entry=self._selected_entry()
+        if entry:
+            image=Path(entry.get("source_path",""))
+            if image.is_file():
+                self._start_worker(image,force=True)
+                return
+        self.scan_folder(force=True)
+
+    def _start_worker(self,path,*,all_images=False,force=False):
         if self.busy:return
         self.busy=True
         use_ollama=bool(self.ai_enabled.get())
@@ -737,7 +747,7 @@ class DueltraceDesktop(tk.Tk):
                     emit({"event":"found","file":image.name,"index":index,"total":len(paths)})
                     try:
                         result=self.autopilot.analyze_file(
-                            image, with_art=art_available,
+                            image, with_art=art_available, force=force,
                             progress=lambda stage,done,total:
                             emit({"event":"progress","stage":stage,"done":done,"total":total}))
                         emit({"event":"done","result":result})
