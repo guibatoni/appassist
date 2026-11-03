@@ -8,10 +8,13 @@ on:
       - security/dueltrace-v070-client-safety
       - fix/dueltrace-v070-tailwind-styles
       - feature/dueltrace-v071-rank-and-fusion-images
+      - feature/dueltrace-v072-check-updates
     paths:
       - 'web/**'
       - 'scanner/dueltrace_web_*.py'
       - 'scanner/dueltrace_rank_live.py'
+      - 'scanner/dueltrace_update_checker.py'
+      - 'tests/test_dueltrace_update_checker.py'
       - 'tests/test_dueltrace_web_bridge.py'
       - 'tests/test_dueltrace_rank_live.py'
       - 'tools/security/**'
@@ -21,6 +24,8 @@ on:
       - 'web/**'
       - 'scanner/dueltrace_web_*.py'
       - 'scanner/dueltrace_rank_live.py'
+      - 'scanner/dueltrace_update_checker.py'
+      - 'tests/test_dueltrace_update_checker.py'
       - 'tests/test_dueltrace_web_bridge.py'
       - 'tests/test_dueltrace_rank_live.py'
 
