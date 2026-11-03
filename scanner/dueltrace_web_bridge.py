@@ -20,7 +20,7 @@ from dueltrace_fusion_planner import plan_fusion_chains
 from dueltrace_rank_live import (model_available, read_rank_candidate,
                                  read_rank_from_verified_binding, project_lp_win_rank)
 from dueltrace_rank_profile_live import (
-    validate_live_rank_binding, project_rank_for_mod
+    validate_live_rank_binding, project_rank_for_mod, x15_compatible_runtime
 )
 from epsxe_launcher import launch_epsxe
 from dueltrace_drops import get_drop_catalog
@@ -209,7 +209,7 @@ class DueltraceWebBridge:
         active,entry,profile=self._active()
         sha=active.get("sha256") if profile else None
         binding=validate_live_rank_binding(profile)
-        if binding is None and not model_available(sha):
+        if binding is None and not model_available(sha) and not x15_compatible_runtime(profile):
             self._rank_calibration=None
             return None,sha,{"state":"unsupported","ready":False,
                 "status":"Tabela e/ou rotina de RANK ainda não calibradas para esta ISO. "
@@ -263,8 +263,16 @@ class DueltraceWebBridge:
             if binding:
                 visible_counters["turns"]=counters[binding["turns_criterion"]]
                 visible_counters["remaining_lp"]=counters[binding["life_points_criterion"]]
+            compatible=(binding is None and not model_available(sha) and
+                        x15_compatible_runtime(profile))
+            status=("Projeção usando SLUS e tabela RANK idênticos ao X15; "
+                    "LP confirmado nesta sessão, mas o resultado do duelo "
+                    "ainda exige comparação."
+                    if compatible else
+                    "Projeção se vencer por LP; resultado e mapeamento RAM "
+                    "não verificados no jogo.")
             return {"ready":True,"state":"provisional",
-                    "status":"Projeção se vencer por LP; resultado e mapeamento RAM não verificados no jogo.",
+                    "status":status,
                     "candidateLp":counters[binding["life_points_criterion"]] if binding else counters["remaining_lp"],
                     "score":result["score"],"category":result["category"],
                     "counters":visible_counters,"breakdown":result["breakdown"],
