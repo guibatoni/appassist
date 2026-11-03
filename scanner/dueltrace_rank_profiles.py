@@ -38,6 +38,7 @@ def rank_profile_for_image(rom_sha256: str, analysis: dict | None = None) -> dic
             "binary_verified": verified,
             "structure_verified": analysis.get("structure_verified") is True,
             "first_offset": analysis.get("first_offset"),
+            "repeat_stride": analysis.get("repeat_stride"),
             "method": analysis.get("method"),
             "layout_moved": analysis.get("layout_moved") is True,
             "status": ("modelo_validado_para_sha_exato" if verified else
