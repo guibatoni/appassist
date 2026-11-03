@@ -98,7 +98,7 @@ class PreviewUpdaterTests(unittest.TestCase):
             found=previews.fetch_latest_preview()
         self.assertEqual(found["run_id"],202)
         self.assertEqual(found["page"],newest["html_url"])
-        self.assertEqual(len(calls),3)
+        self.assertEqual(len(calls),len(previews.PREVIEW_BRANCHES)+1)
 
     def test_ignores_expired_or_failed_builds(self):
         def get_json(url):

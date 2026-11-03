@@ -11,6 +11,7 @@ on:
       - feature/dueltrace-v072-check-updates
       - feature/dueltrace-v073-iso-deep-assets-and-card-text
       - fix/dueltrace-v073-preview-update-button
+      - security/dueltrace-trusted-distribution-v073
     paths:
       - 'web/**'
       - 'scanner/dueltrace_web_*.py'
@@ -24,6 +25,9 @@ on:
       - 'tests/test_fm_deep_assets.py'
       - 'tests/test_fm_card_text.py'
       - 'tests/test_dueltrace_update_checker.py'
+      - 'tests/test_audit_windows_archive.py'
+      - 'tests/test_dueltrace_preview_updates.py'
+      - 'scanner/dueltrace_preview_updates.py'
       - 'tests/test_dueltrace_web_bridge.py'
       - 'tests/test_dueltrace_rank_live.py'
       - 'tools/security/**'
@@ -42,6 +46,9 @@ on:
       - 'tests/test_fm_deep_assets.py'
       - 'tests/test_fm_card_text.py'
       - 'tests/test_dueltrace_update_checker.py'
+      - 'tests/test_audit_windows_archive.py'
+      - 'tests/test_dueltrace_preview_updates.py'
+      - 'scanner/dueltrace_preview_updates.py'
       - 'tests/test_dueltrace_web_bridge.py'
       - 'tests/test_dueltrace_rank_live.py'
 
@@ -114,14 +121,34 @@ jobs:
         run: |
           python -m PyInstaller --noconfirm --clean --onedir --noconsole --name DUELTRACE-WebUI --paths scanner --collect-all webview --add-data "web/out;web/out" --add-data "scanner/dueltrace-build.json;." scanner/dueltrace_web_desktop.py
           if (-not (Test-Path dist/DUELTRACE-WebUI/DUELTRACE-WebUI.exe)) { throw "Executável experimental ausente" }
+          Copy-Item tools/security/AVISO-SEGURANCA-PREVIEW.txt dist/DUELTRACE-WebUI/LEIA-ME-SEGURANCA.txt
           Compress-Archive -Path dist/DUELTRACE-WebUI/* -DestinationPath dist/DUELTRACE-WebUI-Windows-Preview.zip -Force
+      - name: Testar bloqueio de release pública sem editor autorizado
+        shell: pwsh
+        run: |
+          $rejected=$false
+          try {
+            ./tools/security/gate_windows_package.ps1 -PackageDirectory dist/DUELTRACE-WebUI -ZipPath dist/DUELTRACE-WebUI-Windows-Preview.zip -OutputDirectory dist/security -RequireSignature -ExpectedPublisherSubject 'CN=EDITOR_INVALIDO'
+          } catch {
+            if ($_.Exception.Message -like 'Release pública bloqueada*') {
+              $rejected=$true
+            } else {
+              throw
+            }
+          }
+          if (-not $rejected) { throw 'ERRO: gate aceitou release sem editor autorizado.' }
+          Write-Host 'Gate de publicação pública rejeitou editor inválido, conforme esperado.'
+      - name: Confirmar integridade exata do ZIP e ausência de recursos privados
+        shell: pwsh
+        run: |
+          python tools/security/audit_windows_archive.py dist/DUELTRACE-WebUI dist/DUELTRACE-WebUI-Windows-Preview.zip --report dist/security/archive-integrity.json
       - name: Escanear pacote com Microsoft Defender e gerar SHA-256
         shell: pwsh
         run: |
           ./tools/security/gate_windows_package.ps1 -PackageDirectory dist/DUELTRACE-WebUI -ZipPath dist/DUELTRACE-WebUI-Windows-Preview.zip -OutputDirectory dist/security
       - uses: actions/upload-artifact@v4
         with:
-          name: DUELTRACE-WebUI-Windows-Preview-Security-Verified
+          name: DUELTRACE-Windows-Preview-Unsigned-Security-Scanned
           path: |
             dist/DUELTRACE-WebUI-Windows-Preview.zip
             dist/security/

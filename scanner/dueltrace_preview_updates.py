@@ -17,8 +17,9 @@ REPO_WEB = "https://github.com/guibatoni/appassist"
 PREVIEW_BRANCHES = (
     "fix/dueltrace-v073-preview-update-button",
     "feature/dueltrace-v073-assets-hardening",
+    "security/dueltrace-trusted-distribution-v073",
 )
-ARTIFACT_NAME = "DUELTRACE-WebUI-Windows-Preview-Security-Verified"
+ARTIFACT_NAME = "DUELTRACE-Windows-Preview-Unsigned-Security-Scanned"
 BUILD_INFO_FILE = "dueltrace-build.json"
 MAX_BYTES = 768 * 1024
 _SHA = re.compile(r"[0-9a-f]{40}")

@@ -1,0 +1,25 @@
+DUELTRACE WebUI v0.7.3 — PREVIEW EXPERIMENTAL (WINDOWS)
+
+IMPORTANTE: ESTA PRÉVIA NÃO POSSUI ASSINATURA DIGITAL.
+O Microsoft Defender do GitHub Actions examina o build, mas a ausência de
+detecções conhecidas NÃO prova segurança. Chrome/SmartScreen podem bloquear.
+
+NÃO desative antivírus, SmartScreen ou Navegação Segura para instalar.
+Se o navegador bloquear o arquivo como perigoso, interrompa a instalação.
+A distribuição pública depende de assinatura Authenticode de editor confiável,
+verificações independentes e testes reais adicionais.
+
+Repositório oficial:
+https://github.com/guibatoni/appassist
+
+Uma assinatura digital válida permite identificar o editor; mesmo software
+assinado novo pode continuar recebendo alertas até construir reputação.
+
+Para conferir a integridade, compare o SHA-256 com o arquivo SHA256SUMS.txt
+presente no artefato oficial do GitHub Actions. O SHA-256 sozinho não comprova
+autoria nem ausência de malware.
+
+O app não exige desabilitar proteções do Windows nem enviar uma ISO à nuvem.
+A análise de mods deve permanecer local; não distribua ROMs nem arquivos do jogo.
+
+Batoni Dev — Prévia para avaliação técnica, não distribuição comercial.

@@ -7,7 +7,9 @@ Não assina código e não substitui avaliação independente de malware.
 param(
     [Parameter(Mandatory=$true)][string]$PackageDirectory,
     [Parameter(Mandatory=$true)][string]$ZipPath,
-    [Parameter(Mandatory=$true)][string]$OutputDirectory
+    [Parameter(Mandatory=$true)][string]$OutputDirectory,
+    [switch]$RequireSignature,
+    [string]$ExpectedPublisherSubject=""
 )
 $ErrorActionPreference="Stop"
 $package=(Resolve-Path $PackageDirectory).Path
@@ -17,6 +19,23 @@ $report=(Resolve-Path $OutputDirectory).Path
 $exe=Join-Path $package "DUELTRACE-WebUI.exe"
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Executável ausente." }
 if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw "ZIP ausente." }
+
+# Releases públicas exigem um certificado de editor validado.
+# Assinatura própria ou Status=NotSigned não passam neste gate.
+$signature=Get-AuthenticodeSignature -LiteralPath $exe -ErrorAction Stop
+$signed=($signature.Status -eq [System.Management.Automation.SignatureStatus]::Valid -and
+         $null -ne $signature.SignerCertificate)
+$signerSubject=if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { $null }
+$signerThumbprint=if ($signature.SignerCertificate) { $signature.SignerCertificate.Thumbprint } else { $null }
+if ($RequireSignature) {
+    if (-not $signed) { throw "Release pública bloqueada: EXE sem Authenticode confiável." }
+    if ([string]::IsNullOrWhiteSpace($ExpectedPublisherSubject)) {
+        throw "Release pública bloqueada: editor esperado não configurado."
+    }
+    if ($signerSubject -cne $ExpectedPublisherSubject) {
+        throw "Release pública bloqueada: assinatura não pertence ao editor esperado."
+    }
+}
 
 # Bloqueia uploads não determinísticos ou com arquivos de análise na distribuição.
 $forbidden=Get-ChildItem -LiteralPath $package -Recurse -Force -File |
@@ -67,10 +86,18 @@ $securityReport=[ordered]@{
     scan_result="no_threat_detected"
     exe_sha256=$hashes[0].Hash.ToLowerInvariant()
     zip_sha256=$hashes[1].Hash.ToLowerInvariant()
-    signed_code=$false
+    signed_code=[bool]$signed
+    signature_status=$signature.Status.ToString()
+    signer_subject=$signerSubject
+    signer_thumbprint=$signerThumbprint
+    public_release_gate=$RequireSignature.IsPresent
     guarantee_of_safety=$false
 }
 $securityReport | ConvertTo-Json -Depth 5 |
     Set-Content -LiteralPath (Join-Path $report "SECURITY-REPORT.json") -Encoding utf8
-Write-Host "Análise antivírus concluída (sem achados conhecidos). Pacote permanece NÃO ASSINADO."
+if ($signed) {
+    Write-Host "Verificação Defender sem achados conhecidos; Authenticode válido."
+} else {
+    Write-Host "Defender sem achados conhecidos; PREVIEW NÃO ASSINADA, inapta à distribuição pública."
+}
 Write-Host "SHA-256 ZIP: $($hashes[1].Hash)"
