@@ -47,10 +47,10 @@ class RankDropSolverTests(unittest.TestCase):
         self.assertFalse(r["executionVerified"])
 
     def test_no_bijection_for_two_ranks_pointing_same_bank(self):
-        obs=[observation(self.sha,1,1,"Z-POW","duel-Z1"),
-             observation(self.sha,2,1,"Z-POW","duel-Z2"),
-             observation(self.sha,1,1,"S-POW","duel-S1"),
-             observation(self.sha,2,1,"S-POW","duel-S2")]
+        obs=[observation(self.sha,1,1,"Z-POW","duel-Z001"),
+             observation(self.sha,2,1,"Z-POW","duel-Z002"),
+             observation(self.sha,1,1,"S-POW","duel-S001"),
+             observation(self.sha,2,1,"S-POW","duel-S002")]
         r=solve_rank_drop_labels(self.groups,self.wa,obs,self.sha)
         self.assertEqual(r["consistentAssignments"],0)
         self.assertEqual(r["supportedMappings"],{})
