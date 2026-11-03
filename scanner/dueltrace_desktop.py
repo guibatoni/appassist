@@ -34,9 +34,9 @@ PAGES=(
 class DueltraceDesktop(tk.Tk):
     def __init__(self, *, catalog=None):
         super().__init__()
-        self.title("DUELTRACE — MultiMod Companion")
-        self.geometry("1460x900")
-        self.minsize(1160,750)
+        self.title("DUELTRACE — MultiMod Companion · v0.5.1")
+        self.geometry("1480x900")
+        self.minsize(1160,770)
         self.configure(background=BACKGROUND)
         try:apply_window_icon(self)
         except tk.TclError:pass
@@ -184,7 +184,7 @@ class DueltraceDesktop(tk.Tk):
         )
         for caption,subtitle,symbol,key in shortcuts:
             item=QuickTile(tiles,caption,subtitle,symbol,
-                           lambda k=key:self.go(k),width=160,height=106,
+                           lambda k=key:self.go(k),width=140,height=106,
                            accent=GOLD if key=="fusoes" else BLUE)
             item.pack(side="left",fill="x",expand=True,padx=3)
         lower=tk.Frame(body,background=BACKGROUND)
