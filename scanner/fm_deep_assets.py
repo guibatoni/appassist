@@ -27,7 +27,7 @@ FRAME_ATLAS_COLUMN=2
 FRAME_V,FRAME_W,FRAME_H=128,52,60
 FRAME_ROW_STRIDE=64*2
 FRAME_NAMES=("monstro","magica","armadilha","ritual","roxo","laranja")
-ASSET_REVISION=1
+ASSET_REVISION=2
 
 
 def bgr555(value:int,*,transparent_zero=False):
@@ -176,7 +176,8 @@ def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
                 "id":cid,"source":wa_name,"art_offset":art_offset,
                 "art_size":[102,96],"thumbnail_offset":thumb_offset,
                 "thumbnail_size":[40,32],"thumbnail_matches_record":match,
-                "frame_palette":fi,"composed":fi in frames,
+                "frame_palette":fi,"frame_selected_by":"SLUS.type_id",
+                "composed":fi in frames,
             })
         except (OSError,ValueError,struct.error) as exc:
             warnings.append(f"ID {cid}: {str(exc)[:120]}")
