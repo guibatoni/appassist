@@ -287,7 +287,7 @@ export function cardArt(activeSha: string | null, id: number): string | null {
 
 export function sourceLabel(source: string): string {
   if (source === "observada_manualmente_no_jogo") return "Observada em duelo"
-  if (source === "extraida_sete_bancos_consistentes") return "Extraída da ISO ×7"
+  if (source === "extraida_sete_bancos_consistentes") return "Receita validada no mod"
   if (source === "revisada_usuario_em_lote") return "Revisada pelo usuário"
   return "Origem não confirmada"
 }
