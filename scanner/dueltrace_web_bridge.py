@@ -24,6 +24,7 @@ from dueltrace_rank_profile_live import (
 )
 from epsxe_launcher import launch_epsxe
 from dueltrace_drops import get_drop_catalog
+from dueltrace_library_sort import validate_sort,matches_type,sort_key
 from dueltrace_update_checker import (
     check_for_updates, open_official_releases, fetch_stable_release, CURRENT_VERSION
 )
@@ -299,21 +300,23 @@ class DueltraceWebBridge:
             self._rank_last_turns=((sha,sample["pid"]),sample["counters"][turns_key])
             return self.get_rank()
 
-    def get_fusions(self, query="", offset=0, limit=100):
+    def get_fusions(self, query="", offset=0, limit=100,
+                    sort="id", card_type=""):
+        """Filtro aplicado ao RESULTADO da fusão e antes da paginação."""
         if type(query) is not str or len(query)>100:
             raise ValueError("Consulta inválida")
         if type(offset) is not int or offset<0 or offset>1000000:
             raise ValueError("Página inválida")
         if type(limit) is not int or not 1<=limit<=150:
             raise ValueError("Limite inválido")
+        validate_sort(sort,card_type)
         with self._lock:
             active,entry,profile=self._active()
             if not profile or not profile.get("supported_features",{}).get("fusions"):
-                return {"total":0,"offset":0,"rows":[]}
+                return {"total":0,"offset":offset,"rows":[]}
             cards={c["id"]:c for c in self._cards(profile)}
             q=query.strip().casefold()
             rows=[]
-            total=0
             for item in profile.get("fusion_recipes",[]):
                 try:
                     a,b,result=(int(item[k]) for k in ("a","b","result"))
@@ -321,27 +324,41 @@ class DueltraceWebBridge:
                     continue
                 if not all(1<=v<=722 for v in (a,b,result)):
                     continue
+                dest=cards.get(result,{})
+                if not matches_type(dest,card_type):
+                    continue
                 names=[cards.get(cid,{}).get("name") or f"Carta #{cid}"
                        for cid in (a,b,result)]
                 if q and not any(q in text.casefold() or q==str(cid)
                                  for text,cid in zip(names,(a,b,result))):
                     continue
-                if total>=offset and len(rows)<limit:
-                    rows.append({"a":a,"b":b,"result":result,
-                                 "nameA":names[0],"nameB":names[1],
-                                 "nameResult":names[2],
-                                 "atk":cards.get(result,{}).get("atk"),
-                                 "source":str(item.get("validation") or "Não informada")})
-                total+=1
-            return {"total":total,"offset":offset,"rows":rows}
+                rows.append({
+                    "a":a,"b":b,"result":result,
+                    "nameA":names[0],"nameB":names[1],
+                    "nameResult":names[2],
+                    "atk":dest.get("atk"),"def":dest.get("def"),
+                    "type":dest.get("type") or dest.get("category") or "",
+                    "source":str(item.get("validation") or "Não informada"),
+                })
+            if sort=="id":
+                rows.sort(key=lambda row:(row["result"],row["a"],row["b"]))
+            else:
+                rows.sort(key=lambda row:(
+                    sort_key(cards.get(row["result"]),row["result"],
+                             row["nameResult"],sort),
+                    row["a"],row["b"]))
+            total=len(rows)
+            return {"total":total,"offset":offset,"rows":rows[offset:offset+limit]}
 
-    def get_drops(self, opponent_id=0, group="", query="", offset=0, limit=36):
+    def get_drops(self, opponent_id=0, group="", query="", offset=0, limit=36,
+                  sort="id", card_type=""):
         """Consulta exclusivamente tabelas validadas do perfil ISO ativo."""
         with self._lock:
             _active, _entry, profile = self._active()
             return get_drop_catalog(
                 profile, opponent_id=opponent_id, group=group,
-                query=query, offset=offset, limit=limit)
+                query=query, offset=offset, limit=limit,
+                sort=sort,card_type=card_type)
 
     def activate_mod(self, sha, acknowledge=False):
         if not isinstance(sha,str) or len(sha)!=64:
