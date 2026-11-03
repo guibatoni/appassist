@@ -14,7 +14,7 @@ from urllib.request import urlopen
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 
-from auto_mods import ModCatalog, atomic_json
+from auto_mods import ModCatalog, atomic_json, supported_for_runtime
 from dueltrace_web_bridge import DueltraceWebBridge
 from dueltrace_web_desktop import local_handler
 
@@ -57,6 +57,7 @@ class BridgeTests(unittest.TestCase):
             "sha256":self.sha,"source_path":str(self.home/"rom.iso"),
             "file_name":"Local Test.iso","profile_path":str(self.profile_path),
             "level":"conhecido_validado","approved":True,
+            "features":supported_for_runtime(self.profile),
         }
         atomic_json(self.catalog.registry_file,{"schema":1,"entries":[self.entry]})
         atomic_json(self.catalog.active_file,{"sha256":self.sha})
