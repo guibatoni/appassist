@@ -200,7 +200,7 @@ export type DuelEvidence = {
   assignmentCount?: number
   mappingConsistency?: string
   possibleGroups?: Record<string,string[]>
-  suspectedMappings: Record<string,{group:string;observations:number;opponents:number;status:string}>
+  suspectedMappings: Record<string,{group:string;groupDisplay?:string;observations:number;opponents:number;status:string}>
   mismatches: Array<{duelId?:string;rank?:string;opponentId?:number;cardId?:number;reason:string}>
   scoreComparisons: {compared:number;exact:number;different:number;status:string}
   note: string
