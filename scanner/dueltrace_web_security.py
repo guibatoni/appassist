@@ -60,6 +60,16 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_drops(opponent_id,group,query,offset,limit,sort,card_type)
 
+    def get_duel_evidence(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_duel_evidence()
+
+    def record_duel_result(self, credential, opponent_id, observed_rank,
+                           card_id, observed_points=None):
+        self._authorize(credential)
+        return self._bridge.record_duel_result(
+            opponent_id,observed_rank,card_id,observed_points)
+
     def activate_mod(self, credential, sha, acknowledge=False):
         self._authorize(credential)
         return self._bridge.activate_mod(sha,acknowledge)
