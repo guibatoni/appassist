@@ -60,6 +60,9 @@ def validate_live_rank_binding(profile: dict | None) -> dict | None:
             return None
         if sorted({b["below"] for b in bands}) != [b["below"] for b in bands]:
             return None
+    if (binding.get("life_points_criterion") not in offsets or
+            binding.get("turns_criterion") not in offsets):
+        return None
     for name, offset in offsets.items():
         if (not isinstance(offset,dict)
                 or offset.get("type") not in ("u8","u16le")
