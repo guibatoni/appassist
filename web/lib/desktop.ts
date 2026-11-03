@@ -93,15 +93,39 @@ export interface DesktopAPI {
   start_game(): Promise<{started: boolean; status: string}>
 }
 
+interface ProtectedNativeAPI {
+  get_state(token: string): Promise<DesktopState>
+  get_hand(token: string): Promise<HandState>
+  get_fusions(token: string, query: string, offset: number, limit: number): Promise<FusionPage>
+  activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
+  import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
+  configure_epsxe(token: string): Promise<{cancelled: boolean; configured?: boolean}>
+  start_game(token: string): Promise<{started: boolean; status: string}>
+}
+
 declare global {
   interface Window {
-    pywebview?: { api?: DesktopAPI }
+    pywebview?: { api?: ProtectedNativeAPI }
+    __DUELTRACE_TOKEN__?: string
   }
 }
 
 export function desktopApi(): DesktopAPI | null {
-  if (typeof window === "undefined") return null
-  return window.pywebview?.api ?? null
+  if (typeof window === "undefined" || window.top !== window) return null
+  if (window.location.protocol !== "http:" ||
+      window.location.hostname !== "127.0.0.1") return null
+  const native = window.pywebview?.api
+  const token = window.__DUELTRACE_TOKEN__
+  if (!native || typeof token !== "string" || token.length < 32) return null
+  return {
+    get_state: () => native.get_state(token),
+    get_hand: () => native.get_hand(token),
+    get_fusions: (query, offset, limit) => native.get_fusions(token, query, offset, limit),
+    activate_mod: (sha, acknowledge) => native.activate_mod(token, sha, acknowledge),
+    import_iso: () => native.import_iso(token),
+    configure_epsxe: () => native.configure_epsxe(token),
+    start_game: () => native.start_game(token),
+  }
 }
 
 export function useDesktopState() {
