@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import traceback
 from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1] / "scanner"))
@@ -71,6 +72,13 @@ def main():
             "level":"TESTE_SINTETICO",
         })
         app=DueltraceDesktop(catalog=catalog,developer=False)
+        gui_errors=[]
+        def record_callback_error(error_class,error_value,traceback_object):
+            details="".join(traceback.format_exception(
+                error_class,error_value,traceback_object))
+            gui_errors.append(details)
+            print("ERRO NO CALLBACK TKINTER:",details,file=sys.stderr)
+        app.report_callback_exception=record_callback_error
         try:
             app.geometry("1360x780+80+80")
             app.update()
@@ -112,6 +120,12 @@ def main():
                 print("Prévia visual de testes:",dest.resolve())
             except OSError as exc:
                 print(f"Prévia ImageGrab indisponível neste runner: {exc}")
+            app.update_idletasks()
+            app.update()
+            if gui_errors:
+                raise RuntimeError(
+                    "Callback(s) gráficos falharam durante a prévia: "
+                    + " | ".join(x.splitlines()[-1] for x in gui_errors))
         finally:
             app.destroy()
     return 0
