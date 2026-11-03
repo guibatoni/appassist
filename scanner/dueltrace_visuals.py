@@ -263,6 +263,78 @@ class CardArt(tk.Canvas):
                          width=w-20, fill=MUTED, font=("Segoe UI", 9))
 
 
+class HandCardTile(tk.Canvas):
+    """Uma das cinco cartas da mão, com arte da ISO quando disponível.
+
+    A prévia permanece simbólica se a extração de artes não for suportada.
+    Não redesenha informações não validadas da RAM.
+    """
+    def __init__(self, parent, slot: int, *, height=142):
+        super().__init__(parent, height=height, width=145, bg=PANEL, bd=0,
+                         highlightthickness=0)
+        self.slot=slot
+        self.card=None
+        self._picture=None
+        self.bind("<Configure>",lambda _:self._draw())
+        self._draw()
+
+    def show(self, card: dict | None, *, art_root: str | None=None):
+        self.card=card
+        self._picture=None
+        if card and art_root:
+            try:
+                cid=int(card["id"])
+                directory=Path(art_root).resolve(strict=True)
+                path=(directory/f"{cid:03d}.png").resolve(strict=True)
+                if (1<=cid<=722 and path.is_relative_to(directory)
+                        and path.stat().st_size<1_000_000):
+                    raw=tk.PhotoImage(file=str(path))
+                    self._picture=raw.subsample(2,2) if raw.width()>70 else raw
+            except (OSError,ValueError,TypeError,tk.TclError):
+                self._picture=None
+        self._draw()
+
+    def _draw(self):
+        self.delete("all")
+        w=max(115,self.winfo_width())
+        h=max(120,self.winfo_height())
+        active=self.card is not None
+        edge=BLUE if active else BORDER
+        for y in range(2,h-3,3):
+            mix=y/max(h-1,1)
+            color=blend(PANEL_ALT,"#06172A",mix)
+            self.create_line(5,y,w-6,y,fill=color,width=3)
+        self.create_rectangle(3,3,w-4,h-4,outline=edge,width=2)
+        self.create_line(11,5,w-12,5,fill=GOLD,width=2)
+        self.create_text(12,15,anchor="w",
+                         text=f"SLOT {self.slot:02d}",fill=GOLD,
+                         font=("Segoe UI Semibold",9))
+        if not active:
+            self.create_text(w/2,h*.49,text="◇",fill=BORDER,
+                             font=("Segoe UI Symbol",30))
+            self.create_text(w/2,h-18,text="Aguardando carta",fill=MUTED,
+                             font=("Segoe UI",8))
+            return
+        card=self.card
+        if self._picture:
+            self.create_image(w/2,57,image=self._picture)
+        else:
+            self.create_text(w/2,56,text="▣",fill=BLUE,
+                             font=("Segoe UI Symbol",30))
+        cid=card.get("id","?")
+        self.create_text(w/2,93,text=f"#{cid}  {card.get('name',f'Carta {cid}')}",
+                         width=w-13,anchor="center",fill=TEXT,
+                         font=("Segoe UI Semibold",9))
+        attack=card.get("atk")
+        defense=card.get("def")
+        if type(attack) is int and type(defense) is int:
+            stats=f"ATK {attack:,}  •  DEF {defense:,}"
+        else:
+            stats="Atributos indisponíveis"
+        self.create_text(w/2,h-13,text=stats,fill=GOLD,
+                         font=("Segoe UI",8))
+
+
 class CategoryMeters(tk.Frame):
     """Distribuição real do catálogo sem inventar percentuais ou totais."""
     def __init__(self, parent, counts: dict, *, background=PANEL):
