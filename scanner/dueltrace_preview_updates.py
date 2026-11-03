@@ -1,7 +1,8 @@
-"""Consulta metadados públicos de builds Preview aprovados no GitHub Actions.
+"""Consulta builds Preview do workflow OFICIAL, sem lista fixa de branches.
 
-A verificação é acionada pelo usuário. Não baixa, executa nem instala arquivos.
-URLs são construídas apenas para o repositório e branches confiáveis do DUELTRACE.
+Mudanças de branch (v076, v077...) são detectadas sem alterar o aplicativo.
+O conteúdo do GitHub Actions é experimental e nunca é auto-instalado.
+Nenhuma ISO, RAM ou informação local é enviada ao GitHub.
 """
 from __future__ import annotations
 
@@ -10,30 +11,18 @@ import re
 import sys
 import urllib.request
 from pathlib import Path
-from urllib.parse import quote
 
 REPO_API = "https://api.github.com/repos/guibatoni/appassist"
 REPO_WEB = "https://github.com/guibatoni/appassist"
-# Preferir a linha de desenvolvimento mais nova, mesmo que uma branch antiga
-# gere novo CI. Versões antigas são fallback apenas se não houver novo build.
-PREVIEW_BRANCHES = (
-    "feature/dueltrace-v075-rank-forensics-safe-updater",
-    "feature/dueltrace-v074-drops-ranks-frames",
-    "security/dueltrace-trusted-distribution-v073",
-    "fix/dueltrace-v073-preview-update-button",
-    "feature/dueltrace-v073-assets-hardening",
-)
-BRANCH_VERSIONS = {
-    PREVIEW_BRANCHES[0]: "0.7.5",
-    PREVIEW_BRANCHES[1]: "0.7.4",
-    PREVIEW_BRANCHES[2]: "0.7.3",
-    PREVIEW_BRANCHES[3]: "0.7.3",
-    PREVIEW_BRANCHES[4]: "0.7.3",
-}
+RUNS_API = REPO_API + "/actions/runs?event=push&status=success&per_page=100"
+WORKFLOW_NAME = "Validar integração v0 DUELTRACE Windows"
 ARTIFACT_NAME = "DUELTRACE-Windows-Preview-Unsigned-Security-Scanned"
 BUILD_INFO_FILE = "dueltrace-build.json"
 MAX_BYTES = 768 * 1024
-_SHA = re.compile(r"[0-9a-f]{40}")
+_SHA = re.compile(r"[0-9a-f]{40}\Z")
+_VERSION_BRANCH = re.compile(
+    r"(?:feature|fix|security)/dueltrace-v([0-9])([0-9])([0-9])-[a-z0-9][a-z0-9-]*\Z"
+)
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -62,70 +51,77 @@ def _get_json(url: str) -> dict:
     return decoded
 
 
-def _accepted_run(item: dict, branch: str) -> bool:
+def version_for_branch(branch: str | None) -> str | None:
+    if not isinstance(branch,str):
+        return None
+    match=_VERSION_BRANCH.fullmatch(branch)
+    if match is None:
+        return None
+    return ".".join(str(int(c)) for c in match.groups())
+
+
+def _accepted_run(item: dict, branch: str | None = None) -> bool:
     run_id = item.get("id")
     sha = item.get("head_sha")
+    candidate = item.get("head_branch")
     return (
         type(run_id) is int and 0 < run_id < 10**15
-        and item.get("head_branch") == branch
+        and (branch is None or candidate == branch)
+        and version_for_branch(candidate) is not None
         and item.get("status") == "completed"
         and item.get("conclusion") == "success"
         and item.get("event") == "push"
-        and isinstance(sha, str) and bool(_SHA.fullmatch(sha))
+        and item.get("name") == WORKFLOW_NAME
+        and isinstance(item.get("head_repository"),dict)
+        and item["head_repository"].get("full_name") == "guibatoni/appassist"
+        and isinstance(sha,str) and bool(_SHA.fullmatch(sha))
         and item.get("html_url") == f"{REPO_WEB}/actions/runs/{run_id}"
     )
 
 
 def fetch_latest_preview() -> dict | None:
-    """Localiza o build mais novo COM artefato não expirado, não só CI verde."""
-    candidates = []
-    for branch in PREVIEW_BRANCHES:
-        url = f"{REPO_API}/actions/runs?branch={quote(branch, safe='')}&per_page=8"
-        data = _get_json(url)
-        runs = data.get("workflow_runs")
-        if not isinstance(runs, list):
-            raise ValueError("Lista de builds inválida.")
-        candidates.extend(
-            item for item in runs if isinstance(item, dict) and _accepted_run(item, branch)
-        )
-    # Prioridade editorial: nunca sugerir branch anterior como nova versão
-    # só porque um teste antigo recebeu ID de Actions mais alto.
+    """Seleciona maior versão semanticamente, depois maior build na versão."""
+    data=_get_json(RUNS_API)
+    runs=data.get("workflow_runs")
+    if not isinstance(runs,list):
+        raise ValueError("Lista de builds inválida.")
+    candidates=[x for x in runs if isinstance(x,dict) and _accepted_run(x)]
     candidates.sort(key=lambda item: (
-        PREVIEW_BRANCHES.index(item["head_branch"]), -item["id"]))
-    for item in candidates[:12]:
-        run_id = item["id"]
-        data = _get_json(f"{REPO_API}/actions/runs/{run_id}/artifacts?per_page=100")
-        artifacts = data.get("artifacts")
-        if not isinstance(artifacts, list):
+        tuple(map(int,version_for_branch(item["head_branch"]).split("."))),
+        item["id"]), reverse=True)
+    for item in candidates[:16]:
+        run_id=item["id"]
+        artifacts=_get_json(f"{REPO_API}/actions/runs/{run_id}/artifacts?per_page=100").get("artifacts")
+        if not isinstance(artifacts,list):
             continue
-        found = next((x for x in artifacts
-                      if isinstance(x, dict) and x.get("name") == ARTIFACT_NAME
-                      and x.get("expired") is False), None)
-        if found is not None:
+        found=next((a for a in artifacts if isinstance(a,dict)
+                    and a.get("name")==ARTIFACT_NAME
+                    and a.get("expired") is False),None)
+        if found:
             return {
-                "run_id": run_id,
-                "head_sha": item["head_sha"],
-                "branch": item["head_branch"],
-                "page": item["html_url"],
-                "artifact_name": ARTIFACT_NAME,
-                "version": BRANCH_VERSIONS[item["head_branch"]],
+                "run_id":run_id,
+                "head_sha":item["head_sha"],
+                "branch":item["head_branch"],
+                "version":version_for_branch(item["head_branch"]),
+                "page":item["html_url"],
+                "artifact_name":ARTIFACT_NAME,
             }
     return None
 
 
 def installed_preview_build_id() -> int | None:
-    """Lê número do build gravado no executável; antigos são desconhecidos."""
-    bundle = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-    path = bundle / BUILD_INFO_FILE
+    """Metadado imutável escrito no executável pelo Actions."""
+    bundle=Path(getattr(sys,"_MEIPASS",Path(__file__).resolve().parent))
+    path=bundle/BUILD_INFO_FILE
     try:
-        if not path.is_file() or path.stat().st_size > 2048:
+        if not path.is_file() or path.stat().st_size>2048:
             return None
-        data = json.loads(path.read_text(encoding="utf-8-sig"))
-        run_id = data.get("run_id")
-        if data.get("schema") != 1 or type(run_id) is not int:
+        data=json.loads(path.read_text(encoding="utf-8-sig"))
+        run_id=data.get("run_id")
+        if data.get("schema")!=1 or type(run_id) is not int:
             return None
         if 0 < run_id < 10**15:
             return run_id
-    except (OSError, ValueError, TypeError):
+    except (OSError,ValueError,TypeError):
         pass
     return None
