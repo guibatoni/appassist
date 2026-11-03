@@ -129,5 +129,51 @@ class FusionChainPlannerTests(unittest.TestCase):
                 plan_fusion_chains([1,2,3,4,5],idx,cards,**bad)
 
 
+@unittest.skipUnless(sys.platform=="win32","GUI Tk requer Windows")
+class FusionPlannerWindowTests(unittest.TestCase):
+    def test_switch_pair_and_chain_views_and_clear_on_disconnect(self):
+        import tempfile
+        import tkinter as tk
+        from auto_mods import ModCatalog
+        from dueltrace_desktop import DueltraceDesktop
+        with tempfile.TemporaryDirectory() as td:
+            try:
+                app=DueltraceDesktop(catalog=ModCatalog(Path(td)))
+            except tk.TclError as exc:
+                if "display" in str(exc).lower() or "screen" in str(exc).lower():
+                    self.skipTest(str(exc))
+                raise
+            try:
+                app.withdraw()
+                app.update_idletasks()
+                self.assertEqual(app.active_page,"inicio")
+                index,cards=FusionChainPlannerTests.example()
+                app._home_fusions=index
+                app._home_cards={**{n:{"id":n,"name":f"Carta {n}"} for n in range(1,6)},
+                                 **cards}
+                app._render_live_hand({
+                    "ready":True,"hand_ids":[1,2,3,4,5],"pid":1234,
+                    "status":"Mão de teste"})
+                self.assertGreater(len(app.home_fusion_tree.get_children()),0)
+                self.assertEqual(app._home_fusion_mode,"pairs")
+                app._set_home_fusion_mode("chains")
+                app.update_idletasks()
+                self.assertEqual(app._home_fusion_mode,"chains")
+                values=[
+                    app.home_fusion_tree.item(node)["values"]
+                    for node in app.home_fusion_tree.get_children()]
+                self.assertTrue(any("Fusão final" in str(row) for row in values))
+                self.assertIn("rotas",app.home_fusion_count.get())
+                app._render_live_hand({
+                    "ready":False,"hand_ids":None,"pid":None,
+                    "status":"ePSXe desconectado"})
+                self.assertEqual(len(app.home_fusion_tree.get_children()),0)
+                self.assertTrue(all(tile.card is None for tile in app.home_hand_tiles))
+                app._set_home_fusion_mode("pairs")
+                self.assertEqual(len(app.home_fusion_tree.get_children()),0)
+            finally:
+                app.destroy()
+
+
 if __name__=="__main__":
     unittest.main()
