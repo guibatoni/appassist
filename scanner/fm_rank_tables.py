@@ -73,11 +73,15 @@ def _decode_table(data: bytes) -> list[list[tuple[int, int]]] | None:
     return rows
 
 
+MAX_BLOCK_STRIDE = 64 * 1024
+MAX_STRUCTURAL_CANDIDATES = 10_000
+MAX_REPEATS_PER_HASH = 200
+
+
 def _candidate_positions(wa: bytes):
-    """Âncora binária barata: o quinto limite de cada critério é 0x7FFF."""
+    """Âncora barata: o último limiar de cada critério vale 0x7FFF."""
     offset = 0
     seen = 0
-    needed = STRIDE * (BLOCK_COUNT - 1) + TABLE_SIZE
     while True:
         pos = wa.find(b"\xff\x7f", offset)
         if pos < 0:
@@ -87,7 +91,8 @@ def _candidate_positions(wa: bytes):
         if seen > MAX_ANCHORS:
             raise OverflowError("Limite de busca das estruturas RANK excedido")
         start = pos - LAST_BAND_OFFSET
-        if start < 0 or start % 4 != 0 or start + needed > len(wa):
+        # Pares de 16 bits podem ser realocados para alinhamento de 2 bytes.
+        if start < 0 or start % 2 != 0 or start + TABLE_SIZE > len(wa):
             continue
         if all(wa[start + LAST_BAND_OFFSET + row * BANDS_PER_ROW * RECORD_SIZE:
                   start + LAST_BAND_OFFSET + row * BANDS_PER_ROW * RECORD_SIZE + 2]
@@ -95,13 +100,50 @@ def _candidate_positions(wa: bytes):
             yield start
 
 
-def _identical_repetitions(wa: bytes, offset: int, baseline: bytes) -> int:
-    identical = 0
-    for i in range(BLOCK_COUNT):
-        start = offset + i * STRIDE
-        if wa[start:start + TABLE_SIZE] == baseline:
-            identical += 1
-    return identical
+def _find_repeated_tables(wa: bytes) -> list[tuple[int, int, bytes,
+                                                 list[list[tuple[int, int]]]]]:
+    """Busca 40 tabelas iguais com stride inferido, sem assumir o offset X15."""
+    grouped: dict[str, list[int]] = {}
+    decoded: dict[str, tuple[bytes, list[list[tuple[int,int]]]]] = {}
+    structural_count = 0
+    for start in _candidate_positions(wa):
+        table = wa[start:start + TABLE_SIZE]
+        rules = _decode_table(table)
+        if rules is None:
+            continue
+        structural_count += 1
+        if structural_count > MAX_STRUCTURAL_CANDIDATES:
+            raise OverflowError("Candidatos estruturais demais")
+        digest = hashlib.sha256(table).hexdigest()
+        locations = grouped.setdefault(digest, [])
+        locations.append(start)
+        if len(locations) > MAX_REPEATS_PER_HASH:
+            raise OverflowError("Cópias estruturais em excesso")
+        decoded.setdefault(digest, (table, rules))
+
+    results = []
+    for digest, offsets in grouped.items():
+        if len(offsets) < BLOCK_COUNT:
+            continue
+        offsets.sort()
+        available = set(offsets)
+        for i, first in enumerate(offsets):
+            if len(offsets)-i < BLOCK_COUNT:
+                break
+            for second in offsets[i+1:]:
+                stride = second-first
+                if stride > MAX_BLOCK_STRIDE:
+                    break
+                if stride < TABLE_SIZE or stride % 2 != 0:
+                    continue
+                if first+(BLOCK_COUNT-1)*stride not in available:
+                    continue
+                if all(first+n*stride in available for n in range(BLOCK_COUNT)):
+                    table, rules = decoded[digest]
+                    results.append((first, stride, table, rules))
+                    if len(results) > 1:
+                        return results
+    return results
 
 
 def _legacy_diagnostic(wa: bytes) -> dict:
@@ -132,20 +174,13 @@ def extract_rank_table(wa: bytes, *, slus: bytes | None = None,
     """Detecta estrutura por conteúdo; nunca presume pontos de outros mods."""
     if not isinstance(wa, bytes) or not 0 < len(wa) <= MAX_WA_BYTES:
         return _empty("invalid_wa", message="WA indisponível ou acima do limite seguro.")
-    matches = []
     try:
-        for start in _candidate_positions(wa):
-            table = wa[start:start + TABLE_SIZE]
-            rules = _decode_table(table)
-            if rules is None:
-                continue
-            if _identical_repetitions(wa, start, table) == BLOCK_COUNT:
-                matches.append((start, table, rules))
-                if len(matches) > 1:
-                    return _empty(
-                        "ambiguous_rank_tables",
-                        message="Há mais de uma estrutura RANK completa. "
-                                "É necessária análise adicional para escolher.")
+        matches = _find_repeated_tables(wa)
+        if len(matches) > 1:
+            return _empty(
+                "ambiguous_rank_tables",
+                message="Há mais de uma sequência completa de pontuação. "
+                        "É necessária inspeção do SLUS antes de escolher.")
     except OverflowError:
         return _empty("rank_scan_limit",
                       message="ISO apresenta padrões demais; busca interrompida por segurança.")
@@ -153,13 +188,13 @@ def extract_rank_table(wa: bytes, *, slus: bytes | None = None,
     if not matches:
         return _legacy_diagnostic(wa)
 
-    first, table, parsed = matches[0]
+    first, repeat_stride, table, parsed = matches[0]
     table_sha = hashlib.sha256(table).hexdigest()
     slus_digest = hashlib.sha256(slus).hexdigest() if isinstance(slus,bytes) else None
     known_iso = (isinstance(rom_sha256,str) and isinstance(known_rom_sha256,str)
                  and rom_sha256.lower() == known_rom_sha256.lower())
     known_binary = (
-        known_iso and first == LEGACY_OFFSET
+        known_iso and first == LEGACY_OFFSET and repeat_stride == STRIDE
         and slus_digest == KNOWN_X15_SLUS_SHA256
         and table_sha == KNOWN_X15_TABLE_SHA256
     )
@@ -183,19 +218,20 @@ def extract_rank_table(wa: bytes, *, slus: bytes | None = None,
         "source": "DATA/WA_MRG.MRG",
         "first_offset": first,
         "first_sector": first // SECTOR,
+        "repeat_stride": repeat_stride,
         "criterion_names_verified": known_binary,
         "known_x15_table_content": table_sha == KNOWN_X15_TABLE_SHA256,
         "base_points": 50 if known_binary else None,
         "lp_victory_bonus": 2 if known_binary else None,
         "slus_sha256": slus_digest,
         "method": "automatic_stride_scan",
-        "layout_moved": first != LEGACY_OFFSET,
+        "layout_moved": first != LEGACY_OFFSET or repeat_stride != STRIDE,
         "note": (
             "Tabela WA, executável SLUS e SHA da imagem conferem com a perícia "
             "X15. A leitura de RANK na RAM ainda requer teste em duelo real."
             if known_binary else
             "Foram reconhecidas automaticamente 40 cópias idênticas dos "
-            "10 critérios de pontos no WA, inclusive quando deslocados do "
-            "offset padrão. O uso da tabela pelo SLUS e os nomes dos "
+            "10 critérios de pontos no WA, mesmo com offset ou espaçamento "
+            "entre blocos alterado. O uso da tabela pelo SLUS e os nomes dos 
             "critérios ainda NÃO foram confirmados neste mod."),
     }
