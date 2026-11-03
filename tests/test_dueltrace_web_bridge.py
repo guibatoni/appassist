@@ -296,6 +296,15 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             self.bridge.scan_sources(self.sha)
 
+    def test_rescan_does_not_overwrite_registry_for_modified_iso(self):
+        source=self.home/"rom.iso"
+        source.write_bytes(b"changed"*20000)
+        with patch.object(self.catalog,"analyse",side_effect=AssertionError(
+                "Não deve alterar registry após SHA divergente")):
+            with self.assertRaises(RuntimeError):
+                self.bridge.scan_sources(self.sha)
+        self.assertEqual(self.catalog.list()[0]["sha256"],self.sha)
+
     def test_art_route_never_leaks_other_profile_and_denies_post(self):
         (self.analysis/"artes_722").mkdir()
         (self.analysis/"artes_722"/"001.png").write_bytes(b"\x89PNG\r\n\x1a\nSYNTHETIC")
