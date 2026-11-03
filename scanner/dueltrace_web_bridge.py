@@ -386,13 +386,33 @@ class DueltraceWebBridge:
                 return {"available":False,"records":0,"last":None}
             data=load_json(self._trace_results_path(sha),{})
             records=data.get("records",[]) if isinstance(data,dict) else []
+            observations=load_json(self._observations_path(sha),{})
+            duels={r.get("duel_id"):r for r in observations.get("observations",[])
+                   if isinstance(r,dict)} if isinstance(observations,dict) else {}
+            linked=0
+            for record in records:
+                if not isinstance(record,dict) or not record.get("executionEvidence"):
+                    continue
+                duel=duels.get(record.get("duel_id"))
+                snap=duel.get("rank_snapshot") if isinstance(duel,dict) else None
+                if (isinstance(snap,dict) and
+                        duel.get("victory_type")=="lp" and
+                        type(duel.get("observed_points")) is int and
+                        duel["observed_points"]==snap.get("projected_score") and
+                        duel.get("observed_rank")==snap.get("projected_rank")):
+                    linked+=1
             return {"available":True,"records":len(records),
+                    "correlatedDuels":linked,
+                    "rankRoutineConfirmed":False,
                     "last":records[-1] if records else None}
 
-    def import_rank_trace(self):
+    def import_rank_trace(self, duel_id=None):
         """Lê log do depurador durante duelo; não importa código do jogo."""
         if self._file_picker is None:
             raise RuntimeError("Importação de trace disponível somente no Windows.")
+        if duel_id is not None and (type(duel_id) is not str or
+                                    not re.fullmatch("[0-9a-f-]{36}",duel_id)):
+            raise ValueError("Identificador do duelo inválido.")
         files=self._file_picker("trace")
         if not files:
             return {"cancelled":True}
@@ -406,12 +426,19 @@ class DueltraceWebBridge:
             sha=active.get("sha256")
             if not profile or not sha:
                 raise ValueError("Selecione um mod antes de validar a execução.")
+            if duel_id is not None:
+                obs=load_json(self._observations_path(sha),{})
+                valid=obs.get("observations",[]) if isinstance(obs,dict) else []
+                if not any(isinstance(x,dict) and x.get("duel_id")==duel_id and
+                           x.get("rom_sha256")==sha for x in valid):
+                    raise ValueError("O duelo selecionado não pertence à ISO ativa.")
             report=inspect_duel_mips_trace(
                 path.read_bytes(),profile.get("rank_mips_evidence"))
             if not report["available"]:
                 return {"cancelled":False,**report}
             result={
                 "record_id":str(uuid4()),
+                "duel_id":duel_id,
                 "created_at":datetime.now(timezone.utc).isoformat(),
                 "source":"trace_exportado_do_emulador",
                 "status":report["status"],
