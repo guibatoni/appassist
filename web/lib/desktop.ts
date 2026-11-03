@@ -122,15 +122,21 @@ export type UpdateCheck = {
   currentVersion: string
   channel: "stable" | "preview"
   latestStable: string | null
+  latestPreview: string | null
+  previewRunId: number | null
+  previewPage: string | null
+  previewBranch: string | null
+  previewBuildSha: string | null
+  previewStatus?: "unavailable"
   releasePage: string
-  status: "unavailable" | "update_available" | "up_to_date" | "preview" | "preview_ahead"
+  status: "unavailable" | "update_available" | "up_to_date" | "preview" | "preview_ahead" | "preview_current" | "preview_update_available" | "preview_build_unknown"
   updateAvailable: boolean
   message: string
 }
 
 export interface DesktopAPI {
   check_updates(): Promise<UpdateCheck>
-  open_updates_page(): Promise<{opened: boolean}>
+  open_updates_page(runId?: number): Promise<{opened: boolean}>
   get_state(): Promise<DesktopState>
   get_hand(): Promise<HandState>
   get_rank(): Promise<RankState>
@@ -145,7 +151,7 @@ export interface DesktopAPI {
 
 interface ProtectedNativeAPI {
   check_updates(token: string): Promise<UpdateCheck>
-  open_updates_page(token: string): Promise<{opened: boolean}>
+  open_updates_page(token: string, runId?: number): Promise<{opened: boolean}>
   get_state(token: string): Promise<DesktopState>
   get_hand(token: string): Promise<HandState>
   get_rank(token: string): Promise<RankState>
@@ -174,7 +180,7 @@ export function desktopApi(): DesktopAPI | null {
   if (!native || typeof token !== "string" || token.length < 32) return null
   return {
     check_updates: () => native.check_updates(token),
-    open_updates_page: () => native.open_updates_page(token),
+    open_updates_page: (runId) => native.open_updates_page(token, runId),
     get_state: () => native.get_state(token),
     get_hand: () => native.get_hand(token),
     get_rank: () => native.get_rank(token),
