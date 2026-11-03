@@ -224,6 +224,11 @@ def main():
                 window.load_url(url)
         window.events.loaded+=secure_loaded
         def pick_file(kind):
+            if kind=="rank_report":
+                return window.create_file_dialog(
+                    webview.FileDialog.SAVE,
+                    save_filename="DUELTRACE-RANK-EVIDENCE.json",
+                    file_types=("JSON (*.json)",))
             file_types=(
                 ("Imagens de jogo (*.iso;*.bin)",)
                 if kind=="iso" else
