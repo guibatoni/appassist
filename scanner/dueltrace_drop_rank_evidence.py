@@ -95,7 +95,11 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
     solver=solve_rank_drop_labels(
         groups,by_opp,obs,sha,labels=list(pool_names),
         rank_to_label=rank_to_pool)
-    inferred=solver["supportedMappings"]
+    inferred={
+        rank:{**evidence,
+              "groupDisplay":pool_names[groups.index(evidence["group"])]}
+        for rank,evidence in solver["supportedMappings"].items()
+    }
     # Os três bancos formam uma permutação bijetiva; nunca atribuir dois
     # RANKs ao mesmo banco nem tratar um único drop como prova definitiva.
     known_conflict=bool(conflicts)
