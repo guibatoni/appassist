@@ -256,6 +256,7 @@ function Mods({mods,sha,onRefresh,configured}:{
               : mod.rankDetected
                 ? "Pontos encontrados no WA. O uso dessas regras pelo SLUS ainda está em investigação."
                 : "Tabela de pontos não confirmada para este mod."}
+            {mod.rankMipsCandidates ? <span className="ml-1"> · {mod.rankMipsCandidates} trechos MIPS candidatos (não confirmados)</span> : null}
             {mod.rankDetected&&typeof mod.rankOffset==="number"&&
               <span className="ml-1 tabular-nums">Offset WA: 0x{mod.rankOffset.toString(16).toUpperCase()}</span>}
           </p>
