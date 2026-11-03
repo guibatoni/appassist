@@ -125,6 +125,7 @@ class ModCatalog:
         except OSError:
             effect_signature = (0, 0)
         old = self.lookup(path)
+        previous_profile=self.profile_for(old) if old else None
         if (not force and old and old.get("size") == before.st_size
                 and old.get("mtime_ns") == before.st_mtime_ns
                 and tuple(old.get("effects_manifest_signature", ())) == effect_signature):
@@ -140,6 +141,23 @@ class ModCatalog:
                 return dict(old)
 
         profile, profile_path = import_rom(path, self.home, art=with_art, progress=progress)
+        # Reanálises não podem apagar confirmações individuais feitas em duelo.
+        # O catálogo estrutural é recalculado pela etapa de investigação.
+        if (previous_profile and previous_profile.get("rom_sha256")==profile.get("rom_sha256")
+                and profile.get("verified",{}).get("cartas")=="verificado"):
+            manual=[dict(row) for row in previous_profile.get("fusion_recipes",[])
+                    if isinstance(row,dict)
+                    and row.get("validation")=="observada_manualmente_no_jogo"]
+            if manual:
+                profile["fusion_recipes"]=manual
+                profile["supported_features"]["fusions"]=True
+                profile["verified"]["fusoes"]=f"parcial_usuario_{len(manual)}"
+                profile["fusion_review"]={
+                    "status":"confirmacoes_manuais_preservadas_aguardando_reanalise",
+                    "rom_sha256":profile["rom_sha256"],
+                    "in_game_individually_verified":len(manual),
+                }
+                atomic_json(profile_path,profile)
         after = path.stat()
         if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
             raise RuntimeError("Arquivo alterado durante a leitura; análise descartada")
