@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Callable
 
 from importador_perfis import import_rom
-from scanner_multiiso import X15_SHA
+from scanner_multiiso import X15_SHA, ART_PARSER_REVISION
 from card_catalog import effect_sidecar_path
 
 EXTENSIONS = frozenset({".iso", ".bin"})
