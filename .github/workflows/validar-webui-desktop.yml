@@ -40,7 +40,10 @@ jobs:
       - name: Instalar dependências Next.js
         working-directory: web
         run: npm ci
-      - name: Auditar todas as dependências JavaScript
+      - name: Auditar dependências de produção JavaScript (moderada ou superior)
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=moderate
+      - name: Auditar todas as dependências JavaScript (alta ou crítica)
         working-directory: web
         run: npm audit --audit-level=high
       - name: Verificar tipagem e build estático
