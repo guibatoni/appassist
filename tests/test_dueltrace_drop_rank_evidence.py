@@ -64,7 +64,7 @@ class DropRankEvidenceTests(unittest.TestCase):
         self.assertEqual(r["status"],"mismatch")
         self.assertEqual(r["inconsistent"],1)
         self.assertEqual(r["rankMappings"]["Z-POW"]["group"],"Z-POW")
-        self.assertEqual(r["mappingConsistency"],"inconsistent")
+        self.assertEqual(r["mappingConsistency"],"inconsistent_known_mapping")
 
     def test_known_x15_sha_remains_unique_without_manual_observations(self):
         p=fake_profile(X15_SHA,["Z-POW","S-POW","S-TEC"])
