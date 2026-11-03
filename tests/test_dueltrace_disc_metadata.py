@@ -14,6 +14,7 @@ from dueltrace_disc_metadata import (
     CARD_COUNT,DESC_POINTERS,DESC_DATA,DESC_BANK_END,FONT_GLYPHS,
     WA_FRAME_CLUT_BASE,FRAME_VARIANTS,
     _decode_psx_text,extract_descriptions,inspect_frame_palettes,
+    effect_hint_from_description,
 )
 
 
@@ -66,6 +67,15 @@ class DiscMetadataTests(unittest.TestCase):
         self.assertIn("\n",txt)
         self.assertIsNone(_decode_psx_text(b"\x01\xF8\xFF",chars))
         self.assertIsNone(_decode_psx_text(b"\x01\xFD\xFF",chars))
+
+    def test_effect_hint_only_if_explicit_marker_is_present(self):
+        tagged=effect_hint_from_description("<Effect> Attack again.")
+        self.assertEqual(tagged["effect_hint_trigger"],"effect")
+        self.assertFalse(tagged["effect_hint_verified_in_game"])
+        self.assertIn("nao_validacao",tagged["effect_hint_source"].replace("sem_validacao_de_execucao","nao_validacao"))
+        self.assertIsNone(effect_hint_from_description("A strong monster."))
+        self.assertIsNone(effect_hint_from_description("Destroy a monster."))
+        self.assertIsNone(effect_hint_from_description("x"*401))
 
     def test_real_wa_colors_are_not_misrepresented_as_frame_bitmap(self):
         palettes,meta=inspect_frame_palettes(synthetic_wa())
