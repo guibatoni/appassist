@@ -64,9 +64,9 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_rank_trace_status()
 
-    def import_rank_trace(self, credential):
+    def import_rank_trace(self, credential, duel_id=None):
         self._authorize(credential)
-        return self._bridge.import_rank_trace()
+        return self._bridge.import_rank_trace(duel_id)
 
     def get_duel_evidence(self, credential):
         self._authorize(credential)
