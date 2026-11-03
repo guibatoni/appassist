@@ -22,6 +22,7 @@ from mod_autopilot import ModAutopilot, profile_summary, discover_images
 from dueltrace_intelligence import MultiModIntelligence
 from dueltrace_diagnostics import art_diagnostic, mod_diagnostic, format_diagnostic
 from ia_local import DEFAULT_MODEL
+from epsxe_launcher import launch_epsxe
 from integracao_overlay import overlay_snapshot
 from dueltrace_brand import apply_window_icon, png_icon
 from dueltrace_visuals import HeroArt, QuickTile, CardArt, CategoryMeters, NAV_SYMBOLS
@@ -44,7 +45,7 @@ USER_PAGES=tuple(p for p in PAGES if p[1] in ("inicio","mods","cartas","fusoes")
 class DueltraceDesktop(tk.Tk):
     def __init__(self, *, catalog=None, developer=False):
         super().__init__()
-        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.2")
+        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.3")
         self.geometry("1360x780")
         self.minsize(1100,690)
         self.configure(background=BACKGROUND)
@@ -64,6 +65,9 @@ class DueltraceDesktop(tk.Tk):
         self.ai_enabled=tk.BooleanVar(value=settings.get("ollama_auto",True))
         self.art_enabled=tk.BooleanVar(value=settings.get("extract_local_art",True))
         self.ai_model=tk.StringVar(value=settings.get("ollama_model",DEFAULT_MODEL))
+        self.epsxe_executable=tk.StringVar(value=settings.get("epsxe_executable",""))
+        self.epsxe_autostart=tk.BooleanVar(value=settings.get("epsxe_autostart_on_activation",False))
+        self._epsxe_process=None
         self.intelligence_note=tk.StringVar(value="Análise de evidências disponível · Ollama opcional")
         self.last_intelligence={}
         self.status=tk.StringVar(value="Pronto — selecione uma ISO/BIN ou uma pasta de mods.")
@@ -160,8 +164,8 @@ class DueltraceDesktop(tk.Tk):
         button=NeonButton(parent,caption,fn,width=width,height=43,accent=accent)
         return button
 
-    def go(self,key):
-        if key==self.active_page and self.page_frame:
+    def go(self,key,*,refresh=False):
+        if key==self.active_page and self.page_frame and not refresh:
             return
         self.active_page=key
         for k,b in self._buttons.items():
@@ -374,6 +378,18 @@ class DueltraceDesktop(tk.Tk):
         tk.Label(right,textvariable=self.mod_details_ai,bg=PANEL,fg=BLUE,
                  wraplength=260,justify="left",anchor="w",
                  font=("Segoe UI",9)).pack(anchor="w")
+        text_label(right,"ePSXe  /  JOGAR",color=GOLD,
+                   strong=True,size=10,bg=PANEL).pack(anchor="w",pady=(10,4))
+        self._action(right,"Selecionar ePSXe.exe",self.configure_epsxe,
+                     width=240).pack(anchor="w",pady=(0,5))
+        self._action(right,"Iniciar mod no ePSXe",self.launch_active_game,
+                     accent=GOLD,width=240).pack(anchor="w")
+        tk.Checkbutton(right,text="Iniciar após ativar o perfil",
+                       variable=self.epsxe_autostart,
+                       command=self._save_settings,bg=PANEL,fg=TEXT,
+                       activebackground=PANEL,activeforeground=TEXT,
+                       selectcolor=PANEL_ALT,font=("Segoe UI",9)).pack(
+                           anchor="w",pady=(6,0))
         self._refresh_mods()
 
     def _refresh_mods(self):
@@ -681,7 +697,9 @@ class DueltraceDesktop(tk.Tk):
             "auto_scan_on_start":bool(self.auto_start.get()),
             "ollama_auto":bool(self.ai_enabled.get()),
             "extract_local_art":bool(self.art_enabled.get()),
-            "ollama_model":self.ai_model.get().strip() or DEFAULT_MODEL
+            "ollama_model":self.ai_model.get().strip() or DEFAULT_MODEL,
+            "epsxe_executable":self.epsxe_executable.get(),
+            "epsxe_autostart_on_activation":bool(self.epsxe_autostart.get())
         })
 
     def choose_folder(self):
@@ -798,10 +816,18 @@ class DueltraceDesktop(tk.Tk):
                         f"ISO: {overview.get('iso_files_indexed',0)} arquivos · "
                         f"Artes: {'extraídas' if overview.get('art_extracted') else 'indisponíveis'} · "
                         f"Ollama: {ai}")
-                    self.status.set("Investigação local concluída: "+
-                                    event.get("file",""))
+                    fusion=info.get("fusions") or {}
+                    if fusion.get("count"):
+                        self.status.set(
+                            f"Fusões importadas da ISO: {fusion['count']} receitas "
+                            f"(estrutura, sem prova de duelo).")
+                    else:
+                        self.status.set("Investigação local concluída: "+
+                                        event.get("file",""))
                     if hasattr(self,"mod_tree") and self.mod_tree.winfo_exists():
-                        self._on_select_mod()
+                        self._refresh_mods()
+                    if self.active_page=="fusoes":
+                        self.go("fusoes",refresh=True)
                 elif kind=="error":
                     self.status.set("Análise incompleta: "+event.get("message","Erro"))
                 elif kind=="finished":
@@ -828,7 +854,7 @@ class DueltraceDesktop(tk.Tk):
                 return
             if not messagebox.askyesno("Perfil parcialmente reconhecido",
                 "Este mod possui dados parciais. Somente recursos identificados "
-                "serão ativados; ranks, fusões e efeitos desconhecidos ficam "
+                "serão ativados; funções não identificadas continuam "
                 "indisponíveis. Deseja ativar este perfil mesmo assim?",
                 parent=self):
                 return
@@ -840,10 +866,58 @@ class DueltraceDesktop(tk.Tk):
             return
         self.status.set("Perfil ativo: "+entry.get("file_name",""))
         self.go("inicio")
-        messagebox.showinfo("Perfil ativado",
-            "O perfil foi enviado ao DUELTRACE. "
-            "Isso não inicia o ePSXe nem confirma qual ISO ele está executando.",
-            parent=self)
+        if self.epsxe_autostart.get():
+            self.after(100,self.launch_active_game)
+        else:
+            self.status.set("Perfil ativado. Use 'Iniciar mod no ePSXe' para jogar.")
+
+    def configure_epsxe(self):
+        """Seleciona o ePSXe existente, sem instalar nem modificar emuladores."""
+        current=self.epsxe_executable.get()
+        initial=Path(current).parent if current else Path.home()
+        picked=filedialog.askopenfilename(
+            parent=self,title="Localize o executável ePSXe.exe",
+            initialdir=str(initial),
+            filetypes=(("Executáveis Windows","*.exe"),))
+        if not picked:
+            return
+        exe=Path(picked)
+        if not exe.is_file() or exe.suffix.lower()!=".exe" or "epsxe" not in exe.stem.lower():
+            messagebox.showerror(
+                "Executável inválido","Selecione o aplicativo ePSXe.exe do Windows.",
+                parent=self)
+            return
+        self.epsxe_executable.set(str(exe.resolve()))
+        self._save_settings()
+        self.status.set("Caminho do ePSXe configurado. A ISO não será iniciada até ativar o mod.")
+
+    def launch_active_game(self):
+        """Inicia o emulador somente para o perfil selecionado e ativado."""
+        entry=self._selected_entry()
+        if not entry:
+            messagebox.showinfo("Iniciar jogo","Selecione um mod cadastrado.",
+                                parent=self)
+            return
+        if self._epsxe_process is not None and self._epsxe_process.poll() is None:
+            self.status.set("O ePSXe iniciado pelo DUELTRACE já está em execução.")
+            return
+        exe=self.epsxe_executable.get().strip()
+        if not exe:
+            messagebox.showinfo(
+                "Configurar ePSXe",
+                "Escolha o caminho do ePSXe.exe na Biblioteca de Mods antes de jogar.",
+                parent=self)
+            return
+        try:
+            self._epsxe_process=launch_epsxe(
+                self.catalog,exe,entry["sha256"])
+        except (OSError,ValueError,PermissionError) as exc:
+            messagebox.showerror("Não foi possível iniciar o ePSXe",
+                                 str(exc),parent=self)
+            return
+        self.status.set(
+            f"ePSXe iniciado com {entry.get('file_name','ISO')}. "
+            "A execução do duelo ainda precisa ser confirmada.")
 
     def open_legacy(self):
         """Executa o assistente antigo em outro processo, sem alterar seus dados."""
