@@ -252,6 +252,7 @@ class DueltraceWebBridge:
                     self._rank_last_turns[0]==(sha,pid) and
                     turns < self._rank_last_turns[1]):
                 self._rank_calibration=None  # novo duelo ou contador reiniciado
+                self._rank_last_snapshot=None
             self._rank_last_turns=((sha,pid),turns)
             calibrated=(self._rank_calibration is not None and
                 self._rank_calibration["sha"]==sha and
@@ -277,6 +278,11 @@ class DueltraceWebBridge:
                     if compatible else
                     "Projeção se vencer por LP; resultado e mapeamento RAM "
                     "não verificados no jogo.")
+            self._rank_last_snapshot={
+                "rom_sha256":sha,"pid":pid,"monotonic_at":monotonic(),
+                "score":result["score"],"category":result["category"],
+                "counters":visible_counters.copy(),
+            }
             return {"ready":True,"state":"provisional",
                     "status":status,
                     "candidateLp":counters[binding["life_points_criterion"]] if binding else counters["remaining_lp"],
@@ -297,6 +303,7 @@ class DueltraceWebBridge:
             turns_key=binding["turns_criterion"] if binding else "turns"
             if sample["counters"][lp_key]!=life_points:
                 self._rank_calibration=None
+                self._rank_last_snapshot=None
                 return {"ready":False,"state":"lp_mismatch",
                     "status":"LP do jogo divergentes do candidato RAM. Contador não habilitado.",
                     "candidateLp":sample["counters"][lp_key],
