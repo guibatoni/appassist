@@ -155,6 +155,55 @@ class BridgeTests(unittest.TestCase):
         self.assertIsNone(result["score"])
         probe.assert_not_called()
 
+    def test_any_mod_can_project_only_after_own_verified_ram_binding(self):
+        sha=self.sha  # Não é X15
+        self.profile["exe_sha256"]="b"*64
+        self.profile["rank_points"]={
+            "available":True,"table_sha256":"c"*64,
+            "rules":{
+                "criterion_01":[{"below":5,"points":12},{"below":32767,"points":-3}],
+                "criterion_02":[{"below":7000,"points":0},{"below":32767,"points":4}],
+            },
+        }
+        self.profile["rank_runtime_binding"]={
+            "rom_sha256":sha,"exe_sha256":"b"*64,"table_sha256":"c"*64,
+            "validation_method":"independent_duel_trace","verified_duels":2,
+            "record_address":0xB41990,"record_length":32,
+            "criterion_offsets":{
+                "criterion_01":{"type":"u8","offset":1},
+                "criterion_02":{"type":"u16le","offset":20},
+            },
+            "life_points_criterion":"criterion_02",
+            "turns_criterion":"criterion_01","base_points":50,
+            "victory_bonuses":{"lp":2},
+            "rank_bands":[
+                {"label":"Z-POW","minimum":65},
+                {"label":"S-POW","minimum":50},
+                {"label":"S-TEC","minimum":-100},
+            ],
+        }
+        atomic_json(self.profile_path,self.profile)
+        counters={"criterion_01":1,"criterion_02":8000}
+        reader=Mock(return_value={
+            "ready":True,"status":"Contadores verificados","pid":1234,
+            "counters":counters})
+        self.bridge._rank_mod_reader=reader
+        self.bridge._rank_reader=Mock()
+        before=self.bridge.get_rank()
+        self.assertEqual(before["state"],"needs_lp_confirmation")
+        self.assertEqual(before["candidateLp"],8000)
+        self.assertFalse(before["ready"])
+        self.assertEqual(self.bridge.confirm_rank_lp(9000)["state"],"lp_mismatch")
+        result=self.bridge.confirm_rank_lp(8000)
+        self.assertTrue(result["ready"])
+        self.assertFalse(result["final"])
+        self.assertEqual(result["score"],68)
+        self.assertEqual(result["category"],"Z-POW")
+        self.bridge._rank_reader.assert_not_called()
+        reader.assert_called()
+        counters["criterion_01"]=0
+        self.assertEqual(self.bridge.get_rank()["state"],"needs_lp_confirmation")
+
     def test_rank_requires_lp_confirmation_and_resets_on_new_duel(self):
         sha=X15_SHA
         path=self.home/"profiles"/sha[:16]/"profile.json"
