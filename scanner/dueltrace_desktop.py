@@ -434,7 +434,7 @@ class DueltraceDesktop(tk.Tk):
         routes=plan.get("routes",[])
         for idx,route in enumerate(routes):
             self._home_route_rows[str(idx)]=route
-            slots=" → ".join(str(x) for x in route["used_slots"])
+            slots=" → ".join(str(x) for x in route["slot_order"])
             tree.insert("","end",iid=str(idx),values=(
                 slots,
                 f"{len(route['steps'])} etapas consecutivas",
