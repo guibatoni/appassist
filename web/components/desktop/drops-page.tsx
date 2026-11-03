@@ -46,6 +46,8 @@ export function DropsPage({sha}:{sha:string|null}) {
   const [opponent,setOpponent]=useState(0)
   const [group,setGroup]=useState("")
   const [query,setQuery]=useState("")
+  const [sort,setSort]=useState<"id"|"atk"|"def"|"type"|"name">("id")
+  const [cardType,setCardType]=useState("")
   const [offset,setOffset]=useState(0)
   const [revision,setRevision]=useState(0)
   const [result,setResult]=useState<DropsPage|null>(null)
@@ -58,6 +60,8 @@ export function DropsPage({sha}:{sha:string|null}) {
     setOpponent(0)
     setGroup("")
     setQuery("")
+    setSort("id")
+    setCardType("")
     setOffset(0)
     setResult(null)
   },[sha])
@@ -70,17 +74,18 @@ export function DropsPage({sha}:{sha:string|null}) {
       if(!mounted)return
       setLoading(true)
       try{
-        const response=await api.get_drops(opponent,group,query,offset,pageSize)
+        const response=await api.get_drops(opponent,group,query,offset,pageSize,sort,cardType)
         if(mounted){setResult(response);setError(null)}
       }catch(e){
         if(mounted){setResult(null);setError(e instanceof Error?e.message:"Erro ao consultar drops locais.")}
       }finally{if(mounted)setLoading(false)}
     },200)
     return()=>{mounted=false;window.clearTimeout(timer)}
-  },[sha,opponent,group,query,offset,revision])
+  },[sha,opponent,group,query,offset,sort,cardType,revision])
 
   const options=result?.opponents??[]
   const rankGroups=result?.groups??[]
+  const types=result?.cardTypes??[]
   const rank=result?.rankPoints
   const rankRules=rank&&"available" in rank&&rank.available?rank.rules:null
 
@@ -94,7 +99,7 @@ export function DropsPage({sha}:{sha:string|null}) {
         <span className="inline-flex items-center gap-2"><Database className="size-4 text-primary"/> {result?.source??"WA_MRG.MRG + SLUS_014.11"}</span>
         <span className="inline-flex items-center gap-2"><ShieldCheck className="size-4 text-primary"/> Sem dados herdados de outros mods</span>
       </div>
-      <div className="grid gap-3 md:grid-cols-[1fr_1fr_1.5fr_auto]">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <label className="flex flex-col gap-1 text-xs text-muted">Oponente
           <select className="field w-full px-3 py-2 text-sm" value={opponent}
             onChange={e=>{setOpponent(Number(e.target.value));setOffset(0)}}>
@@ -114,6 +119,21 @@ export function DropsPage({sha}:{sha:string|null}) {
             <input value={query} onChange={e=>{setQuery(e.target.value);setOffset(0)}}
               placeholder="Nome ou ID da carta" className="min-w-0 flex-1 bg-transparent text-sm outline-none"/>
           </span>
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted">Ordenar cartas
+          <select className="field w-full px-3 py-2 text-sm" value={sort}
+            onChange={e=>{setSort(e.target.value as typeof sort);setOffset(0)}}>
+            <option value="id">ID / ordem das tabelas</option>
+            <option value="atk">Maior ataque</option><option value="def">Maior defesa</option>
+            <option value="type">Tipo</option><option value="name">Alfabética (A–Z)</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted">Tipo da carta
+          <select className="field w-full px-3 py-2 text-sm" value={cardType}
+            onChange={e=>{setCardType(e.target.value);setOffset(0)}}>
+            <option value="">Todos os tipos</option>
+            {types.map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
         </label>
         <button type="button" className="btn-ghost self-end" onClick={()=>setRevision(x=>x+1)}
           aria-label="Recarregar drops"><RefreshCcw className="size-4"/> Atualizar</button>
