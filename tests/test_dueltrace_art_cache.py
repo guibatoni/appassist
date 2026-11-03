@@ -87,6 +87,33 @@ class ArtAttemptCacheTests(unittest.TestCase):
                 catalog.analyse(rom,with_art=True)
                 reader.assert_called_once()
 
+    def test_upgrade_reanalyses_even_when_old_version_had_722_arts(self):
+        with tempfile.TemporaryDirectory() as td:
+            home=Path(td)
+            rom=home/"previous.iso"
+            rom.write_bytes(b"G"*100_010)
+            sha=hashlib.sha256(rom.read_bytes()).hexdigest()
+            scan=home/"analises"/"previous"
+            profile_path=home/"profiles"/sha[:16]/"profile.json"
+            atomic_json(scan/"relatorio.json",{
+                "art_requested":True,
+                "art_parser_revision":ART_PARSER_REVISION-1,
+                "artes_extraidas":722})
+            profile={
+                "rom_sha256":sha,"scan_result_dir":str(scan),
+                "supported_features":{"art":True,"cards":False}}
+            atomic_json(profile_path,profile)
+            entry={
+                "source_path":str(rom.resolve()),"file_name":rom.name,
+                "sha256":sha,"profile_path":str(profile_path.resolve()),
+                "size":rom.stat().st_size,"mtime_ns":rom.stat().st_mtime_ns,
+                "effects_manifest_signature":[0,0]}
+            catalog=ModCatalog(home)
+            atomic_json(catalog.registry_file,{"schema":1,"entries":[entry]})
+            with patch("auto_mods.import_rom",return_value=(profile,profile_path)) as run:
+                catalog.analyse(rom,with_art=True)
+                run.assert_called_once()
+
     def test_full_wa_rescan_keeps_manual_and_same_sha_structural_fusions(self):
         with tempfile.TemporaryDirectory() as td:
             home=Path(td)
