@@ -254,9 +254,15 @@ def process(path,output,with_art=False,digest=None,progress=None):
         if progress:progress("Lendo índice ISO9660",0,1)
         disc=Disc(path);info['tipo_setor']=disc.sector
         info['arquivos_discos']=[{'nome':n,'lba':lba,'tamanho':sz} for n,(lba,sz) in sorted(disc.files.items())]
-        sl_names=[n for n in disc.files if re.fullmatch(r'SL[UP][A-Z0-9_\.]+',n)]
-        if not sl_names:sl_names=[n for n in disc.files if n.endswith('.EXE')]
-        wa_names=[n for n in disc.files if n.endswith('WA_MRG.MRG')]
+        # SLUS_014.11 pode estar na raiz ou dentro da pasta DATA.
+        sl_names=[n for n in disc.files if re.fullmatch(
+            r'SL[UP][A-Z0-9_.]+',n.rsplit('/',1)[-1])]
+        sl_names=sorted(sl_names,key=lambda x:(
+            x.rsplit('/',1)[-1]!='SLUS_014.11',len(x),x))
+        if not sl_names:
+            sl_names=sorted(n for n in disc.files if n.endswith('.EXE'))
+        wa_names=sorted((n for n in disc.files if n.endswith('WA_MRG.MRG')),
+                        key=lambda x:(not x.startswith('DATA/'),x))
         if not sl_names or not wa_names:
             raise ValueError(f'Layout FM PS1 incompleto; executáveis={sl_names}, WA={wa_names}')
         # O catálogo e as imagens exigem o WA até os pacotes de duelo.
