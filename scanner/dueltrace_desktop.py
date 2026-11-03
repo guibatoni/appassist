@@ -582,34 +582,92 @@ class DueltraceDesktop(tk.Tk):
 
     def _page_fusoes(self,page):
         root=tk.Frame(page,background=BACKGROUND)
-        root.pack(fill="both",expand=True,padx=20,pady=19)
+        root.pack(fill="both",expand=True,padx=18,pady=15)
         self._label(root,"Fusões",
-                    "Receitas ligadas ao mod selecionado, sem probabilidades inventadas.")
+                    "Receitas decodificadas da ISO ativa. Proveniência visível, sem probabilidades fictícias.")
         _,profile=self._profile()
         valid=bool(profile and profile.get("supported_features",{}).get("fusions"))
-        recipes=profile.get("fusion_recipes",[]) if valid else []
-        panel=Panel(root);panel.pack(fill="both",expand=True)
-        text_label(panel,"◎   BANCO DE FUSÕES DO PERFIL",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
-        text_label(panel,"Somente receitas obtidas e autorizadas pelo mod ativo. Rotas não validadas continuam indisponíveis.",
-                   color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(7,9))
-        tree=self._table(panel,("a","b","result","origin"),
-                         (("a","Material A",120),("b","Material B",120),
-                          ("result","Resultado",120),("origin","Procedência",300)))
-        cards={c["id"]:c.get("name",str(c["id"])) for c in (profile or {}).get("cards",[])}
-        for row in recipes:
+        self.fusion_rows=list(profile.get("fusion_recipes",[])) if valid else []
+        self.fusion_names={int(c["id"]):c.get("name",str(c["id"]))
+                           for c in (profile or {}).get("cards",[]) if "id" in c}
+        self.fusion_offset=0
+        panel=Panel(root)
+        panel.pack(fill="both",expand=True)
+        text_label(panel,"◎  BANCO DE FUSÕES DO MOD",color=BLUE,
+                   size=13,strong=True,bg=PANEL).pack(anchor="w")
+        review=(profile or {}).get("fusion_review") or {}
+        origin=review.get("status") or "sem banco decodificado"
+        text_label(panel,f"Origem: {origin}. "
+                          "Extração estrutural não equivale à execução de cada receita no duelo.",
+                   color=GOLD,size=10,bg=PANEL).pack(anchor="w",pady=(5,9))
+        tools=tk.Frame(panel,background=PANEL)
+        tools.pack(fill="x",pady=(0,8))
+        text_label(tools,"Pesquisar carta, resultado ou ID:",color=TEXT,
+                   bg=PANEL).pack(side="left",padx=(0,8))
+        self.fusion_query=tk.StringVar()
+        ttk.Entry(tools,textvariable=self.fusion_query,
+                  width=32,style="DT.TEntry").pack(side="left")
+        self.fusion_count_label=text_label(tools,"",color=MUTED,bg=PANEL,size=9)
+        self.fusion_count_label.pack(side="right")
+        self.fusion_query.trace_add("write",lambda *_:self._filter_fusions())
+        self.fusion_tree=self._table(panel,("a","b","result","origin"),
+            (("a","Material A",160),("b","Material B",160),
+             ("result","Resultado",160),("origin","Procedência",260)),height=14)
+        buttons=tk.Frame(panel,background=PANEL)
+        buttons.pack(fill="x",pady=(8,2))
+        self._action(buttons,"◀ Anteriores",lambda:self._fusion_step(-1),
+                     width=135).pack(side="left",padx=(0,8))
+        self._action(buttons,"Próximas ▶",lambda:self._fusion_step(1),
+                     width=135).pack(side="left")
+        text_label(buttons,"Até 250 receitas por página. Pesquise nas receitas completas.",
+                   color=MUTED,bg=PANEL,size=9).pack(side="right",padx=5)
+        self._filter_fusions()
+
+    def _filter_fusions(self):
+        if not hasattr(self,"fusion_tree") or not self.fusion_tree.winfo_exists():
+            return
+        query=self.fusion_query.get().casefold().strip()
+        if query:
+            def matches(row):
+                try:
+                    nums=(int(row[k]) for k in ("a","b","result"))
+                    pieces=[f"{n} {self.fusion_names.get(n,'')}" for n in nums]
+                    return any(query in piece.casefold() for piece in pieces)
+                except (KeyError,TypeError,ValueError):
+                    return False
+            self._fusion_filtered=[r for r in self.fusion_rows if matches(r)]
+        else:
+            self._fusion_filtered=self.fusion_rows
+        self.fusion_offset=0
+        self._display_fusion_page()
+
+    def _fusion_step(self, delta):
+        limit=250
+        total=len(getattr(self,"_fusion_filtered",[]))
+        new=self.fusion_offset+int(delta)*limit
+        if 0<=new<total:
+            self.fusion_offset=new
+            self._display_fusion_page()
+
+    def _display_fusion_page(self):
+        tree=self.fusion_tree
+        tree.delete(*tree.get_children())
+        total=len(self._fusion_filtered)
+        first=self.fusion_offset
+        end=min(total,first+250)
+        for row in self._fusion_filtered[first:end]:
             try:
-                a,b,result=(int(row[k]) for k in ("a","b","result"))
-            except (KeyError,TypeError,ValueError):
+                a,b,r=(int(row[k]) for k in ("a","b","result"))
+            except (ValueError,KeyError,TypeError):
                 continue
-            tree.insert("","end",values=(f"#{a} {cards.get(a,'')}",
-                                                 f"#{b} {cards.get(b,'')}",
-                                                 f"#{result} {cards.get(result,'')}",
-                                                 row.get("validation","origem não informada")))
-        text_label(panel,f"{len(recipes)} receitas disponíveis no perfil. "
-                         "As hipóteses ainda não revisadas não aparecem como válidas.",
-                   color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(9,7))
-        self._action(panel,"Abrir ferramentas avançadas",self.open_advanced,
-                     accent=GOLD,width=242).pack(anchor="w")
+            label=str(row.get("validation","origem não informada"))
+            tree.insert("","end",values=(
+                f"#{a} {self.fusion_names.get(a,'')}",
+                f"#{b} {self.fusion_names.get(b,'')}",
+                f"#{r} {self.fusion_names.get(r,'')}",
+                label))
+        self.fusion_count_label.configure(
+            text=f"{first+1 if total else 0}–{end} / {total:,} receitas")
 
     def _page_overlay(self,page):
         root=tk.Frame(page,background=BACKGROUND)
