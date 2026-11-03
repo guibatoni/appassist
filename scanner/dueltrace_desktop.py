@@ -43,7 +43,7 @@ USER_PAGES=tuple(p for p in PAGES if p[1] in ("inicio","mods","cartas","fusoes")
 class DueltraceDesktop(tk.Tk):
     def __init__(self, *, catalog=None, developer=False):
         super().__init__()
-        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.1")
+        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.2")
         self.geometry("1360x780")
         self.minsize(1100,690)
         self.configure(background=BACKGROUND)
@@ -271,43 +271,86 @@ class DueltraceDesktop(tk.Tk):
 
     def _page_mods(self,page):
         root=tk.Frame(page,background=BACKGROUND)
-        root.pack(fill="both",expand=True,padx=20,pady=19)
+        root.pack(fill="both",expand=True,padx=18,pady=13)
         self._label(root,"Biblioteca de Mods",
-                    "Importe uma ISO/BIN ou analise uma pasta. O processamento usa o cache quando possível.")
-        toolbar=Panel(root);toolbar.pack(fill="x",pady=(0,13))
-        self._action(toolbar,"Importar ISO/BIN",self.choose_file,accent=GOLD).pack(side="left",padx=(0,9))
-        self._action(toolbar,"Escanear pasta",self.choose_folder).pack(side="left",padx=(0,9))
-        self._action(toolbar,"Reanalisar pasta",self.scan_folder).pack(side="left")
-        self._action(toolbar,"Ativar perfil",self.activate_selected,accent=GREEN).pack(side="right")
-        self._action(toolbar,"Ver diagnóstico",self.show_mod_diagnostic,width=154).pack(side="right",padx=(0,10))
+                    "Gerencie as imagens locais e confira apenas os dados que a análise conseguiu comprovar.")
+        toolbar=Panel(root)
+        toolbar.pack(fill="x",pady=(0,9))
+        self._action(toolbar,"Importar ISO/BIN",self.choose_file,
+                     accent=GOLD,width=146).pack(side="left",padx=(0,7))
+        self._action(toolbar,"Escanear pasta",self.choose_folder,
+                     width=127).pack(side="left",padx=(0,7))
+        self._action(toolbar,"Reanalisar",self.scan_folder,
+                     width=123).pack(side="left")
+        self._action(toolbar,"Ativar perfil",self.activate_selected,
+                     accent=GOLD,width=135).pack(side="right")
+        self._action(toolbar,"Ver diagnóstico",self.show_mod_diagnostic,
+                     width=144).pack(side="right",padx=(0,7))
         automation=Panel(root)
-        automation.pack(fill="x",pady=(0,12))
-        left=tk.Frame(automation,background=PANEL)
-        left.pack(side="left",fill="x",expand=True)
-        tk.Checkbutton(left,text="Investigar com Ollama local (quando disponível)",
+        automation.pack(fill="x",pady=(0,10))
+        left_opts=tk.Frame(automation,background=PANEL)
+        left_opts.pack(side="left",fill="x",expand=True)
+        text_label(left_opts,"◈  ANÁLISE INTELIGENTE  /  LOCAL",color=BLUE,
+                   size=10,strong=True,bg=PANEL).pack(anchor="w")
+        tk.Checkbutton(left_opts,text="Ollama: investigar evidências",
                        variable=self.ai_enabled,command=self._save_settings,
                        bg=PANEL,fg=TEXT,activebackground=PANEL,
                        activeforeground=TEXT,selectcolor=PANEL_ALT,
                        font=("Segoe UI",10)).pack(anchor="w")
-        tk.Checkbutton(left,text="Extrair artes locais dos formatos reconhecidos",
+        tk.Checkbutton(left_opts,text="Extrair artes em formatos reconhecidos",
                        variable=self.art_enabled,command=self._save_settings,
                        bg=PANEL,fg=TEXT,activebackground=PANEL,
                        activeforeground=TEXT,selectcolor=PANEL_ALT,
                        font=("Segoe UI",10)).pack(anchor="w")
-        tk.Label(automation,textvariable=self.intelligence_note,background=PANEL,
-                 foreground=MUTED,wraplength=420,justify="left",
-                 font=("Segoe UI",9)).pack(side="right",padx=7)
-        box=Panel(root)
-        box.pack(fill="both",expand=True)
-        text_label(box,"PERFIS ENCONTRADOS",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
-        self.mod_tree=self._table(box,("name","status","cards","effects","fusions"),
-             (("name","Arquivo / mod",250),("status","Validação",165),
-              ("cards","Cartas",70),("effects","Efeitos com fonte",120),
-              ("fusions","Fusões revisadas",135)))
+        tk.Label(automation,textvariable=self.intelligence_note,
+                 background=PANEL,foreground=MUTED,wraplength=310,
+                 justify="left",font=("Segoe UI",9)).pack(side="right",padx=9)
+        content=tk.Frame(root,background=BACKGROUND)
+        content.pack(fill="both",expand=True)
+        left=Panel(content)
+        left.pack(side="left",fill="both",expand=True,padx=(0,7))
+        right=Panel(content)
+        right.configure(width=302)
+        right.pack(side="right",fill="y",padx=(7,0))
+        right.pack_propagate(False)
+        text_label(left,"◈  MODS DETECTADOS",color=GOLD,size=13,
+                   strong=True,bg=PANEL).pack(anchor="w",pady=(0,6))
+        self.mod_tree=self._table(
+            left,("name","status","cards","effects","fusions"),
+            (("name","Arquivo / mod",226),("status","Status",109),
+             ("cards","Cartas",61),("effects","Efeitos",64),
+             ("fusions","Fusões",63)),
+            height=9)
         self.mod_tree.bind("<<TreeviewSelect>>",self._on_select_mod)
-        self.mod_info=text_label(box,"Selecione um mod para revisar a procedência dos dados.",
-                                 color=MUTED,size=10,bg=PANEL)
+        self.mod_info=text_label(
+            left,"Selecione um mod para conferir o reconhecimento.",
+            color=MUTED,size=9,bg=PANEL)
+        self.mod_info.configure(wraplength=500)
         self.mod_info.pack(anchor="w",pady=(7,2))
+        HeroArt(right,width=260,height=115).pack(fill="x",pady=(0,5))
+        text_label(right,"◈  MOD SELECIONADO",color=BLUE,size=10,
+                   strong=True,bg=PANEL).pack(anchor="w",pady=(0,2))
+        self.mod_name_var=tk.StringVar(value="Selecione uma ISO/BIN")
+        self.mod_name_label=tk.Label(
+            right,textvariable=self.mod_name_var,wraplength=268,
+            fg=GOLD,bg=PANEL,font=("Segoe UI Semibold",12),
+            anchor="w",justify="left")
+        self.mod_name_label.pack(anchor="w",fill="x",pady=(0,6))
+        self.mod_state_var=tk.StringVar(value="Nenhum perfil selecionado")
+        self.mod_state_label=tk.Label(
+            right,textvariable=self.mod_state_var,fg=MUTED,
+            bg=PANEL,font=("Segoe UI Semibold",10),
+            anchor="w")
+        self.mod_state_label.pack(anchor="w",pady=(0,7))
+        self.mod_metrics=tk.StringVar(
+            value="Cartas —  ·  Drops —\nEfeitos —  ·  Fusões —\nArtes —")
+        tk.Label(right,textvariable=self.mod_metrics,bg=PANEL,fg=TEXT,
+                 justify="left",anchor="w",font=("Segoe UI",10),
+                 wraplength=260).pack(fill="x",pady=(0,8))
+        self.mod_details_ai=tk.StringVar(value="Ollama: aguardando análise")
+        tk.Label(right,textvariable=self.mod_details_ai,bg=PANEL,fg=BLUE,
+                 wraplength=260,justify="left",anchor="w",
+                 font=("Segoe UI",9)).pack(anchor="w")
         self._refresh_mods()
 
     def _refresh_mods(self):
@@ -321,6 +364,11 @@ class DueltraceDesktop(tk.Tk):
                         entry.get("level","desconhecido"),
                         summary["cards_total"],summary["effect_count"],
                         summary["fusion_count"]))
+        if not self.selected_sha:
+            active=self.catalog.current() or {}
+            self.selected_sha=active.get("sha256")
+            if not self.selected_sha and self.mod_tree.get_children():
+                self.selected_sha=self.mod_tree.get_children()[0]
         if self.selected_sha and self.mod_tree.exists(self.selected_sha):
             self.mod_tree.selection_set(self.selected_sha)
             self._on_select_mod()
@@ -347,6 +395,18 @@ class DueltraceDesktop(tk.Tk):
         self.intelligence_note.set(
             f"Mod selecionado: {entry.get('file_name','')} · Artes: {art_label} · "
             f"Ollama: {diagnostic['ai']}")
+        if hasattr(self,"mod_name_var"):
+            self.mod_name_var.set(entry.get("file_name","Mod local"))
+            level=diagnostic["level"]
+            checked=(level=="conhecido_validado")
+            self.mod_state_var.set(
+                "●  PERFIL CONHECIDO" if checked else "●  REVISÃO NECESSÁRIA")
+            self.mod_state_label.configure(fg=GREEN if checked else GOLD)
+            self.mod_metrics.set(
+                f"Cartas: {diagnostic['cards']}    Oponentes: {diagnostic['opponents']}\n"
+                f"Drops: {diagnostic['drop_entries']}    Efeitos: {diagnostic['effects']}\n"
+                f"Fusões: {diagnostic['fusions_verified']}    Artes: {art_label}")
+            self.mod_details_ai.set("Ollama: "+diagnostic["ai"])
 
     def show_mod_diagnostic(self):
         """Exibe diagnóstico do mod selecionado; sem caminhos privados ou ROM."""
