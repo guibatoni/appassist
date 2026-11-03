@@ -111,6 +111,30 @@ class WAAssetTests(unittest.TestCase):
             self.assertIn('"thumbnail_matches_record": true',manifest)
             self.assertIn('"rom_sha256": "cccc',manifest)
 
+    def test_mismatched_duplicate_does_not_invalidate_real_assets(self):
+        wa=bytearray(synthetic_wa())
+        # Mod pode alterar uma cópia da miniatura sem perder a arte original.
+        base=assets.FIRST_CARD_SECTOR*assets.SECTOR+0x2AE0
+        wa[base+3]^=1
+        cards=[{"id":1,"type_id":0},{"id":2,"type_id":20}]
+        with tempfile.TemporaryDirectory() as temp:
+            with patch.object(assets,"CARD_COUNT",2):
+                result=assets.extract_asset_pack(
+                    bytes(wa),cards,Path(temp),rom_sha256="a"*64)
+            self.assertEqual(result["status"],"completo")
+            self.assertEqual(result["thumbnail_duplicate_matches"],1)
+            self.assertEqual(result["thumbnail_duplicate_mismatches"],1)
+            self.assertEqual(result["composed_count"],2)
+
+    def test_reject_non_hex_rom_signature(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with patch.object(assets,"CARD_COUNT",2):
+                with self.assertRaises(ValueError):
+                    assets.extract_asset_pack(
+                        synthetic_wa(),
+                        [{"id":1,"type_id":0},{"id":2,"type_id":0}],
+                        Path(temp),rom_sha256="x"*64)
+
     def test_reject_missing_or_repeated_card_ids(self):
         with tempfile.TemporaryDirectory() as temp:
             with patch.object(assets,"CARD_COUNT",2):

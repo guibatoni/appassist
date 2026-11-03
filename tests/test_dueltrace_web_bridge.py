@@ -37,6 +37,7 @@ class BridgeTests(unittest.TestCase):
             "scan_result_dir":str(self.analysis),
             "supported_features":{"cards":True,"art":True,"fusions":True,"composed_cards":True},
             "verified":{"cartas":"verificado"},
+            "graphic_assets":{"frames":6,"composed_cards":7},
             "cards":[
                 {"id":1,"name":"Carta comprovada","atk":1250,"def":1000,
                  "level":7,"description_text":"Descrição verificada",
@@ -78,6 +79,10 @@ class BridgeTests(unittest.TestCase):
         self.assertIsNone(snapshot["cards"][0]["effect"])
         self.assertEqual(snapshot["cards"][0]["description"],"Descrição verificada")
         self.assertEqual(snapshot["cards"][0]["level"],7)
+        self.assertEqual(snapshot["cards"][0]["atk"],1250)
+        self.assertEqual(snapshot["cards"][0]["def"],1000)
+        self.assertEqual(snapshot["mods"][0]["frameStyles"],6)
+        self.assertEqual(snapshot["mods"][0]["framedCards"],7)
         self.assertEqual(snapshot["cards"][0]["descriptionSource"],"SLUS_014.11:0x1B11F4")
         self.assertEqual(snapshot["cards"][1]["effect"],"Efeito com fonte")
         self.assertEqual(snapshot["cards"][1]["effectSource"],"ROM-offset-auditado")

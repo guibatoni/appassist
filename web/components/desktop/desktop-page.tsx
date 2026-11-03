@@ -32,6 +32,13 @@ function CardThumbnail({card,sha}:{card:LocalCard|null;sha:string|null}) {
   </div>
 }
 
+function MonsterStats({card,className=""}:{card:LocalCard|null;className?:string}) {
+  if (!card || card.category!=="Monstros") return null
+  return <p className={"text-[11px] font-semibold tabular-nums text-primary "+className}>
+    ATK {card.atk??"—"} · DEF {card.def??"—"}
+  </p>
+}
+
 function Empty({children}:{children:React.ReactNode}) {
   return <p className="rounded-lg border border-line/60 bg-[#06152c]/70 px-4 py-6 text-center text-sm text-muted">{children}</p>
 }
@@ -111,7 +118,8 @@ function RankPanel({sha}:{sha:string|null}) {
   </section>
 }
 
-function Home({sha}:{sha:string|null}) {
+function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
+  const cardsById=useMemo(()=>new Map(cards.map(c=>[c.id,c])),[cards])
   const [hand,setHand]=useState<HandState|null>(null)
   const [mode,setMode]=useState<"pairs"|"chains">("pairs")
   useEffect(()=>{
@@ -143,7 +151,7 @@ function Home({sha}:{sha:string|null}) {
             <p className="mb-2 text-center text-xs text-gold">SLOT {slot+1}</p>
             <CardThumbnail key={String(sha)+"-"+String(card?.id??"empty")} card={card} sha={sha}/>
             <p className="mt-2 min-h-9 text-center text-xs font-semibold text-white">{card?.name??"Aguardando carta"}</p>
-            <p className="text-center text-[11px] text-primary">ATK {card?.atk??"—"} · DEF {card?.def??"—"}</p>
+            <MonsterStats card={card} className="text-center"/>
           </div>
         })}
       </div>
@@ -161,11 +169,13 @@ function Home({sha}:{sha:string|null}) {
           {hand.pairs.map((x,i)=><div key={i} className="rounded-lg border border-line/70 bg-panel-strong/60 p-3">
             <p className="text-xs text-primary">Slots {x.slot_a} + {x.slot_b}</p>
             <p className="mt-1 font-semibold text-white">{x.result_name} #{x.result}</p>
-            <p className="mt-1 text-xs text-gold">ATK {x.atk??"—"} · {sourceLabel(x.validation)}</p>
+            <MonsterStats card={cardsById.get(x.result)??null} className="mt-1"/>
+            <p className="mt-1 text-xs text-gold">{sourceLabel(x.validation)}</p>
           </div>)}</div>:<Empty>Não há fusões de duas cartas para a mão atual.</Empty>):
         (hand.chains.length?<div className="grid gap-3 lg:grid-cols-2">
           {hand.chains.map((x,i)=><div key={i} className="rounded-xl border border-gold/30 bg-gradient-to-r from-[#112746] to-panel p-3">
-            <p className="font-semibold text-gold">{x.result_name} #{x.result} · ATK {x.atk??"—"}</p>
+            <p className="font-semibold text-gold">{x.result_name} #{x.result}</p>
+            <MonsterStats card={cardsById.get(x.result)??null} className="mt-1"/>
             <p className="mt-1 text-xs text-primary">Ordem: {x.slot_order.join(" → ")}</p>
             <ol className="mt-2 space-y-1 text-xs text-muted">{x.steps.map((s,j)=>
               <li key={j}>{j+1}. #{s.material_a} + #{s.material_b} = #{s.result} ({sourceLabel(s.validation)})</li>)}</ol>
@@ -189,7 +199,7 @@ function Mods({mods,sha,onRefresh,configured}:{
       const result=await api.scan_sources(mod.sha256)
       await onRefresh()
       setMessage("WA/SLUS analisados: "+result.artCount+" artes, "+
-        result.framedCards+" com moldura, "+
+        result.frameStyles+" molduras originais, "+result.framedCards+" cartas com moldura, "+
         result.descriptionCount+" descrições e "+
         result.effectTexts+" textos indicativos de efeitos. "+
         "A execução dos efeitos no jogo não foi confirmada.")
@@ -226,9 +236,10 @@ function Mods({mods,sha,onRefresh,configured}:{
             <p className="truncate font-semibold text-white">{mod.name}</p>
             <p className="mt-1 text-xs text-muted">{mod.sha256.slice(0,18)}…</p>
           </div><span className={sha===mod.sha256?"text-xs text-success":"text-xs text-gold"}>{sha===mod.sha256?"Ativo":mod.requiresReview?"Revisão necessária":"Conhecido"}</span></div>
-          <div className="my-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-5">
-            {([["Cartas",mod.cards],["Fusões",mod.fusions],["Efeitos",mod.effects],
-              ["Descrições",mod.descriptions??0],["Molduras",mod.framedCards??0]] as const).map(([label,n])=>
+          <div className="my-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-3 xl:grid-cols-6">
+            {([["Cartas",mod.cards],["Fusões",mod.fusions],["Textos de efeito",mod.effects],
+              ["Descrições",mod.descriptions??0],["Molduras WA",mod.frameStyles??0],
+              ["Cartas emolduradas",mod.framedCards??0]] as const).map(([label,n])=>
               <div key={label} className="rounded-lg border border-line/50 bg-background/70 p-2"><p className="font-display text-xl text-primary">{n}</p><p className="text-xs text-muted">{label}</p></div>)}
           </div>
           <button type="button" disabled={busy||!desktopApi()||sha===mod.sha256}
@@ -283,7 +294,7 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
               onClick={()=>setSelectedId(card.id)}>
               <CardThumbnail key={String(sha)+"-"+card.id} card={card} sha={sha}/>
               <p className="mt-2 min-h-9 text-xs font-semibold text-white">{card.name}</p>
-              <p className="text-[11px] text-primary">ATK {card.atk??"—"} · DEF {card.def??"—"}</p>
+              <MonsterStats card={card} className="mt-1 text-center"/>
             </button>)}
           </div>
           {!visible.length&&<Empty>Nenhuma carta identificada para esta pesquisa.</Empty>}
@@ -296,10 +307,12 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
         <aside className="rounded-xl border border-gold/40 bg-gradient-to-b from-[#142b50] to-background p-4">
           {chosen?<><h2 className="font-display text-xl font-semibold text-gold">#{chosen.id} {chosen.name}</h2>
             <div className="my-4"><CardThumbnail key={String(sha)+"-"+chosen.id} card={chosen} sha={sha}/></div>
-            <p className="text-sm text-primary">ATK {chosen.atk??"—"} · DEF {chosen.def??"—"}</p>
+            <MonsterStats card={chosen} className="text-base"/>
             <p className="mt-2 text-sm text-muted">Tipo: {chosen.type||"Não identificado"}</p>
             <p className="text-sm text-muted">Categoria: {chosen.category}</p>
             {chosen.level!==null&&chosen.level!==undefined&&<p className="text-sm text-muted">Nível: {chosen.level} · Atributo ID: {chosen.attributeId??"—"}</p>}
+            {(chosen.guardianStar1!==null&&chosen.guardianStar1!==undefined||chosen.guardianStar2!==null&&chosen.guardianStar2!==undefined)&&
+              <p className="text-sm text-muted">Estrelas Guardiãs (IDs extraídos): {chosen.guardianStar1??"—"} / {chosen.guardianStar2??"—"}</p>}
             <div className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3">
               <h3 className="mb-1 font-semibold text-gold">Descrição extraída do SLUS</h3>
               <p className="whitespace-pre-line text-sm text-foreground/85">{chosen.description??"Nenhuma descrição vinculada com segurança ao ID desta carta."}</p>
@@ -333,9 +346,7 @@ function FusionIllustration({id,name,sha,card,role}:{
     </div>
     <span className="text-center text-[11px] font-semibold text-gold">#{id}</span>
     <span className="line-clamp-2 min-h-8 break-words text-center text-xs font-medium text-foreground">{name}</span>
-    {displayed.category==="Monstros"&&<span className="text-center text-[10px] font-semibold tabular-nums text-primary">
-      ATK {displayed.atk??"—"} · DEF {displayed.def??"—"}
-    </span>}
+    <MonsterStats card={displayed} className="text-center text-[10px]"/>
   </div>
 }
 
@@ -383,9 +394,7 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/50 pt-2">
             <span className="text-xs text-muted">{sourceLabel(r.source)}</span>
-            <span className="text-sm font-semibold tabular-nums text-primary">
-              ATK {cardsById.get(r.result)?.atk??r.atk??"—"} · DEF {cardsById.get(r.result)?.def??"—"}
-            </span>
+            <MonsterStats card={cardsById.get(r.result)??null} className="text-sm"/>
           </div>
         </article>)}
       </div>
@@ -424,7 +433,7 @@ export function DesktopPage({page}:{page:Page}) {
     </div>
     {error&&<p className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm text-gold" role="status">{error}</p>}
     {loading&&<p className="text-sm text-muted">Carregando dados locais...</p>}
-    {page==="inicio"&&<Home sha={state?.activeSha??null}/>}
+    {page==="inicio"&&<Home sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>}
     {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="fusoes"&&<Fusions sha={state?.activeSha??null} cards={state?.cards??[]}/>}

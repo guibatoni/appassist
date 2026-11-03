@@ -27,6 +27,7 @@ export type DeepScanResult = {
   artCount: number
   thumbnailCount: number
   framedCards: number
+  frameStyles: number
   descriptionCount: number
   effectTexts: number
   investigation: string
@@ -42,6 +43,7 @@ export type LocalMod = {
   effects: number
   descriptions?: number
   framedCards?: number
+  frameStyles?: number
   requiresReview: boolean
 }
 
