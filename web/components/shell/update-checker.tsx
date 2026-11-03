@@ -13,6 +13,7 @@ export function UpdateChecker() {
   const [visible, setVisible] = useState(false)
   const [checking, setChecking] = useState(false)
   const [opening, setOpening] = useState(false)
+  const [installing, setInstalling] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const [automaticNotice, setAutomaticNotice] = useState(false)
 
@@ -80,6 +81,23 @@ export function UpdateChecker() {
     }
   }
 
+  const installOfficialUpdate = async () => {
+    const api=desktopApi()
+    if (!api || !result?.automaticInstallReady || installing) return
+    if (!window.confirm(
+      "Instalar a nova versão estável assinada do DUELTRACE? "
+      +"O Windows solicitará sua confirmação."
+    )) return
+    setInstalling(true)
+    try {
+      const response=await api.install_signed_update()
+      setProblem(response.status)
+      if (response.started) setAutomaticNotice(false)
+    } catch(e) {
+      setProblem(e instanceof Error ? e.message : "Atualização assinada não pôde ser iniciada.")
+    } finally {setInstalling(false)}
+  }
+
   const available = result?.updateAvailable === true
   return <div className="relative">
     <button type="button"
@@ -118,6 +136,13 @@ export function UpdateChecker() {
                   {available ? <Download className="size-5 shrink-0"/> : <CheckCircle2 className="size-5 shrink-0 text-primary"/>}
                   {result.message}
                 </p>
+                {result.automaticInstallReady&&
+                  <button type="button" disabled={installing}
+                    onClick={()=>void installOfficialUpdate()}
+                    className="btn-gold mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50">
+                    <Download className="size-4"/>
+                    {installing?"Verificando assinatura e preparando…":"Instalar atualização estável assinada"}
+                  </button>}
                 {!result.automaticInstallReady && <p className="mt-3 text-xs text-gold">
                   Instalação automática indisponível até termos instalador assinado digitalmente.
                 </p>}
