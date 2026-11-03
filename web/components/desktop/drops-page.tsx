@@ -81,6 +81,7 @@ export function DropsPage({sha}:{sha:string|null}) {
     setObsOpponent(0)
     setObsCard("")
     setObsPoints("")
+    setObsVictory("lp")
     setObsError(null)
   },[sha])
 
@@ -116,7 +117,10 @@ export function DropsPage({sha}:{sha:string|null}) {
     setTraceError(null)
     try{
       const result=await api.import_rank_trace(duelEvidence?.lastDuelId??null)
-      if(!result.cancelled)setTraceInfo({status:"updated",last:result,records:(traceInfo?.records??0)+1})
+      if(!result.cancelled){
+        if(result.available===false)setTraceError("Log não reconhecido: "+result.status)
+        else setTraceInfo({status:"updated",last:result,records:(traceInfo?.records??0)+1})
+      }
     }catch(e){
       setTraceError(e instanceof Error?e.message:"Não foi possível importar log MIPS.")
     }finally{setTraceBusy(false)}
