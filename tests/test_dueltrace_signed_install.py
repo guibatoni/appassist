@@ -99,6 +99,37 @@ class SignedUpdaterTests(unittest.TestCase):
                         downloader=downloader,launcher=launcher)
             self.assertFalse((folder/"trusted_updates"/"DUELTRACE-Setup-v0.8.0.exe").exists())
 
+    def test_first_signed_exe_auto_enables_future_signed_installs(self):
+        ident={"subject":EDITOR,"issuer":"CN=AC Verificada",
+               "thumbprint":"A"*40}
+        with patch.object(updater.sys,"platform","win32"), \
+             patch.object(updater.sys,"frozen",True,create=True), \
+             patch.object(updater,"_signed_identity",return_value=ident):
+            self.assertTrue(updater.trusted_installer_ready())
+            self.assertTrue(updater.trusted_installer_ready(publisher=EDITOR))
+            self.assertFalse(updater.trusted_installer_ready(publisher="CN=Outro"))
+
+    def test_signed_update_rejects_changed_cert_even_same_subject(self):
+        original={"subject":EDITOR,"issuer":"CN=AC Verificada",
+                  "thumbprint":"A"*40}
+        impostor={"subject":EDITOR,"issuer":"CN=AC Verificada",
+                  "thumbprint":"B"*40}
+        def identity(path):
+            return impostor if path.name.endswith(".exe") and "Setup" in path.name else original
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(updater.sys,"platform","win32"), \
+             patch.object(updater.sys,"frozen",True,create=True), \
+             patch.object(updater,"_signed_identity",side_effect=identity):
+            launches=[]
+            def downloader(info,target):
+                target.write_bytes(b"MZsigned-test")
+            with self.assertRaises(updater.UnsafeUpdate):
+                updater.install_new_release(data_home=Path(tmp),
+                    current_version="0.7.7",release_fetcher=lambda:release(),
+                    downloader=downloader,launcher=lambda path:launches.append(path))
+            self.assertFalse(launches)
+            self.assertFalse((Path(tmp)/"trusted_updates"/"DUELTRACE-Setup-v0.8.0.exe").exists())
+
     def test_no_install_on_equal_or_older_version(self):
         with tempfile.TemporaryDirectory() as td:
             with patch.object(updater,"trusted_installer_ready",return_value=True):
