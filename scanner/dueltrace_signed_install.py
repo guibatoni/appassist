@@ -24,7 +24,7 @@ from dueltrace_preview_updates import NoRedirect
 
 # Só configurar após validação jurídica do certificado REAL da Batoni Dev.
 # O valor vazio desliga TODA instalação automática.
-TRUSTED_PUBLISHER_SUBJECT = ""
+# A primeira versão assinada é a âncora de confiança para futuras atualizações.
 MAX_INSTALLER_BYTES = 220 * 1024 * 1024
 TRUSTED_HOSTS = {"github.com", "release-assets.githubusercontent.com",
                  "objects.githubusercontent.com"}
@@ -73,39 +73,75 @@ def select_signed_installer(release: dict, installed_version: str) -> dict | Non
     return {"version":tag,"filename":name,"url":url,"sha256":m.group(1).lower(),"size":size}
 
 
-def _signed_subject(path: Path) -> str | None:
-    if sys.platform!="win32":
+def _signed_identity(path: Path) -> dict | None:
+    """Identidade do certificado Authenticode com cadeia validada no Windows.
+
+    A assinatura da própria instalação vira a âncora de confiança. Exigir
+    exatamente o mesmo certificado (thumbprint) na atualização previne
+    downloads de executáveis assinados por outra editora.
+    """
+    if sys.platform != "win32":
         return None
     quoted=str(path.resolve()).replace("'","''")
     script=(
         f"$s=Get-AuthenticodeSignature -LiteralPath '{quoted}';"
         "if($s.Status -ne 'Valid' -or !$s.SignerCertificate){exit 7};"
-        "[Console]::Out.Write($s.SignerCertificate.Subject)"
+        "$c=$s.SignerCertificate;"
+        "$o=@{subject=$c.Subject;issuer=$c.Issuer;thumbprint=$c.Thumbprint};"
+        "[Console]::Out.Write(($o | ConvertTo-Json -Compress))"
     )
     encoded=base64.b64encode(script.encode("utf-16le")).decode("ascii")
     try:
         output=subprocess.run(
             ["powershell.exe","-NoProfile","-NonInteractive","-EncodedCommand",encoded],
             capture_output=True,text=True,timeout=15,check=False)
-        if output.returncode!=0:
+        if output.returncode!=0 or len(output.stdout)>4096:
             return None
-        return output.stdout.strip() or None
-    except (OSError,subprocess.TimeoutExpired):
+        data=json.loads(output.stdout)
+        if not isinstance(data,dict):
+            return None
+        if not all(isinstance(data.get(field),str) and data[field]
+                   for field in ("subject","issuer","thumbprint")):
+            return None
+        if not re.fullmatch("[0-9A-Fa-f]{40}",data["thumbprint"]):
+            return None
+        return {"subject":data["subject"],"issuer":data["issuer"],
+                "thumbprint":data["thumbprint"].upper()}
+    except (OSError,ValueError,TypeError,subprocess.TimeoutExpired):
         return None
 
 
-def trusted_installer_ready(*, publisher: str = TRUSTED_PUBLISHER_SUBJECT,
+def _signed_subject(path: Path) -> str | None:
+    identity=_signed_identity(path)
+    return identity["subject"] if identity else None
+
+
+def trusted_installer_ready(*, publisher: str | None = None,
                             installed_exe: Path | None = None,
                             signer=None) -> bool:
-    """Verificar o publisher do app atual antes de permitir update remoto."""
-    if sys.platform!="win32" or not publisher.strip():
+    """Sem EXE assinado não há auto-update; não precisa editar o código
+    quando a primeira versão comercial assinada for lançada.
+    """
+    if sys.platform!="win32":
         return False
     if installed_exe is None and not getattr(sys,"frozen",False):
         return False
     installed_exe = installed_exe or Path(sys.executable)
     if not installed_exe.is_file():
         return False
-    return (signer or _signed_subject)(installed_exe) == publisher
+    if publisher is not None and (not isinstance(publisher,str)
+                                  or not publisher.strip()):
+        return False
+    if signer is None:
+        identity=_signed_identity(installed_exe)
+        if not identity:
+            return False
+        if publisher is not None and identity["subject"] != publisher:
+            return False
+        return True
+    if publisher is None:
+        return False
+    return signer(installed_exe) == publisher
 
 
 def _download_release(info: dict, destination: Path, *, opener=None) -> Path:
@@ -141,7 +177,7 @@ def _download_release(info: dict, destination: Path, *, opener=None) -> Path:
 
 def install_new_release(*, data_home: Path,
                         current_version: str = CURRENT_VERSION,
-                        release_fetcher=None, publisher: str = TRUSTED_PUBLISHER_SUBJECT,
+                        release_fetcher=None, publisher: str | None = None,
                         signer=None, downloader=None, launcher=None) -> dict:
     """Executa apenas instalador oficial e assinado, após clique explícito."""
     if not trusted_installer_ready(publisher=publisher, signer=signer):
@@ -150,6 +186,12 @@ def install_new_release(*, data_home: Path,
     info=select_signed_installer(release,current_version)
     if not info:
         return {"started":False,"status":"Sem release estável mais recente."}
+    installed_identity = _signed_identity(Path(sys.executable)) if signer is None else None
+    if signer is None and installed_identity is None:
+        raise UnsafeUpdate("Assinatura de origem não verificada.")
+    expected_publisher = publisher or (
+        installed_identity["subject"] if installed_identity else None
+    )
     home=Path(data_home).resolve()
     folder=home/"trusted_updates"
     folder.mkdir(parents=True,exist_ok=True)
@@ -162,9 +204,13 @@ def install_new_release(*, data_home: Path,
     if installer.exists():
         installer.unlink()
     (downloader or _download_release)(info,installer)
-    if (signer or _signed_subject)(installer)!=publisher:
+    candidate_identity = _signed_identity(installer) if signer is None else None
+    candidate_subject = (candidate_identity["subject"] if candidate_identity else None
+                         ) if signer is None else signer(installer)
+    if (candidate_subject != expected_publisher
+            or (signer is None and candidate_identity != installed_identity)):
         installer.unlink(missing_ok=True)
-        raise UnsafeUpdate("Assinatura do editor não corresponde ao DUELTRACE.")
+        raise UnsafeUpdate("Certificado do instalador não corresponde ao DUELTRACE.")
     (launcher or (lambda p: subprocess.Popen([str(p)],cwd=str(p.parent),
                                               close_fds=True)))(installer)
     return {"started":True,"version":info["version"],

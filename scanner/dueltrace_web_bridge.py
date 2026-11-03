@@ -18,7 +18,10 @@ from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
                                  suggest_hand_pairs)
 from dueltrace_fusion_planner import plan_fusion_chains
 from dueltrace_rank_live import (model_available, read_rank_candidate,
-                                 project_lp_win_rank)
+                                 read_rank_from_verified_binding, project_lp_win_rank)
+from dueltrace_rank_profile_live import (
+    validate_live_rank_binding, project_rank_for_mod, x15_compatible_runtime
+)
 from epsxe_launcher import launch_epsxe
 from dueltrace_drops import get_drop_catalog
 from dueltrace_update_checker import (
@@ -31,11 +34,13 @@ from dueltrace_signed_install import (
 
 class DueltraceWebBridge:
     def __init__(self, catalog: ModCatalog | None = None, *,
-                 file_picker=None, ram_reader=None, rank_reader=None):
+                 file_picker=None, ram_reader=None, rank_reader=None,
+                 rank_mod_reader=None):
         self.catalog = catalog or ModCatalog()
         self._file_picker = file_picker
         self._ram_reader = ram_reader or read_hand_from_epsxe
         self._rank_reader = rank_reader or read_rank_candidate
+        self._rank_mod_reader = rank_mod_reader or read_rank_from_verified_binding
         self._rank_calibration = None
         self._rank_last_turns = None
         self._process = None
@@ -108,6 +113,8 @@ class DueltraceWebBridge:
             "rankDetected":(profile or {}).get("rank_points",{}).get("available") is True,
             "rankBinaryVerified":(profile or {}).get("rank_points",{}).get("binary_verified") is True,
             "rankOffset":(profile or {}).get("rank_points",{}).get("first_offset"),
+            "rankMipsCandidates":len((profile or {}).get("rank_mips_evidence",{}).get("candidates",[])),
+            "rankMipsConfirmed":(profile or {}).get("rank_mips_evidence",{}).get("rank_routine_confirmed") is True,
             "requiresReview":summary.get("requires_review",True),
             "verified":summary.get("validated",{}),
         }
@@ -201,15 +208,19 @@ class DueltraceWebBridge:
     def _rank_sample(self):
         active,entry,profile=self._active()
         sha=active.get("sha256") if profile else None
-        if not model_available(sha):
+        binding=validate_live_rank_binding(profile)
+        if binding is None and not model_available(sha) and not x15_compatible_runtime(profile):
             self._rank_calibration=None
             return None,sha,{"state":"unsupported","ready":False,
-                "status":"Pontuação ainda não validada nesta ISO. Não aplicar o modelo de outro mod.",
+                "status":"Tabela e/ou rotina de RANK ainda não calibradas para esta ISO. "
+                         "A leitura MIPS estática não autoriza inferir endereços RAM.",
                 "score":None,"category":None,"counters":None}
         preferred=(self._process.pid if self._process is not None and
                    self._process.poll() is None else None)
         try:
-            sample=self._rank_reader(preferred_pid=preferred)
+            sample=(self._rank_mod_reader(binding, preferred_pid=preferred)
+                    if binding is not None else
+                    self._rank_reader(preferred_pid=preferred))
         except (OSError,RuntimeError,ValueError) as exc:
             sample={"ready":False,"status":str(exc)[:150],"pid":None,"counters":None}
         if not sample.get("ready"):
@@ -228,7 +239,9 @@ class DueltraceWebBridge:
                 return issue
             counters=sample["counters"]
             pid=sample["pid"]
-            turns=counters["turns"]
+            _a,_e,profile=self._active()
+            binding=validate_live_rank_binding(profile)
+            turns=counters[binding["turns_criterion"]] if binding else counters["turns"]
             if (self._rank_last_turns is not None and
                     self._rank_last_turns[0]==(sha,pid) and
                     turns < self._rank_last_turns[1]):
@@ -242,14 +255,27 @@ class DueltraceWebBridge:
                 self._rank_calibration=None
                 return {"ready":False,"state":"needs_lp_confirmation",
                     "status":"Confirme os LP exibidos pelo jogo neste duelo para habilitar a projeção.",
-                    "candidateLp":counters["remaining_lp"],"score":None,
+                    "candidateLp":counters[binding["life_points_criterion"]] if binding else counters["remaining_lp"],"score":None,
                     "category":None,"counters":None}
-            result=project_lp_win_rank(counters)
+            result=(project_rank_for_mod(profile,counters)
+                    if binding else project_lp_win_rank(counters))
+            visible_counters=dict(counters)
+            if binding:
+                visible_counters["turns"]=counters[binding["turns_criterion"]]
+                visible_counters["remaining_lp"]=counters[binding["life_points_criterion"]]
+            compatible=(binding is None and not model_available(sha) and
+                        x15_compatible_runtime(profile))
+            status=("Projeção usando SLUS e tabela RANK idênticos ao X15; "
+                    "LP confirmado nesta sessão, mas o resultado do duelo "
+                    "ainda exige comparação."
+                    if compatible else
+                    "Projeção se vencer por LP; resultado e mapeamento RAM "
+                    "não verificados no jogo.")
             return {"ready":True,"state":"provisional",
-                    "status":"Projeção se vencer por LP; resultado e mapeamento RAM não verificados no jogo.",
-                    "candidateLp":counters["remaining_lp"],
+                    "status":status,
+                    "candidateLp":counters[binding["life_points_criterion"]] if binding else counters["remaining_lp"],
                     "score":result["score"],"category":result["category"],
-                    "counters":counters,"breakdown":result["breakdown"],
+                    "counters":visible_counters,"breakdown":result["breakdown"],
                     "model":result["model"],"final":False}
 
     def confirm_rank_lp(self, life_points):
@@ -259,14 +285,18 @@ class DueltraceWebBridge:
             sample,sha,issue=self._rank_sample()
             if issue is not None:
                 return issue
-            if sample["counters"]["remaining_lp"]!=life_points:
+            _a,_e,profile=self._active()
+            binding=validate_live_rank_binding(profile)
+            lp_key=binding["life_points_criterion"] if binding else "remaining_lp"
+            turns_key=binding["turns_criterion"] if binding else "turns"
+            if sample["counters"][lp_key]!=life_points:
                 self._rank_calibration=None
                 return {"ready":False,"state":"lp_mismatch",
                     "status":"LP do jogo divergentes do candidato RAM. Contador não habilitado.",
-                    "candidateLp":sample["counters"]["remaining_lp"],
+                    "candidateLp":sample["counters"][lp_key],
                     "score":None,"category":None,"counters":None}
             self._rank_calibration={"sha":sha,"pid":sample["pid"],"at":monotonic()}
-            self._rank_last_turns=((sha,sample["pid"]),sample["counters"]["turns"])
+            self._rank_last_turns=((sha,sample["pid"]),sample["counters"][turns_key])
             return self.get_rank()
 
     def get_fusions(self, query="", offset=0, limit=100):

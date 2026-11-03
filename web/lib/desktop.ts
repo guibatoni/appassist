@@ -52,6 +52,8 @@ export type LocalMod = {
   rankDetected?: boolean
   rankBinaryVerified?: boolean
   rankOffset?: number | null
+  rankMipsCandidates?: number
+  rankMipsConfirmed?: boolean
   requiresReview: boolean
 }
 
@@ -188,6 +190,7 @@ export type UpdateCheck = {
   previewBranch: string | null
   previewBuildSha: string | null
   previewStatus?: "unavailable"
+  previewError?: string | null
   releasePage: string
   status: "unavailable" | "update_available" | "up_to_date" | "preview" | "preview_ahead" | "preview_current" | "preview_update_available" | "preview_build_unknown" | "preview_older"
   updateAvailable: boolean

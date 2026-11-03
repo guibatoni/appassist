@@ -15,6 +15,7 @@ on:
       - feature/dueltrace-v074-drops-ranks-frames
       - feature/dueltrace-v075-rank-forensics-safe-updater
       - feature/dueltrace-v076-rank-autodiscovery
+      - feature/dueltrace-v077-mips-rank-safe-updates
     paths:
       - 'web/**'
       - 'scanner/dueltrace_web_*.py'
@@ -26,6 +27,10 @@ on:
       - 'scanner/dueltrace_drops.py'
       - 'scanner/dueltrace_rank_profiles.py'
       - 'scanner/fm_rank_tables.py'
+      - 'scanner/fm_rank_mips_evidence.py'
+      - 'scanner/dueltrace_rank_profile_live.py'
+      - 'tests/test_fm_rank_mips_evidence.py'
+      - 'tests/test_dueltrace_rank_profile_live.py'
       - 'tests/test_fm_rank_tables.py'
       - 'tests/test_scanner_rapido.py'
       - 'tests/test_dueltrace_drops.py'
@@ -57,6 +62,10 @@ on:
       - 'scanner/dueltrace_drops.py'
       - 'scanner/dueltrace_rank_profiles.py'
       - 'scanner/fm_rank_tables.py'
+      - 'scanner/fm_rank_mips_evidence.py'
+      - 'scanner/dueltrace_rank_profile_live.py'
+      - 'tests/test_fm_rank_mips_evidence.py'
+      - 'tests/test_dueltrace_rank_profile_live.py'
       - 'tests/test_fm_rank_tables.py'
       - 'tests/test_scanner_rapido.py'
       - 'tests/test_dueltrace_drops.py'
@@ -137,7 +146,7 @@ jobs:
         env:
           DUELTRACE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          $identity = @{ schema = 1; run_id = [long]$env:GITHUB_RUN_ID; head_sha = $env:DUELTRACE_HEAD_SHA; version = "0.7.6" } | ConvertTo-Json -Compress
+          $identity = @{ schema = 1; run_id = [long]$env:GITHUB_RUN_ID; head_sha = $env:DUELTRACE_HEAD_SHA; version = "0.7.7" } | ConvertTo-Json -Compress
           [System.IO.File]::WriteAllText((Join-Path (Get-Location) "scanner/dueltrace-build.json"), $identity, [System.Text.UTF8Encoding]::new($false))
       - name: Empacotar UI v0 com motor Python
         shell: pwsh

@@ -16,7 +16,7 @@ from dueltrace_preview_updates import (
     fetch_latest_preview, installed_preview_build_id, version_for_branch
 )
 
-CURRENT_VERSION = "0.7.6"
+CURRENT_VERSION = "0.7.7"
 CURRENT_CHANNEL = "preview"
 RELEASE_API = "https://api.github.com/repos/guibatoni/appassist/releases/latest"
 RELEASE_PAGE = "https://github.com/guibatoni/appassist/releases/latest"
@@ -80,6 +80,7 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
         "previewVersion": None,
         "releasePage": RELEASE_PAGE,
         "automaticInstallReady": False,
+        "previewError": None,
         "automaticInstallReason": "Instalação automática bloqueada: não há instalador público assinado e verificado.",
         "status": "unavailable",
         "updateAvailable": False,
@@ -204,6 +205,9 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
                 urllib.error.URLError, json.JSONDecodeError):
             # Se a API de Actions falhar, preserve a comparação estável.
             result["previewStatus"] = "unavailable"
+            result["previewError"] = ("Consulta de builds indisponível. "
+                                       "O GitHub pode estar fora do ar "
+                                       "ou ter atingido o limite da API.")
             if result["status"] == "unavailable":
                 result["message"] = (
                     "A consulta automática falhou. Você ainda pode abrir "

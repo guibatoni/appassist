@@ -289,6 +289,8 @@ def process(path,output,with_art=False,digest=None,progress=None):
         wa=disc.get(wa_names[0])
         info['executavel']=sl_names[0]
         info['hash_executavel']=hashlib.sha256(sl).hexdigest()
+        from fm_rank_mips_evidence import inspect_mips_rank_routines
+        info['rank_mips_evidence']=inspect_mips_rank_routines(sl)
         info['wa_prefix_bytes']=len(wa)
         info['wa_total_bytes']=disc.files[wa_names[0]][1]
         wa_sha=hashlib.sha256(wa).hexdigest()

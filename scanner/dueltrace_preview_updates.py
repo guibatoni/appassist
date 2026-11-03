@@ -14,7 +14,7 @@ from pathlib import Path
 
 REPO_API = "https://api.github.com/repos/guibatoni/appassist"
 REPO_WEB = "https://github.com/guibatoni/appassist"
-RUNS_API = REPO_API + "/actions/runs?event=push&status=success&per_page=100"
+RUNS_API = REPO_API + "/actions/workflows/validar-webui-desktop.yml/runs?event=push&status=success&per_page=100"
 WORKFLOW_NAME = "Validar integração v0 DUELTRACE Windows"
 ARTIFACT_NAME = "DUELTRACE-Windows-Preview-Unsigned-Security-Scanned"
 BUILD_INFO_FILE = "dueltrace-build.json"
