@@ -172,12 +172,15 @@ export type UpdateCheck = {
   latestStable: string | null
   latestPreview: string | null
   previewRunId: number | null
+  previewVersion: string | null
+  automaticInstallReady: boolean
+  automaticInstallReason: string
   previewPage: string | null
   previewBranch: string | null
   previewBuildSha: string | null
   previewStatus?: "unavailable"
   releasePage: string
-  status: "unavailable" | "update_available" | "up_to_date" | "preview" | "preview_ahead" | "preview_current" | "preview_update_available" | "preview_build_unknown"
+  status: "unavailable" | "update_available" | "up_to_date" | "preview" | "preview_ahead" | "preview_current" | "preview_update_available" | "preview_build_unknown" | "preview_older"
   updateAvailable: boolean
   message: string
 }
