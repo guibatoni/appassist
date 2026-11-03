@@ -73,10 +73,12 @@ def local_handler(directory: Path, bridge: DueltraceWebBridge):
             if origin and origin!=f"http://{expected}":
                 self.send_error(403,"Origin não autorizado")
                 return None
-            raw=urlsplit(self.path).path
+            parsed=urlsplit(self.path)
+            raw=parsed.path
             decoded=unquote(raw)
             parts=decoded.split("/")
-            if (not decoded.startswith("/") or decoded.startswith("//") or
+            if (parsed.scheme or parsed.netloc or self.path.startswith("//") or
+                    not decoded.startswith("/") or decoded.startswith("//") or
                     "\\" in decoded or "\x00" in decoded or
                     unquote(decoded)!=decoded or
                     any(part.startswith(".") for part in parts[1:] if part) or
