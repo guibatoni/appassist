@@ -132,6 +132,7 @@ export function UpdateChecker() {
                 <p className="mt-1 text-xs text-muted">Última estável: <strong className="text-white">{result.latestStable ?? "Indisponível"}</strong></p>
                 <p className="mt-1 text-xs text-muted">Preview encontrada: <strong className="text-white">{result.previewVersion ? "v"+result.previewVersion : "Indisponível"}</strong></p>
                 <p className="mt-1 text-xs text-muted">Preview Windows: <strong className="text-white">{result.previewRunId ? `Build #${result.previewRunId} · ${result.previewBuildSha ?? "SHA indisponível"}` : "Não identificado"}</strong></p>
+                {result.previewError && <p className="mt-2 text-xs text-gold" role="status">{result.previewError}</p>}
                 <p className={"mt-3 flex items-start gap-2 text-sm " + (available ? "text-gold" : "text-foreground/85")}>
                   {available ? <Download className="size-5 shrink-0"/> : <CheckCircle2 className="size-5 shrink-0 text-primary"/>}
                   {result.message}
@@ -149,7 +150,7 @@ export function UpdateChecker() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" onClick={() => void openOfficialPage(result.previewRunId ?? 0)}
                       disabled={opening} className="btn-gold inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50">
-                      {opening ? "Abrindo…" : (result.previewRunId != null ? "Abrir pacote Preview" : "Ver builds Preview")} <ArrowUpRight className="size-4"/>
+                      {opening ? "Abrindo…" : (result.previewRunId != null ? "Abrir prévia no GitHub (manual)" : "Ver builds Preview")} <ArrowUpRight className="size-4"/>
                     </button>
                   <button type="button" onClick={() => void openOfficialPage()}
                     disabled={opening} className="btn-ghost inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50">
