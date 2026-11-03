@@ -21,7 +21,7 @@ from integracao_overlay import overlay_snapshot
 from dueltrace_brand import apply_window_icon
 from dueltrace_visuals import HeroArt, QuickTile, CardArt, CategoryMeters, NAV_SYMBOLS
 from dueltrace_theme import (
-    BACKGROUND,SIDEBAR,PANEL,PANEL_ALT,BLUE,GOLD,GREEN,RED,TEXT,MUTED,
+    BACKGROUND,SIDEBAR,PANEL,PANEL_ALT,BORDER,BLUE,GOLD,GREEN,RED,TEXT,MUTED,
     Panel,NeonButton,setup_theme,text_label,card_stat,
 )
 
@@ -36,7 +36,7 @@ PAGES=(
 class DueltraceDesktop(tk.Tk):
     def __init__(self, *, catalog=None):
         super().__init__()
-        self.title("DUELTRACE — MultiMod Companion · v0.5.1")
+        self.title("DUELTRACE — MultiMod Companion · v0.5.3")
         self.geometry("1480x900")
         self.minsize(1160,770)
         self.configure(background=BACKGROUND)
