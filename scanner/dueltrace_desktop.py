@@ -320,6 +320,11 @@ class DueltraceDesktop(tk.Tk):
         self.card_category_var.trace_add("write",lambda *_:self._refresh_cards())
         self.card_counter=text_label(toolbar,"",color=GOLD,size=10,bg=PANEL)
         self.card_counter.pack(side="right")
+        self.card_sort_var=tk.StringVar(value="ID")
+        ttk.Combobox(toolbar,textvariable=self.card_sort_var,state="readonly",
+                     values=("ID","ATK ↓","DEF ↓","Nome"),width=11,
+                     style="DT.TCombobox").pack(side="right",padx=12)
+        self.card_sort_var.trace_add("write",lambda *_:self._refresh_cards())
         sections=tk.Frame(root,background=BACKGROUND)
         sections.pack(fill="both",expand=True)
         main=Panel(sections);main.pack(side="left",fill="both",expand=True,padx=(0,8))
@@ -329,7 +334,11 @@ class DueltraceDesktop(tk.Tk):
         self.card_tree.bind("<<TreeviewSelect>>",self._on_select_card)
         detail=Panel(sections,width=300);detail.pack(side="left",fill="y",padx=(8,0))
         detail.pack_propagate(False)
-        text_label(detail,"DETALHES DA CARTA",color=BLUE,size=12,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(detail,"CARTA SELECIONADA",color=BLUE,size=12,strong=True,bg=PANEL).pack(anchor="w")
+        self.card_art=CardArt(detail,width=265,height=230)
+        self.card_art.pack(fill="x",pady=(8,6))
+        text_label(detail,"Prévia simbólica · sem arte extraída da ISO",
+                   color=MUTED,size=8,bg=PANEL).pack(anchor="w",pady=(0,7))
         self.card_title=text_label(detail,"Selecione uma carta",color=GOLD,size=12,strong=True,bg=PANEL)
         self.card_title.pack(anchor="w",pady=(15,10))
         self.card_details=text_label(detail,"",color=MUTED,size=10,bg=PANEL)
@@ -352,6 +361,15 @@ class DueltraceDesktop(tk.Tk):
                    and (not query or query in str(x.get("name","")).casefold()
                         or query in str(x.get("id",""))
                         or query in str(x.get("effect_text") or "").casefold())]
+        order=self.card_sort_var.get() if hasattr(self,"card_sort_var") else "ID"
+        if order=="ATK ↓":
+            displayed.sort(key=lambda c:(-(int(c.get("atk") or 0)),int(c.get("id") or 0)))
+        elif order=="DEF ↓":
+            displayed.sort(key=lambda c:(-(int(c.get("def") or 0)),int(c.get("id") or 0)))
+        elif order=="Nome":
+            displayed.sort(key=lambda c:(str(c.get("name") or "").casefold(),int(c.get("id") or 0)))
+        else:
+            displayed.sort(key=lambda c:int(c.get("id") or 0))
         for item in displayed:
             self.card_tree.insert("","end",iid=str(item["id"]),
                 values=(item["id"],item.get("name",""),item.get("category","Não identificado"),
@@ -363,6 +381,7 @@ class DueltraceDesktop(tk.Tk):
         if not ids:return
         card=next((x for x in self.visible_cards if str(x.get("id"))==ids[0]),None)
         if not card:return
+        self.card_art.set_card(card)
         self.card_title.configure(text=f"#{card['id']}  {card.get('name','')}")
         self.card_details.configure(text=(
             f"Categoria: {card.get('category','Não identificado')}\n"
@@ -385,7 +404,9 @@ class DueltraceDesktop(tk.Tk):
         valid=bool(profile and profile.get("supported_features",{}).get("fusions"))
         recipes=profile.get("fusion_recipes",[]) if valid else []
         panel=Panel(root);panel.pack(fill="both",expand=True)
-        text_label(panel,"BANCO DE FUSÕES DO PERFIL",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(panel,"◎   BANCO DE FUSÕES DO PERFIL",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(panel,"Somente receitas obtidas e autorizadas pelo mod ativo. Rotas não validadas continuam indisponíveis.",
+                   color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(7,9))
         tree=self._table(panel,("a","b","result","origin"),
                          (("a","Material A",120),("b","Material B",120),
                           ("result","Resultado",120),("origin","Procedência",300)))
@@ -430,6 +451,10 @@ class DueltraceDesktop(tk.Tk):
                        color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(0,11))
         self._action(left,"Selecionar perfil",lambda:self.go("mods")).pack(anchor="w",pady=6)
         info=Panel(root);info.pack(fill="x",pady=8)
+        text_label(info,"▤  Estado de integração",color=BLUE,size=12,strong=True,
+                   bg=PANEL).pack(anchor="w",pady=(0,8))
+        text_label(info,"LP e estatísticas só aparecerão quando houver telemetria real e validada.",
+                   color=TEXT,size=10,bg=PANEL).pack(anchor="w",pady=(0,10))
         text_label(info,"Leitura de cartas no campo: não validada. "
                         "Fusões envolvendo a mesa continuam desativadas.",
                    color=MUTED,size=11,bg=PANEL).pack(anchor="w")
@@ -440,7 +465,9 @@ class DueltraceDesktop(tk.Tk):
         self._label(root,"Diagnóstico",
                     "Ferramentas técnicas de investigação, somente leitura e sem acesso presumido ao campo.")
         panel=Panel(root);panel.pack(fill="x",pady=8)
-        text_label(panel,"MODO AVANÇADO",color=BLUE,size=14,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(panel,"▥   FERRAMENTAS DE DIAGNÓSTICO",color=BLUE,size=14,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(panel,"Investigação local  •  somente leitura",color=GOLD,size=10,
+                   bg=PANEL).pack(anchor="w",pady=(8,0))
         text_label(panel,"RAM experimental, leitor temporal e revisão de fusões "
                          "permanecem disponíveis na Biblioteca técnica. "
                          "O reconhecimento de cartas no campo não foi validado.",
@@ -456,7 +483,7 @@ class DueltraceDesktop(tk.Tk):
         self._label(root,"Configurações",
                     "Preferências locais. Nenhum arquivo de jogo será modificado.")
         panel=Panel(root);panel.pack(fill="x",pady=8)
-        text_label(panel,"PASTA DE MODS",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(panel,"⚙   PASTA DE MODS",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
         ttk.Entry(panel,textvariable=self.folder,width=80,
                   style="DT.TEntry").pack(fill="x",pady=(12,10))
         self._action(panel,"Escolher pasta",self.choose_folder).pack(anchor="w")
