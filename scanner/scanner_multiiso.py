@@ -21,7 +21,7 @@ WA_CARD_SECTOR_START=722
 WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
-ART_PARSER_REVISION=2  # revisão da validação de imagens e retry da extração
+ART_PARSER_REVISION=3  # arte grande + miniatura 40x32 + moldura autêntica + texto de SLUS
 
 
 def sha256(path:Path, progress=None):
@@ -146,7 +146,11 @@ def decode_names(sl):
     for i in range(1,723):
         name=txt(i) or ''
         packed=struct.unpack_from('<I',sl,SLUS_ATTRIBUTES+(i-1)*4)[0]
-        cards.append({'id':i,'nome':name,'atk':(packed&511)*10,'def':((packed>>9)&511)*10,'tipo':(packed>>26)&31})
+        detail=sl[0x1C5B33+i-1] if 0x1C5B33+i-1<len(sl) else 0
+        cards.append({'id':i,'nome':name,'atk':(packed&511)*10,
+            'def':((packed>>9)&511)*10,'tipo':(packed>>26)&31,
+            'nivel':detail&15,'atributo':(detail>>4)&15,
+            'estrela_1':(packed>>18)&15,'estrela_2':(packed>>22)&15})
     def plausible(s):return bool(s) and len(s)<=64 and '�' not in s and '[' not in s and sum(ch.isalpha() or ch.isdigit() for ch in s)>=2
     n_good=sum(plausible(x['nome']) for x in opponents)
     card_good=sum(plausible(x['nome']) for x in cards)
@@ -250,13 +254,19 @@ def process(path,output,with_art=False,digest=None,progress=None):
         if progress:progress("Lendo índice ISO9660",0,1)
         disc=Disc(path);info['tipo_setor']=disc.sector
         info['arquivos_discos']=[{'nome':n,'lba':lba,'tamanho':sz} for n,(lba,sz) in sorted(disc.files.items())]
-        sl_names=[n for n in disc.files if re.fullmatch(r'SL[UP][A-Z0-9_\.]+',n)]
-        if not sl_names:sl_names=[n for n in disc.files if n.endswith('.EXE')]
-        wa_names=[n for n in disc.files if n.endswith('WA_MRG.MRG')]
+        # SLUS_014.11 pode estar na raiz ou dentro da pasta DATA.
+        sl_names=[n for n in disc.files if re.fullmatch(
+            r'SL[UP][A-Z0-9_.]+',n.rsplit('/',1)[-1])]
+        sl_names=sorted(sl_names,key=lambda x:(
+            x.rsplit('/',1)[-1]!='SLUS_014.11',len(x),x))
+        if not sl_names:
+            sl_names=sorted(n for n in disc.files if n.endswith('.EXE'))
+        wa_names=sorted((n for n in disc.files if n.endswith('WA_MRG.MRG')),
+                        key=lambda x:(not x.startswith('DATA/'),x))
         if not sl_names or not wa_names:
             raise ValueError(f'Layout FM PS1 incompleto; executáveis={sl_names}, WA={wa_names}')
-        # Cartas e artes conhecidas estão antes de ~16 MB dentro do WA.
-        # Não carregar centenas de MB sem necessidade.
+        # O catálogo e as imagens exigem o WA até os pacotes de duelo.
+        # A extração profunda lê o WA completo, não apenas seu prefixo.
         wa_required=max(
             WA_OPP_BASE+(OPP_COUNT-1)*WA_OPP_STEP+3*WA_RANK_STRIDE+WA_ARRAY_BYTES,
             ((CARD_COUNT-1)*WA_CARD_SECTORS+WA_CARD_SECTOR_START)*2048+0x2840,
@@ -264,18 +274,29 @@ def process(path,output,with_art=False,digest=None,progress=None):
         if progress:progress("Lendo executável do jogo",0,1)
         sl=disc.get(sl_names[0])
         if progress:progress("Lendo tabelas necessárias do WA_MRG",0,1)
-        wa=disc.get(wa_names[0],limit_bytes=wa_required)
+        wa_size=disc.files[wa_names[0]][1]
+        if wa_size>96*1024*1024:
+            raise ValueError('WA_MRG maior que 96 MiB: análise interrompida por segurança')
+        wa=disc.get(wa_names[0]) if with_art else disc.get(wa_names[0],limit_bytes=wa_required)
         info['executavel']=sl_names[0]
         info['hash_executavel']=hashlib.sha256(sl).hexdigest()
         info['wa_prefix_bytes']=len(wa)
         info['wa_total_bytes']=disc.files[wa_names[0]][1]
         info['hash_wa_prefix']=hashlib.sha256(wa).hexdigest()
-        # SHA-256 do contêiner COMPLETO não foi calculado; não rotular prefixo como hash inteiro.
-        info['hash_wa']=None
+        info['hash_wa']=hashlib.sha256(wa).hexdigest() if len(wa)==wa_size else None
+        info['wa_lido_integralmente']=len(wa)==wa_size
         info['versao_conhecida']='Remaster X15 1.2.1' if info['sha256']==X15_SHA else 'desconhecida — não atribuir dados X15'
         if progress:progress("Decodificando cartas e adversários",0,1)
         opponents,cards,nomes_status=decode_names(sl)
         info['nomes_status']=nomes_status
+        from fm_card_text import extract_descriptions
+        descriptions,desc_state=extract_descriptions(sl,exe_name=sl_names[0])
+        info['descricoes_slus']=desc_state
+        if cards and desc_state.get('valid'):
+            for card in cards:
+                row=descriptions.get(card['id'])
+                card['descricao']=row['text'] if row else ''
+                card['descricao_fonte']=row['source'] if row else ''
         if opponents:
             write_csv(dest/'oponentes.csv',opponents)
             write_csv(dest/'cartas.csv',cards)
@@ -290,10 +311,16 @@ def process(path,output,with_art=False,digest=None,progress=None):
             info['codificacao_drops']=drops['codificacoes']
         if with_art:
             if opponents:
-                count,desc=art_extract(wa,cards,dest/'artes_722')
-                info['artes_extraidas']=count
-                info['artes_obs']=desc
-                info['artes_origem']="WA_MRG.MRG: 7 setores por carta, 102x96, paleta BGR555"
+                from fm_deep_assets import extract_asset_pack
+                pack=extract_asset_pack(wa,cards,dest,rom_sha256=info['sha256'],
+                                        wa_name=wa_names[0])
+                info['artes_extraidas']=pack['art_count']
+                info['miniaturas_extraidas']=pack['thumbnail_count']
+                info['molduras_extraidas']=pack['frame_count']
+                info['cartas_com_moldura']=pack['composed_count']
+                info['artes_status']=pack['status']
+                info['artes_obs']=' | '.join(pack.get('warnings',[])[:4]) or pack['status']
+                info['artes_origem']='WA_MRG.MRG: arte 102x96, miniatura 40x32 e moldura 52x60 do duelo'
                 info['artes_layout_confirmado_na_versao']=info['sha256']==X15_SHA
             else:
                 info['artes_extraidas']=0

@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 import webbrowser
 
-CURRENT_VERSION = "0.7.2"
+CURRENT_VERSION = "0.7.3"
 CURRENT_CHANNEL = "preview"
 RELEASE_API = "https://api.github.com/repos/guibatoni/appassist/releases/latest"
 RELEASE_PAGE = "https://github.com/guibatoni/appassist/releases/latest"
@@ -39,7 +39,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def fetch_stable_release() -> dict:
     request = urllib.request.Request(RELEASE_API, headers={
         "Accept": "application/vnd.github+json",
-        "User-Agent": "DUELTRACE-VersionChecker/0.7.2",
+        "User-Agent": "DUELTRACE-VersionChecker/0.7.3",
         "X-GitHub-Api-Version": "2022-11-28",
     })
     opener = urllib.request.build_opener(NoRedirect())

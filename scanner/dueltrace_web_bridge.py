@@ -68,6 +68,14 @@ class DueltraceWebBridge:
                 "def": item.get("def") if type(item.get("def")) is int else None,
                 "effect": effect,
                 "effectSource": str(item["effect_source"])[:150] if effect else None,
+                "effectStatus": str(item.get("effect_status") or "não_confirmado")[:120]
+                    if effect else None,
+                "description":str(item.get("description_text") or "")[:550] or None,
+                "descriptionSource":str(item.get("description_source") or "")[:150] or None,
+                "level":item.get("level") if type(item.get("level")) is int else None,
+                "attributeId":item.get("attribute_id") if type(item.get("attribute_id")) is int else None,
+                "guardianStar1":item.get("guardian_star_1") if type(item.get("guardian_star_1")) is int else None,
+                "guardianStar2":item.get("guardian_star_2") if type(item.get("guardian_star_2")) is int else None,
             })
         return sorted(prepared,key=lambda x:x["id"])
 
@@ -81,6 +89,9 @@ class DueltraceWebBridge:
             "cards":summary.get("cards_total",0),
             "fusions":summary.get("fusion_count",0),
             "effects":summary.get("effect_count",0),
+            "descriptions":len([c for c in (profile or {}).get("cards",[])
+                                if c.get("description_text") and c.get("description_source")]),
+            "framedCards":(profile or {}).get("graphic_assets",{}).get("composed_cards",0),
             "requiresReview":summary.get("requires_review",True),
             "verified":summary.get("validated",{}),
         }
@@ -274,6 +285,43 @@ class DueltraceWebBridge:
         self._rank_calibration=None
         self._rank_last_turns=None
         return self.get_state()
+
+    def scan_sources(self, sha):
+        """Releia a ISO local e seus WA_MRG/SLUS; não envie dados à nuvem."""
+        if type(sha) is not str or len(sha)!=64 or any(
+                ch not in "0123456789abcdef" for ch in sha):
+            raise ValueError("Identificador SHA-256 inválido")
+        with self._lock:
+            entry=next((e for e in self.catalog.list() if e.get("sha256")==sha),None)
+            if not entry or not entry.get("source_path"):
+                raise ValueError("Mod não cadastrado")
+            source=Path(entry["source_path"]).resolve(strict=True)
+            if not source.is_file() or source.suffix.lower() not in (".bin",".iso"):
+                raise ValueError("Imagem original não encontrada")
+            # Validar ANTES de reescrever registro ou perfil: uma ISO substituída
+            # não pode destruir o cadastro antigo quando o SHA mudou.
+            from scanner_multiiso import sha256 as hash_image
+            if hash_image(source)!=sha:
+                raise RuntimeError("ISO modificada desde o cadastro; o perfil original foi preservado")
+            updated=self.catalog.analyse(source,with_art=True,force=True)
+            if updated["sha256"]!=sha:
+                raise RuntimeError("A imagem da ISO mudou desde o último cadastro")
+            self._fusion_cache_key=None
+            self._rank_calibration=None
+            analysis=MultiModIntelligence(self.catalog).inspect(source,use_ollama=False)
+            profile=self.catalog.profile_for(updated)
+            graphic=(profile or {}).get("graphic_assets",{})
+            provenance=(profile or {}).get("descriptions_provenance",{})
+            return {
+                "sha256":sha,
+                "artCount":graphic.get("art_count",0),
+                "thumbnailCount":graphic.get("thumbnails",0),
+                "framedCards":graphic.get("composed_cards",0),
+                "descriptionCount":provenance.get("descriptions_attached",0),
+                "effectTexts":provenance.get("effect_descriptions_attached",0),
+                "investigation":analysis.get("state","sem_relatorio"),
+                "status":"Análise local de WA_MRG.MRG e SLUS_014.11 concluída.",
+            }
 
     def import_iso(self):
         if self._file_picker is None:

@@ -54,6 +54,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.activate_mod(sha,acknowledge)
 
+    def scan_sources(self, credential, sha):
+        self._authorize(credential)
+        return self._bridge.scan_sources(sha)
+
     def import_iso(self, credential):
         self._authorize(credential)
         return self._bridge.import_iso()

@@ -35,10 +35,12 @@ class BridgeTests(unittest.TestCase):
         self.profile={
             "rom_sha256":self.sha,
             "scan_result_dir":str(self.analysis),
-            "supported_features":{"cards":True,"art":True,"fusions":True},
+            "supported_features":{"cards":True,"art":True,"fusions":True,"composed_cards":True},
             "verified":{"cartas":"verificado"},
             "cards":[
                 {"id":1,"name":"Carta comprovada","atk":1250,"def":1000,
+                 "level":7,"description_text":"Descrição verificada",
+                 "description_source":"SLUS_014.11:0x1B11F4",
                  "effect_text":"Texto inventado sem fonte"},
                 {"id":2,"name":"Outra carta","atk":300,"def":800,
                  "effect_text":"Efeito com fonte","effect_source":"ROM-offset-auditado"},
@@ -74,6 +76,9 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(snapshot["fusionCount"],2)
         self.assertEqual(snapshot["cards"][0]["name"],"Carta comprovada")
         self.assertIsNone(snapshot["cards"][0]["effect"])
+        self.assertEqual(snapshot["cards"][0]["description"],"Descrição verificada")
+        self.assertEqual(snapshot["cards"][0]["level"],7)
+        self.assertEqual(snapshot["cards"][0]["descriptionSource"],"SLUS_014.11:0x1B11F4")
         self.assertEqual(snapshot["cards"][1]["effect"],"Efeito com fonte")
         self.assertEqual(snapshot["cards"][1]["effectSource"],"ROM-offset-auditado")
         self.assertNotIn("source_path",str(snapshot))
@@ -171,6 +176,7 @@ class BridgeTests(unittest.TestCase):
             ("activate_mod",(self.sha,False)),
             ("import_iso",()),
             ("configure_epsxe",()),
+            ("scan_sources",(self.sha,)),
             ("start_game",()),
         ):
             with self.subTest(method=method):
@@ -282,9 +288,28 @@ class BridgeTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
+    def test_scan_sources_rejects_unregistered_or_missing_source_file(self):
+        with self.assertRaises(ValueError):
+            self.bridge.scan_sources("not-a-sha")
+        with self.assertRaises(ValueError):
+            self.bridge.scan_sources("b"*64)
+        with self.assertRaises(FileNotFoundError):
+            self.bridge.scan_sources(self.sha)
+
+    def test_rescan_does_not_overwrite_registry_for_modified_iso(self):
+        source=self.home/"rom.iso"
+        source.write_bytes(b"changed"*20000)
+        with patch.object(self.catalog,"analyse",side_effect=AssertionError(
+                "Não deve alterar registry após SHA divergente")):
+            with self.assertRaises(RuntimeError):
+                self.bridge.scan_sources(self.sha)
+        self.assertEqual(self.catalog.list()[0]["sha256"],self.sha)
+
     def test_art_route_never_leaks_other_profile_and_denies_post(self):
         (self.analysis/"artes_722").mkdir()
         (self.analysis/"artes_722"/"001.png").write_bytes(b"\x89PNG\r\n\x1a\nSYNTHETIC")
+        (self.analysis/"cartas_com_moldura").mkdir()
+        (self.analysis/"cartas_com_moldura"/"001.png").write_bytes(b"\x89PNG\r\n\x1a\nFRAMED")
         static=self.home/"static"
         static.mkdir()
         (static/"index.html").write_text("<html>DUELTRACE</html>",encoding="utf-8")
@@ -296,6 +321,11 @@ class BridgeTests(unittest.TestCase):
             base="http://127.0.0.1:"+str(server.server_port)
             with urlopen(base+"/__art__/"+self.sha+"/1.png") as response:
                 self.assertTrue(response.read().startswith(b"\x89PNG"))
+            with urlopen(base+"/__card__/"+self.sha+"/1.png") as response:
+                self.assertIn(b"FRAMED",response.read())
+            with self.assertRaises(HTTPError) as foreign_card:
+                urlopen(base+"/__card__/"+"b"*64+"/1.png")
+            self.assertEqual(foreign_card.exception.code,404)
             with self.assertRaises(HTTPError) as bad_sha:
                 urlopen(base+"/__art__/"+"b"*64+"/1.png")
             self.assertEqual(bad_sha.exception.code,404)

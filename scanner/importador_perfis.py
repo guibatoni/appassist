@@ -60,11 +60,27 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     catalog = enrich_cards([
         {"id": integer(r["id"]), "name": r["nome"],
          "atk": integer(r["atk"]), "def": integer(r["def"]),
-         "type_id": integer(r.get("tipo"))}
+         "type_id": integer(r.get("tipo")),
+         "level": integer(r.get("nivel")),
+         "attribute_id": integer(r.get("atributo")),
+         "guardian_star_1": integer(r.get("estrela_1")),
+         "guardian_star_2": integer(r.get("estrela_2"))}
         for r in cards
     ], known_fm_layout=True) if card_ok else []
+    from fm_card_text import attach_descriptions
+    candidate_descriptions={
+        integer(row.get("id")):{"text":row["descricao"],"source":row["descricao_fonte"]}
+        for row in cards if row.get("descricao") and row.get("descricao_fonte")
+    }
+    catalog,description_info=attach_descriptions(catalog,candidate_descriptions)
     effects_info = {"status": "nao_identificados", "count": 0, "sources": [],
                     "effects_executed_in_game_verified": False}
+    if description_info["effect_descriptions_attached"]:
+        effects_info["sources"].append({
+            "status":"slus_card_text",
+            "count":description_info["effect_descriptions_attached"],
+            "source":result.get("executavel"),
+            "effects_executed_in_game_verified":False})
     effect_warnings=[]
     if card_ok:
         # A primeira fonte é o próprio ISO, APENAS quando traz um arquivo
@@ -108,6 +124,8 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "artes": "extraídas" if result.get("artes_extraidas") == 722 else "indisponíveis",
         "categorias": "codigo_fm_padrao" if card_ok else "nao_identificadas",
         "efeitos": effects_info["status"],
+        "descricoes":"texto_slus_extraido" if description_info["descriptions_attached"] else "não_identificadas",
+        "molduras":"extraidas_do_WA" if result.get("molduras_extraidas")==6 else "indisponiveis",
     }
 
     payload = {
@@ -122,6 +140,10 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
             "cards": card_ok, "opponents": opponent_ok, "drops": weights_ok,
             "ranks": known_x15, "scoring": known_x15, "fusions": False,
             "art": result.get("artes_extraidas") == 722,
+            "thumbnails": result.get("miniaturas_extraidas") == 722,
+            "card_frames": result.get("molduras_extraidas") == 6,
+            "composed_cards": result.get("cartas_com_moldura") == 722,
+            "descriptions": description_info["descriptions_attached"] > 0,
             "categories": card_ok,
             "effects": effects_info["count"] > 0,
         },
@@ -131,6 +153,16 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "cards": catalog,
         "category_counts": category_summary(catalog),
         "effects_provenance": effects_info,
+        "descriptions_provenance": {
+            **description_info,
+            "slus_report":result.get("descricoes_slus",{}),
+            "source":result.get("executavel")},
+        "graphic_assets": {
+            "art_count":result.get("artes_extraidas",0),
+            "thumbnails":result.get("miniaturas_extraidas",0),
+            "frames":result.get("molduras_extraidas",0),
+            "composed_cards":result.get("cartas_com_moldura",0),
+            "manifest":"recursos_wa.json" if result.get("miniaturas_extraidas") else None},
         "opponents": [
             {"id": integer(r["id"]), "name": r["nome"]} for r in opponents
         ] if opponent_ok else [],

@@ -12,7 +12,25 @@ export type LocalCard = {
   def: number | null
   effect: string | null
   effectSource: string | null
+  effectStatus?: string | null
+  description?: string | null
+  descriptionSource?: string | null
+  level?: number | null
+  attributeId?: number | null
+  guardianStar1?: number | null
+  guardianStar2?: number | null
   slot?: number
+}
+
+export type DeepScanResult = {
+  sha256: string
+  artCount: number
+  thumbnailCount: number
+  framedCards: number
+  descriptionCount: number
+  effectTexts: number
+  investigation: string
+  status: string
 }
 
 export type LocalMod = {
@@ -22,6 +40,8 @@ export type LocalMod = {
   cards: number
   fusions: number
   effects: number
+  descriptions?: number
+  framedCards?: number
   requiresReview: boolean
 }
 
@@ -115,6 +135,7 @@ export interface DesktopAPI {
   confirm_rank_lp(lifePoints: number): Promise<RankState>
   get_fusions(query: string, offset: number, limit: number): Promise<FusionPage>
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
+  scan_sources(sha: string): Promise<DeepScanResult>
   import_iso(): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(): Promise<{started: boolean; status: string}>
@@ -129,6 +150,7 @@ interface ProtectedNativeAPI {
   confirm_rank_lp(token: string, lifePoints: number): Promise<RankState>
   get_fusions(token: string, query: string, offset: number, limit: number): Promise<FusionPage>
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
+  scan_sources(token: string, sha: string): Promise<DeepScanResult>
   import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(token: string): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(token: string): Promise<{started: boolean; status: string}>
@@ -157,6 +179,7 @@ export function desktopApi(): DesktopAPI | null {
     confirm_rank_lp: (lifePoints) => native.confirm_rank_lp(token, lifePoints),
     get_fusions: (query, offset, limit) => native.get_fusions(token, query, offset, limit),
     activate_mod: (sha, acknowledge) => native.activate_mod(token, sha, acknowledge),
+    scan_sources: (sha) => native.scan_sources(token, sha),
     import_iso: () => native.import_iso(token),
     configure_epsxe: () => native.configure_epsxe(token),
     start_game: () => native.start_game(token),
@@ -201,6 +224,12 @@ export function useDesktopState() {
   }, [refresh, state])
 
   return {state, error, loading, refresh}
+}
+
+export function cardWithFrame(activeSha: string | null, id: number): string | null {
+  if (!activeSha || !/^[a-f0-9]{64}$/.test(activeSha) ||
+      !Number.isInteger(id) || id < 1 || id > 722) return null
+  return `/__card__/${activeSha}/${id}.png`
 }
 
 export function cardArt(activeSha: string | null, id: number): string | null {
