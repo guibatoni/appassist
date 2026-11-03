@@ -1,4 +1,5 @@
 import { ShieldCheck } from "lucide-react"
+import { UpdateChecker } from "./update-checker"
 
 function Logo() {
   return (
@@ -31,9 +32,12 @@ export function TopBar() {
   return (
     <header className="flex items-center justify-between gap-4 px-4 pb-3 pt-4 sm:px-6 lg:px-8 lg:pt-5">
       <Logo />
-      <div className="hidden items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary sm:flex">
-        <ShieldCheck className="size-5" />
-        <span>Interface local · Windows</span>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <UpdateChecker />
+        <div className="hidden items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary xl:flex">
+          <ShieldCheck className="size-5" />
+          <span>Interface local · Windows</span>
+        </div>
       </div>
     </header>
   )

@@ -22,6 +22,14 @@ class ProtectedDesktopApi:
                 credential,self._token):
             raise PermissionError("Acesso não autorizado à API local.")
 
+    def check_updates(self, credential):
+        self._authorize(credential)
+        return self._bridge.check_updates()
+
+    def open_updates_page(self, credential):
+        self._authorize(credential)
+        return self._bridge.open_updates_page()
+
     def get_state(self, credential):
         self._authorize(credential)
         return self._bridge.get_state()

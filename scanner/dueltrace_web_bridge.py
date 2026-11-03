@@ -20,6 +20,7 @@ from dueltrace_fusion_planner import plan_fusion_chains
 from dueltrace_rank_live import (model_available, read_rank_candidate,
                                  project_lp_win_rank)
 from epsxe_launcher import launch_epsxe
+from dueltrace_update_checker import check_for_updates, open_official_releases
 
 
 class DueltraceWebBridge:
@@ -83,6 +84,16 @@ class DueltraceWebBridge:
             "requiresReview":summary.get("requires_review",True),
             "verified":summary.get("validated",{}),
         }
+
+    def check_updates(self):
+        """Consulta somente o endpoint público de releases, sob demanda."""
+        return check_for_updates()
+
+    def open_updates_page(self):
+        """Abre no navegador padrão apenas a página oficial de releases."""
+        if not open_official_releases():
+            raise RuntimeError("Não foi possível abrir o navegador padrão.")
+        return {"opened":True}
 
     def get_state(self):
         with self._lock:

@@ -162,6 +162,8 @@ class BridgeTests(unittest.TestCase):
         protected=ProtectedDesktopApi(self.bridge,secret)
         for method,params in (
             ("get_state",()),
+            ("check_updates",()),
+            ("open_updates_page",()),
             ("get_hand",()),
             ("get_fusions",("",0,10)),
             ("get_rank",()),
@@ -177,6 +179,21 @@ class BridgeTests(unittest.TestCase):
                         getattr(protected,method)(credential,*params)
         self.assertEqual(protected.get_state(secret)["activeSha"],self.sha)
         self.assertEqual(len(protected.get_hand(secret)["hand"]),5)
+
+    def test_updates_bridge_is_explicit_and_does_not_download(self):
+        from unittest.mock import patch
+        with patch("dueltrace_web_bridge.check_for_updates",return_value={
+            "status":"preview_ahead","currentVersion":"0.7.2","latestStable":"v0.6.6",
+            "updateAvailable":False,"message":"Prévia mais nova",
+            "channel":"preview","releasePage":"https://github.com/guibatoni/appassist/releases/latest"
+        }) as check:
+            result=self.bridge.check_updates()
+        self.assertEqual(result["status"],"preview_ahead")
+        check.assert_called_once_with()
+        with patch("dueltrace_web_bridge.open_official_releases",return_value=True) as opener:
+            self.assertEqual(self.bridge.open_updates_page(),{"opened":True})
+            opener.assert_called_once_with()
+
 
     def test_capability_only_injected_into_exact_loopback_origin(self):
         origin="http://127.0.0.1:49321/"
