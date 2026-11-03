@@ -13,7 +13,7 @@ import urllib.request
 import webbrowser
 
 from dueltrace_preview_updates import (
-    fetch_latest_preview, installed_preview_build_id, BRANCH_VERSIONS
+    fetch_latest_preview, installed_preview_build_id, version_for_branch
 )
 
 CURRENT_VERSION = "0.7.5"
@@ -142,20 +142,15 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
                 branch = preview.get("branch")
                 sha = preview.get("head_sha")
                 if (type(run_id) is not int or not 0 < run_id < 10**15
-                        or branch not in (
-                            "security/dueltrace-trusted-distribution-v073",
-                            "feature/dueltrace-v074-drops-ranks-frames",
-                            "feature/dueltrace-v075-rank-forensics-safe-updater",
-                            "feature/dueltrace-v073-assets-hardening",
-                            "fix/dueltrace-v073-preview-update-button")
+                        or version_for_branch(branch) is None
                         or not isinstance(sha, str)
                         or not re.fullmatch(r"[0-9a-f]{40}", sha)
                         or preview.get("page") !=
                         f"https://github.com/guibatoni/appassist/actions/runs/{run_id}"):
                     raise ValueError("Build Preview com origem inválida.")
-                remote_label = preview.get("version", BRANCH_VERSIONS.get(branch))
+                remote_label = preview.get("version", version_for_branch(branch))
                 remote_version = parse_version(remote_label)
-                if remote_version is None or remote_label != BRANCH_VERSIONS.get(branch):
+                if remote_version is None or remote_label != version_for_branch(branch):
                     raise ValueError("Versão Preview não corresponde à branch publicada.")
                 result["latestPreview"] = f"v{remote_label} Preview (não assinado)"
                 result["previewVersion"] = remote_label
