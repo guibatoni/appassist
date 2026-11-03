@@ -30,6 +30,14 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_hand()
 
+    def get_rank(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_rank()
+
+    def confirm_rank_lp(self, credential, life_points):
+        self._authorize(credential)
+        return self._bridge.confirm_rank_lp(life_points)
+
     def get_fusions(self, credential, query="", offset=0, limit=100):
         self._authorize(credential)
         return self._bridge.get_fusions(query,offset,limit)
