@@ -96,7 +96,19 @@ export type RankState = {
   final?: boolean
 }
 
+export type UpdateCheck = {
+  currentVersion: string
+  channel: "stable" | "preview"
+  latestStable: string | null
+  releasePage: string
+  status: "unavailable" | "update_available" | "up_to_date" | "preview" | "preview_ahead"
+  updateAvailable: boolean
+  message: string
+}
+
 export interface DesktopAPI {
+  check_updates(): Promise<UpdateCheck>
+  open_updates_page(): Promise<{opened: boolean}>
   get_state(): Promise<DesktopState>
   get_hand(): Promise<HandState>
   get_rank(): Promise<RankState>
@@ -109,6 +121,8 @@ export interface DesktopAPI {
 }
 
 interface ProtectedNativeAPI {
+  check_updates(token: string): Promise<UpdateCheck>
+  open_updates_page(token: string): Promise<{opened: boolean}>
   get_state(token: string): Promise<DesktopState>
   get_hand(token: string): Promise<HandState>
   get_rank(token: string): Promise<RankState>
@@ -135,6 +149,8 @@ export function desktopApi(): DesktopAPI | null {
   const token = window.__DUELTRACE_TOKEN__
   if (!native || typeof token !== "string" || token.length < 32) return null
   return {
+    check_updates: () => native.check_updates(token),
+    open_updates_page: () => native.open_updates_page(token),
     get_state: () => native.get_state(token),
     get_hand: () => native.get_hand(token),
     get_rank: () => native.get_rank(token),
