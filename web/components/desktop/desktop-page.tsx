@@ -6,7 +6,7 @@ import {
   AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, FilePlus2, Gamepad2,
   GitMerge, Layers, Play, RefreshCcw, Search, Shield, Swords, Upload,
 } from "lucide-react"
-import {cardArt, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
+import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
 import type {LocalCard, HandState, FusionPage, LocalMod, RankState} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes"
@@ -19,10 +19,14 @@ function Heading({title,subtitle}:{title:string;subtitle:string}) {
 }
 
 function CardThumbnail({card,sha}:{card:LocalCard|null;sha:string|null}) {
-  const [broken,setBroken]=useState(false)
-  const url=card?cardArt(sha,card.id):null
+  const [source,setSource]=useState<"composite"|"large"|"none">("composite")
+  useEffect(()=>setSource("composite"),[sha,card?.id])
+  const framed=card?cardWithFrame(sha,card.id):null
+  const large=card?cardArt(sha,card.id):null
+  const url=source==="composite"?framed:source==="large"?large:null
   return <div className="relative mx-auto flex aspect-[3/4] w-full max-w-32 items-center justify-center overflow-hidden rounded-lg border-2 border-gold/50 bg-gradient-to-b from-[#19466d] via-[#102449] to-[#060e23] p-2 shadow-[0_0_18px_rgb(56_200_255/0.18)]">
-    {url&&!broken?<Image src={url} alt={card?.name??""} fill unoptimized sizes="160px" className="object-contain" onError={()=>setBroken(true)}/>:
+    {url?<Image src={url} alt={card?.name??""} fill unoptimized sizes="160px" className="object-contain p-1"
+      onError={()=>setSource(source==="composite"?"large":"none")}/>:
       <Layers className="size-9 text-primary/45" aria-label="Imagem não extraída"/>}
     {card&&<span className="absolute left-1 top-1 rounded bg-black/70 px-1 text-[10px] text-gold">#{card.id}</span>}
   </div>
@@ -273,6 +277,12 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
             <p className="text-sm text-primary">ATK {chosen.atk??"—"} · DEF {chosen.def??"—"}</p>
             <p className="mt-2 text-sm text-muted">Tipo: {chosen.type||"Não identificado"}</p>
             <p className="text-sm text-muted">Categoria: {chosen.category}</p>
+            {chosen.level!==null&&chosen.level!==undefined&&<p className="text-sm text-muted">Nível: {chosen.level} · Atributo ID: {chosen.attributeId??"—"}</p>}
+            <div className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3">
+              <h3 className="mb-1 font-semibold text-gold">Descrição extraída do SLUS</h3>
+              <p className="whitespace-pre-line text-sm text-foreground/85">{chosen.description??"Nenhuma descrição vinculada com segurança ao ID desta carta."}</p>
+              {chosen.descriptionSource&&<p className="mt-2 break-all text-[11px] text-muted">Fonte: {chosen.descriptionSource}</p>}
+            </div>
             <div className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3">
               <h3 className="mb-1 font-semibold text-primary">Efeito com fonte</h3>
               <p className="text-sm text-foreground/85">{chosen.effect??"Efeito não identificado de forma verificável."}</p>
@@ -298,6 +308,9 @@ function FusionIllustration({id,name,sha,card,role}:{
     </div>
     <span className="text-center text-[11px] font-semibold text-gold">#{id}</span>
     <span className="line-clamp-2 min-h-8 break-words text-center text-xs font-medium text-foreground">{name}</span>
+    {displayed.category==="Monstros"&&<span className="text-center text-[10px] font-semibold tabular-nums text-primary">
+      ATK {displayed.atk??"—"} · DEF {displayed.def??"—"}
+    </span>}
   </div>
 }
 
@@ -345,7 +358,9 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/50 pt-2">
             <span className="text-xs text-muted">{sourceLabel(r.source)}</span>
-            <span className="text-sm font-semibold tabular-nums text-primary">ATK {r.atk??"—"}</span>
+            <span className="text-sm font-semibold tabular-nums text-primary">
+              ATK {cardsById.get(r.result)?.atk??r.atk??"—"} · DEF {cardsById.get(r.result)?.def??"—"}
+            </span>
           </div>
         </article>)}
       </div>
