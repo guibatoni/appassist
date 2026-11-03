@@ -282,7 +282,7 @@ def process(path,output,with_art=False,digest=None,progress=None):
         if wa_size>96*1024*1024:
             raise ValueError('WA_MRG maior que 96 MiB: análise interrompida por segurança')
         if wa_size<wa_required:
-            raise ValueError('WA_MRG muito curto: tabelas de drops/ranqueamento incompletas')
+            info['wa_incompleto_para_layout_x15']=True
         # O RANK pode estar deslocado em outros mods. Sem a leitura integral,
         # um scan sem artes ignorava os últimos 216 bytes do bloco conhecido
         # e nunca conseguiria identificar tabelas realocadas.
