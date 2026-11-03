@@ -181,6 +181,22 @@ function Mods({mods,sha,onRefresh,configured}:{
 }) {
   const [busy,setBusy]=useState(false)
   const [message,setMessage]=useState<string|null>(null)
+  const rescan=async(mod:LocalMod)=>{
+    const api=desktopApi()
+    if(!api)return
+    setBusy(true);setMessage(null)
+    try{
+      const result=await api.scan_sources(mod.sha256)
+      await onRefresh()
+      setMessage("WA/SLUS analisados: "+result.artCount+" artes, "+
+        result.framedCards+" com moldura, "+
+        result.descriptionCount+" descrições e "+
+        result.effectTexts+" textos indicativos de efeitos. "+
+        "A execução dos efeitos no jogo não foi confirmada.")
+    }catch(e){
+      setMessage(e instanceof Error?e.message:"Falha na análise local dos arquivos")
+    }finally{setBusy(false)}
+  }
   const run=async (action:()=>Promise<unknown>,label:string)=>{
     setBusy(true);setMessage(null)
     try{const result=await action();await onRefresh();setMessage(label)}
@@ -210,8 +226,9 @@ function Mods({mods,sha,onRefresh,configured}:{
             <p className="truncate font-semibold text-white">{mod.name}</p>
             <p className="mt-1 text-xs text-muted">{mod.sha256.slice(0,18)}…</p>
           </div><span className={sha===mod.sha256?"text-xs text-success":"text-xs text-gold"}>{sha===mod.sha256?"Ativo":mod.requiresReview?"Revisão necessária":"Conhecido"}</span></div>
-          <div className="my-4 grid grid-cols-3 gap-2 text-center">
-            {([["Cartas",mod.cards],["Fusões",mod.fusions],["Efeitos",mod.effects]] as const).map(([label,n])=>
+          <div className="my-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-5">
+            {([["Cartas",mod.cards],["Fusões",mod.fusions],["Efeitos",mod.effects],
+              ["Descrições",mod.descriptions??0],["Molduras",mod.framedCards??0]] as const).map(([label,n])=>
               <div key={label} className="rounded-lg border border-line/50 bg-background/70 p-2"><p className="font-display text-xl text-primary">{n}</p><p className="text-xs text-muted">{label}</p></div>)}
           </div>
           <button type="button" disabled={busy||!desktopApi()||sha===mod.sha256}
@@ -219,6 +236,11 @@ function Mods({mods,sha,onRefresh,configured}:{
               const ok=!mod.requiresReview||window.confirm("O mod requer revisão. Ativar somente os dados comprovados?")
               if(ok)void run(()=>desktopApi()!.activate_mod(mod.sha256,mod.requiresReview),"Perfil ativado.")
             }}>{sha===mod.sha256?"Perfil ativo":"Ativar perfil"}</button>
+          <button type="button" className="btn-ghost mt-2 w-full disabled:opacity-40"
+            disabled={busy||!desktopApi()}
+            onClick={()=>void rescan(mod)}>
+            <RefreshCcw className="size-4"/> Ler WA_MRG + SLUS novamente
+          </button>
         </div>)}
       </div>
       {!mods.length&&<Empty>Nenhum mod cadastrado. Importe uma ISO/BIN na versão Windows. Os arquivos não são enviados ao Vercel.</Empty>}
