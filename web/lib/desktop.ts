@@ -12,6 +12,7 @@ export type LocalCard = {
   def: number | null
   effect: string | null
   effectSource: string | null
+  effectStatus?: string | null
   description?: string | null
   descriptionSource?: string | null
   level?: number | null
