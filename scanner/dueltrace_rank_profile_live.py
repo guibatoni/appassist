@@ -37,8 +37,9 @@ def validate_live_rank_binding(profile: dict | None) -> dict | None:
             or type(binding.get("verified_duels")) is not int
             or binding["verified_duels"] < 2):
         return None
+    # Host pointer do processo ePSXe (não o endereço MIPS 0x80000000).
     address=binding.get("record_address")
-    if type(address) is not int or not 0x80000000 <= address <= 0x801FFFFF:
+    if type(address) is not int or not 0x10000 <= address <= 0xFFFFFFFF:
         return None
     if type(binding.get("record_length")) is not int or not 28 <= binding["record_length"] <= 256:
         return None
