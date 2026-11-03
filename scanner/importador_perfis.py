@@ -13,6 +13,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from scanner_multiiso import process, sha256, X15_SHA
+from card_catalog import enrich_cards, attach_effect_manifest, effect_sidecar_path, category_summary
 
 SCHEMA = 1
 LABELS_X15 = ["Z-POW", "S-POW", "S-TEC"]
@@ -53,6 +54,24 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         integer(r.get("peso_total")) == 2048 for r in checks
     ) and len(drops) > 0)
 
+    # Códigos de tipo extraídos do executável; não inferimos por nome.
+    # Textos de efeito são opcionais e externos quando o mod os fornece.
+    catalog = enrich_cards([
+        {"id": integer(r["id"]), "name": r["nome"],
+         "atk": integer(r["atk"]), "def": integer(r["def"]),
+         "type_id": integer(r.get("tipo"))}
+        for r in cards
+    ], known_fm_layout=True) if card_ok else []
+    effects_info = {"status": "nao_fornecido", "count": 0}
+    effect_warning = None
+    if card_ok:
+        try:
+            catalog, effects_info = attach_effect_manifest(
+                catalog, effect_sidecar_path(iso), rom_sha256=result["sha256"])
+        except (OSError, ValueError, UnicodeError) as exc:
+            # Nenhum efeito é atribuído se o manifesto for inválido.
+            effect_warning = str(exc)[:240]
+
     groups = []
     if weights_ok:
         for r in checks:
@@ -68,6 +87,8 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "regras_de_pontuacao": "verificado_x15" if known_x15 else "não_extraídas",
         "fusoes": "não_extraídas",
         "artes": "extraídas" if result.get("artes_extraidas") == 722 else "indisponíveis",
+        "categorias": "codigo_fm_padrao" if card_ok else "nao_identificadas",
+        "efeitos": effects_info["status"],
     }
 
     payload = {
@@ -82,16 +103,15 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
             "cards": card_ok, "opponents": opponent_ok, "drops": weights_ok,
             "ranks": known_x15, "scoring": known_x15, "fusions": False,
             "art": result.get("artes_extraidas") == 722,
+            "categories": card_ok,
+            "effects": effects_info["count"] > 0,
         },
         "rank_labels": LABELS_X15 if known_x15 else None,
         "drop_group_labels": groups if weights_ok else [],
         "art_root": str((extracted / "artes_722").resolve()) if status["artes"] == "extraídas" else None,
-        "cards": [
-            {"id": integer(r["id"]), "name": r["nome"],
-             "atk": integer(r["atk"]), "def": integer(r["def"]),
-             "type_id": integer(r.get("tipo"))}
-            for r in cards
-        ] if card_ok else [],
+        "cards": catalog,
+        "category_counts": category_summary(catalog),
+        "effects_provenance": effects_info,
         "opponents": [
             {"id": integer(r["id"]), "name": r["nome"]} for r in opponents
         ] if opponent_ok else [],
@@ -114,6 +134,10 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
             "Imagem original nunca é alterada; as artes permanecem em pasta local.",
         ],
     }
+    if effect_warning:
+        payload["notes"].append("Manifesto de efeitos ignorado: " + effect_warning)
+    if effects_info["count"]:
+        payload["notes"].append("Efeitos fornecidos por manifesto local e SHA coincidente; não extraídos nem confirmados na ISO.")
     if not all([card_ok, opponent_ok, weights_ok]):
         payload["notes"].append("Perfil incompleto: informações ausentes NÃO são inferidas.")
     return payload
