@@ -14,6 +14,31 @@ MAX_CRITERIA = 32
 MAX_STEPS = 12
 
 
+def x15_compatible_runtime(profile: dict | None) -> bool:
+    """Compartilha o motor X15 apenas se SLUS e toda tabela RANK forem idênticos.
+
+    Diferente de comparar título, nome da ISO ou skin. Ainda requer confirmar
+    os LP observados na sessão para autorizar projeção em tempo real.
+    """
+    from fm_rank_tables import (
+        KNOWN_X15_SLUS_SHA256, KNOWN_X15_TABLE_SHA256, LEGACY_OFFSET, STRIDE
+    )
+    if not isinstance(profile,dict):
+        return False
+    info=profile.get("rank_points")
+    if not isinstance(info,dict):
+        return False
+    return (
+        profile.get("exe_sha256")==KNOWN_X15_SLUS_SHA256
+        and info.get("table_sha256")==KNOWN_X15_TABLE_SHA256
+        and info.get("structure_verified") is True
+        and info.get("first_offset")==LEGACY_OFFSET
+        and info.get("repeat_stride")==STRIDE
+        and info.get("available") is True
+    )
+
+
+
 def validate_live_rank_binding(profile: dict | None) -> dict | None:
     if not isinstance(profile, dict):
         return None
