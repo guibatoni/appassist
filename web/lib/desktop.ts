@@ -116,6 +116,9 @@ export type DropRow = {
   group: string
   cardId: number
   cardName: string
+  category: string
+  atk: number | null
+  def: number | null
   weight: number
   chancePercent: number
   sourceOffset: string | null
