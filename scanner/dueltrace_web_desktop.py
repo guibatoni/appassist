@@ -226,7 +226,9 @@ def main():
         def pick_file(kind):
             file_types=(
                 ("Imagens de jogo (*.iso;*.bin)",)
-                if kind=="iso" else ("Executável ePSXe (*.exe)",))
+                if kind=="iso" else
+                ("Log MIPS de duelo (*.log;*.txt)",) if kind=="trace" else
+                ("Executável ePSXe (*.exe)",))
             return window.create_file_dialog(
                 webview.FileDialog.OPEN,allow_multiple=False,
                 file_types=file_types)
