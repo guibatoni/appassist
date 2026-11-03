@@ -115,7 +115,7 @@ export function DropsPage({sha}:{sha:string|null}) {
     setTraceBusy(true)
     setTraceError(null)
     try{
-      const result=await api.import_rank_trace()
+      const result=await api.import_rank_trace(duelEvidence?.lastDuelId??null)
       if(!result.cancelled)setTraceInfo({status:"updated",last:result,records:(traceInfo?.records??0)+1})
     }catch(e){
       setTraceError(e instanceof Error?e.message:"Não foi possível importar log MIPS.")
@@ -291,13 +291,14 @@ export function DropsPage({sha}:{sha:string|null}) {
       <div className="mt-4 border-t border-line/50 pt-3">
         <h3 className="font-semibold text-gold">Auditoria de execução MIPS do duelo</h3>
         <p className="mt-1 text-xs text-muted">
-          Importe um arquivo .log ou .txt de instruções executadas exportado pelo depurador do emulador durante um duelo.
+          Importe um arquivo .log ou .txt de instruções executadas exportado pelo depurador do emulador durante um duelo. Quando houver um resultado registrado, o trace será associado explicitamente ao último duelo.
           O analisador compara os PCs executados com os candidatos do SLUS deste mod, sem enviar o log para a internet.
         </p>
         <button type="button" className="btn-ghost mt-2" disabled={traceBusy||!desktopApi()}
           onClick={()=>void importTrace()}>{traceBusy?"Analisando log…":"Importar log MIPS de duelo"}</button>
         {traceError&&<p className="mt-2 text-xs text-danger" role="alert">{traceError}</p>}
-        {traceInfo?.last&&<div className="mt-2 text-xs text-muted">
+        {(traceInfo?.correlatedDuels??0)>0&&<p className="mt-2 text-xs text-primary">{traceInfo?.correlatedDuels} duelo(s) com projeção de pontos igual à nota registrada e PCs candidatos observados. Isso é correlação, não prova de causalidade MIPS.</p>}
+      {traceInfo?.last&&<div className="mt-2 text-xs text-muted">
           <p>Último trace: {traceInfo.last.status} · PCs distintos: {traceInfo.last.distinctPCs??"—"}
             {" "}· Instruções amostradas: {traceInfo.last.instructionSamples??"—"}</p>
           {traceInfo.last.executedCandidates?.map(x=>
