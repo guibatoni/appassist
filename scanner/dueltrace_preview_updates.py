@@ -15,9 +15,9 @@ from urllib.parse import quote
 REPO_API = "https://api.github.com/repos/guibatoni/appassist"
 REPO_WEB = "https://github.com/guibatoni/appassist"
 PREVIEW_BRANCHES = (
-    "security/dueltrace-trusted-distribution-v073",
     "fix/dueltrace-v073-preview-update-button",
     "feature/dueltrace-v073-assets-hardening",
+    "security/dueltrace-trusted-distribution-v073",
 )
 ARTIFACT_NAME = "DUELTRACE-Windows-Preview-Unsigned-Security-Scanned"
 BUILD_INFO_FILE = "dueltrace-build.json"
