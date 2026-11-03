@@ -52,6 +52,8 @@ export type LocalMod = {
   rankDetected?: boolean
   rankBinaryVerified?: boolean
   rankOffset?: number | null
+  rankMipsCandidates?: number
+  rankMipsConfirmed?: boolean
   requiresReview: boolean
 }
 
