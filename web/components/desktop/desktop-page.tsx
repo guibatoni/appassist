@@ -333,6 +333,9 @@ function FusionIllustration({id,name,sha,card,role,palettes}:{
     </div>
     <span className="text-center text-[11px] font-semibold text-gold">#{id}</span>
     <span className="line-clamp-2 min-h-8 break-words text-center text-xs font-medium text-foreground">{name}</span>
+    <span className="text-center text-[11px] font-semibold tabular-nums text-primary">
+      ATK {card?.atk??"—"} · DEF {card?.def??"—"}
+    </span>
   </div>
 }
 
