@@ -14,7 +14,7 @@ import webbrowser
 
 from dueltrace_preview_updates import fetch_latest_preview, installed_preview_build_id
 
-CURRENT_VERSION = "0.7.3"
+CURRENT_VERSION = "0.7.4"
 CURRENT_CHANNEL = "preview"
 RELEASE_API = "https://api.github.com/repos/guibatoni/appassist/releases/latest"
 RELEASE_PAGE = "https://github.com/guibatoni/appassist/releases/latest"
@@ -139,6 +139,7 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
                 if (type(run_id) is not int or not 0 < run_id < 10**15
                         or branch not in (
                             "security/dueltrace-trusted-distribution-v073",
+                            "feature/dueltrace-v074-drops-ranks-frames",
                             "feature/dueltrace-v073-assets-hardening",
                             "fix/dueltrace-v073-preview-update-button")
                         or not isinstance(sha, str)
