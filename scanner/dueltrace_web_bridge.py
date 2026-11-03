@@ -108,6 +108,8 @@ class DueltraceWebBridge:
             "rankDetected":(profile or {}).get("rank_points",{}).get("available") is True,
             "rankBinaryVerified":(profile or {}).get("rank_points",{}).get("binary_verified") is True,
             "rankOffset":(profile or {}).get("rank_points",{}).get("first_offset"),
+            "rankMipsCandidates":len((profile or {}).get("rank_mips_evidence",{}).get("candidates",[])),
+            "rankMipsConfirmed":(profile or {}).get("rank_mips_evidence",{}).get("rank_routine_confirmed") is True,
             "requiresReview":summary.get("requires_review",True),
             "verified":summary.get("validated",{}),
         }
