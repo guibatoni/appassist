@@ -218,8 +218,8 @@ function Mods({mods,sha,onRefresh,configured}:{
             <p className="truncate font-semibold text-white">{mod.name}</p>
             <p className="mt-1 text-xs text-muted">{mod.sha256.slice(0,18)}…</p>
           </div><span className={sha===mod.sha256?"text-xs text-success":"text-xs text-gold"}>{sha===mod.sha256?"Ativo":mod.requiresReview?"Revisão necessária":"Conhecido"}</span></div>
-          <div className="my-4 grid grid-cols-3 gap-2 text-center">
-            {([["Cartas",mod.cards],["Fusões",mod.fusions],["Efeitos",mod.effects]] as const).map(([label,n])=>
+          <div className="my-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+            {([["Cartas",mod.cards],["Descrições",mod.descriptions??0],["Fusões",mod.fusions],["Efeitos",mod.effects]] as const).map(([label,n])=>
               <div key={label} className="rounded-lg border border-line/50 bg-background/70 p-2"><p className="font-display text-xl text-primary">{n}</p><p className="text-xs text-muted">{label}</p></div>)}
           </div>
           <button type="button" disabled={busy||!desktopApi()}
@@ -304,6 +304,14 @@ function Library({cards,sha,palettes}:{cards:LocalCard[];sha:string|null;palette
               <h3 className="mb-1 font-semibold text-primary">Efeito com fonte</h3>
               <p className="text-sm text-foreground/85">{chosen.effect??"Efeito não identificado de forma verificável."}</p>
               {chosen.effectSource&&<p className="mt-2 text-xs text-gold">Fonte: {chosen.effectSource}</p>}
+              {!chosen.effect&&chosen.effectHint&&
+                <div className="mt-3 rounded-lg border border-gold/30 bg-gold/5 p-2">
+                  <p className="text-xs font-semibold text-gold">Possível efeito citado na descrição</p>
+                  <p className="mt-1 whitespace-pre-line text-xs text-foreground/85">{chosen.effectHint}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Texto do SLUS; efeito ainda não confirmado no jogo.
+                  </p>
+                </div>}
             </div></>:<Empty>Selecione uma carta.</Empty>}
         </aside>
       </div>
