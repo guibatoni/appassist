@@ -278,6 +278,23 @@ class DueltraceDesktop(tk.Tk):
         self._action(toolbar,"Escanear pasta",self.choose_folder).pack(side="left",padx=(0,9))
         self._action(toolbar,"Reanalisar pasta",self.scan_folder).pack(side="left")
         self._action(toolbar,"Ativar perfil",self.activate_selected,accent=GREEN).pack(side="right")
+        automation=Panel(root)
+        automation.pack(fill="x",pady=(0,12))
+        left=tk.Frame(automation,background=PANEL)
+        left.pack(side="left",fill="x",expand=True)
+        tk.Checkbutton(left,text="Investigar com Ollama local (quando disponível)",
+                       variable=self.ai_enabled,command=self._save_settings,
+                       bg=PANEL,fg=TEXT,activebackground=PANEL,
+                       activeforeground=TEXT,selectcolor=PANEL_ALT,
+                       font=("Segoe UI",10)).pack(anchor="w")
+        tk.Checkbutton(left,text="Extrair artes locais dos formatos reconhecidos",
+                       variable=self.art_enabled,command=self._save_settings,
+                       bg=PANEL,fg=TEXT,activebackground=PANEL,
+                       activeforeground=TEXT,selectcolor=PANEL_ALT,
+                       font=("Segoe UI",10)).pack(anchor="w")
+        tk.Label(automation,textvariable=self.intelligence_note,background=PANEL,
+                 foreground=MUTED,wraplength=420,justify="left",
+                 font=("Segoe UI",9)).pack(side="right",padx=7)
         box=Panel(root)
         box.pack(fill="both",expand=True)
         text_label(box,"PERFIS ENCONTRADOS",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
@@ -523,6 +540,11 @@ class DueltraceDesktop(tk.Tk):
                    color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(2,8))
         self._action(option,"Abrir ajustes avançados",self.open_advanced,
                      width=245).pack(anchor="w")
+        text_label(option,"Modelo Ollama local (não envia a ISO):",color=BLUE,
+                   bg=PANEL).pack(anchor="w",pady=(12,3))
+        ttk.Entry(option,textvariable=self.ai_model,width=40,
+                  style="DT.TEntry").pack(anchor="w")
+        self.ai_model.trace_add("write",lambda *_:self._save_settings())
 
     def _save_settings(self):
         atomic_json(self.settings_path,{
@@ -563,18 +585,35 @@ class DueltraceDesktop(tk.Tk):
     def _start_worker(self,path,*,all_images=False):
         if self.busy:return
         self.busy=True
+        use_ollama=bool(self.ai_enabled.get())
+        with_art=bool(self.art_enabled.get())
+        model=self.ai_model.get().strip() or DEFAULT_MODEL
         self.header_status.configure(text="●  Analisando…",fg=GOLD)
         self.status.set(f"Analisando {path.name} (somente leitura)…")
         def emit(e):self.inbox.put(e)
         def worker():
             try:
-                if all_images:
-                    self.autopilot.analyze_folder(path,callback=emit)
-                else:
-                    result=self.autopilot.analyze_file(
-                        path,progress=lambda stage,done,total:
-                        emit({"event":"progress","stage":stage,"done":done,"total":total}))
-                    emit({"event":"done","result":result})
+                paths=discover_images(path) if all_images else [Path(path)]
+                if not paths:
+                    emit({"event":"intelligence","message":"Nenhuma ISO/BIN na pasta selecionada."})
+                for index,image in enumerate(paths,1):
+                    emit({"event":"found","file":image.name,"index":index,"total":len(paths)})
+                    try:
+                        result=self.autopilot.analyze_file(
+                            image, with_art=with_art,
+                            progress=lambda stage,done,total:
+                            emit({"event":"progress","stage":stage,"done":done,"total":total}))
+                        emit({"event":"done","result":result})
+                        try:
+                            info=self.intelligence.inspect(
+                                image,model=model,use_ollama=use_ollama,emit=emit)
+                            emit({"event":"intelligence_done","result":info,
+                                  "file":image.name})
+                        except (OSError,RuntimeError,ValueError) as exc:
+                            emit({"event":"intelligence","message":
+                                  "Investigação adicional não concluída: "+str(exc)[:150]})
+                    except (OSError,RuntimeError,ValueError) as exc:
+                        emit({"event":"error","message":image.name+": "+str(exc)[:220]})
             except (OSError,RuntimeError,ValueError) as exc:
                 emit({"event":"error","message":str(exc)[:250]})
             finally:
@@ -600,6 +639,20 @@ class DueltraceDesktop(tk.Tk):
                         self.selected_sha=summary["sha256"]
                     self.status.set("Perfil analisado: "+summary.get("name","Mod"))
                     self._refresh_mods()
+                elif kind=="intelligence":
+                    self.intelligence_note.set(event.get("message","Analisando evidências…"))
+                    self.status.set(event.get("message","Analisando evidências…"))
+                elif kind=="intelligence_done":
+                    info=event.get("result",{})
+                    self.last_intelligence[event.get("file","")]=info
+                    ai=info.get("ai","não_iniciada")
+                    overview=info.get("inventory",{})
+                    self.intelligence_note.set(
+                        f"ISO: {overview.get('iso_files_indexed',0)} arquivos · "
+                        f"Artes: {'extraídas' if overview.get('art_extracted') else 'indisponíveis'} · "
+                        f"Ollama: {ai}")
+                    self.status.set("Investigação local concluída: "+
+                                    event.get("file",""))
                 elif kind=="error":
                     self.status.set("Análise incompleta: "+event.get("message","Erro"))
                 elif kind=="finished":
