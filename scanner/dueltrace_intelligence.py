@@ -9,16 +9,17 @@ from __future__ import annotations
 
 import json
 import re
+import hashlib
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from auto_mods import ModCatalog, atomic_json, load_json
-from ia_local import DEFAULT_MODEL, analyse_with_local_ai, save_suggestion
+from ia_local import DEFAULT_MODEL, analyse_with_local_ai, save_suggestion, minimal_evidence
 from investigador_iso import investigate
 
 MODEL_LIST_URL = "http://127.0.0.1:11434/api/tags"
-REPORT_SCHEMA = 1
+REPORT_SCHEMA = 2
 MAX_FILE_RECORDS = 80
 
 
@@ -107,6 +108,26 @@ def inventory_from_profile(profile: dict) -> dict:
     }
 
 
+def local_report_fingerprint(entry: dict, profile: dict) -> str:
+    """Invalida diagnósticos após atualização local, mesmo com SHA da ISO igual."""
+    items = []
+    for path in (
+        Path(entry.get("profile_path") or "profile-missing"),
+        Path(profile.get("scan_result_dir") or "analysis-missing") / "relatorio.json",
+    ):
+        try:
+            stat = path.stat()
+            items.append([stat.st_size, stat.st_mtime_ns])
+        except OSError:
+            items.append(None)
+    raw = json.dumps({
+        "schema": REPORT_SCHEMA,
+        "rom": entry.get("sha256"),
+        "files": items,
+    },sort_keys=True).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
 class MultiModIntelligence:
     """Roda exclusivamente em worker, nunca na thread de widgets Tkinter."""
 
@@ -126,8 +147,10 @@ class MultiModIntelligence:
         work_dir = self.catalog.home / "investigacoes"
         report_path = work_dir / f"{sha}.json"
         cached = load_json(report_path, {})
+        profile_digest = local_report_fingerprint(entry, profile)
         if (cached.get("hash_rom") == sha and
-                cached.get("analysis_schema") == REPORT_SCHEMA):
+                cached.get("analysis_schema") == REPORT_SCHEMA and
+                cached.get("profile_digest") == profile_digest):
             report = dict(cached)
             report_state = "cache"
         else:
@@ -147,6 +170,7 @@ class MultiModIntelligence:
                 }
             report_state = "analisado"
         report["analysis_schema"] = REPORT_SCHEMA
+        report["profile_digest"] = profile_digest
         report["hash_rom"] = sha
         report["inventory"] = inventory_from_profile(profile)
         report["analysis_notice"] = (
@@ -156,6 +180,7 @@ class MultiModIntelligence:
         atomic_json(report_path, report)
         result = {
             "state": report_state,
+            "sha256": sha,
             "report_path": str(report_path),
             "ai": "desativada",
             "inventory": report["inventory"],
@@ -170,8 +195,13 @@ class MultiModIntelligence:
 
         safe_model = re.sub(r"[^a-zA-Z0-9_.-]", "_", model)[:100]
         ai_path = work_dir / f"{sha}.{safe_model}.ollama.json"
+        evidence_fingerprint = hashlib.sha256(
+            json.dumps(minimal_evidence(report),ensure_ascii=False,
+                       sort_keys=True).encode("utf-8")
+        ).hexdigest()
         previous = load_json(ai_path, {})
-        if previous.get("model") == model and previous.get("rom_sha256") == sha:
+        if (previous.get("model") == model and previous.get("rom_sha256") == sha
+                and previous.get("evidence_sha256") == evidence_fingerprint):
             result.update({"ai": "hipoteses_em_cache",
                            "ai_report_path": str(ai_path)})
             return result
@@ -186,6 +216,7 @@ class MultiModIntelligence:
         suggestion.update({
             "model": model,
             "rom_sha256": sha,
+            "evidence_sha256": evidence_fingerprint,
             "verified_data_changed": False,
         })
         save_suggestion(ai_path, suggestion)

@@ -43,7 +43,7 @@ def profile_summary(entry: dict, profile: dict | None) -> dict:
     features=profile.get("supported_features",{})
     cards=profile.get("cards",[]) if features.get("cards") else []
     counts=category_summary(cards) if cards else {}
-    effects=sum(bool(c.get("effect_text")) for c in cards)
+    effects=sum(bool(c.get("effect_text") and c.get("effect_source")) for c in cards)
     recipes=profile.get("fusion_recipes",[]) if features.get("fusions") else []
     status=entry.get("level","desconhecido")
     return {
