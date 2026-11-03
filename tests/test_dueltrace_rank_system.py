@@ -8,6 +8,7 @@ from dueltrace_rank_system import (
     X15_RANKS, CLASSIC_RANKS, CLASSIC_POOLS, pool_index_for_rank,
     classic_rank_for_verified_score, x15_rank_for_verified_score,
 )
+from dueltrace_rank_system import rank_label_for_existing_score
 from dueltrace_drops import get_drop_catalog
 from dueltrace_rank_drop_solver import solve_rank_drop_labels
 from test_dueltrace_drops import fake_profile
@@ -84,6 +85,26 @@ class RankSystemTests(unittest.TestCase):
             rank_to_label={"S-POW":"S/A POW"})
         self.assertEqual(report["distinctDuels"],0)
         self.assertFalse(report["executionVerified"])
+
+    def test_only_rank_letter_changes_for_same_existing_points(self):
+        # O cálculo numérico continua sendo o do motor atual.
+        for score,classic,x15 in (
+            (95,"S-POW","Z-POW"),
+            (85,"A-POW","S-POW"),
+            (68,"C-POW","S-POW"),
+            (50,"D-POW","S-POW"),
+            (49,"D-TEC","S-TEC"),
+            (0,"S-TEC","S-TEC"),
+            (101,"S-POW","Z-POW"),
+            (-12,"S-TEC","S-TEC"),
+        ):
+            with self.subTest(score=score):
+                self.assertEqual(rank_label_for_existing_score("a"*64,score),classic)
+                self.assertEqual(rank_label_for_existing_score(X15_SHA,score),x15)
+        for wrong in (None,True,False,85.5,"85",10**9):
+            with self.subTest(wrong=wrong):
+                with self.assertRaises(ValueError):
+                    rank_label_for_existing_score(X15_SHA,wrong)
 
     def test_score_labels_only_for_independently_observed_result(self):
         for score,label in (
