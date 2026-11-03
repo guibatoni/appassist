@@ -297,6 +297,8 @@ class BridgeTests(unittest.TestCase):
             ("get_fusions",("",0,10)),
             ("get_drops",(0,"","",0,10)),
             ("get_duel_evidence",()),
+            ("get_rank_trace_status",()),
+            ("import_rank_trace",()),
             ("record_duel_result",(1,"Z-POW",1,None)),
             ("get_rank",()),
             ("confirm_rank_lp",(8000,)),
