@@ -21,6 +21,7 @@ from typing import Callable
 
 from importador_perfis import import_rom
 from scanner_multiiso import X15_SHA
+from card_catalog import effect_sidecar_path
 
 EXTENSIONS = frozenset({".iso", ".bin"})
 REGISTRY_FILE = "registro_mods.json"
@@ -77,6 +78,8 @@ def supported_for_runtime(profile: dict) -> dict:
         "rank": known and bool(flags.get("ranks")),
         "pontuacao": known and bool(flags.get("scoring")),
         "fusoes": bool(flags.get("fusions")),
+        "categorias": bool(flags.get("cards") and flags.get("categories")),
+        "efeitos": bool(flags.get("cards") and flags.get("effects")),
     }
 
 
@@ -114,8 +117,16 @@ class ModCatalog:
         before = path.stat()
         if before.st_size < 100_000:
             raise ValueError("Arquivo pequeno demais para uma imagem de jogo")
+        effect_file = effect_sidecar_path(path)
+        try:
+            sidecar_stat = effect_file.stat()
+            effect_signature = (sidecar_stat.st_size, sidecar_stat.st_mtime_ns)
+        except OSError:
+            effect_signature = (0, 0)
         old = self.lookup(path)
-        if old and old.get("size") == before.st_size and old.get("mtime_ns") == before.st_mtime_ns:
+        if (old and old.get("size") == before.st_size
+                and old.get("mtime_ns") == before.st_mtime_ns
+                and tuple(old.get("effects_manifest_signature", ())) == effect_signature):
             if not with_art or (self.profile_for(old) or {}).get("supported_features", {}).get("art"):
                 return dict(old)
 
@@ -129,6 +140,7 @@ class ModCatalog:
             "file_name": path.name,
             "size": after.st_size,
             "mtime_ns": after.st_mtime_ns,
+            "effects_manifest_signature": list(effect_signature),
             "sha256": profile["rom_sha256"],
             "profile_path": str(profile_path.resolve()),
             "level": report_level(profile),
