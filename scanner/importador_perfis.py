@@ -15,6 +15,7 @@ from pathlib import Path
 from scanner_multiiso import process, sha256, X15_SHA
 from card_catalog import enrich_cards, attach_effect_manifest, effect_sidecar_path, category_summary
 from mod_effects_iso import extract_embedded_effects
+from dueltrace_disc_metadata import effect_hint_from_description
 
 SCHEMA = 1
 LABELS_X15 = ["Z-POW", "S-POW", "S-TEC"]
@@ -78,6 +79,10 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     if result.get("description_audit",{}).get("status")=="texto_extraido_layout_fm_com_verificacao_estrutural":
         for card in catalog:
             card.update(description_index.get(card["id"],{}))
+            if card.get("description"):
+                hint=effect_hint_from_description(card["description"])
+                if hint:
+                    card.update(hint)
 
     effects_info = {"status": "nao_identificados", "count": 0, "sources": [],
                     "effects_executed_in_game_verified": False}
