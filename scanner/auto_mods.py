@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Callable
 
 from importador_perfis import import_rom
-from scanner_multiiso import X15_SHA
+from scanner_multiiso import X15_SHA, ART_PARSER_REVISION
 from card_catalog import effect_sidecar_path
 
 EXTENSIONS = frozenset({".iso", ".bin"})
@@ -110,7 +110,8 @@ class ModCatalog:
             return None
         return profile
 
-    def analyse(self, path: Path, with_art: bool = False, progress=None) -> dict:
+    def analyse(self, path: Path, with_art: bool = False, progress=None,
+                *, force: bool = False) -> dict:
         path = Path(path).resolve(strict=True)
         if not path.is_file() or path.suffix.lower() not in EXTENSIONS:
             raise ValueError("Selecione uma imagem .bin ou .iso")
@@ -124,10 +125,18 @@ class ModCatalog:
         except OSError:
             effect_signature = (0, 0)
         old = self.lookup(path)
-        if (old and old.get("size") == before.st_size
+        if (not force and old and old.get("size") == before.st_size
                 and old.get("mtime_ns") == before.st_mtime_ns
                 and tuple(old.get("effects_manifest_signature", ())) == effect_signature):
-            if not with_art or (self.profile_for(old) or {}).get("supported_features", {}).get("art"):
+            profile=self.profile_for(old) or {}
+            if not with_art or profile.get("supported_features", {}).get("art"):
+                return dict(old)
+            scan_dir=profile.get("scan_result_dir")
+            meta=load_json(Path(scan_dir) / "relatorio.json", {}) if scan_dir else {}
+            # Não reescanear toda a ISO a cada abertura após uma tentativa
+            # sem sucesso. Nova revisão ou 'Reanalisar' invalida este cache.
+            if (meta.get("art_requested") is True
+                    and meta.get("art_parser_revision") == ART_PARSER_REVISION):
                 return dict(old)
 
         profile, profile_path = import_rom(path, self.home, art=with_art, progress=progress)

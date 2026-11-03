@@ -21,6 +21,7 @@ WA_CARD_SECTOR_START=722
 WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
+ART_PARSER_REVISION=1  # invalida o cache negativo após mudanças no decodificador
 
 
 def sha256(path:Path, progress=None):
@@ -221,7 +222,8 @@ def write_csv(path,rows):
 def process(path,output,with_art=False,digest=None,progress=None):
     info={'arquivo':path.name,'tamanho':path.stat().st_size,
           'sha256':digest or sha256(path,progress=progress),'status':'não validado',
-          'art_requested':bool(with_art)}
+          'art_requested':bool(with_art),
+          'art_parser_revision':ART_PARSER_REVISION if with_art else None}
     key=re.sub(r'[^a-zA-Z0-9_-]+','_',path.stem)[:42]+'_'+info['sha256'][:10]
     dest=output/key;dest.mkdir(parents=True,exist_ok=True)
     # Contrato de dados: o scanner é a única fonte do caminho da extração.

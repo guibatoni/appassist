@@ -9,14 +9,14 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-BACKGROUND="#060F20"
-SIDEBAR="#07182B"
-PANEL="#0B2036"
-PANEL_ALT="#102A44"
-BORDER="#225874"
-BLUE="#26D7FF"
-BLUE_DARK="#084868"
-GOLD="#EBC176"
+BACKGROUND="#040B18"
+SIDEBAR="#071427"
+PANEL="#09213A"
+PANEL_ALT="#123856"
+BORDER="#1A5C7F"
+BLUE="#20D8FF"
+BLUE_DARK="#075679"
+GOLD="#F3C373"
 GREEN="#36DA9B"
 WARNING="#F2AE64"
 RED="#FF7985"
@@ -43,9 +43,9 @@ def setup_theme(root: tk.Misc) -> ttk.Style:
                     font=("Segoe UI Semibold",19))
     style.configure("DT.Treeview",background=PANEL,fieldbackground=PANEL,
                     foreground=TEXT,selectbackground=BLUE_DARK,
-                    selectforeground="#FFFFFF",rowheight=30,borderwidth=0)
+                    selectforeground="#FFFFFF",rowheight=34,borderwidth=0)
     style.configure("DT.Treeview.Heading",background=PANEL_ALT,foreground=GOLD,
-                    font=("Segoe UI Semibold",10),relief="flat",padding=(9,8))
+                    font=("Segoe UI Semibold",10),relief="flat",padding=(11,10))
     style.map("DT.Treeview",background=[("selected",BLUE_DARK)],
               foreground=[("selected",TEXT)])
     style.map("DT.Treeview.Heading",background=[("active",BORDER)])
@@ -63,67 +63,142 @@ def setup_theme(root: tk.Misc) -> ttk.Style:
 
 
 class NeonButton(tk.Canvas):
-    """Botão com hover animado e navegação por teclado."""
-    def __init__(self,master,text,command,width=190,height=43,accent=BLUE,
-                 active=False,**kwargs):
-        super().__init__(master,width=width,height=height,background=SIDEBAR,
-                         borderwidth=0,highlightthickness=0,**kwargs)
-        self.caption=text
-        self.command=command
-        self.accent=accent
-        self.selected=active
-        self.hover=0.0
-        self.target=0.0
-        self.animation=None
-        self.configure(cursor="hand2",takefocus=1)
-        self.bind("<Enter>",lambda _e:self._set_target(1.0))
-        self.bind("<Leave>",lambda _e:self._set_target(0.0))
-        self.bind("<Button-1>",lambda _e:self.command())
-        self.bind("<Return>",lambda _e:self.command())
-        self.bind("<space>",lambda _e:self.command())
-        self.bind("<FocusIn>",lambda _e:self._set_target(1.0))
-        self.bind("<FocusOut>",lambda _e:self._set_target(0.0))
-        self.bind("<Configure>",lambda _e:self._draw())
+    """Botão premium com gradiente, bordas luminosas, hover e foco acessível.
+
+    Tk nativo mantém toda a navegação por teclado. Os desenhos são estáticos
+    entre transições e não criam threads ou timers periódicos.
+    """
+    def __init__(self, master, text, command, width=190, height=43, accent=BLUE,
+                 active=False, **kwargs):
+        bg = master.cget("background")
+        super().__init__(master, width=width, height=height, background=bg,
+                         borderwidth=0, highlightthickness=0, **kwargs)
+        self.caption = text
+        self.command = command
+        self.accent = accent
+        self.selected = bool(active)
+        self.hover = 0.0
+        self.target = 0.0
+        self.animation = None
+        self.focused = False
+        self.configure(cursor="hand2", takefocus=1)
+        self.bind("<Enter>", lambda _: self._set_target(1.0))
+        self.bind("<Leave>", lambda _: self._set_target(0.0))
+        self.bind("<FocusIn>", self._focus_in)
+        self.bind("<FocusOut>", self._focus_out)
+        self.bind("<Button-1>", lambda _: self.command())
+        self.bind("<Return>", lambda _: self.command())
+        self.bind("<space>", lambda _: self.command())
+        self.bind("<Configure>", lambda _: self._draw())
+        self.bind("<Destroy>", self._cleanup)
         self._draw()
 
-    def set_active(self,value:bool):
-        self.selected=bool(value)
+    def _cleanup(self, _event):
+        if self.animation is not None:
+            try:
+                self.after_cancel(self.animation)
+            except tk.TclError:
+                pass
+            self.animation = None
+
+    def _focus_in(self, _event):
+        self.focused = True
+        self._set_target(1.0)
+
+    def _focus_out(self, _event):
+        self.focused = False
+        self._set_target(0.0)
+
+    def set_active(self, value: bool):
+        self.selected = bool(value)
         self._draw()
 
-    def _set_target(self,value:float):
-        self.target=value
+    def _set_target(self, value: float):
+        self.target = value
         if self.animation is None:
             self._tick()
 
     def _tick(self):
-        delta=self.target-self.hover
-        if abs(delta)<0.025:
-            self.hover=self.target
-            self.animation=None
+        delta = self.target - self.hover
+        if abs(delta) < 0.025:
+            self.hover = self.target
+            self.animation = None
         else:
-            self.hover+=delta*0.35
-            self.animation=self.after(17,self._tick)
+            self.hover += delta * 0.35
+            self.animation = self.after(17, self._tick)
         self._draw()
 
     def _draw(self):
-        w=max(60,self.winfo_width());h=max(20,self.winfo_height())
         self.delete("all")
-        active=1.0 if self.selected else self.hover*0.65
-        bg=blend(SIDEBAR,BLUE_DARK,active)
-        stroke=blend(BORDER,self.accent,active)
-        self.create_rectangle(2,2,w-3,h-3,fill=bg,outline=stroke,
-                              width=2 if self.selected else 1)
+        w = max(60, self.winfo_width())
+        h = max(20, self.winfo_height())
+        illuminated = max(self.hover, 0.9 if self.selected else 0.0)
+        border = blend(BORDER, self.accent, 0.5 + illuminated * 0.5)
+        # Three-stage cyan/gold glow; corner cuts imitate metal framing.
+        self.create_rectangle(1, 1, w-2, h-2, outline=blend(SIDEBAR, self.accent,
+                              illuminated*.24), width=2)
+        self.create_polygon(5, 3, w-11, 3, w-4, 10, w-4, h-5,
+                            11, h-5, 4, h-12, fill=PANEL_ALT, outline="")
+        for y in range(5, max(h-5, 6), 2):
+            t = (y-5)/max(1,h-10)
+            color = blend(blend(PANEL_ALT,BLUE_DARK, illuminated*0.75),
+                          blend("#071326",PANEL,illuminated*.20),t)
+            self.create_line(6,y,w-7,y,fill=color,width=2)
+        # Top highlight + frame edges.
+        self.create_line(12,4,w-12,4,fill=blend(BLUE,self.accent,illuminated),width=1)
+        self.create_line(5,h-8,5,11,11,5,fill=border,width=2)
+        self.create_line(w-11,5,w-5,11,w-5,h-10,fill=border,width=2)
+        self.create_line(11,h-5,w-11,h-5,fill=border,width=2)
+        self.create_line(13,h-8,w-13,h-8,fill=blend(BLUE,self.accent,illuminated*.8))
         if self.selected:
-            self.create_rectangle(4,7,7,h-8,fill=GOLD,outline="")
+            self.create_rectangle(5, 12, 8, h-13,fill=GOLD,outline="")
+        if illuminated>0.05:
+            self.create_line(16,7,w-16,7,
+                             fill=blend(BORDER,self.accent,illuminated),width=1)
         self.create_text(w/2,h/2,text=self.caption,fill=TEXT,
-                         font=("Segoe UI Semibold",11 if self.selected else 10))
+                         width=w-20,
+                         font=("Segoe UI Semibold",10 if not self.selected else 11))
+        if self.focused:
+            self.create_rectangle(10,8,w-11,h-9,outline=GOLD,dash=(2,3))
 
 
 class Panel(tk.Frame):
+    """Painel com textura gradiente e acabamento metálico, preservando a API pack.
+
+    O Canvas é apenas um plano de fundo abaixo dos widgets: todos os controles
+    existentes permanecem Tk nativos, acessíveis e funcionais.
+    """
     def __init__(self,parent,**kwargs):
         super().__init__(parent,background=PANEL,highlightbackground=BORDER,
                          highlightcolor=BLUE,highlightthickness=1,
                          padx=13,pady=12,**kwargs)
+        self._skin = tk.Canvas(self, background=PANEL, highlightthickness=0,
+                               borderwidth=0, takefocus=0)
+        self._skin.place(x=0,y=0,relwidth=1,relheight=1)
+        # Canvas.lower() manipula itens internos; chamar 'lower' do Tk
+        # diretamente mantém a decoração atrás dos controles.
+        self.tk.call("lower", str(self._skin))
+        self._skin.bind("<Configure>", self._paint)
+
+    def _paint(self, event):
+        c = self._skin
+        w, h = event.width, event.height
+        if w < 5 or h < 5:
+            return
+        c.delete("all")
+        for y in range(0,h,4):
+            t = y/max(h-1,1)
+            color = blend(blend(PANEL_ALT,PANEL,.48),PANEL,min(1,t*.85))
+            c.create_rectangle(0,y,w,y+4,fill=color,outline=color)
+        c.create_line(0,0,w,0,fill=blend(GOLD,BLUE,.55),width=2)
+        c.create_line(0,0,0,h,fill=blend(GOLD,BLUE,.35),width=1)
+        c.create_line(w-2,0,w-2,h,fill=BLUE_DARK,width=1)
+        c.create_line(0,h-2,w,h-2,fill=GOLD,width=1)
+        # Ornamentos laterais sem deslocar o conteúdo.
+        c.create_line(6,4,28,4,fill=GOLD,width=2)
+        c.create_line(w-28,4,w-6,4,fill=BLUE,width=2)
+        c.create_line(6,h-6,32,h-6,fill=BLUE,width=1)
+        c.create_line(w-32,h-6,w-6,h-6,fill=GOLD,width=1)
 
 
 def text_label(parent,label,*,color=TEXT,size=10,strong=False,bg=None):
