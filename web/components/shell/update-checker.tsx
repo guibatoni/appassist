@@ -1,11 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ArrowUpRight, CheckCircle2, Download, RefreshCw, ShieldAlert, X } from "lucide-react"
 import { desktopApi, type UpdateCheck } from "@/lib/desktop"
 
 /**
- * A consulta só acontece após clique. Não baixa binários nem carrega scripts.
+ * Consulta automática após abertura e opção de verificação manual. Não instala binários.
  * A abertura da página oficial é feita no navegador do Windows pelo motor Python.
  */
 export function UpdateChecker() {
@@ -14,6 +14,35 @@ export function UpdateChecker() {
   const [checking, setChecking] = useState(false)
   const [opening, setOpening] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
+  const [automaticNotice, setAutomaticNotice] = useState(false)
+
+  // Verificação automática UMA vez por inicialização, após a API local
+  // pywebview disponibilizar o token. Não instala conteúdo em segundo plano.
+  useEffect(() => {
+    let mounted = true
+    let attempts = 0
+    let handle: ReturnType<typeof setTimeout> | undefined
+    const probe = () => {
+      if (!mounted) return
+      const api = desktopApi()
+      if (!api) {
+        if (++attempts <= 20) handle = window.setTimeout(probe, 750)
+        return
+      }
+      void api.check_updates().then(response => {
+        if (!mounted) return
+        setResult(response)
+        setAutomaticNotice(response.updateAvailable)
+      }).catch(() => {
+        // Falhas offline não geram alertas falsos. O botão permite retentar.
+      })
+    }
+    handle = window.setTimeout(probe, 1000)
+    return () => {
+      mounted = false
+      if (handle !== undefined) window.clearTimeout(handle)
+    }
+  }, [])
 
   const check = async () => {
     setVisible(true)
@@ -26,7 +55,9 @@ export function UpdateChecker() {
     }
     setChecking(true)
     try {
-      setResult(await api.check_updates())
+      const response = await api.check_updates()
+      setResult(response)
+      setAutomaticNotice(response.updateAvailable)
     } catch {
       setResult(null)
       setProblem("Não foi possível consultar as versões. Verifique a conexão e tente novamente.")
@@ -57,7 +88,9 @@ export function UpdateChecker() {
       onClick={() => void check()}
       aria-label="Verificar atualizações do DUELTRACE">
       <RefreshCw className={"size-4 text-primary" + (checking ? " animate-spin" : "")} />
-      <span>{checking ? "Verificando…" : "Verificar atualizações"}</span>
+      <span>{checking ? "Verificando…" : automaticNotice ? "Nova versão disponível" : "Verificar atualizações"}</span>
+      {automaticNotice && <span aria-label="Atualização identificada"
+        className="size-2 animate-pulse rounded-full bg-gold"/>
     </button>
     {visible &&
       <section className="absolute right-0 top-full z-50 mt-2 w-[min(90vw,370px)] rounded-xl border border-gold/40 bg-[#0a1a31] p-4 text-sm text-foreground shadow-[0_12px_36px_rgba(0,0,0,.65)]"
@@ -79,11 +112,15 @@ export function UpdateChecker() {
                   <span>Instalada: <strong className="text-white">v{result.currentVersion} {result.channel === "preview" ? "Preview" : "Estável"}</strong></span>
                 </div>
                 <p className="mt-1 text-xs text-muted">Última estável: <strong className="text-white">{result.latestStable ?? "Indisponível"}</strong></p>
+                <p className="mt-1 text-xs text-muted">Preview encontrada: <strong className="text-white">{result.previewVersion ? "v"+result.previewVersion : "Indisponível"}</strong></p>
                 <p className="mt-1 text-xs text-muted">Preview Windows: <strong className="text-white">{result.previewRunId ? `Build #${result.previewRunId} · ${result.previewBuildSha ?? "SHA indisponível"}` : "Não identificado"}</strong></p>
                 <p className={"mt-3 flex items-start gap-2 text-sm " + (available ? "text-gold" : "text-foreground/85")}>
                   {available ? <Download className="size-5 shrink-0"/> : <CheckCircle2 className="size-5 shrink-0 text-primary"/>}
                   {result.message}
                 </p>
+                {!result.automaticInstallReady && <p className="mt-3 text-xs text-gold">
+                  Instalação automática indisponível até termos instalador assinado digitalmente.
+                </p>}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" onClick={() => void openOfficialPage(result.previewRunId ?? 0)}
                       disabled={opening} className="btn-gold inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50">
