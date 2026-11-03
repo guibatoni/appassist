@@ -14,6 +14,8 @@ export type LocalCard = {
   effectSource: string | null
   description?: string | null
   descriptionSource?: string | null
+  effectHint?: string | null
+  effectHintSource?: string | null
   slot?: number
 }
 
@@ -24,6 +26,7 @@ export type LocalMod = {
   cards: number
   fusions: number
   effects: number
+  descriptions?: number
   requiresReview: boolean
 }
 
