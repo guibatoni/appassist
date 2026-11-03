@@ -232,6 +232,6 @@ def extract_rank_table(wa: bytes, *, slus: bytes | None = None,
             if known_binary else
             "Foram reconhecidas automaticamente 40 cópias idênticas dos "
             "10 critérios de pontos no WA, mesmo com offset ou espaçamento "
-            "entre blocos alterado. O uso da tabela pelo SLUS e os nomes dos 
+            "entre blocos alterado. O uso da tabela pelo SLUS e os nomes dos "
             "critérios ainda NÃO foram confirmados neste mod."),
     }
