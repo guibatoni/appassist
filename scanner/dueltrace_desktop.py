@@ -223,7 +223,7 @@ class DueltraceDesktop(tk.Tk):
 
         hero=Panel(body)
         hero.pack(fill="x",pady=(0,8))
-        HeroArt(hero,width=230,height=85).pack(side="right",padx=(9,0))
+        HeroArt(hero,width=210,height=72).pack(side="right",padx=(9,0))
         text_label(hero,"DUELTRACE  /  OLHO DO MILÊNIO",
                    color=BLUE,size=10,strong=True,bg=PANEL).pack(anchor="w")
         text_label(hero,"CENTRAL DE DUELO",
@@ -275,9 +275,9 @@ class DueltraceDesktop(tk.Tk):
                  bg=PANEL,fg=BLUE,font=("Segoe UI",9)).pack(side="right")
         self.home_fusion_tree=self._table(
             fusion_panel,("slots","materials","result","atk","origin"),
-            (("slots","Slots",68),("materials","Materiais",185),
-             ("result","Resultado",180),("atk","ATK",70),
-             ("origin","Origem",115)),height=6)
+            (("slots","Slots",56),("materials","Materiais",146),
+             ("result","Resultado",145),("atk","ATK",62),
+             ("origin","Origem",106)),height=6)
         self.home_fusion_hint=tk.StringVar(
             value="Sugestões aparecem aqui após leitura de cinco cartas válidas.")
         tk.Label(fusion_panel,textvariable=self.home_fusion_hint,
