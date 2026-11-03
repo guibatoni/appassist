@@ -232,6 +232,7 @@ export type RankState = {
   candidateLp?: number
   score: number | null
   category: string | null
+  rankSystem?: "x15" | "classic"
   counters: Record<string, number> | null
   breakdown?: Record<string, number>
   model?: string

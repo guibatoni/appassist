@@ -257,7 +257,9 @@ class BridgeTests(unittest.TestCase):
         self.assertTrue(result["ready"])
         self.assertFalse(result["final"])
         self.assertEqual(result["score"],68)
-        self.assertEqual(result["category"],"Z-POW")
+        self.assertEqual(result["category"],"C-POW")
+        self.assertEqual(result["rankSystem"],"classic")
+        self.assertEqual(self.bridge._rank_last_snapshot["category"],"C-POW")
         self.bridge._rank_reader.assert_not_called()
         reader.assert_called()
         counters["criterion_01"]=0
@@ -283,7 +285,9 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(start["state"],"needs_lp_confirmation")
         result=self.bridge.confirm_rank_lp(8000)
         self.assertTrue(result["ready"])
-        self.assertEqual(result["category"],"Z-POW")
+        self.assertEqual(result["score"],101)
+        self.assertEqual(result["category"],"S-POW")
+        self.assertEqual(result["rankSystem"],"classic")
         self.assertIn("idênticos ao X15",result["status"])
 
     def test_rank_requires_lp_confirmation_and_resets_on_new_duel(self):
@@ -312,6 +316,8 @@ class BridgeTests(unittest.TestCase):
         self.assertTrue(calibrated["ready"])
         self.assertFalse(calibrated["final"])
         self.assertEqual(calibrated["category"],"Z-POW")
+        self.assertEqual(calibrated["rankSystem"],"x15")
+        self.assertEqual(self.bridge._rank_last_snapshot["category"],"Z-POW")
         counters["turns"]=2
         self.assertTrue(self.bridge.get_rank()["ready"])
         counters["turns"]=0  # reinício da partida

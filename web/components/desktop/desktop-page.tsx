@@ -93,7 +93,7 @@ function RankPanel({sha}:{sha:string|null}) {
       <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
         {rank?.ready?rank.category:"RANK indisponível"}
       </span>
-      {rank?.ready&&<span className="text-xs text-gold">Estimativa · não é resultado final</span>}
+      {rank?.ready&&<span className="text-xs text-gold">Estimativa · {rank.rankSystem==="x15"?"RANK X15":rank.rankSystem==="classic"?"RANK original":"RANK não identificado"} · não é resultado final</span>}
     </div>
     <p className="mt-2 text-sm text-muted" role="status">{rank?.status??"Consultando leitura e modelo do mod…"}</p>
     {(rank?.state==="needs_lp_confirmation"||rank?.state==="lp_mismatch")&&
@@ -117,8 +117,9 @@ function RankPanel({sha}:{sha:string|null}) {
           </div>)}
       </div>}
     <p className="mt-3 text-xs text-muted">
-      A contagem só é habilitada para o modelo Remaster X15 de SHA conhecido, após confirmação dos LP.
-      A origem do endereço no ePSXe ainda é experimental. Outros mods exigem análise própria.
+      Esta atualização mantém a fórmula de pontos já usada pelo DUELTRACE e altera apenas a letra
+      exibida segundo o sistema da ISO ativa (X15 ou original). A leitura ao vivo requer RAM calibrada
+      e LP confirmados; mods sem mapeamento validado continuam indisponíveis.
     </p>
   </section>
 }

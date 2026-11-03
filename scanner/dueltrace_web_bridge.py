@@ -29,7 +29,7 @@ from dueltrace_rank_profile_live import (
 from epsxe_launcher import launch_epsxe
 from dueltrace_drops import get_drop_catalog
 from dueltrace_drop_rank_evidence import rank_drop_report
-from dueltrace_rank_system import available_ranks
+from dueltrace_rank_system import available_ranks,rank_system,rank_label_for_existing_score
 from dueltrace_mips_duel_trace import inspect_duel_mips_trace, MAX_TRACE_BYTES
 from dueltrace_rank_memory_trace import inspect_rank_memory_trace
 from dueltrace_rank_export import build_rank_evidence_report
@@ -271,6 +271,8 @@ class DueltraceWebBridge:
                     "category":None,"counters":None}
             result=(project_rank_for_mod(profile,counters)
                     if binding else project_lp_win_rank(counters))
+            # Sem modificar soma, tabelas de pontos, contadores ou bônus.
+            display_category=rank_label_for_existing_score(sha,result["score"])
             visible_counters=dict(counters)
             if binding:
                 visible_counters["turns"]=counters[binding["turns_criterion"]]
@@ -285,15 +287,16 @@ class DueltraceWebBridge:
                     "não verificados no jogo.")
             self._rank_last_snapshot={
                 "rom_sha256":sha,"pid":pid,"monotonic_at":monotonic(),
-                "score":result["score"],"category":result["category"],
+                "score":result["score"],"category":display_category,
                 "counters":visible_counters.copy(),
             }
             return {"ready":True,"state":"provisional",
                     "status":status,
                     "candidateLp":counters[binding["life_points_criterion"]] if binding else counters["remaining_lp"],
-                    "score":result["score"],"category":result["category"],
+                    "score":result["score"],"category":display_category,
                     "counters":visible_counters,"breakdown":result["breakdown"],
-                    "model":result["model"],"final":False}
+                    "model":result["model"],"rankSystem":rank_system(sha),
+                    "final":False}
 
     def confirm_rank_lp(self, life_points):
         if type(life_points) is not int or not 0<=life_points<=32766:
