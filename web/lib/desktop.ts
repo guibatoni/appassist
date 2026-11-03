@@ -153,6 +153,18 @@ export type RankPoints = {
   note: string
 }
 
+export type DuelEvidence = {
+  status: string
+  observations: number
+  usable: number
+  ambiguous: number
+  inconsistent: number
+  rankMappings: Record<string,{group:string;status:string}>
+  suspectedMappings: Record<string,{group:string;observations:number;opponents:number;status:string}>
+  mismatches: Array<{duelId?:string;rank?:string;opponentId?:number;cardId?:number;reason:string}>
+  note: string
+}
+
 export type DropsPage = {
   available: boolean
   status: string
@@ -211,6 +223,8 @@ export interface DesktopAPI {
   confirm_rank_lp(lifePoints: number): Promise<RankState>
   get_fusions(query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
   get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<DropsPage>
+  get_duel_evidence(): Promise<DuelEvidence>
+  record_duel_result(opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null): Promise<DuelEvidence>
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(sha: string): Promise<DeepScanResult>
   import_iso(): Promise<{cancelled: boolean; investigation?: string}>
@@ -228,6 +242,8 @@ interface ProtectedNativeAPI {
   confirm_rank_lp(token: string, lifePoints: number): Promise<RankState>
   get_fusions(token: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
   get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<DropsPage>
+  get_duel_evidence(token: string): Promise<DuelEvidence>
+  record_duel_result(token: string, opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null): Promise<DuelEvidence>
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(token: string, sha: string): Promise<DeepScanResult>
   import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
@@ -259,6 +275,9 @@ export function desktopApi(): DesktopAPI | null {
     confirm_rank_lp: (lifePoints) => native.confirm_rank_lp(token, lifePoints),
     get_fusions: (query, offset, limit, sort, cardType) => native.get_fusions(token, query, offset, limit, sort, cardType),
     get_drops: (opponentId, group, query, offset, limit, sort, cardType) => native.get_drops(token, opponentId, group, query, offset, limit, sort, cardType),
+    get_duel_evidence: () => native.get_duel_evidence(token),
+    record_duel_result: (opponentId, observedRank, cardId, observedPoints) =>
+      native.record_duel_result(token, opponentId, observedRank, cardId, observedPoints),
     activate_mod: (sha, acknowledge) => native.activate_mod(token, sha, acknowledge),
     scan_sources: (sha) => native.scan_sources(token, sha),
     import_iso: () => native.import_iso(token),
