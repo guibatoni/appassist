@@ -20,12 +20,14 @@ from auto_mods import ModCatalog, atomic_json, load_json
 from card_catalog import CARD_CATEGORIES
 from mod_autopilot import ModAutopilot, profile_summary, discover_images
 from dueltrace_intelligence import MultiModIntelligence
+from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
+                                 suggest_hand_pairs)
 from dueltrace_diagnostics import art_diagnostic, mod_diagnostic, format_diagnostic
 from ia_local import DEFAULT_MODEL
 from epsxe_launcher import launch_epsxe
 from integracao_overlay import overlay_snapshot
 from dueltrace_brand import apply_window_icon, png_icon
-from dueltrace_visuals import HeroArt, QuickTile, CardArt, CategoryMeters, NAV_SYMBOLS
+from dueltrace_visuals import HeroArt, QuickTile, CardArt, CategoryMeters, HandCardTile, NAV_SYMBOLS
 from dueltrace_theme import (
     BACKGROUND,SIDEBAR,PANEL,PANEL_ALT,BORDER,BLUE,GOLD,GREEN,RED,TEXT,MUTED,
     Panel,NeonButton,setup_theme,text_label,card_stat,
@@ -45,7 +47,7 @@ USER_PAGES=tuple(p for p in PAGES if p[1] in ("inicio","mods","cartas","fusoes")
 class DueltraceDesktop(tk.Tk):
     def __init__(self, *, catalog=None, developer=False):
         super().__init__()
-        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.3")
+        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.4")
         self.geometry("1360x780")
         self.minsize(1100,690)
         self.configure(background=BACKGROUND)
@@ -79,9 +81,13 @@ class DueltraceDesktop(tk.Tk):
         self._buttons={}
         self._legacy_window=None
         self._legacy_process=None
+        self._live_pending=False
+        self._live_last=None
+        self._home_sha=None
         self._build_shell()
         self.go("inicio")
         self.after(140,self._poll_events)
+        self.after(850,self._poll_live_hand)
         if self.auto_start.get() and self.folder.get() and Path(self.folder.get()).is_dir():
             self.after(650,self.scan_folder)
         for index,(_,key) in enumerate(self.pages,1):
@@ -196,91 +202,190 @@ class DueltraceDesktop(tk.Tk):
         return (entry,self.catalog.profile_for(entry)) if entry else (None,None)
 
     def _page_inicio(self,page):
+        """Dashboard de duelo: cinco cartas ao vivo + opções de fusão da mão."""
         body=tk.Frame(page,background=BACKGROUND)
-        body.pack(fill="both",expand=True,padx=18,pady=15)
+        body.pack(fill="both",expand=True,padx=16,pady=10)
+        active=self.catalog.current() or {}
+        self._home_sha=active.get("sha256")
+        entry=next((x for x in self.catalog.list()
+                    if x.get("sha256")==self._home_sha),None)
+        profile=self.catalog.profile_for(entry) if entry else None
+        features=(profile or {}).get("supported_features",{})
+        self._home_cards={
+            int(c["id"]):c for c in (profile or {}).get("cards",[])
+            if features.get("cards") and type(c.get("id")) is int
+        }
+        self._home_art_root=profile.get("art_root") if profile and features.get("art") else None
+        self._home_fusions=build_fusion_index(
+            profile.get("fusion_recipes",[])
+            if profile and features.get("fusions") else [])
+        self._live_last=None
+
         hero=Panel(body)
-        hero.pack(fill="x",pady=(0,11))
-        hero_art=HeroArt(hero,width=365,height=173)
-        hero_art.pack(side="right",padx=(7,2))
-        copy=tk.Frame(hero,background=PANEL)
-        copy.pack(side="left",fill="both",expand=True)
-        text_label(copy,"◈  DUELTRACE  /  MULTIMOD COMPANION",color=BLUE,
-                   size=10,strong=True,bg=PANEL).pack(anchor="w")
-        text_label(copy,"Bem-vindo ao DUELTRACE",
-                   color=GOLD,size=18,strong=True,bg=PANEL).pack(anchor="w",pady=(12,7))
-        text_label(copy,"Selecione seu mod e explore cartas, imagens e fusões identificadas. "
-                        "O scanner separa dados extraídos de hipóteses do Ollama.",
-                   color=TEXT,size=10,bg=PANEL).pack(anchor="w",pady=(0,13))
-        actions=tk.Frame(copy,background=PANEL)
-        actions.pack(anchor="w")
-        self._action(actions,"Selecionar ISO / BIN",self.choose_file,
-                     accent=GOLD,width=190).pack(side="left",padx=(0,10))
-        self._action(actions,"Analisar pasta",self.choose_folder,
-                     width=155).pack(side="left")
-        tiles=tk.Frame(body,background=BACKGROUND)
-        tiles.pack(fill="x",pady=(0,12))
-        shortcuts=(
-            ("Biblioteca de Mods","Detectar e validar","⬡","mods"),
-            ("Biblioteca de Cartas","Buscar e filtrar","▣","cartas"),
-            ("Fusões","Receitas revisadas","◎","fusoes"),
-            ("Overlay","Perfil de duelo","▤","overlay"),
-            ("Diagnóstico","Ferramentas RAM","▥","diagnostico"),
-            ("Configurações","Preferências locais","⚙","configuracoes"),
-        )
-        for caption,subtitle,symbol,key in shortcuts:
-            if key not in {x[1] for x in self.pages}:
-                continue
-            item=QuickTile(tiles,caption,subtitle,symbol,
-                           lambda k=key:self.go(k),width=192 if not self.developer else 140,height=106,
-                           accent=GOLD if key=="fusoes" else BLUE)
-            item.pack(side="left",fill="x",expand=True,padx=3)
-        lower=tk.Frame(body,background=BACKGROUND)
-        lower.pack(fill="both",expand=True)
-        left=Panel(lower)
-        left.pack(side="left",fill="both",expand=True,padx=(0,6))
-        right=Panel(lower)
-        right.pack(side="left",fill="both",expand=True,padx=(6,0))
-        active=self.catalog.current()
-        entries=self.catalog.list()
-        profile=None
-        if active:
-            match=next((x for x in entries if x.get("sha256")==active.get("sha256")),None)
-            if match:profile=self.catalog.profile_for(match)
-        text_label(left,"⬡   MOD ATIVO",color=BLUE,size=13,strong=True,
-                   bg=PANEL).pack(anchor="w")
-        if profile:
-            text_label(left,str(profile.get("name") or "Mod local"),
-                       color=GOLD,size=18,strong=True,bg=PANEL).pack(
-                           anchor="w",pady=(12,9))
-            text_label(left,"Perfil ativo no DUELTRACE. Ainda não há confirmação "
-                            "da ISO executada pelo emulador.",
-                       color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(0,10))
+        hero.pack(fill="x",pady=(0,8))
+        HeroArt(hero,width=210,height=72).pack(side="right",padx=(9,0))
+        text_label(hero,"DUELTRACE  /  OLHO DO MILÊNIO",
+                   color=BLUE,size=10,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(hero,"CENTRAL DE DUELO",
+                   color=GOLD,size=17,strong=True,bg=PANEL).pack(
+                       anchor="w",pady=(3,3))
+        active_name=str((profile or {}).get("name") or "Nenhum mod ativado")
+        self.home_mod_var=tk.StringVar(value=f"MOD ATIVO  ·  {active_name}")
+        tk.Label(hero,textvariable=self.home_mod_var,background=PANEL,
+                 foreground=MUTED,font=("Segoe UI",10),anchor="w").pack(
+                     anchor="w")
+
+        hand_panel=Panel(body)
+        hand_panel.pack(fill="x",pady=(0,8))
+        heading=tk.Frame(hand_panel,background=PANEL)
+        heading.pack(fill="x",pady=(0,7))
+        text_label(heading,"▣  SUA MÃO  /  AO VIVO",color=BLUE,
+                   size=12,strong=True,bg=PANEL).pack(side="left")
+        self.home_ram_status=tk.StringVar(
+            value="Aguardando ePSXe — entre em um duelo para ler as cinco cartas")
+        self.home_status_label=tk.Label(
+            heading,textvariable=self.home_ram_status,
+            foreground=MUTED,background=PANEL,
+            font=("Segoe UI",9),anchor="e")
+        self.home_status_label.pack(side="right")
+        tiles=tk.Frame(hand_panel,background=PANEL)
+        tiles.pack(fill="x")
+        self.home_hand_tiles=[]
+        for n in range(1,6):
+            tile=HandCardTile(tiles,n,height=142)
+            tile.pack(side="left",fill="x",expand=True,padx=4)
+            self.home_hand_tiles.append(tile)
+        self.home_notice=tk.StringVar(
+            value="RAM somente leitura · nomes vinculados ao perfil selecionado; "
+                  "ISO carregada no ePSXe não é identificada automaticamente")
+        tk.Label(hand_panel,textvariable=self.home_notice,
+                 fg=MUTED,bg=PANEL,font=("Segoe UI",9),
+                 anchor="w").pack(fill="x",pady=(6,0))
+
+        bottom=tk.Frame(body,background=BACKGROUND)
+        bottom.pack(fill="both",expand=True)
+        fusion_panel=Panel(bottom)
+        fusion_panel.pack(side="left",fill="both",expand=True,padx=(0,5))
+        bar=tk.Frame(fusion_panel,background=PANEL)
+        bar.pack(fill="x",pady=(0,6))
+        text_label(bar,"◎  FUSÕES POSSÍVEIS  /  MÃO × MÃO",
+                   color=GOLD,strong=True,size=12,bg=PANEL).pack(side="left")
+        self.home_fusion_count=tk.StringVar(value="Aguardando mão")
+        tk.Label(bar,textvariable=self.home_fusion_count,
+                 bg=PANEL,fg=BLUE,font=("Segoe UI",9)).pack(side="right")
+        self.home_fusion_tree=self._table(
+            fusion_panel,("slots","materials","result","atk","origin"),
+            (("slots","Slots",56),("materials","Materiais",146),
+             ("result","Resultado",145),("atk","ATK",62),
+             ("origin","Origem",106)),height=6)
+        self.home_fusion_hint=tk.StringVar(
+            value="Sugestões aparecem aqui após leitura de cinco cartas válidas.")
+        tk.Label(fusion_panel,textvariable=self.home_fusion_hint,
+                 bg=PANEL,fg=MUTED,font=("Segoe UI",9),
+                 anchor="w").pack(fill="x",pady=(5,0))
+        side=Panel(bottom)
+        side.configure(width=266)
+        side.pack(side="right",fill="y",padx=(5,0))
+        side.pack_propagate(False)
+        text_label(side,"◈  PAINEL DE AÇÕES",color=BLUE,
+                   size=11,strong=True,bg=PANEL).pack(anchor="w",pady=(0,7))
+        self.home_index_status=tk.StringVar(
+            value=f"Banco de fusões: {sum(len(v) for v in self._home_fusions.values())} entradas")
+        tk.Label(side,textvariable=self.home_index_status,
+                 bg=PANEL,fg=GOLD,font=("Segoe UI",9),
+                 wraplength=225,justify="left",anchor="w").pack(
+                     anchor="w",pady=(0,8))
+        self._action(side,"Trocar mod",lambda:self.go("mods"),
+                     width=205,accent=GOLD).pack(anchor="w",pady=(0,7))
+        self._action(side,"Todas as fusões",lambda:self.go("fusoes"),
+                     width=205).pack(anchor="w",pady=(0,7))
+        self._action(side,"Atualizar mão",lambda:self._poll_live_hand(force=True),
+                     width=205).pack(anchor="w")
+        text_label(side,"As sugestões usam somente o banco de fusões "
+                        "do perfil ativo; não incluem cartas da mesa nem "
+                        "garantem que cada combinação funcione no duelo.",
+                   color=MUTED,size=9,bg=PANEL).pack(anchor="w",pady=(9,0))
+
+    def _poll_live_hand(self, *, force=False):
+        """Thread lê apenas 140 bytes. Widgets são atualizados por _poll_events."""
+        if not self.winfo_exists():
+            return
+        if self.active_page=="inicio" and not self._live_pending:
+            self._live_pending=True
+            sha=self._home_sha
+            process=self._epsxe_process
+            preferred=(process.pid if process is not None
+                       and process.poll() is None else None)
+            def worker():
+                try:
+                    result=read_hand_from_epsxe(preferred_pid=preferred)
+                except Exception as exc:
+                    result={"ready":False,"status":str(exc)[:140],
+                            "hand_ids":None,"pid":None}
+                self.inbox.put({"event":"live_hand","profile_sha":sha,
+                                "result":result})
+            threading.Thread(target=worker,daemon=True,
+                             name="dueltrace-live-hand").start()
+        if not force:
+            self.after(1100,self._poll_live_hand)
+
+    def _render_live_hand(self, sample):
+        if self.active_page!="inicio":
+            return
+        if not hasattr(self,"home_hand_tiles") or not all(
+                t.winfo_exists() for t in self.home_hand_tiles):
+            return
+        ready=sample.get("ready") is True
+        ids=sample.get("hand_ids") if ready else None
+        pid=sample.get("pid")
+        status=str(sample.get("status") or "Sem leitura")
+        self.home_ram_status.set(status+(f" · PID {pid}" if pid else ""))
+        self.home_status_label.configure(fg=GREEN if ready else GOLD)
+        signature=(tuple(ids) if ids else None,self._home_sha,ready)
+        if signature==self._live_last:
+            return
+        self._live_last=signature
+        for slot,tile in enumerate(self.home_hand_tiles):
+            tile.show(self._home_cards.get(ids[slot]) if ids and ids[slot] in self._home_cards
+                      else ({"id":ids[slot],"name":f"Carta #{ids[slot]}"}
+                            if ids else None),
+                      art_root=self._home_art_root)
+        tree=self.home_fusion_tree
+        tree.delete(*tree.get_children())
+        matches=suggest_hand_pairs(ids,self._home_fusions,self._home_cards,
+                                   limit=24)
+        for row in matches:
+            a,b=row["a"],row["b"]
+            a_name=self._home_cards.get(a,{}).get("name",f"#{a}")
+            b_name=self._home_cards.get(b,{}).get("name",f"#{b}")
+            origin=row["validation"]
+            if origin=="observada_manualmente_no_jogo":
+                source="Testada"
+            elif origin=="extraida_sete_bancos_consistentes":
+                source="ISO ×7"
+            elif origin=="revisada_usuario_em_lote":
+                source="Revisada"
+            else:
+                source="Não informada"
+            tree.insert("","end",values=(
+                f"{row['slot_a']} + {row['slot_b']}",
+                f"{a_name} + {b_name}",
+                f"#{row['result']} {row['result_name']}",
+                f"{row['atk']:,}" if row["atk"] is not None else "—",
+                source))
+        if not ready:
+            self.home_fusion_count.set("Sem leitura válida")
+            self.home_fusion_hint.set(
+                "Abra o ePSXe e entre em duelo. A mão é limpa ao desconectar.")
+        elif not self._home_fusions:
+            self.home_fusion_count.set("Banco indisponível")
+            self.home_fusion_hint.set(
+                "Ative um perfil com fusões extraídas e analisadas.")
         else:
-            text_label(left,"Nenhum perfil ativo",color=GOLD,size=17,
-                       strong=True,bg=PANEL).pack(anchor="w",pady=(12,10))
-            text_label(left,"Importe uma ISO/BIN para iniciar. Mods desconhecidos "
-                            "exigem investigação antes da ativação.",
-                       color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(0,10))
-        self._action(left,"Ativar ou trocar mod",lambda:self.go("mods"),
-                     accent=GOLD,width=198).pack(anchor="w",pady=(2,8))
-        if self.developer:
-            self._action(left,"Abrir Assistente Clássico",self.open_legacy,
-                         width=215).pack(anchor="w",pady=(0,10))
-        text_label(left,f"MODS CADASTRADOS  {len(entries)}",color=MUTED,
-                   size=10,bg=PANEL).pack(anchor="w",pady=3)
-        text_label(left,f"PERFIS VALIDADOS  {sum(e.get('level')=='conhecido_validado' for e in entries)}",
-                   color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=3)
-        text_label(right,"▣   BIBLIOTECA INTELIGENTE",color=BLUE,size=13,
-                   strong=True,bg=PANEL).pack(anchor="w",pady=(0,10))
-        if profile and profile.get("supported_features",{}).get("cards"):
-            from card_catalog import category_summary
-            counts=category_summary(profile.get("cards",[]))
-        else:
-            counts={}
-        CategoryMeters(right,counts).pack(fill="x",expand=True)
-        text_label(right,"Valores extraídos do perfil local; categorias não "
-                         "confirmadas não são estimadas.",color=MUTED,
-                   size=9,bg=PANEL).pack(anchor="w",pady=(8,0))
+            self.home_fusion_count.set(f"{len(matches)} sugestão(ões)")
+            self.home_fusion_hint.set(
+                "Ordenadas por ATK do resultado • pares mão×mão • "
+                "validade estrutural, não confirmação em duelo.")
 
     def _table(self,parent,columns,specs,height=14):
         container=tk.Frame(parent,background=PANEL)
@@ -886,6 +991,12 @@ class DueltraceDesktop(tk.Tk):
                         self._refresh_mods()
                     if self.active_page=="fusoes":
                         self.go("fusoes",refresh=True)
+                    elif self.active_page=="inicio":
+                        self.go("inicio",refresh=True)
+                elif kind=="live_hand":
+                    self._live_pending=False
+                    if event.get("profile_sha")==self._home_sha:
+                        self._render_live_hand(event.get("result") or {})
                 elif kind=="error":
                     self.status.set("Análise incompleta: "+event.get("message","Erro"))
                 elif kind=="finished":
