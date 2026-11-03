@@ -1,9 +1,10 @@
 """Decodificador de artes e molduras do próprio WA_MRG.MRG.
 
-Offsets publicados por projetos de engenharia reversa de Forbidden Memories:
-722 registros de 7 setores (setor 722); sprite da mão: tpage 0x1E,
-UV(0,128), 52x60 4bpp, CLUT linhas 1-6 da primeira cena de duelo.
-Não inclui dados do jogo nem código copiado de outros projetos.
+Validado contra Remaster X15 e FM13 reais: 722 registros de 7 setores
+(setor 722); sprite da mão UV(0,128), 52x60 em **8bpp**, paletas de
+256 cores nas linhas 1-6 da primeira cena de duelo. O índice da fase
+está organizado em colunas de 64 words x 256 linhas (16 setores por
+coluna). Não inclui bytes nem código de terceiros.
 """
 from __future__ import annotations
 
@@ -69,22 +70,21 @@ def _palette(wa:bytes,at:int,entries:int)->list[int]:
 
 
 def decode_hand_frame(wa:bytes,color_index:int):
-    """Frame 52x60 4bpp de duelo e CLUT original da cor escolhida."""
+    """Frame 52x60 **8bpp**, usando CLUT original de 256 cores por quadro."""
     if type(color_index) is not int or not 0<=color_index<len(FRAME_NAMES):
         raise ValueError("Cor da moldura inválida")
     at=DUEL_IMAGE_START+FRAME_ATLAS_COLUMN*DUEL_COL_SIZE
     start=at+FRAME_V*FRAME_ROW_STRIDE
-    length=((FRAME_W+3)//4)*2
+    length=FRAME_W
     if start+(FRAME_H-1)*FRAME_ROW_STRIDE+length>len(wa):
         raise ValueError("Bloco de molduras do duelo incompleto")
-    colors=_palette(wa,DUEL_CLUT_START+(color_index+1)*256*2,16)
-    raw=bytearray()
-    for y in range(FRAME_H):
-        row=start+y*FRAME_ROW_STRIDE
-        for byte in wa[row:row+length]:
-            raw.append(byte&15)
-            raw.append(byte>>4)
-    frame=_paletted(bytes(raw),(FRAME_W,FRAME_H),colors)
+    colors=_palette(wa,DUEL_CLUT_START+(color_index+1)*256*2,256)
+    # WA armazena 8bpp como 52 pixels consecutivos por linha da
+    # coluna de 128 bytes. O primeiro decodificador 4bpp produzia
+    # listras; validação real de ambas as ISOs confirmou 8bpp.
+    raw=b"".join(wa[start+y*FRAME_ROW_STRIDE:
+                    start+y*FRAME_ROW_STRIDE+length] for y in range(FRAME_H))
+    frame=_paletted(raw,(FRAME_W,FRAME_H),colors)
     # Na GPU do PS1 a entrada 0 da CLUT costuma ser transparente.
     # Só aplicar alpha quando a paleta real confirmar cor 0.
     if colors[0]==0:
