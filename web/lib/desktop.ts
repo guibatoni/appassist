@@ -12,6 +12,12 @@ export type LocalCard = {
   def: number | null
   effect: string | null
   effectSource: string | null
+  description?: string | null
+  descriptionSource?: string | null
+  level?: number | null
+  attributeId?: number | null
+  guardianStar1?: number | null
+  guardianStar2?: number | null
   slot?: number
 }
 
@@ -201,6 +207,12 @@ export function useDesktopState() {
   }, [refresh, state])
 
   return {state, error, loading, refresh}
+}
+
+export function cardWithFrame(activeSha: string | null, id: number): string | null {
+  if (!activeSha || !/^[a-f0-9]{64}$/.test(activeSha) ||
+      !Number.isInteger(id) || id < 1 || id > 722) return null
+  return `/__card__/${activeSha}/${id}.png`
 }
 
 export function cardArt(activeSha: string | null, id: number): string | null {
