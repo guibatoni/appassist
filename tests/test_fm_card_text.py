@@ -31,6 +31,25 @@ class SLUSTextTests(unittest.TestCase):
         self.assertIn("id=722",rows[722]["source"])
         self.assertEqual(rows[722]["exe_offset"],DESCRIPTION_BANK+0x1000+721*6)
 
+    def test_partial_remaster_style_description_table_is_accepted(self):
+        sl=bytearray(fake_slus())
+        for cid in range(1,226):  # 225 cartões sem descrição, como no X15
+            ptr=struct.unpack_from("<H",sl,DESCRIPTION_POINTERS+(cid-1)*2)[0]
+            sl[DESCRIPTION_BANK+ptr]=255
+        rows,meta=extract_descriptions(bytes(sl))
+        self.assertTrue(meta["valid"])
+        self.assertEqual(len(rows),497)
+        self.assertNotIn(1,rows)
+        self.assertIn(722,rows)
+
+    def test_original_ps1_effect_markup_is_recognized(self):
+        cards=[{"id":1,"category":"Monstros","effect_text":None}]
+        enriched,meta=attach_descriptions(cards,{1:{
+            "text":"《Effect》 Cause 500 damage.","source":"SLUS-offset-10"}})
+        self.assertEqual(meta["effect_descriptions_attached"],1)
+        self.assertEqual(enriched[0]["effect_text"],"《Effect》 Cause 500 damage.")
+        self.assertFalse(meta["effects_executed_in_game_verified"])
+
     def test_no_assignment_for_unknown_or_corrupt_pointer_table(self):
         rows,meta=extract_descriptions(bytes(0x1D0800))
         self.assertEqual(rows,{})
