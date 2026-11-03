@@ -29,6 +29,7 @@ from epsxe_launcher import launch_epsxe
 from dueltrace_drops import get_drop_catalog
 from dueltrace_drop_rank_evidence import rank_drop_report, LABELS
 from dueltrace_mips_duel_trace import inspect_duel_mips_trace, MAX_TRACE_BYTES
+from dueltrace_rank_memory_trace import inspect_rank_memory_trace
 from dueltrace_library_sort import validate_sort,matches_type,sort_key
 from dueltrace_update_checker import (
     check_for_updates, open_official_releases, fetch_stable_release, CURRENT_VERSION
@@ -402,6 +403,9 @@ class DueltraceWebBridge:
                         duel.get("observed_rank")==snap.get("projected_rank")):
                     linked+=1
             return {"available":True,"records":len(records),
+                    "tableReadReports":sum(
+                        bool(x.get("rankTableEvidence",{}).get("tableReadsObserved"))
+                        for x in records if isinstance(x,dict)),
                     "correlatedDuels":linked,
                     "rankRoutineConfirmed":False,
                     "last":records[-1] if records else None}
@@ -432,8 +436,12 @@ class DueltraceWebBridge:
                 if not any(isinstance(x,dict) and x.get("duel_id")==duel_id and
                            x.get("rom_sha256")==sha for x in valid):
                     raise ValueError("O duelo selecionado não pertence à ISO ativa.")
+            raw_trace=path.read_bytes()
             report=inspect_duel_mips_trace(
-                path.read_bytes(),profile.get("rank_mips_evidence"))
+                raw_trace,profile.get("rank_mips_evidence"))
+            table_evidence=inspect_rank_memory_trace(
+                raw_trace,profile.get("rank_points"),
+                profile.get("rank_mips_evidence"))
             if not report["available"]:
                 return {"cancelled":False,**report}
             result={
@@ -448,6 +456,7 @@ class DueltraceWebBridge:
                 "distinctPCs":report["distinctPCs"],
                 "rankRoutineConfirmed":False,
                 "traceSha256":report["traceSha256"],
+                "rankTableEvidence":table_evidence,
                 "note":report["note"],
             }
             dest=self._trace_results_path(sha)
