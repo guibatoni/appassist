@@ -293,6 +293,13 @@ function Library({cards,sha,palettes}:{cards:LocalCard[];sha:string|null;palette
             <p className="text-sm text-primary">ATK {chosen.atk??"—"} · DEF {chosen.def??"—"}</p>
             <p className="mt-2 text-sm text-muted">Tipo: {chosen.type||"Não identificado"}</p>
             <p className="text-sm text-muted">Categoria: {chosen.category}</p>
+            {chosen.category==="Monstros"&&
+              <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-line/60 bg-background/60 p-3 text-xs text-muted">
+                <p>Nível: <strong className="text-white">{chosen.level??"—"}</strong></p>
+                <p>Atributo: <strong className="text-white">{chosen.attributeId==null?"—":"Código "+chosen.attributeId}</strong></p>
+                <p>Estrela 1: <strong className="text-white">{chosen.guardianStar1==null?"—":"Código "+chosen.guardianStar1}</strong></p>
+                <p>Estrela 2: <strong className="text-white">{chosen.guardianStar2==null?"—":"Código "+chosen.guardianStar2}</strong></p>
+              </div>}
             <div className="mt-4 rounded-lg border border-gold/30 bg-background/60 p-3">
               <h3 className="mb-1 font-semibold text-gold">Descrição da carta</h3>
               <p className="whitespace-pre-line text-sm text-foreground/85">
