@@ -83,6 +83,20 @@ def x15_rank_for_verified_score(points: int) -> str:
     return "Z-POW" if points>=95 else "S-POW" if points>=50 else "S-TEC"
 
 
+def rank_label_for_existing_score(sha: str | None, score: int) -> str:
+    """Apenas classifica um SCORE JÁ CALCULADO pelo motor autorizado.
+
+    Não lê RAM, não modifica contadores, regras ou bônus de vitória.
+    Os jogos limitam as letras aos extremos de sua escala, mesmo quando
+    a soma intermediária fica abaixo de zero ou acima de 99.
+    """
+    if type(score) is not int or not -10000 <= score <= 10000:
+        raise ValueError("Pontuação calculada inválida.")
+    if is_x15_sha(sha):
+        return x15_rank_for_verified_score(max(0,min(score,300)))
+    return classic_rank_for_verified_score(max(0,min(score,99)))
+
+
 def score_rank_for_verified_result(sha: str | None, points: int) -> str:
     return (x15_rank_for_verified_score(points) if is_x15_sha(sha)
             else classic_rank_for_verified_score(points))
