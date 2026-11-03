@@ -14,12 +14,22 @@ from urllib.parse import quote
 
 REPO_API = "https://api.github.com/repos/guibatoni/appassist"
 REPO_WEB = "https://github.com/guibatoni/appassist"
+# Preferir a linha de desenvolvimento mais nova, mesmo que uma branch antiga
+# gere novo CI. Versões antigas são fallback apenas se não houver novo build.
 PREVIEW_BRANCHES = (
+    "feature/dueltrace-v075-rank-forensics-safe-updater",
+    "feature/dueltrace-v074-drops-ranks-frames",
+    "security/dueltrace-trusted-distribution-v073",
     "fix/dueltrace-v073-preview-update-button",
     "feature/dueltrace-v073-assets-hardening",
-    "security/dueltrace-trusted-distribution-v073",
-    "feature/dueltrace-v074-drops-ranks-frames",
 )
+BRANCH_VERSIONS = {
+    PREVIEW_BRANCHES[0]: "0.7.5",
+    PREVIEW_BRANCHES[1]: "0.7.4",
+    PREVIEW_BRANCHES[2]: "0.7.3",
+    PREVIEW_BRANCHES[3]: "0.7.3",
+    PREVIEW_BRANCHES[4]: "0.7.3",
+}
 ARTIFACT_NAME = "DUELTRACE-Windows-Preview-Unsigned-Security-Scanned"
 BUILD_INFO_FILE = "dueltrace-build.json"
 MAX_BYTES = 768 * 1024
@@ -34,7 +44,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def _get_json(url: str) -> dict:
     request = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github+json",
-        "User-Agent": "DUELTRACE-PreviewChecker/0.7.3",
+        "User-Agent": "DUELTRACE-PreviewChecker/0.7.5",
         "X-GitHub-Api-Version": "2022-11-28",
     })
     with urllib.request.build_opener(NoRedirect()).open(request, timeout=8) as response:
@@ -60,7 +70,7 @@ def _accepted_run(item: dict, branch: str) -> bool:
         and item.get("head_branch") == branch
         and item.get("status") == "completed"
         and item.get("conclusion") == "success"
-        and item.get("event") in ("pull_request", "push")
+        and item.get("event") == "push"
         and isinstance(sha, str) and bool(_SHA.fullmatch(sha))
         and item.get("html_url") == f"{REPO_WEB}/actions/runs/{run_id}"
     )
@@ -78,7 +88,10 @@ def fetch_latest_preview() -> dict | None:
         candidates.extend(
             item for item in runs if isinstance(item, dict) and _accepted_run(item, branch)
         )
-    candidates.sort(key=lambda item: item["id"], reverse=True)
+    # Prioridade editorial: nunca sugerir branch anterior como nova versão
+    # só porque um teste antigo recebeu ID de Actions mais alto.
+    candidates.sort(key=lambda item: (
+        PREVIEW_BRANCHES.index(item["head_branch"]), -item["id"]))
     for item in candidates[:12]:
         run_id = item["id"]
         data = _get_json(f"{REPO_API}/actions/runs/{run_id}/artifacts?per_page=100")
@@ -95,6 +108,7 @@ def fetch_latest_preview() -> dict | None:
                 "branch": item["head_branch"],
                 "page": item["html_url"],
                 "artifact_name": ARTIFACT_NAME,
+                "version": BRANCH_VERSIONS[item["head_branch"]],
             }
     return None
 
