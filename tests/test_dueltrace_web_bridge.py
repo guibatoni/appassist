@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 
@@ -113,6 +113,56 @@ class BridgeTests(unittest.TestCase):
             self.bridge.import_iso()
         with self.assertRaises(RuntimeError):
             self.bridge.configure_epsxe()
+
+    def test_static_server_rejects_cross_origin_and_dangerous_paths(self):
+        static=self.home/"www"
+        static.mkdir()
+        (static/"index.html").write_text("DUELTRACE",encoding="utf-8")
+        (static/"safe.js").write_text("console.log('safe')",encoding="utf-8")
+        (static/".env").write_text("SECRET_CANARY",encoding="utf-8")
+        (static/"empty").mkdir()
+        outside=self.home/"not_static.txt"
+        outside.write_text("PRIVATE_CANARY",encoding="utf-8")
+        handler=local_handler(static,self.bridge)
+        server=http.server.ThreadingHTTPServer(("127.0.0.1",0),handler)
+        worker=threading.Thread(target=server.serve_forever,daemon=True)
+        worker.start()
+        try:
+            base="http://127.0.0.1:"+str(server.server_port)
+            with urlopen(base+"/") as response:
+                self.assertEqual(response.read(),b"DUELTRACE")
+                self.assertEqual(response.headers["X-Frame-Options"],"DENY")
+                self.assertIn("script-src 'self'",response.headers["Content-Security-Policy"])
+                self.assertEqual(response.headers["Cross-Origin-Resource-Policy"],
+                                 "same-origin")
+            for url,headers,method,expected in (
+                ("/",{"Host":"evil.example"}, "GET",403),
+                ("/",{"Origin":"https://evil.example"}, "GET",403),
+                ("/",{"Sec-Fetch-Site":"cross-site"},"GET",403),
+                ("/%2e%2e/not_static.txt",{},"GET",403),
+                ("/%252e%252e/not_static.txt",{},"GET",403),
+                ("//evil.example/path",{},"GET",403),
+                ("/.env",{},"GET",403),
+                ("/empty/",{},"GET",403),
+                ("/",{},"POST",405),
+                ("/__art__/"+"b"*64+"/1.png",{},"HEAD",405),
+            ):
+                with self.subTest(url=url,headers=headers,method=method):
+                    req=Request(base+url,headers=headers,method=method)
+                    with self.assertRaises(HTTPError) as denied:
+                        urlopen(req)
+                    self.assertEqual(denied.exception.code,expected)
+            try:
+                (static/"outbound.txt").symlink_to(outside)
+            except (OSError,NotImplementedError):
+                pass  # Windows CI pode negar symlinks não privilegiados.
+            else:
+                with self.assertRaises(HTTPError) as denied:
+                    urlopen(base+"/outbound.txt")
+                self.assertEqual(denied.exception.code,403)
+        finally:
+            server.shutdown()
+            server.server_close()
 
     def test_art_route_never_leaks_other_profile_and_denies_post(self):
         (self.analysis/"artes_722").mkdir()
