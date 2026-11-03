@@ -81,7 +81,8 @@ class PerModDiagnosticTests(unittest.TestCase):
                     "candidates":{"fusion_tables_u16":[]},"uncertainties":[],
                     "evidence":[]}
             with (
-                patch("dueltrace_intelligence.investigate", return_value=report) as inspect,
+                patch("dueltrace_intelligence.investigate",
+                      side_effect=lambda _image, p: {**report, "features": dict(p["verified"])}) as inspect,
                 patch("dueltrace_intelligence.ollama_status",
                       return_value={"available":True,"state":"pronto"}) as status,
                 patch("dueltrace_intelligence.analyse_with_local_ai",
