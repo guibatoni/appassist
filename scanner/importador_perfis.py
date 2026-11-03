@@ -148,7 +148,11 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
             "categories": card_ok,
             "effects": effects_info["count"] > 0,
         },
-        "rank_labels": LABELS_X15 if known_x15 else None,
+        "rank_labels": LABELS_X15 if known_x15 else list(
+            __import__("dueltrace_rank_system").CLASSIC_RANKS),
+        "rank_system":("x15" if known_x15 else "classic"),
+        "rank_system_verification":("sha_x15_confirmado" if known_x15
+                                    else "layout_original_presumido"),
         "rank_points": rank_profile_for_image(result["sha256"],result.get("rank_analysis")),
         "rank_mips_evidence": result.get("rank_mips_evidence", {
             "status":"not_scanned","rank_routine_confirmed":False,"candidates":[]}),
