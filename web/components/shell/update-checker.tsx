@@ -23,6 +23,18 @@ export function UpdateChecker() {
     let mounted = true
     let attempts = 0
     let handle: number | undefined
+    let recurring: number | undefined
+    const refresh = () => {
+      const api = desktopApi()
+      if (!api) return
+      void api.check_updates().then(response => {
+        if (!mounted) return
+        setResult(response)
+        setAutomaticNotice(response.updateAvailable)
+      }).catch(() => {
+        // Falhas offline não geram notificações fictícias.
+      })
+    }
     const probe = () => {
       if (!mounted) return
       const api = desktopApi()
@@ -30,18 +42,15 @@ export function UpdateChecker() {
         if (++attempts <= 20) handle = window.setTimeout(probe, 750)
         return
       }
-      void api.check_updates().then(response => {
-        if (!mounted) return
-        setResult(response)
-        setAutomaticNotice(response.updateAvailable)
-      }).catch(() => {
-        // Falhas offline não geram alertas falsos. O botão permite retentar.
-      })
+      refresh()
+      // Consulta novamente se o usuário mantiver o DUELTRACE aberto.
+      recurring = window.setInterval(refresh, 3 * 60 * 60 * 1000)
     }
     handle = window.setTimeout(probe, 1000)
     return () => {
       mounted = false
       if (handle !== undefined) window.clearTimeout(handle)
+      if (recurring !== undefined) window.clearInterval(recurring)
     }
   }, [])
 
