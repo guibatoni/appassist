@@ -117,20 +117,20 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
             return empty
         oid = _integer(record.get("opponent_id"))
         cid = _integer(record.get("card_id"))
-        rank = record.get("group")
+        raw_rank = record.get("group")
         weight = _integer(record.get("weight"))
-        if (oid not in opponents or type(rank) is not str or rank not in raw_groups
+        if (oid not in opponents or type(raw_rank) is not str or raw_rank not in raw_groups
                 or cid is None or not 1 <= cid <= MAX_CARDS
                 or weight is None or not 1 <= weight <= WEIGHT_TOTAL):
             return empty
-        key = (oid, rank, cid)
+        key = (oid, raw_rank, cid)
         if key in seen:
             return empty
         seen.add(key)
-        totals[(oid, rank)] += weight
-        if totals[(oid,rank)] > WEIGHT_TOTAL:
+        totals[(oid, raw_rank)] += weight
+        if totals[(oid,raw_rank)] > WEIGHT_TOTAL:
             return empty
-        checked.append((oid, rank, cid, weight, record.get("source_offset")))
+        checked.append((oid, raw_rank, cid, weight, record.get("source_offset")))
     if (len(totals) != EXPECTED_TABLES
             or any(totals.get((oid,rank)) != WEIGHT_TOTAL
                    for oid in opponents for rank in raw_groups)):
