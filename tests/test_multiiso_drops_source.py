@@ -43,6 +43,18 @@ class BinaryDropTests(unittest.TestCase):
         tables,_=decode_drops(bytes(make_wa()),names)
         self.assertEqual([row["rank"] for row in tables["drops"][:3]],list(names))
 
+    def test_original_rank_pools_use_correct_physical_WA_table_order(self):
+        from dueltrace_rank_system import CLASSIC_POOLS
+        tables,_=decode_drops(bytes(make_wa()),CLASSIC_POOLS)
+        self.assertEqual(
+            [row["rank"] for row in tables["verificacao"][:3]],
+            ["S/A POW","B/C/D POW/TEC","S/A TEC"])
+        self.assertEqual(
+            [row["source_offset"] for row in tables["verificacao"][:3]],
+            [WA_OPP_BASE+WA_RANK_STRIDE,
+             WA_OPP_BASE+2*WA_RANK_STRIDE,
+             WA_OPP_BASE+3*WA_RANK_STRIDE])
+
     def test_corrupted_drop_table_is_never_published(self):
         wa=make_wa()
         at=WA_OPP_BASE+WA_RANK_STRIDE+2
