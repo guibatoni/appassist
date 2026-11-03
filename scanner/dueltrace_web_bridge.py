@@ -67,6 +67,13 @@ class DueltraceWebBridge:
                 "attribute": str(item.get("attribute") or "")[:60],
                 "atk": item.get("atk") if type(item.get("atk")) is int else None,
                 "def": item.get("def") if type(item.get("def")) is int else None,
+                "level":item.get("level") if type(item.get("level")) is int else None,
+                "attributeId":item.get("attribute_id")
+                    if type(item.get("attribute_id")) is int else None,
+                "guardianStar1":item.get("guardian_star_1")
+                    if type(item.get("guardian_star_1")) is int else None,
+                "guardianStar2":item.get("guardian_star_2")
+                    if type(item.get("guardian_star_2")) is int else None,
                 "effect": effect,
                 "effectSource": str(item["effect_source"])[:150] if effect else None,
                 "description": str(item.get("description") or "")[:400]
