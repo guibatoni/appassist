@@ -1,0 +1,1 @@
+DUELTRACE v0.5.0 — Inicio da plataforma: novo desktop Windows, UI moderna com transicoes, icone SVG/PNG/ICO, scanner automatico ISO/BIN, biblioteca com cinco categorias, efeitos declarados com procedencia, fusoes e overlay conservadores. Sem suporte universal nem reconhecimento de cartas no campo. Testes automatizados e patch incremental.
