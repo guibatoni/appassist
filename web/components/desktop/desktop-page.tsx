@@ -203,7 +203,7 @@ function Mods({mods,sha,onRefresh,configured}:{
     try{
       const result=await api.scan_sources(mod.sha256)
       await onRefresh()
-      setMessage("WA/SLUS analisados: "+result.artCount+" artes, "+
+      setMessage("ISO analisada: "+result.opponentCount+" oponentes, "+result.dropEntries+" drops, "+result.artCount+" artes, "+
         result.frameStyles+" molduras originais, "+result.framedCards+" cartas com moldura, "+
         result.descriptionCount+" descrições e "+
         result.effectTexts+" textos indicativos de efeitos. "+
@@ -242,9 +242,10 @@ function Mods({mods,sha,onRefresh,configured}:{
             <p className="truncate font-semibold text-white">{mod.name}</p>
             <p className="mt-1 text-xs text-muted">{mod.sha256.slice(0,18)}…</p>
           </div><span className={sha===mod.sha256?"text-xs text-success":"text-xs text-gold"}>{sha===mod.sha256?"Ativo":mod.requiresReview?"Revisão necessária":"Conhecido"}</span></div>
-          <div className="my-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-3 xl:grid-cols-6">
-            {([["Cartas",mod.cards],["Fusões",mod.fusions],["Textos de efeito",mod.effects],
-              ["Descrições",mod.descriptions??0],["Molduras WA",mod.frameStyles??0],
+          <div className="my-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-3 xl:grid-cols-3">
+            {([["Cartas",mod.cards],["Oponentes",mod.opponents??0],["Drops",mod.dropEntries??0],
+              ["Fusões",mod.fusions],["Textos de efeito",mod.effects],["Descrições",mod.descriptions??0],
+              ["Tabelas WA",mod.dropTables??0],["Molduras WA",mod.frameStyles??0],
               ["Cartas emolduradas",mod.framedCards??0]] as const).map(([label,n])=>
               <div key={label} className="rounded-lg border border-line/50 bg-background/70 p-2"><p className="font-display text-xl text-primary">{n}</p><p className="text-xs text-muted">{label}</p></div>)}
           </div>
