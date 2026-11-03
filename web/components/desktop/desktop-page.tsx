@@ -279,15 +279,28 @@ function Mods({mods,sha,onRefresh,configured}:{
 
 function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
   const [search,setSearch]=useState("")
-  const [sort,setSort]=useState<"id"|"atk"|"name">("id")
+  const [sort,setSort]=useState<"id"|"atk"|"def"|"type"|"name">("id")
+  const [cardType,setCardType]=useState("")
   const [page,setPage]=useState(0)
   const [selectedId,setSelectedId]=useState<number|null>(null)
+  const types=useMemo(()=>Array.from(new Set(cards.map(c=>c.type||c.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"pt-BR")),[cards])
+  useEffect(()=>{setSearch("");setSort("id");setCardType("");setPage(0);setSelectedId(null)},[sha])
   const visible=useMemo(()=>{
-    const q=search.trim().toLowerCase()
-    const filtered=cards.filter(c=>!q||(String(c.id)+" "+c.name+" "+c.type+" "+c.category).toLowerCase().includes(q))
-    filtered.sort((a,b)=>sort==="atk"?(b.atk??-1)-(a.atk??-1):sort==="name"?a.name.localeCompare(b.name,"pt-BR"):a.id-b.id)
+    const q=search.trim().toLocaleLowerCase("pt-BR")
+    const filtered=cards.filter(c=>(!q||(String(c.id)+" "+c.name+" "+c.type+" "+c.category).toLocaleLowerCase("pt-BR").includes(q))
+      &&(!cardType||(c.type||c.category)===cardType))
+    const stat=(a:LocalCard,b:LocalCard,key:"atk"|"def")=>{
+      const av=a[key],bv=b[key]
+      if(typeof av!=="number")return typeof bv!=="number"?a.id-b.id:1
+      if(typeof bv!=="number")return -1
+      return bv-av||a.id-b.id
+    }
+    filtered.sort((a,b)=>sort==="atk"?stat(a,b,"atk"):sort==="def"?stat(a,b,"def")
+      :sort==="name"?a.name.localeCompare(b.name,"pt-BR")||a.id-b.id
+      :sort==="type"?(a.type||a.category).localeCompare(b.type||b.category,"pt-BR")||a.name.localeCompare(b.name,"pt-BR")||a.id-b.id
+      :a.id-b.id)
     return filtered
-  },[cards,search,sort])
+  },[cards,search,sort,cardType])
   const chosen=cards.find(c=>c.id===selectedId)??visible[0]??null
   const pages=Math.max(1,Math.ceil(visible.length/32))
   return <>
@@ -300,7 +313,12 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
             onChange={e=>{setSearch(e.target.value);setPage(0)}} placeholder="Buscar por nome, tipo ou ID"/>
         </label>
         <select className="field px-3 py-2" value={sort} aria-label="Ordenar" onChange={e=>{setSort(e.target.value as typeof sort);setPage(0)}}>
-          <option value="id">ID</option><option value="atk">Maior ATK</option><option value="name">Nome</option>
+          <option value="id">ID</option><option value="atk">Maior ataque</option><option value="def">Maior defesa</option><option value="type">Tipo</option><option value="name">Alfabética (A–Z)</option>
+        </select>
+        <select className="field px-3 py-2" value={cardType} aria-label="Filtrar por tipo"
+          onChange={e=>{setCardType(e.target.value);setPage(0)}}>
+          <option value="">Todos os tipos</option>
+          {types.map(t=><option key={t} value={t}>{t}</option>)}
         </select>
         <span className="self-center text-sm text-muted">{visible.length} / {cards.length} cartas</span>
       </div>
