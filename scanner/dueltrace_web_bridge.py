@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
+from time import monotonic
 
 from auto_mods import ModCatalog, load_json
 from mod_autopilot import ModAutopilot, profile_summary
@@ -16,15 +17,20 @@ from dueltrace_intelligence import MultiModIntelligence
 from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
                                  suggest_hand_pairs)
 from dueltrace_fusion_planner import plan_fusion_chains
+from dueltrace_rank_live import (model_available, read_rank_candidate,
+                                 project_lp_win_rank)
 from epsxe_launcher import launch_epsxe
 
 
 class DueltraceWebBridge:
     def __init__(self, catalog: ModCatalog | None = None, *,
-                 file_picker=None, ram_reader=None):
+                 file_picker=None, ram_reader=None, rank_reader=None):
         self.catalog = catalog or ModCatalog()
         self._file_picker = file_picker
         self._ram_reader = ram_reader or read_hand_from_epsxe
+        self._rank_reader = rank_reader or read_rank_candidate
+        self._rank_calibration = None
+        self._rank_last_turns = None
         self._process = None
         self._lock = threading.RLock()
         self._fusion_cache_key = None
@@ -140,6 +146,77 @@ class DueltraceWebBridge:
                     "chains":chains["routes"],
                     "chainsComplete":chains["complete"]}
 
+    def _rank_sample(self):
+        active,entry,profile=self._active()
+        sha=active.get("sha256") if profile else None
+        if not model_available(sha):
+            self._rank_calibration=None
+            return None,sha,{"state":"unsupported","ready":False,
+                "status":"Pontuação ainda não validada nesta ISO. Não aplicar o modelo de outro mod.",
+                "score":None,"category":None,"counters":None}
+        preferred=(self._process.pid if self._process is not None and
+                   self._process.poll() is None else None)
+        try:
+            sample=self._rank_reader(preferred_pid=preferred)
+        except (OSError,RuntimeError,ValueError) as exc:
+            sample={"ready":False,"status":str(exc)[:150],"pid":None,"counters":None}
+        if not sample.get("ready"):
+            self._rank_calibration=None
+            self._rank_last_turns=None
+            return None,sha,{"state":"unavailable","ready":False,
+                "status":sample.get("status","Leitura indisponível"),
+                "score":None,"category":None,"counters":None}
+        return sample,sha,None
+
+    def get_rank(self):
+        """Sem pontuação até o usuário validar os LP do duelo atual."""
+        with self._lock:
+            sample,sha,issue=self._rank_sample()
+            if issue is not None:
+                return issue
+            counters=sample["counters"]
+            pid=sample["pid"]
+            turns=counters["turns"]
+            if (self._rank_last_turns is not None and
+                    self._rank_last_turns[0]==(sha,pid) and
+                    turns < self._rank_last_turns[1]):
+                self._rank_calibration=None  # novo duelo ou contador reiniciado
+            self._rank_last_turns=((sha,pid),turns)
+            calibrated=(self._rank_calibration is not None and
+                self._rank_calibration["sha"]==sha and
+                self._rank_calibration["pid"]==pid and
+                monotonic()-self._rank_calibration["at"]<7200)
+            if not calibrated:
+                self._rank_calibration=None
+                return {"ready":False,"state":"needs_lp_confirmation",
+                    "status":"Confirme os LP exibidos pelo jogo neste duelo para habilitar a projeção.",
+                    "candidateLp":counters["remaining_lp"],"score":None,
+                    "category":None,"counters":None}
+            result=project_lp_win_rank(counters)
+            return {"ready":True,"state":"provisional",
+                    "status":"Projeção se vencer por LP; resultado e mapeamento RAM não verificados no jogo.",
+                    "candidateLp":counters["remaining_lp"],
+                    "score":result["score"],"category":result["category"],
+                    "counters":counters,"breakdown":result["breakdown"],
+                    "model":result["model"],"final":False}
+
+    def confirm_rank_lp(self, life_points):
+        if type(life_points) is not int or not 0<=life_points<=32766:
+            raise ValueError("Informe os LP exatos mostrados no duelo (0 a 32766).")
+        with self._lock:
+            sample,sha,issue=self._rank_sample()
+            if issue is not None:
+                return issue
+            if sample["counters"]["remaining_lp"]!=life_points:
+                self._rank_calibration=None
+                return {"ready":False,"state":"lp_mismatch",
+                    "status":"LP do jogo divergentes do candidato RAM. Contador não habilitado.",
+                    "candidateLp":sample["counters"]["remaining_lp"],
+                    "score":None,"category":None,"counters":None}
+            self._rank_calibration={"sha":sha,"pid":sample["pid"],"at":monotonic()}
+            self._rank_last_turns=((sha,sample["pid"]),sample["counters"]["turns"])
+            return self.get_rank()
+
     def get_fusions(self, query="", offset=0, limit=100):
         if type(query) is not str or len(query)>100:
             raise ValueError("Consulta inválida")
@@ -183,6 +260,8 @@ class DueltraceWebBridge:
             raise ValueError("Confirmação inválida")
         self.catalog.activate(sha,acknowledge_uncertainty=acknowledge)
         self._fusion_cache_key=None
+        self._rank_calibration=None
+        self._rank_last_turns=None
         return self.get_state()
 
     def import_iso(self):

@@ -7,17 +7,22 @@ on:
       - feature/dueltrace-v070-v0-desktop-integration
       - security/dueltrace-v070-client-safety
       - fix/dueltrace-v070-tailwind-styles
+      - feature/dueltrace-v071-rank-and-fusion-images
     paths:
       - 'web/**'
       - 'scanner/dueltrace_web_*.py'
+      - 'scanner/dueltrace_rank_live.py'
       - 'tests/test_dueltrace_web_bridge.py'
+      - 'tests/test_dueltrace_rank_live.py'
       - 'tools/security/**'
       - '.github/workflows/validar-webui-desktop.yml'
   pull_request:
     paths:
       - 'web/**'
       - 'scanner/dueltrace_web_*.py'
+      - 'scanner/dueltrace_rank_live.py'
       - 'tests/test_dueltrace_web_bridge.py'
+      - 'tests/test_dueltrace_rank_live.py'
 
 permissions:
   contents: read

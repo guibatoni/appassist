@@ -83,9 +83,24 @@ export type FusionRow = {
 
 export type FusionPage = { total: number; offset: number; rows: FusionRow[] }
 
+export type RankState = {
+  ready: boolean
+  state: "unsupported" | "unavailable" | "needs_lp_confirmation" | "lp_mismatch" | "provisional"
+  status: string
+  candidateLp?: number
+  score: number | null
+  category: string | null
+  counters: Record<string, number> | null
+  breakdown?: Record<string, number>
+  model?: string
+  final?: boolean
+}
+
 export interface DesktopAPI {
   get_state(): Promise<DesktopState>
   get_hand(): Promise<HandState>
+  get_rank(): Promise<RankState>
+  confirm_rank_lp(lifePoints: number): Promise<RankState>
   get_fusions(query: string, offset: number, limit: number): Promise<FusionPage>
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
   import_iso(): Promise<{cancelled: boolean; investigation?: string}>
@@ -96,6 +111,8 @@ export interface DesktopAPI {
 interface ProtectedNativeAPI {
   get_state(token: string): Promise<DesktopState>
   get_hand(token: string): Promise<HandState>
+  get_rank(token: string): Promise<RankState>
+  confirm_rank_lp(token: string, lifePoints: number): Promise<RankState>
   get_fusions(token: string, query: string, offset: number, limit: number): Promise<FusionPage>
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
   import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
@@ -120,6 +137,8 @@ export function desktopApi(): DesktopAPI | null {
   return {
     get_state: () => native.get_state(token),
     get_hand: () => native.get_hand(token),
+    get_rank: () => native.get_rank(token),
+    confirm_rank_lp: (lifePoints) => native.confirm_rank_lp(token, lifePoints),
     get_fusions: (query, offset, limit) => native.get_fusions(token, query, offset, limit),
     activate_mod: (sha, acknowledge) => native.activate_mod(token, sha, acknowledge),
     import_iso: () => native.import_iso(token),

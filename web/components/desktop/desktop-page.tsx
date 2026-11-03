@@ -7,7 +7,7 @@ import {
   GitMerge, Layers, Play, RefreshCcw, Search, Shield, Swords, Upload,
 } from "lucide-react"
 import {cardArt, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
-import type {LocalCard, HandState, FusionPage, LocalMod} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes"
 
@@ -32,6 +32,81 @@ function Empty({children}:{children:React.ReactNode}) {
   return <p className="rounded-lg border border-line/60 bg-[#06152c]/70 px-4 py-6 text-center text-sm text-muted">{children}</p>
 }
 
+function RankPanel({sha}:{sha:string|null}) {
+  const [rank,setRank]=useState<RankState|null>(null)
+  const [lp,setLp]=useState("")
+  const [busy,setBusy]=useState(false)
+  useEffect(()=>{
+    let mounted=true,busyRead=false
+    setRank(null)
+    const refresh=async()=>{
+      const api=desktopApi()
+      if(!api||busyRead)return
+      busyRead=true
+      try{const result=await api.get_rank();if(mounted)setRank(result)}
+      catch{if(mounted)setRank({ready:false,state:"unavailable",status:"Leitura de RANK indisponível",score:null,category:null,counters:null})}
+      finally{busyRead=false}
+    }
+    void refresh()
+    const id=window.setInterval(()=>void refresh(),2200)
+    return()=>{mounted=false;window.clearInterval(id)}
+  },[sha])
+  const confirm=async()=>{
+    if(!/^\d{1,5}$/.test(lp))return
+    const value=Number(lp)
+    if(!Number.isInteger(value)||value<0||value>32766)return
+    const api=desktopApi()
+    if(!api)return
+    setBusy(true)
+    try{setRank(await api.confirm_rank_lp(value))}
+    catch{setRank({ready:false,state:"unavailable",status:"Não foi possível confirmar os LP",score:null,category:null,counters:null})}
+    finally{setBusy(false)}
+  }
+  return <section className="panel rounded-xl p-4" aria-label="Contador de RANK">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 className="font-display text-xl font-semibold text-gold">Contador de RANK</h2>
+        <p className="mt-1 text-xs text-muted">Projeção de pontuação · somente leitura</p>
+      </div>
+      <div className="flex min-w-36 items-baseline justify-end gap-2 rounded-lg border border-gold/30 bg-gradient-to-r from-[#152c4a] to-background px-3 py-2">
+        <span className="font-display text-3xl font-bold tabular-nums text-primary">{rank?.ready?rank.score:"—"}</span>
+        <span className="text-xs text-muted">pontos</span>
+      </div>
+    </div>
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+      <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
+        {rank?.ready?rank.category:"RANK indisponível"}
+      </span>
+      {rank?.ready&&<span className="text-xs text-gold">Estimativa · não é resultado final</span>}
+    </div>
+    <p className="mt-2 text-sm text-muted" role="status">{rank?.status??"Consultando leitura e modelo do mod…"}</p>
+    {(rank?.state==="needs_lp_confirmation"||rank?.state==="lp_mismatch")&&
+      <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-line/60 bg-panel-strong/60 p-3">
+        <label className="flex flex-col gap-1 text-xs text-foreground">
+          LP atuais mostrados no jogo
+          <input type="number" min={0} max={32766} inputMode="numeric"
+            value={lp} onChange={e=>setLp(e.target.value)}
+            className="field w-44 rounded-md px-3 py-2 text-sm" placeholder="Ex.: 8000"/>
+        </label>
+        <button type="button" className="btn-gold disabled:opacity-40" disabled={busy||!lp||!desktopApi()}
+          onClick={()=>void confirm()}>Confirmar LP</button>
+        <span className="text-xs text-muted">Candidato da RAM: {rank?.candidateLp??"—"} LP</span>
+      </div>}
+    {rank?.ready&&rank.counters&&
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted sm:grid-cols-4">
+        {[["Turnos",rank.counters.turns],["Fusões",rank.counters.fusions],
+          ["Magias",rank.counters.spells],["LP",rank.counters.remaining_lp]].map(([label,value])=>
+          <div key={label} className="rounded-md border border-line/50 bg-background/40 px-3 py-2">
+            <span className="block">{label}</span><strong className="font-display text-base text-white">{value??"—"}</strong>
+          </div>)}
+      </div>}
+    <p className="mt-3 text-xs text-muted">
+      A contagem só é habilitada para o modelo Remaster X15 de SHA conhecido, após confirmação dos LP.
+      A origem do endereço no ePSXe ainda é experimental. Outros mods exigem análise própria.
+    </p>
+  </section>
+}
+
 function Home({sha}:{sha:string|null}) {
   const [hand,setHand]=useState<HandState|null>(null)
   const [mode,setMode]=useState<"pairs"|"chains">("pairs")
@@ -50,7 +125,8 @@ function Home({sha}:{sha:string|null}) {
     return()=>{mounted=false;window.clearInterval(timer)}
   },[sha])
   return <>
-    <Heading title="Central de Duelo" subtitle="Sua mão e as melhores combinações identificadas no perfil ativo"/>
+    <Heading title="Central de Duelo" subtitle="Sua mão, projeção de RANK e combinações do perfil ativo"/>
+    <RankPanel sha={sha}/>
     <div className="panel rounded-xl p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-xl font-semibold text-primary">Sua mão · 5 slots</h2>
@@ -208,44 +284,90 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
   </>
 }
 
-function Fusions({sha}:{sha:string|null}) {
+function FusionIllustration({id,name,sha,card,role}:{
+  id:number;name:string;sha:string|null;card:LocalCard|null;role:string
+}) {
+  const displayed:LocalCard=card??{
+    id,name,type:"",attribute:"",category:"Não identificada",
+    atk:null,def:null,effect:null,effectSource:null
+  }
+  return <div className="flex min-w-0 flex-col items-center gap-1.5" title={name}>
+    <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{role}</span>
+    <div className="w-16 sm:w-20">
+      <CardThumbnail key={String(sha)+"-"+id} card={displayed} sha={sha}/>
+    </div>
+    <span className="text-center text-[11px] font-semibold text-gold">#{id}</span>
+    <span className="line-clamp-2 min-h-8 break-words text-center text-xs font-medium text-foreground">{name}</span>
+  </div>
+}
+
+function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [query,setQuery]=useState("")
   const [offset,setOffset]=useState(0)
   const [records,setRecords]=useState<FusionPage|null>(null)
   const [error,setError]=useState<string|null>(null)
+  const cardsById=useMemo(()=>new Map(cards.map(c=>[c.id,c])),[cards])
+  const pageSize=12
   useEffect(()=>{
     let mounted=true
+    setRecords(null)
     const id=window.setTimeout(async()=>{
       const api=desktopApi()
       if(!api){if(mounted)setRecords(null);return}
-      try{const x=await api.get_fusions(query,offset,80);if(mounted){setRecords(x);setError(null)}}
-      catch(e){if(mounted)setError(e instanceof Error?e.message:"Falha ao carregar fusões")}
-    },230)
+      try{
+        const result=await api.get_fusions(query,offset,pageSize)
+        if(mounted){setRecords(result);setError(null)}
+      }catch(e){if(mounted)setError(e instanceof Error?e.message:"Falha ao carregar fusões")}
+    },220)
     return()=>{mounted=false;window.clearTimeout(id)}
   },[sha,query,offset])
   return <>
-    <Heading title="Fusões" subtitle="Catálogo do mod ativo, com resultados e origem identificados"/>
+    <Heading title="Biblioteca de Fusões" subtitle="Imagem, nome e ID de cada material e resultado — somente receitas do mod ativo"/>
     <section className="panel rounded-xl p-4">
-      <label className="field flex items-center gap-2 px-3 py-2"><Search className="size-4 text-primary"/>
-        <input className="w-full bg-transparent outline-none" placeholder="Pesquisar material, resultado ou ID"
-          value={query} onChange={e=>{setQuery(e.target.value);setOffset(0)}}/>
-      </label>
-      {error&&<p className="mt-2 text-sm text-danger">{error}</p>}
-      <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[610px] text-left text-sm">
-        <thead className="border-b border-primary/40 text-gold"><tr><th className="p-2">Material A</th><th className="p-2">Material B</th><th className="p-2">Resultado</th><th className="p-2">ATK</th><th className="p-2">Origem</th></tr></thead>
-        <tbody>{records?.rows.map((r,i)=><tr key={String(i)+"-"+r.a+"-"+r.b} className="border-b border-line/30 hover:bg-primary/5">
-          <td className="p-2">#{r.a} {r.nameA}</td><td className="p-2">#{r.b} {r.nameB}</td>
-          <td className="p-2 font-semibold text-primary">#{r.result} {r.nameResult}</td>
-          <td className="p-2">{r.atk??"—"}</td><td className="p-2 text-xs text-muted">{sourceLabel(r.source)}</td></tr>)}</tbody>
-      </table></div>
-      {!records?.rows.length&&<Empty>Não há fusões confirmadas para mostrar no perfil ou na pesquisa atual.</Empty>}
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <p className="text-sm text-muted">{records?.total??0} receitas</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="field flex min-w-56 flex-1 items-center gap-2 px-3 py-2">
+          <Search className="size-4 text-primary"/>
+          <input className="w-full bg-transparent outline-none" placeholder="Pesquisar material, resultado ou ID"
+            value={query} onChange={e=>{setQuery(e.target.value);setOffset(0)}}/>
+        </label>
+        <span className="text-xs text-muted">{records?.total??0} receitas</span>
+      </div>
+      {error&&<p className="mt-3 text-sm text-danger" role="alert">{error}</p>}
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        {records?.rows.map((r,i)=><article key={r.a+"-"+r.b+"-"+r.result+"-"+i}
+          className="rounded-xl border border-line/80 bg-gradient-to-br from-panel-strong/90 via-[#0b1a35] to-background p-3 shadow-[inset_0_1px_0_rgb(245_184_61/0.09)] transition-colors hover:border-primary/60">
+          <div className="grid grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)_24px_minmax(0,1fr)] items-start gap-1">
+            <FusionIllustration id={r.a} name={r.nameA} card={cardsById.get(r.a)??null} sha={sha} role="Material A"/>
+            <span className="pt-14 text-center font-display text-xl font-bold text-primary" aria-hidden>+</span>
+            <FusionIllustration id={r.b} name={r.nameB} card={cardsById.get(r.b)??null} sha={sha} role="Material B"/>
+            <span className="pt-14 text-center font-display text-xl font-bold text-gold" aria-hidden>→</span>
+            <FusionIllustration id={r.result} name={r.nameResult} card={cardsById.get(r.result)??null} sha={sha} role="Resultado"/>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/50 pt-2">
+            <span className="text-xs text-muted">{sourceLabel(r.source)}</span>
+            <span className="text-sm font-semibold tabular-nums text-primary">ATK {r.atk??"—"}</span>
+          </div>
+        </article>)}
+      </div>
+      {records&&!records.rows.length&&<Empty>Não há fusões cadastradas para esta pesquisa e este mod.</Empty>}
+      {!records&&!error&&<p className="py-4 text-center text-sm text-muted">Carregando receitas do perfil ativo…</p>}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted">
+          {records?.total?String(offset+1)+"–"+Math.min(offset+pageSize,records.total)+" de "+records.total:"Nenhuma receita"}
+        </p>
         <div className="flex gap-2">
-          <button type="button" className="btn-ghost disabled:opacity-30" disabled={offset===0} onClick={()=>setOffset(x=>Math.max(0,x-80))}><ChevronLeft className="size-4"/>Anterior</button>
-          <button type="button" className="btn-ghost disabled:opacity-30" disabled={offset+80>=(records?.total??0)} onClick={()=>setOffset(x=>x+80)}>Próxima<ChevronRight className="size-4"/></button>
+          <button type="button" className="btn-ghost disabled:opacity-30" disabled={offset===0}
+            onClick={()=>setOffset(x=>Math.max(0,x-pageSize))}>
+            <ChevronLeft className="size-4"/> Anterior
+          </button>
+          <button type="button" className="btn-ghost disabled:opacity-30" disabled={offset+pageSize>=(records?.total??0)}
+            onClick={()=>setOffset(x=>x+pageSize)}>Próxima <ChevronRight className="size-4"/></button>
         </div>
       </div>
+      <p className="mt-3 text-xs text-muted">
+        As imagens só aparecem quando o scanner extraiu PNGs da ISO ativa.
+        Na ausência de arte, mostramos um cartão simbólico; nenhuma imagem é inventada.
+      </p>
     </section>
   </>
 }
@@ -265,6 +387,6 @@ export function DesktopPage({page}:{page:Page}) {
     {page==="inicio"&&<Home sha={state?.activeSha??null}/>}
     {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>}
     {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}
-    {page==="fusoes"&&<Fusions sha={state?.activeSha??null}/>}
+    {page==="fusoes"&&<Fusions sha={state?.activeSha??null} cards={state?.cards??[]}/>}
   </div>
 }
