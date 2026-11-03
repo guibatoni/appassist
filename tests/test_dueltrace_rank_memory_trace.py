@@ -15,10 +15,10 @@ MIPS={"available":True,"candidates":[{"pc":"0x80012000","score":18}]}
 
 
 def make_trace(*, pc=0x80012040, base=0x80030000,
-               corrupt=False, scores_only=False, wrong_phase=False):
+               corrupt=False, scores_only=False, wrong_phase=False, stride=4):
     text=[]
     for i,(limit,score) in enumerate(PAIRS):
-        addr=base+i*4
+        addr=base+i*stride
         phase="DUEL" if wrong_phase else "RANK"
         if not scores_only:
             text.append(f"PC=0x{pc:08X} PHASE={phase} OP=LHU ADDR=0x{addr:08X} VALUE=0x{limit:04X}")
@@ -40,6 +40,11 @@ class RankMemoryTraceTests(unittest.TestCase):
     def test_executed_pc_outside_candidate_range_not_inferred(self):
         result=inspect_rank_memory_trace(make_trace(pc=0x80017000),RANK,MIPS)
         self.assertFalse(result["tableReadsObserved"])
+
+    def test_coincidental_matching_pairs_at_wrong_offsets_are_rejected(self):
+        result=inspect_rank_memory_trace(make_trace(stride=8),RANK,MIPS)
+        self.assertFalse(result["tableReadsObserved"])
+        self.assertEqual(result["matchedPairs"],0)
 
     def test_scores_alone_or_wrong_phase_or_changed_value_rejected(self):
         for content in (
