@@ -28,6 +28,7 @@ from dueltrace_rank_profile_live import (
 from epsxe_launcher import launch_epsxe
 from dueltrace_drops import get_drop_catalog
 from dueltrace_drop_rank_evidence import rank_drop_report, LABELS
+from dueltrace_mips_duel_trace import inspect_duel_mips_trace, MAX_TRACE_BYTES
 from dueltrace_library_sort import validate_sort,matches_type,sort_key
 from dueltrace_update_checker import (
     check_for_updates, open_official_releases, fetch_stable_release, CURRENT_VERSION
@@ -371,6 +372,63 @@ class DueltraceWebBridge:
                 profile, opponent_id=opponent_id, group=group,
                 query=query, offset=offset, limit=limit,
                 sort=sort,card_type=card_type)
+
+    def _trace_results_path(self, sha):
+        if type(sha) is not str or not re.fullmatch("[0-9a-f]{64}",sha):
+            raise ValueError("SHA da ISO inválido")
+        return self.catalog.home / "rank_observations" / (sha+".mips.json")
+
+    def get_rank_trace_status(self):
+        with self._lock:
+            active,entry,profile=self._active()
+            sha=active.get("sha256")
+            if not profile or not isinstance(sha,str):
+                return {"available":False,"records":0,"last":None}
+            data=load_json(self._trace_results_path(sha),{})
+            records=data.get("records",[]) if isinstance(data,dict) else []
+            return {"available":True,"records":len(records),
+                    "last":records[-1] if records else None}
+
+    def import_rank_trace(self):
+        """Lê log do depurador durante duelo; não importa código do jogo."""
+        if self._file_picker is None:
+            raise RuntimeError("Importação de trace disponível somente no Windows.")
+        files=self._file_picker("trace")
+        if not files:
+            return {"cancelled":True}
+        path=Path(files[0]).expanduser().resolve(strict=True)
+        if path.suffix.casefold() not in (".log",".txt"):
+            raise ValueError("Selecione um log de execução MIPS .log ou .txt.")
+        if not 0<path.stat().st_size<=MAX_TRACE_BYTES:
+            raise ValueError("Log de execução vazio ou acima de 8 MiB.")
+        with self._lock:
+            active,entry,profile=self._active()
+            sha=active.get("sha256")
+            if not profile or not sha:
+                raise ValueError("Selecione um mod antes de validar a execução.")
+            report=inspect_duel_mips_trace(
+                path.read_bytes(),profile.get("rank_mips_evidence"))
+            if not report["available"]:
+                return {"cancelled":False,**report}
+            result={
+                "record_id":str(uuid4()),
+                "created_at":datetime.now(timezone.utc).isoformat(),
+                "source":"trace_exportado_do_emulador",
+                "status":report["status"],
+                "executionEvidence":report["executionEvidence"],
+                "executedCandidates":report["executedCandidates"],
+                "instructionSamples":report["instructionSamples"],
+                "distinctPCs":report["distinctPCs"],
+                "rankRoutineConfirmed":False,
+                "traceSha256":report["traceSha256"],
+                "note":report["note"],
+            }
+            dest=self._trace_results_path(sha)
+            prior=load_json(dest,{})
+            records=list(prior.get("records",[])) if isinstance(prior,dict) else []
+            records.append(result)
+            atomic_json(dest,{"schema":1,"rom_sha256":sha,"records":records[-50:]})
+            return {"cancelled":False,**result}
 
     def _observations_path(self, sha):
         if type(sha) is not str or not re.fullmatch("[0-9a-f]{64}",sha):
