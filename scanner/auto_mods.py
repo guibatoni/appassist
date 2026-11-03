@@ -134,12 +134,13 @@ class ModCatalog:
                 and old.get("mtime_ns") == before.st_mtime_ns
                 and tuple(old.get("effects_manifest_signature", ())) == effect_signature):
             profile=self.profile_for(old) or {}
-            if not with_art or profile.get("supported_features", {}).get("art"):
+            if not with_art:
                 return dict(old)
             scan_dir=profile.get("scan_result_dir")
             meta=load_json(Path(scan_dir) / "relatorio.json", {}) if scan_dir else {}
-            # Não reescanear toda a ISO a cada abertura após uma tentativa
-            # sem sucesso. Nova revisão ou 'Reanalisar' invalida este cache.
+            # Revisão 3 deve atualizar inclusive perfis com arte 102x96 já
+            # extraída: faltavam miniaturas, molduras e texto SLUS.
+            # Repetir uma análise com a mesma revisão não gera trabalho extra.
             if (meta.get("art_requested") is True
                     and meta.get("art_parser_revision") == ART_PARSER_REVISION):
                 return dict(old)
