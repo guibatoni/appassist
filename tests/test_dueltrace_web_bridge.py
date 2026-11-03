@@ -121,6 +121,26 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(evidence["suspectedMappings"]["Z-POW"]["group"],groups[1])
         self.assertEqual(protected.get_duel_evidence("x"*64)["observations"],2)
 
+    def test_offline_rank_report_saved_only_as_json_and_never_overwritten(self):
+        import json
+        report_path=self.home/"auditoria-rank.json"
+        self.profile["token"]="PRIVATE_TOKEN_SHOULD_NOT_APPEAR"
+        atomic_json(self.profile_path,self.profile)
+        self.bridge._file_picker=lambda kind: [str(report_path)] if kind=="rank_report" else []
+        protected=ProtectedDesktopApi(self.bridge,"x"*64)
+        with self.assertRaises(PermissionError):
+            protected.export_rank_audit("wrong")
+        result=protected.export_rank_audit("x"*64)
+        self.assertFalse(result["cancelled"])
+        saved=json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(saved["rom_sha256"],self.sha)
+        self.assertNotIn("PRIVATE_TOKEN",report_path.read_text(encoding="utf-8"))
+        self.assertNotIn(str(self.home),report_path.read_text(encoding="utf-8"))
+        self.assertEqual(saved["report_sha256"],result["reportSha256"])
+        with self.assertRaises(FileExistsError):
+            self.bridge.export_rank_audit()
+        self.assertEqual(json.loads(report_path.read_text(encoding="utf-8")),saved)
+
     def test_live_hand_uses_existing_fusion_engine(self):
         result=self.bridge.get_hand()
         self.assertTrue(result["ready"])
@@ -315,6 +335,7 @@ class BridgeTests(unittest.TestCase):
             ("get_drops",(0,"","",0,10)),
             ("get_duel_evidence",()),
             ("get_rank_trace_status",()),
+            ("export_rank_audit",()),
             ("import_rank_trace",()),
             ("record_duel_result",(1,"Z-POW",1,None)),
             ("get_rank",()),
