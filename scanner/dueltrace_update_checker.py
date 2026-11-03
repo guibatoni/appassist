@@ -12,9 +12,11 @@ import urllib.error
 import urllib.request
 import webbrowser
 
-from dueltrace_preview_updates import fetch_latest_preview, installed_preview_build_id
+from dueltrace_preview_updates import (
+    fetch_latest_preview, installed_preview_build_id, BRANCH_VERSIONS
+)
 
-CURRENT_VERSION = "0.7.4"
+CURRENT_VERSION = "0.7.5"
 CURRENT_CHANNEL = "preview"
 RELEASE_API = "https://api.github.com/repos/guibatoni/appassist/releases/latest"
 RELEASE_PAGE = "https://github.com/guibatoni/appassist/releases/latest"
@@ -41,7 +43,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def fetch_stable_release() -> dict:
     request = urllib.request.Request(RELEASE_API, headers={
         "Accept": "application/vnd.github+json",
-        "User-Agent": "DUELTRACE-VersionChecker/0.7.3",
+        "User-Agent": "DUELTRACE-VersionChecker/0.7.5",
         "X-GitHub-Api-Version": "2022-11-28",
     })
     opener = urllib.request.build_opener(NoRedirect())
@@ -75,7 +77,10 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
         "previewPage": None,
         "previewBranch": None,
         "previewBuildSha": None,
+        "previewVersion": None,
         "releasePage": RELEASE_PAGE,
+        "automaticInstallReady": False,
+        "automaticInstallReason": "Instalação automática bloqueada: não há instalador público assinado e verificado.",
         "status": "unavailable",
         "updateAvailable": False,
         "message": "",
@@ -140,6 +145,7 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
                         or branch not in (
                             "security/dueltrace-trusted-distribution-v073",
                             "feature/dueltrace-v074-drops-ranks-frames",
+                            "feature/dueltrace-v075-rank-forensics-safe-updater",
                             "feature/dueltrace-v073-assets-hardening",
                             "fix/dueltrace-v073-preview-update-button")
                         or not isinstance(sha, str)
@@ -147,7 +153,12 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
                         or preview.get("page") !=
                         f"https://github.com/guibatoni/appassist/actions/runs/{run_id}"):
                     raise ValueError("Build Preview com origem inválida.")
-                result["latestPreview"] = f"v{CURRENT_VERSION} Preview (não assinado)"
+                remote_label = preview.get("version", BRANCH_VERSIONS.get(branch))
+                remote_version = parse_version(remote_label)
+                if remote_version is None or remote_label != BRANCH_VERSIONS.get(branch):
+                    raise ValueError("Versão Preview não corresponde à branch publicada.")
+                result["latestPreview"] = f"v{remote_label} Preview (não assinado)"
+                result["previewVersion"] = remote_label
                 result["previewRunId"] = run_id
                 result["previewPage"] = preview["page"]
                 result["previewBranch"] = branch
@@ -155,36 +166,39 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
                 installed = (installed_run_id if installed_run_id is not None
                              else installed_preview_build_id())
                 if result["status"] == "update_available":
-                    # Uma release estável numericamente mais nova prevalece.
+                    # Release estável mais nova permanece prioritária.
                     pass
+                elif remote_version < current:
+                    result["status"] = "preview_older"
+                    result["message"] = (
+                        "A prévia publicada no Actions é de uma versão anterior "
+                        "à instalação atual. Nenhuma atualização necessária."
+                    )
+                elif remote_version > current:
+                    result["status"] = "preview_update_available"
+                    result["updateAvailable"] = True
+                    result["message"] = (
+                        f"Nova prévia v{remote_label} identificada. O pacote ainda "
+                        "não é assinado: o aplicativo NÃO irá baixá-lo nem "
+                        "instalá-lo automaticamente. Consulte o GitHub."
+                    )
                 elif type(installed) is int and installed >= run_id:
                     result["status"] = "preview_current"
-                    result["message"] = (
-                        "Este pacote Preview já é igual ou mais recente que "
-                        "o último build Windows aprovado."
-                    )
+                    result["message"] = "Este build já é igual ou mais recente que a prévia publicada."
                 elif type(installed) is int and 0 < installed < run_id:
                     result["status"] = "preview_update_available"
                     result["updateAvailable"] = True
                     result["message"] = (
-                        "Existe um build Preview mais recente, aprovado nos testes "
-                        "de integração. É uma prévia não assinada; "
-                        "não ignore alertas de segurança do navegador. "
-                        "Consulte a página do build para avaliá-lo."
-                    )
-                elif current < parse_version(CURRENT_VERSION):
-                    result["status"] = "preview_update_available"
-                    result["updateAvailable"] = True
-                    result["message"] = (
-                        "Uma versão Preview mais recente está disponível no "
-                        "GitHub Actions. Baixe o pacote Windows em Artifacts."
+                        "Novo build Preview identificado. A versão é experimental "
+                        "e não assinada; a instalação automática permanece "
+                        "bloqueada por segurança."
                     )
                 else:
                     result["status"] = "preview_build_unknown"
                     result["message"] = (
-                        "Há um build Preview aprovado no GitHub Actions. "
-                        "Esta instalação não registra seu número de build; "
-                        "confira a página para comparar e atualizar manualmente."
+                        "Uma prévia foi encontrada, mas o build instalado não "
+                        "possui identidade comparável. Consulte os detalhes "
+                        "antes de atualizar manualmente."
                     )
             elif result["status"] == "unavailable" and not result["latestStable"]:
                 result["message"] = (
