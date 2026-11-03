@@ -45,8 +45,8 @@ class BrandAndExtractionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             count,message=art_extract(bytes(wa),[{"id":1}],Path(temp))
             self.assertEqual(count,1,message)
-            img=Image.open(Path(temp)/"001.png")
-            self.assertEqual(img.size,(102,96))
+            with Image.open(Path(temp)/"001.png") as img:
+                self.assertEqual(img.size,(102,96))
         # Um binário insuficiente fornece diagnóstico, não afirma sucesso.
         with tempfile.TemporaryDirectory() as temp2:
             count,message=art_extract(b"tiny",[{"id":1}],Path(temp2))
