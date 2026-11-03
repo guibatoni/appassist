@@ -30,6 +30,7 @@ from dueltrace_drops import get_drop_catalog
 from dueltrace_drop_rank_evidence import rank_drop_report, LABELS
 from dueltrace_mips_duel_trace import inspect_duel_mips_trace, MAX_TRACE_BYTES
 from dueltrace_rank_memory_trace import inspect_rank_memory_trace
+from dueltrace_rank_export import build_rank_evidence_report
 from dueltrace_library_sort import validate_sort,matches_type,sort_key
 from dueltrace_update_checker import (
     check_for_updates, open_official_releases, fetch_stable_release, CURRENT_VERSION
@@ -373,6 +374,42 @@ class DueltraceWebBridge:
                 profile, opponent_id=opponent_id, group=group,
                 query=query, offset=offset, limit=limit,
                 sort=sort,card_type=card_type)
+
+    def export_rank_audit(self):
+        """Exporta evidências numéricas locais para validar uma ISO no Windows."""
+        if self._file_picker is None:
+            raise RuntimeError("Exportação disponível apenas no aplicativo Windows.")
+        with self._lock:
+            active,entry,profile=self._active()
+            sha=active.get("sha256")
+            if not profile or not isinstance(sha,str):
+                raise ValueError("Selecione uma ISO para exportar diagnóstico.")
+            obs=load_json(self._observations_path(sha),{})
+            traces=load_json(self._trace_results_path(sha),{})
+            rows=obs.get("observations",[]) if isinstance(obs,dict) else []
+            trace_rows=traces.get("records",[]) if isinstance(traces,dict) else []
+            drop_summary=rank_drop_report(profile,rows)
+            report=build_rank_evidence_report(profile,rows,trace_rows,drop_summary)
+            output=json.dumps(report,ensure_ascii=False,indent=2)
+            if len(output.encode("utf-8"))>2*1024*1024:
+                raise ValueError("Relatório ultrapassou o limite de exportação.")
+        selected=self._file_picker("rank_report")
+        if not selected:
+            return {"cancelled":True}
+        path=Path(selected[0] if isinstance(selected,(list,tuple))
+                  else selected).expanduser().resolve()
+        if path.suffix.lower()!=".json":
+            raise ValueError("Selecione um destino com extensão .json.")
+        # Modo exclusivo: relatório nunca substitui documentos existentes.
+        try:
+            with path.open("x",encoding="utf-8") as stream:
+                stream.write(output+"\n")
+        except FileExistsError as exc:
+            raise FileExistsError("Arquivo já existe. Escolha um nome novo.") from exc
+        return {"cancelled":False,"file":str(path),
+                "reportSha256":report["report_sha256"],
+                "bytes":path.stat().st_size,
+                "status":"Relatório salvo localmente sem ROM, SLUS, WA ou dados brutos de RAM."}
 
     def _trace_results_path(self, sha):
         if type(sha) is not str or not re.fullmatch("[0-9a-f]{64}",sha):
