@@ -161,7 +161,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         <h2 className="font-display text-xl text-gold">Fusões disponíveis</h2>
         <div className="flex gap-2">
           <button type="button" onClick={()=>setMode("pairs")} className={mode==="pairs"?"btn-gold":"btn-ghost"}>Duplas</button>
-          <button type="button" onClick={()=>setMode("chains")} className={mode==="chains"?"btn-gold":"btn-ghost"}>Cadeias (3–5)</button>
+          <button type="button" onClick={()=>setMode("chains")} className={mode==="chains"?"btn-gold":"btn-ghost"}>Cadeias (2–5)</button>
         </div>
       </div>
       {!hand?.ready?<Empty>Entre em duelo no ePSXe. Nenhuma mão fictícia é exibida.</Empty>:
@@ -179,7 +179,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             <p className="mt-1 text-xs text-primary">Ordem: {x.slot_order.join(" → ")}</p>
             <ol className="mt-2 space-y-1 text-xs text-muted">{x.steps.map((s,j)=>
               <li key={j}>{j+1}. #{s.material_a} + #{s.material_b} = #{s.result} ({sourceLabel(s.validation)})</li>)}</ol>
-          </div>)}</div>:<Empty>Nenhuma cadeia de 3 a 5 cartas foi identificada.</Empty>)}
+          </div>)}</div>:<Empty>Nenhuma cadeia de 2 a 5 cartas foi identificada.</Empty>)}
       {hand?.chainsComplete===false&&mode==="chains"&&<p className="mt-2 text-xs text-gold">Busca parcial; o limite de estados foi alcançado.</p>}
       <p className="mt-3 text-xs text-muted">Resultados extraídos do mod. O jogo ainda precisa confirmar as combinações em duelo.</p>
     </div>
@@ -426,11 +426,8 @@ export function DesktopPage({page}:{page:Page}) {
   const {state,error,loading,refresh}=useDesktopState()
   return <div className="flex flex-col gap-3 lg:gap-4">
     <div className="panel flex flex-wrap items-center gap-3 rounded-xl px-4 py-2 text-xs">
-      <span className={state?.connected?"flex items-center gap-2 text-success":"flex items-center gap-2 text-gold"}>
-        {state?.connected?<CheckCircle2 className="size-4"/>:<AlertTriangle className="size-4"/>}
-        {state?.connected?"Motor Python conectado":"Prévia do v0 — sem acesso ao ePSXe"}
-      </span>
-      <span className="text-muted">Mod ativo: <strong className="font-semibold text-white">{state?.activeName??"Nenhum"}</strong></span>
+
+      <span className="text-muted">ISO ativa: <strong className="font-semibold text-white">{state?.activeName??"Nenhuma ISO selecionada"}</strong></span>
     </div>
     {error&&<p className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm text-gold" role="status">{error}</p>}
     {loading&&<p className="text-sm text-muted">Carregando dados locais...</p>}
