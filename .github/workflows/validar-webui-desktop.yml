@@ -9,14 +9,25 @@ on:
       - fix/dueltrace-v070-tailwind-styles
       - feature/dueltrace-v071-rank-and-fusion-images
       - feature/dueltrace-v072-check-updates
+      - feature/dueltrace-v073-wa-slus-metadata
     paths:
       - 'web/**'
       - 'scanner/dueltrace_web_*.py'
       - 'scanner/dueltrace_rank_live.py'
+      - 'scanner/dueltrace_disc_metadata.py'
+      - 'scanner/scanner_multiiso.py'
+      - 'scanner/importador_perfis.py'
+      - 'scanner/auto_mods.py'
+      - 'tests/test_dueltrace_disc_metadata.py'
       - 'scanner/dueltrace_update_checker.py'
       - 'tests/test_dueltrace_update_checker.py'
       - 'tests/test_dueltrace_web_bridge.py'
       - 'tests/test_dueltrace_rank_live.py'
+      - 'scanner/dueltrace_disc_metadata.py'
+      - 'scanner/scanner_multiiso.py'
+      - 'scanner/importador_perfis.py'
+      - 'scanner/auto_mods.py'
+      - 'tests/test_dueltrace_disc_metadata.py'
       - 'tools/security/**'
       - '.github/workflows/validar-webui-desktop.yml'
   pull_request:
@@ -24,10 +35,20 @@ on:
       - 'web/**'
       - 'scanner/dueltrace_web_*.py'
       - 'scanner/dueltrace_rank_live.py'
+      - 'scanner/dueltrace_disc_metadata.py'
+      - 'scanner/scanner_multiiso.py'
+      - 'scanner/importador_perfis.py'
+      - 'scanner/auto_mods.py'
+      - 'tests/test_dueltrace_disc_metadata.py'
       - 'scanner/dueltrace_update_checker.py'
       - 'tests/test_dueltrace_update_checker.py'
       - 'tests/test_dueltrace_web_bridge.py'
       - 'tests/test_dueltrace_rank_live.py'
+      - 'scanner/dueltrace_disc_metadata.py'
+      - 'scanner/scanner_multiiso.py'
+      - 'scanner/importador_perfis.py'
+      - 'scanner/auto_mods.py'
+      - 'tests/test_dueltrace_disc_metadata.py'
 
 permissions:
   contents: read
