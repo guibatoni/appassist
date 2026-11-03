@@ -389,12 +389,14 @@ class DueltraceWebBridge:
             return rank_drop_report(profile,observations)
 
     def record_duel_result(self, opponent_id, observed_rank, card_id,
-                           observed_points=None):
+                           observed_points=None, victory_type="unknown"):
         """Registra recompensa e nota VISTAS pelo jogador, jamais auto-verificadas.
 
         A projeção do snapshot anterior não se torna verdade de treinamento:
         fica explicitamente marcada como previsão para futura comparação.
         """
+        if type(victory_type) is not str or victory_type not in ("lp","deckout","other","unknown"):
+            raise ValueError("Resultado de vitória inválido.")
         if type(opponent_id) is not int or not 1<=opponent_id<=39:
             raise ValueError("Selecione um oponente válido (1–39).")
         if type(card_id) is not int or not 1<=card_id<=722:
@@ -432,6 +434,7 @@ class DueltraceWebBridge:
                 "duel_id":str(uuid4()),"rom_sha256":sha,
                 "opponent_id":opponent_id,"observed_rank":observed_rank,
                 "card_id":card_id,"observed_points":observed_points,
+                "victory_type":victory_type,
                 "recorded_at":datetime.now(timezone.utc).isoformat(),
                 "source":"manual_game_observation",
                 "rank_snapshot":estimate,
