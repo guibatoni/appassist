@@ -257,7 +257,10 @@ def process(path,output,with_art=False,digest=None,progress=None):
         # SLUS_014.11 pode estar na raiz ou dentro da pasta DATA.
         sl_names=[n for n in disc.files if re.fullmatch(
             r'SL[UP][A-Z0-9_.]+',n.rsplit('/',1)[-1])]
+        # Mods podem ter múltiplos executáveis: priorizar o SLUS solicitado
+        # em DATA, sem perder compatibilidade com ISOs de executável na raiz.
         sl_names=sorted(sl_names,key=lambda x:(
+            x!='DATA/SLUS_014.11',
             x.rsplit('/',1)[-1]!='SLUS_014.11',len(x),x))
         if not sl_names:
             sl_names=sorted(n for n in disc.files if n.endswith('.EXE'))
