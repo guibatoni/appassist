@@ -182,16 +182,16 @@ def install_new_release(*, data_home: Path,
     """Executa apenas instalador oficial e assinado, após clique explícito."""
     if not trusted_installer_ready(publisher=publisher, signer=signer):
         raise UnsafeUpdate("Editor não verificado; instalação automática bloqueada.")
+    release=(release_fetcher or fetch_stable_release)()
+    info=select_signed_installer(release,current_version)
+    if not info:
+        return {"started":False,"status":"Sem release estável mais recente."}
     installed_identity = _signed_identity(Path(sys.executable)) if signer is None else None
     if signer is None and installed_identity is None:
         raise UnsafeUpdate("Assinatura de origem não verificada.")
     expected_publisher = publisher or (
         installed_identity["subject"] if installed_identity else None
     )
-    release=(release_fetcher or fetch_stable_release)()
-    info=select_signed_installer(release,current_version)
-    if not info:
-        return {"started":False,"status":"Sem release estável mais recente."}
     home=Path(data_home).resolve()
     folder=home/"trusted_updates"
     folder.mkdir(parents=True,exist_ok=True)
