@@ -26,7 +26,7 @@ class EpsxeTests(unittest.TestCase):
             self.assertEqual(args[-1],str(rom.resolve()))
             self.assertEqual(args[1:3],["-nogui","-loadiso"])
             self.assertEqual(len(args),4)
-            self.assertEqual(cwd,exe.parent)
+            self.assertEqual(cwd,exe.resolve().parent)
             with self.assertRaises(ValueError):
                 command_for_epsxe(rom,rom)
 
@@ -55,7 +55,7 @@ class EpsxeTests(unittest.TestCase):
             args,kw=proc.call_args
             self.assertEqual(args[0][-1],str(rom.resolve()))
             self.assertIs(kw["shell"],False)
-            self.assertEqual(kw["cwd"],str(exe.parent))
+            self.assertEqual(Path(kw["cwd"]).resolve(),exe.resolve().parent)
             rom.write_bytes(b"B"*100_005)
             with self.assertRaises(ValueError):
                 launch_epsxe(cat,exe,sha,popen=proc,platform="win32")
