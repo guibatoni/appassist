@@ -38,6 +38,7 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         "total": 0, "offset": offset, "rows": [], "opponents": [], "groups": [],
         "rankLabelsVerified": False, "weightTotal": WEIGHT_TOTAL,
         "source": "DATA/WA_MRG.MRG + SLUS_014.11",
+        "rankPoints": (profile.get("rank_points", {}) if isinstance(profile,dict) else {}),
     }
     if (not isinstance(profile, dict)
             or profile.get("verified", {}).get("tabelas_drops") != "verificado"
@@ -131,7 +132,8 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
     matched.sort(key=lambda row: (
         row["opponentId"], raw_groups.index(row["group"]),
         -row["weight"], row["cardId"]))
-    is_known = (profile.get("rom_sha256", "").lower() == X15_SHA.lower()
+    image_sha = profile.get("rom_sha256")
+    is_known = (isinstance(image_sha, str) and image_sha.lower() == X15_SHA.lower()
                 and profile.get("verified", {}).get("nomes_dos_ranks") == "verificado")
     return {
         **empty, "available": True,
