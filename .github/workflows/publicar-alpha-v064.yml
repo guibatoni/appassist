@@ -207,6 +207,9 @@ jobs:
           if [[ -f dist/DUELTRACE-PREVIA-TESTE.png ]]; then
             assets+=(dist/DUELTRACE-PREVIA-TESTE.png)
           fi
+          if [[ -f dist/DUELTRACE-PREVIA-INICIO-TESTE.png ]]; then
+            assets+=(dist/DUELTRACE-PREVIA-INICIO-TESTE.png)
+          fi
           gh release create v0.6.4 "${assets[@]}" \
             --target "$GITHUB_SHA" \
             --latest \
