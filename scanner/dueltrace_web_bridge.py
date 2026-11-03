@@ -163,7 +163,7 @@ class DueltraceWebBridge:
                 for i,cid in enumerate(ids)]
             index=self._fusion_index(active["sha256"],profile)
             pairs=suggest_hand_pairs(ids,index,cards,limit=24)
-            chains=plan_fusion_chains(ids,index,cards,limit=16)
+            chains=plan_fusion_chains(ids,index,cards,min_cards=2,max_cards=5,limit=16)
             return {"ready":True,"status":sample.get("status","Mão identificada"),
                     "hand":enriched,"pairs":pairs,
                     "chains":chains["routes"],
