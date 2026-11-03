@@ -50,6 +50,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_fusions(query,offset,limit)
 
+    def reanalyze_mod(self, credential, sha):
+        self._authorize(credential)
+        return self._bridge.reanalyze_mod(sha)
+
     def activate_mod(self, credential, sha, acknowledge=False):
         self._authorize(credential)
         return self._bridge.activate_mod(sha,acknowledge)
