@@ -85,11 +85,10 @@ export function UpdateChecker() {
                   {result.message}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {result.previewRunId != null &&
-                    <button type="button" onClick={() => void openOfficialPage(result.previewRunId!)}
+                  <button type="button" onClick={() => void openOfficialPage(result.previewRunId ?? 0)}
                       disabled={opening} className="btn-gold inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50">
-                      {opening ? "Abrindo…" : "Abrir pacote Preview"} <ArrowUpRight className="size-4"/>
-                    </button>}
+                      {opening ? "Abrindo…" : (result.previewRunId != null ? "Abrir pacote Preview" : "Ver builds Preview")} <ArrowUpRight className="size-4"/>
+                    </button>
                   <button type="button" onClick={() => void openOfficialPage()}
                     disabled={opening} className="btn-ghost inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50">
                     Ver versões estáveis <ArrowUpRight className="size-4"/>
