@@ -123,6 +123,8 @@ export type DropRow = {
   group: string
   cardId: number
   cardName: string
+  groupLabel: string
+  eligibleRanks: string[]
   cardType: string
   category: string
   atk: number | null
@@ -212,6 +214,10 @@ export type DropsPage = {
   rows: DropRow[]
   opponents: Array<{id:number; name:string}>
   groups: string[]
+  groupOptions: Array<{value:string;label:string;ranks:string[]}>
+  rankOptions: string[]
+  rankSelected: string
+  rankSystem: "x15" | "classic" | null
   cardTypes: string[]
   rankLabelsVerified: boolean
   weightTotal: number
@@ -261,7 +267,7 @@ export interface DesktopAPI {
   get_rank(): Promise<RankState>
   confirm_rank_lp(lifePoints: number): Promise<RankState>
   get_fusions(query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
-  get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<DropsPage>
+  get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
   get_rank_trace_status(): Promise<MipsTraceResult>
   import_rank_trace(duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(): Promise<RankAuditExport>
@@ -283,7 +289,7 @@ interface ProtectedNativeAPI {
   get_rank(token: string): Promise<RankState>
   confirm_rank_lp(token: string, lifePoints: number): Promise<RankState>
   get_fusions(token: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
-  get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<DropsPage>
+  get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
   get_rank_trace_status(token: string): Promise<MipsTraceResult>
   import_rank_trace(token: string, duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(token: string): Promise<RankAuditExport>
@@ -319,7 +325,7 @@ export function desktopApi(): DesktopAPI | null {
     get_rank: () => native.get_rank(token),
     confirm_rank_lp: (lifePoints) => native.confirm_rank_lp(token, lifePoints),
     get_fusions: (query, offset, limit, sort, cardType) => native.get_fusions(token, query, offset, limit, sort, cardType),
-    get_drops: (opponentId, group, query, offset, limit, sort, cardType) => native.get_drops(token, opponentId, group, query, offset, limit, sort, cardType),
+    get_drops: (opponentId, group, query, offset, limit, sort, cardType, rank) => native.get_drops(token, opponentId, group, query, offset, limit, sort, cardType, rank),
     get_rank_trace_status: () => native.get_rank_trace_status(token),
     import_rank_trace: (duelId) => native.import_rank_trace(token, duelId),
     export_rank_audit: () => native.export_rank_audit(token),
