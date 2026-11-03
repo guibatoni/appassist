@@ -123,6 +123,21 @@ jobs:
           if (-not (Test-Path dist/DUELTRACE-WebUI/DUELTRACE-WebUI.exe)) { throw "Executável experimental ausente" }
           Copy-Item tools/security/AVISO-SEGURANCA-PREVIEW.txt dist/DUELTRACE-WebUI/LEIA-ME-SEGURANCA.txt
           Compress-Archive -Path dist/DUELTRACE-WebUI/* -DestinationPath dist/DUELTRACE-WebUI-Windows-Preview.zip -Force
+      - name: Testar bloqueio de release pública sem editor autorizado
+        shell: pwsh
+        run: |
+          $rejected=$false
+          try {
+            ./tools/security/gate_windows_package.ps1 -PackageDirectory dist/DUELTRACE-WebUI -ZipPath dist/DUELTRACE-WebUI-Windows-Preview.zip -OutputDirectory dist/security -RequireSignature -ExpectedPublisherSubject 'CN=EDITOR_INVALIDO'
+          } catch {
+            if ($_.Exception.Message -like 'Release pública bloqueada*') {
+              $rejected=$true
+            } else {
+              throw
+            }
+          }
+          if (-not $rejected) { throw 'ERRO: gate aceitou release sem editor autorizado.' }
+          Write-Host 'Gate de publicação pública rejeitou editor inválido, conforme esperado.'
       - name: Confirmar integridade exata do ZIP e ausência de recursos privados
         shell: pwsh
         run: |
