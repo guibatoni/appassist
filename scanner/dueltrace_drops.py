@@ -138,12 +138,12 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
 
     text = query.strip().casefold()
     matched = []
-    for oid, rank, cid, weight, source_offset in checked:
+    for oid, raw_rank, cid, weight, source_offset in checked:
         if opponent_id and oid != opponent_id:
             continue
-        if group and rank != group:
+        if group and raw_rank != group:
             continue
-        if selected_group and rank != selected_group:
+        if selected_group and raw_rank != selected_group:
             continue
         card=cards_by_id.get(cid,{})
         if not matches_type(card,card_type):
@@ -156,9 +156,9 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
                        else None)
         matched.append({
             "opponentId": oid, "opponentName": opponents[oid],
-            "group": rank,
-            "groupLabel":labels_by_raw[rank],
-            "eligibleRanks":list(grouped_by_raw[rank]),
+            "group": raw_rank,
+            "groupLabel":labels_by_raw[raw_rank],
+            "eligibleRanks":list(grouped_by_raw[raw_rank]),
             "cardId": cid, "cardName": name,
             "category":card.get("category") or "Não identificada",
             "cardType":card_type_value(card),
