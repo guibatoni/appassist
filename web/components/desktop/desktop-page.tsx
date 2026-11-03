@@ -1,0 +1,270 @@
+"use client"
+
+import Image from "next/image"
+import { useEffect, useMemo, useState } from "react"
+import {
+  AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, FilePlus2, Gamepad2,
+  GitMerge, Layers, Play, RefreshCcw, Search, Shield, Swords, Upload,
+} from "lucide-react"
+import {cardArt, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod} from "@/lib/desktop"
+
+type Page = "inicio" | "mods" | "biblioteca" | "fusoes"
+
+function Heading({title,subtitle}:{title:string;subtitle:string}) {
+  return <div className="panel rounded-xl border-gold/40 bg-gradient-to-r from-[#142b51] to-[#061126] px-5 py-4">
+    <h1 className="font-display text-2xl font-bold text-gold sm:text-3xl">{title}</h1>
+    <p className="mt-1 text-sm text-muted">{subtitle}</p>
+  </div>
+}
+
+function CardThumbnail({card,sha}:{card:LocalCard|null;sha:string|null}) {
+  const [broken,setBroken]=useState(false)
+  const url=card?cardArt(sha,card.id):null
+  return <div className="relative mx-auto flex aspect-[3/4] w-full max-w-32 items-center justify-center overflow-hidden rounded-lg border-2 border-gold/50 bg-gradient-to-b from-[#19466d] via-[#102449] to-[#060e23] p-2 shadow-[0_0_18px_rgb(56_200_255/0.18)]">
+    {url&&!broken?<Image src={url} alt={card?.name??""} fill unoptimized sizes="160px" className="object-contain" onError={()=>setBroken(true)}/>:
+      <Layers className="size-9 text-primary/45" aria-label="Imagem não extraída"/>}
+    {card&&<span className="absolute left-1 top-1 rounded bg-black/70 px-1 text-[10px] text-gold">#{card.id}</span>}
+  </div>
+}
+
+function Empty({children}:{children:React.ReactNode}) {
+  return <p className="rounded-lg border border-line/60 bg-[#06152c]/70 px-4 py-6 text-center text-sm text-muted">{children}</p>
+}
+
+function Home({sha}:{sha:string|null}) {
+  const [hand,setHand]=useState<HandState|null>(null)
+  const [mode,setMode]=useState<"pairs"|"chains">("pairs")
+  useEffect(()=>{
+    let mounted=true,busy=false
+    const load=async()=>{
+      const api=desktopApi()
+      if(!api||busy)return
+      busy=true
+      try{const x=await api.get_hand();if(mounted)setHand(x)}
+      catch{if(mounted)setHand({ready:false,status:"Mão indisponível",hand:[],pairs:[],chains:[]})}
+      finally{busy=false}
+    }
+    void load()
+    const timer=window.setInterval(()=>void load(),1500)
+    return()=>{mounted=false;window.clearInterval(timer)}
+  },[sha])
+  return <>
+    <Heading title="Central de Duelo" subtitle="Sua mão e as melhores combinações identificadas no perfil ativo"/>
+    <div className="panel rounded-xl p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-display text-xl font-semibold text-primary">Sua mão · 5 slots</h2>
+        <p className={hand?.ready?"text-xs text-success":"text-xs text-gold"}>{hand?.status??"Aguardando ePSXe"}</p>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+        {Array.from({length:5},(_,slot)=>{
+          const card=hand?.ready?hand.hand[slot]??null:null
+          return <div key={slot} className="rounded-lg border border-line bg-gradient-to-b from-panel-strong to-background p-2.5">
+            <p className="mb-2 text-center text-xs text-gold">SLOT {slot+1}</p>
+            <CardThumbnail key={String(sha)+"-"+String(card?.id??"empty")} card={card} sha={sha}/>
+            <p className="mt-2 min-h-9 text-center text-xs font-semibold text-white">{card?.name??"Aguardando carta"}</p>
+            <p className="text-center text-[11px] text-primary">ATK {card?.atk??"—"} · DEF {card?.def??"—"}</p>
+          </div>
+        })}
+      </div>
+    </div>
+    <div className="panel rounded-xl p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-display text-xl text-gold">Fusões disponíveis</h2>
+        <div className="flex gap-2">
+          <button type="button" onClick={()=>setMode("pairs")} className={mode==="pairs"?"btn-gold":"btn-ghost"}>Duplas</button>
+          <button type="button" onClick={()=>setMode("chains")} className={mode==="chains"?"btn-gold":"btn-ghost"}>Cadeias (3–5)</button>
+        </div>
+      </div>
+      {!hand?.ready?<Empty>Entre em duelo no ePSXe. Nenhuma mão fictícia é exibida.</Empty>:
+        mode==="pairs"?(hand.pairs.length?<div className="grid gap-2 lg:grid-cols-2">
+          {hand.pairs.map((x,i)=><div key={i} className="rounded-lg border border-line/70 bg-panel-strong/60 p-3">
+            <p className="text-xs text-primary">Slots {x.slot_a} + {x.slot_b}</p>
+            <p className="mt-1 font-semibold text-white">{x.result_name} #{x.result}</p>
+            <p className="mt-1 text-xs text-gold">ATK {x.atk??"—"} · {sourceLabel(x.validation)}</p>
+          </div>)}</div>:<Empty>Não há fusões de duas cartas para a mão atual.</Empty>):
+        (hand.chains.length?<div className="grid gap-3 lg:grid-cols-2">
+          {hand.chains.map((x,i)=><div key={i} className="rounded-xl border border-gold/30 bg-gradient-to-r from-[#112746] to-panel p-3">
+            <p className="font-semibold text-gold">{x.result_name} #{x.result} · ATK {x.atk??"—"}</p>
+            <p className="mt-1 text-xs text-primary">Ordem: {x.slot_order.join(" → ")}</p>
+            <ol className="mt-2 space-y-1 text-xs text-muted">{x.steps.map((s,j)=>
+              <li key={j}>{j+1}. #{s.material_a} + #{s.material_b} = #{s.result} ({sourceLabel(s.validation)})</li>)}</ol>
+          </div>)}</div>:<Empty>Nenhuma cadeia de 3 a 5 cartas foi identificada.</Empty>)}
+      {hand?.chainsComplete===false&&mode==="chains"&&<p className="mt-2 text-xs text-gold">Busca parcial; o limite de estados foi alcançado.</p>}
+      <p className="mt-3 text-xs text-muted">Resultados extraídos do mod. O jogo ainda precisa confirmar as combinações em duelo.</p>
+    </div>
+  </>
+}
+
+function Mods({mods,sha,onRefresh,configured}:{
+  mods:LocalMod[];sha:string|null;onRefresh:()=>Promise<void>;configured:boolean
+}) {
+  const [busy,setBusy]=useState(false)
+  const [message,setMessage]=useState<string|null>(null)
+  const run=async (action:()=>Promise<unknown>,label:string)=>{
+    setBusy(true);setMessage(null)
+    try{const result=await action();await onRefresh();setMessage(label)}
+    catch(e){setMessage(e instanceof Error?e.message:"Operação não concluída")}
+    finally{setBusy(false)}
+  }
+  return <>
+    <Heading title="Biblioteca de Mods" subtitle="Importe e ative imagens locais, com dados separados por SHA da ISO"/>
+    <section className="panel rounded-xl p-4">
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn-gold disabled:opacity-40" disabled={busy||!desktopApi()}
+          onClick={()=>void run(()=>desktopApi()!.import_iso(),"Processamento de ISO concluído ou cancelado.")}>
+          <FilePlus2 className="size-4"/> Importar ISO/BIN</button>
+        <button type="button" className="btn-ghost disabled:opacity-40" disabled={busy||!desktopApi()}
+          onClick={()=>void run(()=>desktopApi()!.configure_epsxe(),"Configuração do emulador atualizada.")}>
+          <Gamepad2 className="size-4"/> {configured?"Alterar ePSXe.exe":"Configurar ePSXe.exe"}</button>
+        <button type="button" className="btn-ghost disabled:opacity-40" disabled={busy||!configured||!sha||!desktopApi()}
+          onClick={()=>void run(()=>desktopApi()!.start_game(),"Comando enviado ao ePSXe.")}>
+          <Play className="size-4"/> Iniciar jogo</button>
+        <button type="button" className="btn-ghost" onClick={()=>void onRefresh()}>
+          <RefreshCcw className="size-4"/> Atualizar</button>
+      </div>
+      {message&&<p className="mt-3 text-sm text-gold" role="status">{message}</p>}
+      <div className="mt-4 grid gap-3 xl:grid-cols-2">
+        {mods.map(mod=><div key={mod.sha256} className={"rounded-xl border bg-gradient-to-b from-panel-strong/90 to-panel/50 p-4 "+(sha===mod.sha256?"border-success/70":"border-line/70")}>
+          <div className="flex items-start justify-between gap-3"><div className="min-w-0">
+            <p className="truncate font-semibold text-white">{mod.name}</p>
+            <p className="mt-1 text-xs text-muted">{mod.sha256.slice(0,18)}…</p>
+          </div><span className={sha===mod.sha256?"text-xs text-success":"text-xs text-gold"}>{sha===mod.sha256?"Ativo":mod.requiresReview?"Revisão necessária":"Conhecido"}</span></div>
+          <div className="my-4 grid grid-cols-3 gap-2 text-center">
+            {([["Cartas",mod.cards],["Fusões",mod.fusions],["Efeitos",mod.effects]] as const).map(([label,n])=>
+              <div key={label} className="rounded-lg border border-line/50 bg-background/70 p-2"><p className="font-display text-xl text-primary">{n}</p><p className="text-xs text-muted">{label}</p></div>)}
+          </div>
+          <button type="button" disabled={busy||!desktopApi()||sha===mod.sha256}
+            className="btn-gold w-full disabled:opacity-40" onClick={()=>{
+              const ok=!mod.requiresReview||window.confirm("O mod requer revisão. Ativar somente os dados comprovados?")
+              if(ok)void run(()=>desktopApi()!.activate_mod(mod.sha256,mod.requiresReview),"Perfil ativado.")
+            }}>{sha===mod.sha256?"Perfil ativo":"Ativar perfil"}</button>
+        </div>)}
+      </div>
+      {!mods.length&&<Empty>Nenhum mod cadastrado. Importe uma ISO/BIN na versão Windows. Os arquivos não são enviados ao Vercel.</Empty>}
+    </section>
+  </>
+}
+
+function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
+  const [search,setSearch]=useState("")
+  const [sort,setSort]=useState<"id"|"atk"|"name">("id")
+  const [page,setPage]=useState(0)
+  const [selectedId,setSelectedId]=useState<number|null>(null)
+  const visible=useMemo(()=>{
+    const q=search.trim().toLowerCase()
+    const filtered=cards.filter(c=>!q||(String(c.id)+" "+c.name+" "+c.type+" "+c.category).toLowerCase().includes(q))
+    filtered.sort((a,b)=>sort==="atk"?(b.atk??-1)-(a.atk??-1):sort==="name"?a.name.localeCompare(b.name,"pt-BR"):a.id-b.id)
+    return filtered
+  },[cards,search,sort])
+  const chosen=cards.find(c=>c.id===selectedId)??visible[0]??null
+  const pages=Math.max(1,Math.ceil(visible.length/32))
+  return <>
+    <Heading title="Biblioteca de Cartas" subtitle="Cartas extraídas da ISO ativa, sem raridades e efeitos inventados"/>
+    <section className="panel rounded-xl p-4">
+      <div className="flex flex-wrap gap-2">
+        <label className="field flex min-w-56 flex-1 items-center gap-2 px-3 py-2">
+          <Search className="size-4 text-primary"/><span className="sr-only">Buscar carta</span>
+          <input className="w-full bg-transparent outline-none" value={search}
+            onChange={e=>{setSearch(e.target.value);setPage(0)}} placeholder="Buscar por nome, tipo ou ID"/>
+        </label>
+        <select className="field px-3 py-2" value={sort} aria-label="Ordenar" onChange={e=>{setSort(e.target.value as typeof sort);setPage(0)}}>
+          <option value="id">ID</option><option value="atk">Maior ATK</option><option value="name">Nome</option>
+        </select>
+        <span className="self-center text-sm text-muted">{visible.length} / {cards.length} cartas</span>
+      </div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
+        <div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {visible.slice(page*32,(page+1)*32).map(card=><button type="button" key={card.id}
+              className={"rounded-lg border p-2 text-center transition hover:border-primary "+(chosen?.id===card.id?"border-primary bg-primary/10":"border-line/70 bg-panel-strong/60")}
+              onClick={()=>setSelectedId(card.id)}>
+              <CardThumbnail key={String(sha)+"-"+card.id} card={card} sha={sha}/>
+              <p className="mt-2 min-h-9 text-xs font-semibold text-white">{card.name}</p>
+              <p className="text-[11px] text-primary">ATK {card.atk??"—"} · DEF {card.def??"—"}</p>
+            </button>)}
+          </div>
+          {!visible.length&&<Empty>Nenhuma carta identificada para esta pesquisa.</Empty>}
+          <div className="mt-3 flex items-center justify-center gap-3">
+            <button type="button" className="btn-ghost disabled:opacity-30" disabled={page===0} onClick={()=>setPage(x=>x-1)}><ChevronLeft className="size-4"/>Anterior</button>
+            <span className="text-xs text-muted">{page+1} / {pages}</span>
+            <button type="button" className="btn-ghost disabled:opacity-30" disabled={page+1>=pages} onClick={()=>setPage(x=>x+1)}>Próxima<ChevronRight className="size-4"/></button>
+          </div>
+        </div>
+        <aside className="rounded-xl border border-gold/40 bg-gradient-to-b from-[#142b50] to-background p-4">
+          {chosen?<><h2 className="font-display text-xl font-semibold text-gold">#{chosen.id} {chosen.name}</h2>
+            <div className="my-4"><CardThumbnail key={String(sha)+"-"+chosen.id} card={chosen} sha={sha}/></div>
+            <p className="text-sm text-primary">ATK {chosen.atk??"—"} · DEF {chosen.def??"—"}</p>
+            <p className="mt-2 text-sm text-muted">Tipo: {chosen.type||"Não identificado"}</p>
+            <p className="text-sm text-muted">Categoria: {chosen.category}</p>
+            <div className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3">
+              <h3 className="mb-1 font-semibold text-primary">Efeito com fonte</h3>
+              <p className="text-sm text-foreground/85">{chosen.effect??"Efeito não identificado de forma verificável."}</p>
+              {chosen.effectSource&&<p className="mt-2 text-xs text-gold">Fonte: {chosen.effectSource}</p>}
+            </div></>:<Empty>Selecione uma carta.</Empty>}
+        </aside>
+      </div>
+    </section>
+  </>
+}
+
+function Fusions({sha}:{sha:string|null}) {
+  const [query,setQuery]=useState("")
+  const [offset,setOffset]=useState(0)
+  const [records,setRecords]=useState<FusionPage|null>(null)
+  const [error,setError]=useState<string|null>(null)
+  useEffect(()=>{
+    let mounted=true
+    const id=window.setTimeout(async()=>{
+      const api=desktopApi()
+      if(!api){if(mounted)setRecords(null);return}
+      try{const x=await api.get_fusions(query,offset,80);if(mounted){setRecords(x);setError(null)}}
+      catch(e){if(mounted)setError(e instanceof Error?e.message:"Falha ao carregar fusões")}
+    },230)
+    return()=>{mounted=false;window.clearTimeout(id)}
+  },[sha,query,offset])
+  return <>
+    <Heading title="Fusões" subtitle="Catálogo do mod ativo, com resultados e origem identificados"/>
+    <section className="panel rounded-xl p-4">
+      <label className="field flex items-center gap-2 px-3 py-2"><Search className="size-4 text-primary"/>
+        <input className="w-full bg-transparent outline-none" placeholder="Pesquisar material, resultado ou ID"
+          value={query} onChange={e=>{setQuery(e.target.value);setOffset(0)}}/>
+      </label>
+      {error&&<p className="mt-2 text-sm text-danger">{error}</p>}
+      <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[610px] text-left text-sm">
+        <thead className="border-b border-primary/40 text-gold"><tr><th className="p-2">Material A</th><th className="p-2">Material B</th><th className="p-2">Resultado</th><th className="p-2">ATK</th><th className="p-2">Origem</th></tr></thead>
+        <tbody>{records?.rows.map((r,i)=><tr key={String(i)+"-"+r.a+"-"+r.b} className="border-b border-line/30 hover:bg-primary/5">
+          <td className="p-2">#{r.a} {r.nameA}</td><td className="p-2">#{r.b} {r.nameB}</td>
+          <td className="p-2 font-semibold text-primary">#{r.result} {r.nameResult}</td>
+          <td className="p-2">{r.atk??"—"}</td><td className="p-2 text-xs text-muted">{sourceLabel(r.source)}</td></tr>)}</tbody>
+      </table></div>
+      {!records?.rows.length&&<Empty>Não há fusões confirmadas para mostrar no perfil ou na pesquisa atual.</Empty>}
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <p className="text-sm text-muted">{records?.total??0} receitas</p>
+        <div className="flex gap-2">
+          <button type="button" className="btn-ghost disabled:opacity-30" disabled={offset===0} onClick={()=>setOffset(x=>Math.max(0,x-80))}><ChevronLeft className="size-4"/>Anterior</button>
+          <button type="button" className="btn-ghost disabled:opacity-30" disabled={offset+80>=(records?.total??0)} onClick={()=>setOffset(x=>x+80)}>Próxima<ChevronRight className="size-4"/></button>
+        </div>
+      </div>
+    </section>
+  </>
+}
+
+export function DesktopPage({page}:{page:Page}) {
+  const {state,error,loading,refresh}=useDesktopState()
+  return <div className="flex flex-col gap-3 lg:gap-4">
+    <div className="panel flex flex-wrap items-center gap-3 rounded-xl px-4 py-2 text-xs">
+      <span className={state?.connected?"flex items-center gap-2 text-success":"flex items-center gap-2 text-gold"}>
+        {state?.connected?<CheckCircle2 className="size-4"/>:<AlertTriangle className="size-4"/>}
+        {state?.connected?"Motor Python conectado":"Prévia do v0 — sem acesso ao ePSXe"}
+      </span>
+      <span className="text-muted">Mod ativo: <strong className="font-semibold text-white">{state?.activeName??"Nenhum"}</strong></span>
+    </div>
+    {error&&<p className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm text-gold" role="status">{error}</p>}
+    {loading&&<p className="text-sm text-muted">Carregando dados locais...</p>}
+    {page==="inicio"&&<Home sha={state?.activeSha??null}/>}
+    {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>}
+    {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}
+    {page==="fusoes"&&<Fusions sha={state?.activeSha??null}/>}
+  </div>
+}
