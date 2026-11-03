@@ -31,6 +31,30 @@ PALETTE_ROWS = 256
 PALETTE_BYTES = PALETTE_ROWS * 2
 
 
+EXTRA_STATS_PACKED = 0x1C4A44
+EXTRA_LEVEL_ATTRIBUTE = 0x1C5B33
+
+
+def supplemental_card_stats(exe: bytes, card_id: int) -> dict:
+    """Nível, atributo bruto e dois Guardian Stars por ID do SLUS.
+
+    Não atribui nomes aos códigos até validar os mapas de enumeração do mod.
+    """
+    if not isinstance(card_id,int) or not 1<=card_id<=CARD_COUNT:
+        raise ValueError("ID de carta fora de 1..722")
+    i=card_id-1
+    if len(exe)<=EXTRA_LEVEL_ATTRIBUTE+i or len(exe)<EXTRA_STATS_PACKED+(i+1)*4:
+        raise ValueError("SLUS incompleto para nível, atributo ou estrelas")
+    packed=struct.unpack_from("<I",exe,EXTRA_STATS_PACKED+i*4)[0]
+    byte=exe[EXTRA_LEVEL_ATTRIBUTE+i]
+    return {
+        "level":byte&0x0F,
+        "attribute_id":(byte>>4)&0x0F,
+        "guardian_star_1":(packed>>22)&0x0F,
+        "guardian_star_2":(packed>>18)&0x0F,
+    }
+
+
 def _chars(exe: bytes):
     if len(exe) < FONT_GLYPHS + 93*4:
         raise ValueError("SLUS sem tabela conhecida de glifos.")
