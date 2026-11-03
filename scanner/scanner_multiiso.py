@@ -6,7 +6,10 @@ Não baixa nem distribui imagens de jogos. Para formatos desconhecidos, não inv
 from __future__ import annotations
 import argparse, csv, hashlib, json, re, struct, sys, unicodedata
 from pathlib import Path
-from dueltrace_disc_metadata import extract_descriptions, inspect_frame_palettes, save_metadata
+from dueltrace_disc_metadata import (
+    extract_descriptions, inspect_frame_palettes, save_metadata,
+    supplemental_card_stats,
+)
 
 OPP_COUNT=39
 CARD_COUNT=722
@@ -148,7 +151,10 @@ def decode_names(sl):
     for i in range(1,723):
         name=txt(i) or ''
         packed=struct.unpack_from('<I',sl,SLUS_ATTRIBUTES+(i-1)*4)[0]
-        cards.append({'id':i,'nome':name,'atk':(packed&511)*10,'def':((packed>>9)&511)*10,'tipo':(packed>>26)&31})
+        card={'id':i,'nome':name,'atk':(packed&511)*10,
+              'def':((packed>>9)&511)*10,'tipo':(packed>>26)&31}
+        card.update(supplemental_card_stats(sl,i))
+        cards.append(card)
     def plausible(s):return bool(s) and len(s)<=64 and '�' not in s and '[' not in s and sum(ch.isalpha() or ch.isdigit() for ch in s)>=2
     n_good=sum(plausible(x['nome']) for x in opponents)
     card_good=sum(plausible(x['nome']) for x in cards)
