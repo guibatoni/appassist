@@ -77,9 +77,9 @@ class DropRankEvidenceTests(unittest.TestCase):
     def test_sort_and_exact_type_before_pagination(self):
         from dueltrace_drops import get_drop_catalog
         p=fake_profile()
-        p["cards"][0].update(name="Zebra",atk=500,def=100,type_label="Dragão",category="Monstros")
-        p["cards"][1].update(name="Abelha",atk=300,def=800,type_label="Fada",category="Monstros")
-        p["cards"][2].update(name="Lua",atk=100,def=300,type_label="Fada",category="Monstros")
+        p["cards"][0].update({"name":"Zebra","atk":500,"def":100,"type_label":"Dragão","category":"Monstros"})
+        p["cards"][1].update({"name":"Abelha","atk":300,"def":800,"type_label":"Fada","category":"Monstros"})
+        p["cards"][2].update({"name":"Lua","atk":100,"def":300,"type_label":"Fada","category":"Monstros"})
         sorted_atk=get_drop_catalog(p,sort="atk",limit=1)
         self.assertEqual(sorted_atk["rows"][0]["cardId"],1)
         sorted_def=get_drop_catalog(p,sort="def",limit=1)
