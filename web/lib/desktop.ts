@@ -140,6 +140,7 @@ export type RankPoints = {
   structure_verified?: boolean
   method?: string | null
   first_offset?: number | null
+  repeat_stride?: number | null
   layout_moved?: boolean
   criterion_names_verified?: boolean
   table_count?: number
