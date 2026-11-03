@@ -226,8 +226,9 @@ function Mods({mods,sha,onRefresh,configured}:{
         <button type="button" className="btn-ghost disabled:opacity-40" disabled={busy||!configured||!sha||!desktopApi()}
           onClick={()=>void run(()=>desktopApi()!.start_game(),"Comando enviado ao ePSXe.")}>
           <Play className="size-4"/> Iniciar jogo</button>
-        <button type="button" className="btn-ghost" onClick={()=>void onRefresh()}>
-          <RefreshCcw className="size-4"/> Atualizar</button>
+        <button type="button" className="btn-ghost disabled:opacity-40" disabled={busy}
+          onClick={()=>void run(async()=>{}, "Lista de mods atualizada. Para reler os arquivos da ISO, use 'Ler WA_MRG + SLUS novamente'.")}>
+          <RefreshCcw className="size-4"/> Atualizar lista</button>
       </div>
       {message&&<p className="mt-3 text-sm text-gold" role="status">{message}</p>}
       <div className="mt-4 grid gap-3 xl:grid-cols-2">
