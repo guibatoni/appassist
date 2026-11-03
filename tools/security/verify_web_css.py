@@ -34,7 +34,7 @@ def verify_css() -> tuple[Path, bytes]:
         raise RuntimeError(f"CSS suspiciously short ({len(data)} bytes); Tailwind probably not compiled.")
     if re.search(r"@(?:apply|theme)\b",css):
         raise RuntimeError("Uncompiled Tailwind @apply/@theme in shipped CSS.")
-    for klass in ("flex","grid","relative","rounded-xl","text-gold","bg-background"):
+    for klass in ("flex","grid","relative","rounded-xl","text-gold","text-primary"):
         name=re.escape(klass)
         if not re.search(r"\."+name+r"\s*[{,:]",css):
             raise RuntimeError(f"Tailwind utility missing from shipped CSS: {klass}")
