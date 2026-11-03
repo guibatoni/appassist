@@ -49,6 +49,9 @@ export type LocalMod = {
   opponents?: number
   dropEntries?: number
   dropTables?: number
+  rankDetected?: boolean
+  rankBinaryVerified?: boolean
+  rankOffset?: number | null
   requiresReview: boolean
 }
 
