@@ -28,6 +28,8 @@ export type DeepScanResult = {
   thumbnailCount: number
   framedCards: number
   frameStyles: number
+  opponentCount: number
+  dropEntries: number
   descriptionCount: number
   effectTexts: number
   investigation: string
@@ -44,6 +46,9 @@ export type LocalMod = {
   descriptions?: number
   framedCards?: number
   frameStyles?: number
+  opponents?: number
+  dropEntries?: number
+  dropTables?: number
   requiresReview: boolean
 }
 
@@ -105,6 +110,45 @@ export type FusionRow = {
 
 export type FusionPage = { total: number; offset: number; rows: FusionRow[] }
 
+export type DropRow = {
+  opponentId: number
+  opponentName: string
+  group: string
+  cardId: number
+  cardName: string
+  category: string
+  atk: number | null
+  def: number | null
+  weight: number
+  chancePercent: number
+  sourceOffset: string | null
+}
+
+export type RankPoints = {
+  available: boolean
+  status: string
+  source: string
+  rules: Record<string, Array<{below: number; points: number}>>
+  base_points: number | null
+  lp_victory_bonus: number | null
+  final_rank: boolean
+  note: string
+}
+
+export type DropsPage = {
+  available: boolean
+  status: string
+  total: number
+  offset: number
+  rows: DropRow[]
+  opponents: Array<{id:number; name:string}>
+  groups: string[]
+  rankLabelsVerified: boolean
+  weightTotal: number
+  source: string
+  rankPoints: RankPoints | Record<string,never>
+}
+
 export type RankState = {
   ready: boolean
   state: "unsupported" | "unavailable" | "needs_lp_confirmation" | "lp_mismatch" | "provisional"
@@ -142,6 +186,7 @@ export interface DesktopAPI {
   get_rank(): Promise<RankState>
   confirm_rank_lp(lifePoints: number): Promise<RankState>
   get_fusions(query: string, offset: number, limit: number): Promise<FusionPage>
+  get_drops(opponentId: number, group: string, query: string, offset: number, limit: number): Promise<DropsPage>
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(sha: string): Promise<DeepScanResult>
   import_iso(): Promise<{cancelled: boolean; investigation?: string}>
@@ -157,6 +202,7 @@ interface ProtectedNativeAPI {
   get_rank(token: string): Promise<RankState>
   confirm_rank_lp(token: string, lifePoints: number): Promise<RankState>
   get_fusions(token: string, query: string, offset: number, limit: number): Promise<FusionPage>
+  get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number): Promise<DropsPage>
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(token: string, sha: string): Promise<DeepScanResult>
   import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
@@ -186,6 +232,7 @@ export function desktopApi(): DesktopAPI | null {
     get_rank: () => native.get_rank(token),
     confirm_rank_lp: (lifePoints) => native.confirm_rank_lp(token, lifePoints),
     get_fusions: (query, offset, limit) => native.get_fusions(token, query, offset, limit),
+    get_drops: (opponentId, group, query, offset, limit) => native.get_drops(token, opponentId, group, query, offset, limit),
     activate_mod: (sha, acknowledge) => native.activate_mod(token, sha, acknowledge),
     scan_sources: (sha) => native.scan_sources(token, sha),
     import_iso: () => native.import_iso(token),
@@ -248,7 +295,7 @@ export function cardArt(activeSha: string | null, id: number): string | null {
 
 export function sourceLabel(source: string): string {
   if (source === "observada_manualmente_no_jogo") return "Observada em duelo"
-  if (source === "extraida_sete_bancos_consistentes") return "Extraída da ISO ×7"
+  if (source === "extraida_sete_bancos_consistentes") return "Receita validada no mod"
   if (source === "revisada_usuario_em_lote") return "Revisada pelo usuário"
   return "Origem não confirmada"
 }

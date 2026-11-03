@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Cpu, House, Infinity as InfinityIcon, Layers, MonitorPlay, Settings, Swords } from "lucide-react"
+import { Cpu, House, Infinity as InfinityIcon, Layers, MonitorPlay, Settings, Swords, Gift } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navItems = [
@@ -10,6 +10,7 @@ const navItems = [
   { label: "Biblioteca de Mods", href: "/mods", icon: Cpu, enabled: true },
   { label: "Biblioteca de Cartas", href: "/biblioteca", icon: Layers, enabled: true },
   { label: "Fusões", href: "/fusoes", icon: InfinityIcon, enabled: true },
+  { label: "Drops", href: "/drops", icon: Gift, enabled: true },
 ]
 
 function EyeOfHorus() {

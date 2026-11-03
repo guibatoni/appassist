@@ -21,7 +21,7 @@ WA_CARD_SECTOR_START=722
 WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
-ART_PARSER_REVISION=3  # arte grande + miniatura 40x32 + moldura autêntica + texto de SLUS
+ART_PARSER_REVISION=4  # extração completa com proveniência de drops e arte por ID
 
 
 def sha256(path:Path, progress=None):
@@ -182,9 +182,9 @@ def decode_drops(wa,rank_names=None):
             if len(candidates)!=1:
                 return None,f'Drops não validados para ID {i+1} / {rank}: formato desconhecido (opções={len(candidates)}), sem probabilidades atribuídas'
             enc,weights=candidates[0];encodings.append(enc)
-            check.append({'oponente_id':i+1,'rank':rank,'peso_total':sum(weights),'codificacao':enc})
+            check.append({'oponente_id':i+1,'rank':rank,'peso_total':sum(weights),'codificacao':enc,'source_offset':a})
             for cid,w in enumerate(weights,1):
-                if w: rows.append({'oponente_id':i+1,'rank':rank,'carta_id':cid,'peso':w,'chance_percentual':round(w*100/2048,6)})
+                if w: rows.append({'oponente_id':i+1,'rank':rank,'carta_id':cid,'peso':w,'chance_percentual':round(w*100/2048,6),'source_offset':a+(cid-1)*2})
     return {'drops':rows,'decks':deck,'verificacao':check,'codificacoes':sorted(set(encodings))},'117/117 tabelas validadas; soma 2048 por tabela'
 
 def art_extract(wa,cards,dest):
@@ -257,7 +257,10 @@ def process(path,output,with_art=False,digest=None,progress=None):
         # SLUS_014.11 pode estar na raiz ou dentro da pasta DATA.
         sl_names=[n for n in disc.files if re.fullmatch(
             r'SL[UP][A-Z0-9_.]+',n.rsplit('/',1)[-1])]
+        # Mods podem ter múltiplos executáveis: priorizar o SLUS solicitado
+        # em DATA, sem perder compatibilidade com ISOs de executável na raiz.
         sl_names=sorted(sl_names,key=lambda x:(
+            x!='DATA/SLUS_014.11',
             x.rsplit('/',1)[-1]!='SLUS_014.11',len(x),x))
         if not sl_names:
             sl_names=sorted(n for n in disc.files if n.endswith('.EXE'))
@@ -305,6 +308,7 @@ def process(path,output,with_art=False,digest=None,progress=None):
         drops,drop_status=decode_drops(wa,RANKS if info['sha256']==X15_SHA else None)
         info['rotulos_ranks_confirmados']=info['sha256']==X15_SHA
         info['drops_status']=drop_status
+        info['drops_source']=wa_names[0]
         if drops is not None:
             info['tabelas_drops']=len(drops['verificacao']);info['drops']=len(drops['drops'])
             for keyname,filename in [('drops','drops_por_oponente.csv'),('decks','decks.csv'),('verificacao','validacao_pesos.csv')]:write_csv(dest/filename,drops[keyname])

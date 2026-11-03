@@ -50,6 +50,11 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_fusions(query,offset,limit)
 
+    def get_drops(self, credential, opponent_id=0, group="", query="",
+                  offset=0, limit=36):
+        self._authorize(credential)
+        return self._bridge.get_drops(opponent_id,group,query,offset,limit)
+
     def activate_mod(self, credential, sha, acknowledge=False):
         self._authorize(credential)
         return self._bridge.activate_mod(sha,acknowledge)

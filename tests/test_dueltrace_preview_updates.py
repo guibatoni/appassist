@@ -56,7 +56,7 @@ class PreviewUpdaterTests(unittest.TestCase):
                    return_value=None):
             data=check_for_updates(
                 fetcher=lambda:stable(),preview_fetcher=lambda:preview(120),
-                current_version="0.7.3")
+                current_version="0.7.4")
         self.assertEqual(data["status"],"preview_build_unknown")
         self.assertFalse(data["updateAvailable"])
         self.assertEqual(data["previewRunId"],120)

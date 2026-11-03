@@ -15,6 +15,7 @@ from pathlib import Path
 from scanner_multiiso import process, sha256, X15_SHA
 from card_catalog import enrich_cards, attach_effect_manifest, effect_sidecar_path, category_summary
 from mod_effects_iso import extract_embedded_effects
+from dueltrace_rank_profiles import rank_profile_for_image
 
 SCHEMA = 1
 LABELS_X15 = ["Z-POW", "S-POW", "S-TEC"]
@@ -148,6 +149,12 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
             "effects": effects_info["count"] > 0,
         },
         "rank_labels": LABELS_X15 if known_x15 else None,
+        "rank_points": rank_profile_for_image(result["sha256"]),
+        "drops_provenance": {"source": result.get("drops_source") or "DATA/WA_MRG.MRG",
+                             "opponent_names_source": result.get("executavel"),
+                             "table_count": len(checks) if weights_ok else 0,
+                             "weight_total": 2048 if weights_ok else None,
+                             "rank_label_verified": bool(known_x15 and weights_ok)},
         "drop_group_labels": groups if weights_ok else [],
         "art_root": str((extracted / "artes_722").resolve()) if status["artes"] == "extraídas" else None,
         "cards": catalog,
@@ -169,7 +176,8 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "drops": [
             {"opponent_id": integer(r["oponente_id"]), "group": r["rank"],
              "card_id": integer(r["carta_id"]), "weight": integer(r["peso"]),
-             "probability_percent": float(r["chance_percentual"])}
+             "probability_percent": float(r["chance_percentual"]),
+             "source_offset": integer(r.get("source_offset"))}
             for r in drops
         ] if weights_ok else [],
         "decks": [

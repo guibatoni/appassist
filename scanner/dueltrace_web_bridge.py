@@ -20,6 +20,7 @@ from dueltrace_fusion_planner import plan_fusion_chains
 from dueltrace_rank_live import (model_available, read_rank_candidate,
                                  project_lp_win_rank)
 from epsxe_launcher import launch_epsxe
+from dueltrace_drops import get_drop_catalog
 from dueltrace_update_checker import check_for_updates, open_official_releases
 
 
@@ -93,6 +94,12 @@ class DueltraceWebBridge:
                                 if c.get("description_text") and c.get("description_source")]),
             "framedCards":(profile or {}).get("graphic_assets",{}).get("composed_cards",0),
             "frameStyles":(profile or {}).get("graphic_assets",{}).get("frames",0),
+            "opponents":len((profile or {}).get("opponents",[]))
+                if (profile or {}).get("supported_features",{}).get("opponents") else 0,
+            "dropEntries":len((profile or {}).get("drops",[]))
+                if (profile or {}).get("supported_features",{}).get("drops") else 0,
+            "dropTables":(profile or {}).get("drops_provenance",{}).get("table_count",0)
+                if (profile or {}).get("supported_features",{}).get("drops") else 0,
             "requiresReview":summary.get("requires_review",True),
             "verified":summary.get("validated",{}),
         }
@@ -163,7 +170,7 @@ class DueltraceWebBridge:
                 for i,cid in enumerate(ids)]
             index=self._fusion_index(active["sha256"],profile)
             pairs=suggest_hand_pairs(ids,index,cards,limit=24)
-            chains=plan_fusion_chains(ids,index,cards,limit=16)
+            chains=plan_fusion_chains(ids,index,cards,min_cards=2,max_cards=5,limit=16)
             return {"ready":True,"status":sample.get("status","Mão identificada"),
                     "hand":enriched,"pairs":pairs,
                     "chains":chains["routes"],
@@ -276,6 +283,14 @@ class DueltraceWebBridge:
                 total+=1
             return {"total":total,"offset":offset,"rows":rows}
 
+    def get_drops(self, opponent_id=0, group="", query="", offset=0, limit=36):
+        """Consulta exclusivamente tabelas validadas do perfil ISO ativo."""
+        with self._lock:
+            _active, _entry, profile = self._active()
+            return get_drop_catalog(
+                profile, opponent_id=opponent_id, group=group,
+                query=query, offset=offset, limit=limit)
+
     def activate_mod(self, sha, acknowledge=False):
         if not isinstance(sha,str) or len(sha)!=64:
             raise ValueError("Identificador de mod inválido")
@@ -318,6 +333,10 @@ class DueltraceWebBridge:
                 "artCount":graphic.get("art_count",0),
                 "thumbnailCount":graphic.get("thumbnails",0),
                 "framedCards":graphic.get("composed_cards",0),
+                "opponentCount":len((profile or {}).get("opponents",[]))
+                    if (profile or {}).get("supported_features",{}).get("opponents") else 0,
+                "dropEntries":len((profile or {}).get("drops",[]))
+                    if (profile or {}).get("supported_features",{}).get("drops") else 0,
                 "frameStyles":graphic.get("frames",0),
                 "descriptionCount":provenance.get("descriptions_attached",0),
                 "effectTexts":provenance.get("effect_descriptions_attached",0),

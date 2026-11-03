@@ -7,9 +7,10 @@ import {
   GitMerge, Layers, Play, RefreshCcw, Search, Shield, Swords, Upload,
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
+import {DropsPage} from "./drops-page"
 import type {LocalCard, HandState, FusionPage, LocalMod, RankState} from "@/lib/desktop"
 
-type Page = "inicio" | "mods" | "biblioteca" | "fusoes"
+type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
 function Heading({title,subtitle}:{title:string;subtitle:string}) {
   return <div className="panel rounded-xl border-gold/40 bg-gradient-to-r from-[#142b51] to-[#061126] px-5 py-4">
@@ -24,8 +25,12 @@ function CardThumbnail({card,sha}:{card:LocalCard|null;sha:string|null}) {
   const framed=card?cardWithFrame(sha,card.id):null
   const large=card?cardArt(sha,card.id):null
   const url=source==="composite"?framed:source==="large"?large:null
-  return <div className="relative mx-auto flex aspect-[3/4] w-full max-w-32 items-center justify-center overflow-hidden rounded-lg border-2 border-gold/50 bg-gradient-to-b from-[#19466d] via-[#102449] to-[#060e23] p-2 shadow-[0_0_18px_rgb(56_200_255/0.18)]">
-    {url?<Image src={url} alt={card?.name??""} fill unoptimized sizes="160px" className="object-contain p-1"
+  return <div className={"relative mx-auto flex w-full max-w-32 items-center justify-center overflow-hidden bg-[#061126] shadow-[0_0_18px_rgb(56_200_255/0.18)] "+
+      (source==="composite"
+        ? "aspect-[52/60] rounded-sm border border-gold/20"
+        : "aspect-[102/96] rounded-lg border border-line/50 p-1")}>
+    {url?<Image src={url} alt={card?.name??""} fill unoptimized sizes="160px"
+      className={source==="composite"?"object-fill [image-rendering:pixelated]":"object-contain p-1"}
       onError={()=>setSource(source==="composite"?"large":"none")}/>:
       <Layers className="size-9 text-primary/45" aria-label="Imagem não extraída"/>}
     {card&&<span className="absolute left-1 top-1 rounded bg-black/70 px-1 text-[10px] text-gold">#{card.id}</span>}
@@ -161,7 +166,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         <h2 className="font-display text-xl text-gold">Fusões disponíveis</h2>
         <div className="flex gap-2">
           <button type="button" onClick={()=>setMode("pairs")} className={mode==="pairs"?"btn-gold":"btn-ghost"}>Duplas</button>
-          <button type="button" onClick={()=>setMode("chains")} className={mode==="chains"?"btn-gold":"btn-ghost"}>Cadeias (3–5)</button>
+          <button type="button" onClick={()=>setMode("chains")} className={mode==="chains"?"btn-gold":"btn-ghost"}>Cadeias (2–5)</button>
         </div>
       </div>
       {!hand?.ready?<Empty>Entre em duelo no ePSXe. Nenhuma mão fictícia é exibida.</Empty>:
@@ -179,7 +184,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             <p className="mt-1 text-xs text-primary">Ordem: {x.slot_order.join(" → ")}</p>
             <ol className="mt-2 space-y-1 text-xs text-muted">{x.steps.map((s,j)=>
               <li key={j}>{j+1}. #{s.material_a} + #{s.material_b} = #{s.result} ({sourceLabel(s.validation)})</li>)}</ol>
-          </div>)}</div>:<Empty>Nenhuma cadeia de 3 a 5 cartas foi identificada.</Empty>)}
+          </div>)}</div>:<Empty>Nenhuma cadeia de 2 a 5 cartas foi identificada.</Empty>)}
       {hand?.chainsComplete===false&&mode==="chains"&&<p className="mt-2 text-xs text-gold">Busca parcial; o limite de estados foi alcançado.</p>}
       <p className="mt-3 text-xs text-muted">Resultados extraídos do mod. O jogo ainda precisa confirmar as combinações em duelo.</p>
     </div>
@@ -198,7 +203,7 @@ function Mods({mods,sha,onRefresh,configured}:{
     try{
       const result=await api.scan_sources(mod.sha256)
       await onRefresh()
-      setMessage("WA/SLUS analisados: "+result.artCount+" artes, "+
+      setMessage("ISO analisada: "+result.opponentCount+" oponentes, "+result.dropEntries+" drops, "+result.artCount+" artes, "+
         result.frameStyles+" molduras originais, "+result.framedCards+" cartas com moldura, "+
         result.descriptionCount+" descrições e "+
         result.effectTexts+" textos indicativos de efeitos. "+
@@ -237,9 +242,10 @@ function Mods({mods,sha,onRefresh,configured}:{
             <p className="truncate font-semibold text-white">{mod.name}</p>
             <p className="mt-1 text-xs text-muted">{mod.sha256.slice(0,18)}…</p>
           </div><span className={sha===mod.sha256?"text-xs text-success":"text-xs text-gold"}>{sha===mod.sha256?"Ativo":mod.requiresReview?"Revisão necessária":"Conhecido"}</span></div>
-          <div className="my-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-3 xl:grid-cols-6">
-            {([["Cartas",mod.cards],["Fusões",mod.fusions],["Textos de efeito",mod.effects],
-              ["Descrições",mod.descriptions??0],["Molduras WA",mod.frameStyles??0],
+          <div className="my-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-3 xl:grid-cols-3">
+            {([["Cartas",mod.cards],["Oponentes",mod.opponents??0],["Drops",mod.dropEntries??0],
+              ["Fusões",mod.fusions],["Textos de efeito",mod.effects],["Descrições",mod.descriptions??0],
+              ["Tabelas WA",mod.dropTables??0],["Molduras WA",mod.frameStyles??0],
               ["Cartas emolduradas",mod.framedCards??0]] as const).map(([label,n])=>
               <div key={label} className="rounded-lg border border-line/50 bg-background/70 p-2"><p className="font-display text-xl text-primary">{n}</p><p className="text-xs text-muted">{label}</p></div>)}
           </div>
@@ -394,7 +400,7 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             <FusionIllustration id={r.result} name={r.nameResult} card={cardsById.get(r.result)??null} sha={sha} role="Resultado"/>
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/50 pt-2">
-            <span className="text-xs text-muted">{sourceLabel(r.source)}</span>
+            <span className="text-xs text-muted">#{r.a} + #{r.b} → #{r.result}</span>
             <MonsterStats card={cardsById.get(r.result)??null} className="text-sm"/>
           </div>
         </article>)}
@@ -426,11 +432,8 @@ export function DesktopPage({page}:{page:Page}) {
   const {state,error,loading,refresh}=useDesktopState()
   return <div className="flex flex-col gap-3 lg:gap-4">
     <div className="panel flex flex-wrap items-center gap-3 rounded-xl px-4 py-2 text-xs">
-      <span className={state?.connected?"flex items-center gap-2 text-success":"flex items-center gap-2 text-gold"}>
-        {state?.connected?<CheckCircle2 className="size-4"/>:<AlertTriangle className="size-4"/>}
-        {state?.connected?"Motor Python conectado":"Prévia do v0 — sem acesso ao ePSXe"}
-      </span>
-      <span className="text-muted">Mod ativo: <strong className="font-semibold text-white">{state?.activeName??"Nenhum"}</strong></span>
+
+      <span className="text-muted">ISO ativa: <strong className="font-semibold text-white">{state?.activeName??"Nenhuma ISO selecionada"}</strong></span>
     </div>
     {error&&<p className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm text-gold" role="status">{error}</p>}
     {loading&&<p className="text-sm text-muted">Carregando dados locais...</p>}
@@ -438,5 +441,6 @@ export function DesktopPage({page}:{page:Page}) {
     {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>}
     {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="fusoes"&&<Fusions sha={state?.activeSha??null} cards={state?.cards??[]}/>}
+    {page==="drops"&&<DropsPage sha={state?.activeSha??null}/>}
   </div>
 }

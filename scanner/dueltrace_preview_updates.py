@@ -18,6 +18,7 @@ PREVIEW_BRANCHES = (
     "fix/dueltrace-v073-preview-update-button",
     "feature/dueltrace-v073-assets-hardening",
     "security/dueltrace-trusted-distribution-v073",
+    "feature/dueltrace-v074-drops-ranks-frames",
 )
 ARTIFACT_NAME = "DUELTRACE-Windows-Preview-Unsigned-Security-Scanned"
 BUILD_INFO_FILE = "dueltrace-build.json"
