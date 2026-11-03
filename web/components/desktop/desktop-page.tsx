@@ -7,9 +7,10 @@ import {
   GitMerge, Layers, Play, RefreshCcw, Search, Shield, Swords, Upload,
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
+import {DropsPage} from "./drops-page"
 import type {LocalCard, HandState, FusionPage, LocalMod, RankState} from "@/lib/desktop"
 
-type Page = "inicio" | "mods" | "biblioteca" | "fusoes"
+type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
 function Heading({title,subtitle}:{title:string;subtitle:string}) {
   return <div className="panel rounded-xl border-gold/40 bg-gradient-to-r from-[#142b51] to-[#061126] px-5 py-4">
@@ -435,5 +436,6 @@ export function DesktopPage({page}:{page:Page}) {
     {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>}
     {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="fusoes"&&<Fusions sha={state?.activeSha??null} cards={state?.cards??[]}/>}
+    {page==="drops"&&<DropsPage sha={state?.activeSha??null}/>}
   </div>
 }
