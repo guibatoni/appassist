@@ -119,6 +119,7 @@ export interface DesktopAPI {
   confirm_rank_lp(lifePoints: number): Promise<RankState>
   get_fusions(query: string, offset: number, limit: number): Promise<FusionPage>
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
+  reanalyze_mod(sha: string): Promise<DesktopState>
   import_iso(): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(): Promise<{started: boolean; status: string}>
@@ -133,6 +134,7 @@ interface ProtectedNativeAPI {
   confirm_rank_lp(token: string, lifePoints: number): Promise<RankState>
   get_fusions(token: string, query: string, offset: number, limit: number): Promise<FusionPage>
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
+  reanalyze_mod(token: string, sha: string): Promise<DesktopState>
   import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(token: string): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(token: string): Promise<{started: boolean; status: string}>
@@ -161,6 +163,7 @@ export function desktopApi(): DesktopAPI | null {
     confirm_rank_lp: (lifePoints) => native.confirm_rank_lp(token, lifePoints),
     get_fusions: (query, offset, limit) => native.get_fusions(token, query, offset, limit),
     activate_mod: (sha, acknowledge) => native.activate_mod(token, sha, acknowledge),
+    reanalyze_mod: (sha) => native.reanalyze_mod(token, sha),
     import_iso: () => native.import_iso(token),
     configure_epsxe: () => native.configure_epsxe(token),
     start_game: () => native.start_game(token),
