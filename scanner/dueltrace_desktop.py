@@ -22,6 +22,7 @@ from mod_autopilot import ModAutopilot, profile_summary, discover_images
 from dueltrace_intelligence import MultiModIntelligence
 from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
                                  suggest_hand_pairs)
+from dueltrace_fusion_planner import plan_fusion_chains, describe_route
 from dueltrace_diagnostics import art_diagnostic, mod_diagnostic, format_diagnostic
 from ia_local import DEFAULT_MODEL
 from epsxe_launcher import launch_epsxe
@@ -47,7 +48,7 @@ USER_PAGES=tuple(p for p in PAGES if p[1] in ("inicio","mods","cartas","fusoes")
 class DueltraceDesktop(tk.Tk):
     def __init__(self, *, catalog=None, developer=False):
         super().__init__()
-        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.4")
+        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.5")
         self.geometry("1360x780")
         self.minsize(1100,690)
         self.configure(background=BACKGROUND)
@@ -220,6 +221,10 @@ class DueltraceDesktop(tk.Tk):
             profile.get("fusion_recipes",[])
             if profile and features.get("fusions") else [])
         self._live_last=None
+        self._home_pairs=[]
+        self._home_route_plan={"routes":[],"complete":True}
+        self._home_route_rows={}
+        self._home_fusion_mode="pairs"
 
         hero=Panel(body)
         hero.pack(fill="x",pady=(0,8))
@@ -268,11 +273,22 @@ class DueltraceDesktop(tk.Tk):
         fusion_panel.pack(side="left",fill="both",expand=True,padx=(0,5))
         bar=tk.Frame(fusion_panel,background=PANEL)
         bar.pack(fill="x",pady=(0,6))
-        text_label(bar,"◎  FUSÕES POSSÍVEIS  /  MÃO × MÃO",
+        text_label(bar,"◎  FUSÕES POSSÍVEIS  /  SUA MÃO",
                    color=GOLD,strong=True,size=12,bg=PANEL).pack(side="left")
         self.home_fusion_count=tk.StringVar(value="Aguardando mão")
         tk.Label(bar,textvariable=self.home_fusion_count,
                  bg=PANEL,fg=BLUE,font=("Segoe UI",9)).pack(side="right")
+        choices=tk.Frame(fusion_panel,background=PANEL)
+        choices.pack(anchor="w",pady=(0,3))
+        self.home_pair_button=self._action(
+            choices,"Fusões diretas (2)",lambda:self._set_home_fusion_mode("pairs"),
+            width=155)
+        self.home_pair_button.pack(side="left",padx=(0,6))
+        self.home_chain_button=self._action(
+            choices,"Cadeias (3–5)",lambda:self._set_home_fusion_mode("chains"),
+            width=149)
+        self.home_chain_button.pack(side="left")
+        self.home_pair_button.set_active(True)
         self.home_fusion_tree=self._table(
             fusion_panel,("slots","materials","result","atk","origin"),
             (("slots","Slots",56),("materials","Materiais",146),
@@ -282,7 +298,9 @@ class DueltraceDesktop(tk.Tk):
             value="Sugestões aparecem aqui após leitura de cinco cartas válidas.")
         tk.Label(fusion_panel,textvariable=self.home_fusion_hint,
                  bg=PANEL,fg=MUTED,font=("Segoe UI",9),
-                 anchor="w").pack(fill="x",pady=(5,0))
+                 anchor="w",justify="left",wraplength=540).pack(
+                     fill="x",pady=(5,0))
+        self.home_fusion_tree.bind("<<TreeviewSelect>>",self._on_home_fusion_select)
         side=Panel(bottom)
         side.configure(width=266)
         side.pack(side="right",fill="y",padx=(5,0))
@@ -350,42 +368,104 @@ class DueltraceDesktop(tk.Tk):
                       else ({"id":ids[slot],"name":f"Carta #{ids[slot]}"}
                             if ids else None),
                       art_root=self._home_art_root)
+        self._home_pairs=suggest_hand_pairs(
+            ids,self._home_fusions,self._home_cards,limit=24)
+        self._home_route_plan=plan_fusion_chains(
+            ids,self._home_fusions,self._home_cards,limit=24)
+        self._render_home_suggestions(ready=ready)
+
+    def _set_home_fusion_mode(self, mode):
+        if mode not in ("pairs","chains"):
+            return
+        self._home_fusion_mode=mode
+        if hasattr(self,"home_pair_button"):
+            self.home_pair_button.set_active(mode=="pairs")
+            self.home_chain_button.set_active(mode=="chains")
+        self._render_home_suggestions()
+
+    def _render_home_suggestions(self, *, ready=None):
+        """Troca modo de sugestões sem nova leitura RAM ou cálculos duplicados."""
+        if self.active_page!="inicio" or not hasattr(self,"home_fusion_tree"):
+            return
         tree=self.home_fusion_tree
+        if not tree.winfo_exists():
+            return
         tree.delete(*tree.get_children())
-        matches=suggest_hand_pairs(ids,self._home_fusions,self._home_cards,
-                                   limit=24)
-        for row in matches:
-            a,b=row["a"],row["b"]
-            a_name=self._home_cards.get(a,{}).get("name",f"#{a}")
-            b_name=self._home_cards.get(b,{}).get("name",f"#{b}")
-            origin=row["validation"]
-            if origin=="observada_manualmente_no_jogo":
-                source="Testada"
-            elif origin=="extraida_sete_bancos_consistentes":
-                source="ISO ×7"
-            elif origin=="revisada_usuario_em_lote":
-                source="Revisada"
-            else:
-                source="Não informada"
-            tree.insert("","end",values=(
-                f"{row['slot_a']} + {row['slot_b']}",
-                f"{a_name} + {b_name}",
-                f"#{row['result']} {row['result_name']}",
-                f"{row['atk']:,}" if row["atk"] is not None else "—",
-                source))
+        self._home_route_rows={}
+        if ready is None:
+            ready=bool(self._live_last and self._live_last[2])
         if not ready:
             self.home_fusion_count.set("Sem leitura válida")
             self.home_fusion_hint.set(
                 "Abra o ePSXe e entre em duelo. A mão é limpa ao desconectar.")
-        elif not self._home_fusions:
+            return
+        if not self._home_fusions:
             self.home_fusion_count.set("Banco indisponível")
             self.home_fusion_hint.set(
                 "Ative um perfil com fusões extraídas e analisadas.")
-        else:
-            self.home_fusion_count.set(f"{len(matches)} sugestão(ões)")
+            return
+        if self._home_fusion_mode=="pairs":
+            matches=self._home_pairs
+            for idx,row in enumerate(matches):
+                a,b=row["a"],row["b"]
+                a_name=self._home_cards.get(a,{}).get("name",f"#{a}")
+                b_name=self._home_cards.get(b,{}).get("name",f"#{b}")
+                origin=row["validation"]
+                if origin=="observada_manualmente_no_jogo":
+                    source="Testada"
+                elif origin=="extraida_sete_bancos_consistentes":
+                    source="ISO ×7"
+                elif origin=="revisada_usuario_em_lote":
+                    source="Revisada"
+                else:
+                    source="Não informada"
+                tree.insert("","end",iid=str(idx),values=(
+                    f"{row['slot_a']} + {row['slot_b']}",
+                    f"{a_name} + {b_name}",
+                    f"#{row['result']} {row['result_name']}",
+                    f"{row['atk']:,}" if row["atk"] is not None else "—",
+                    source))
+            self.home_fusion_count.set(f"{len(matches)} pares")
             self.home_fusion_hint.set(
-                "Ordenadas por ATK do resultado • pares mão×mão • "
-                "validade estrutural, não confirmação em duelo.")
+                "Fusões diretas, ordenadas por ATK do resultado. "
+                "A procedência da receita não confirma o duelo atual.")
+            return
+        plan=self._home_route_plan
+        routes=plan.get("routes",[])
+        for idx,route in enumerate(routes):
+            self._home_route_rows[str(idx)]=route
+            slots=" → ".join(str(x) for x in route["used_slots"])
+            tree.insert("","end",iid=str(idx),values=(
+                slots,
+                f"{len(route['steps'])} etapas consecutivas",
+                f"#{route['result']} {route['result_name']}",
+                f"{route['atk']:,}" if route["atk"] is not None else "—",
+                "Etapas testadas" if route["all_steps_observed_individually"]
+                else "ISO / perfil"))
+        partial=not plan.get("complete",True)
+        self.home_fusion_count.set(
+            f"{len(routes)} rotas" + (" · busca parcial" if partial else ""))
+        if routes:
+            self.home_fusion_hint.set(
+                describe_route(routes[0],self._home_cards)
+                + ("\nBusca interrompida pelo limite de estados." if partial else
+                   "\nSequência sugerida; rota completa não testada no duelo."))
+        else:
+            self.home_fusion_hint.set(
+                "Não há cadeias identificadas entre três e cinco cartas "
+                "na mão atual e nas receitas disponíveis do mod.")
+
+    def _on_home_fusion_select(self, _event=None):
+        if getattr(self,"_home_fusion_mode","pairs")!="chains":
+            return
+        selected=self.home_fusion_tree.selection()
+        if not selected:
+            return
+        route=self._home_route_rows.get(selected[0])
+        if route:
+            self.home_fusion_hint.set(
+                describe_route(route,self._home_cards)
+                +"\nSequência teórica baseada nas receitas; não executada no jogo.")
 
     def _table(self,parent,columns,specs,height=14):
         container=tk.Frame(parent,background=PANEL)
