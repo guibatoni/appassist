@@ -15,6 +15,10 @@ from pathlib import Path
 
 from fusion_ram_probe import decode_hand, FusionMemoryProbe
 from field_occupancy_probe import analyze_occupancy
+from field_cancel_probe import (
+    FOCUS_CHUNK, focus_watch_values, focus_slot_u16_values,
+    focus_phase_differences, cancelled_preparation_analysis,
+)
 
 HAND_ADDR = 0xBFF484
 HAND_SIZE = 140
@@ -162,12 +166,16 @@ class FieldMemoryProbe:
     -> REMOVIDA (opcional). As fases são observadas pelo usuário no jogo.
     """
 
-    def __init__(self, reader_provider, home: Path, *, expanded: bool = False):
+    def __init__(self, reader_provider, home: Path, *, expanded: bool = False,
+                 focused: bool = False):
         self.reader_provider=reader_provider
         self.home=Path(home)
         if type(expanded) is not bool:
             raise ValueError("expanded deve ser booleano")
+        if type(focused) is not bool:
+            raise ValueError("focused deve ser booleano")
         self.expanded=expanded
+        self.focused=focused
         self.search_start=EXPANDED_START if expanded else SEARCH_START
         self.search_size=EXPANDED_SIZE if expanded else SEARCH_SIZE
         self.before=None
@@ -177,6 +185,8 @@ class FieldMemoryProbe:
         self.occupied_control=None
         self.removed_sample=None
         self.vacant_control=None
+        self.cancelled=False
+        self.cancel_file=None
         self.report=None
         self.file=None
 
@@ -195,7 +205,11 @@ class FieldMemoryProbe:
             raise RuntimeError("Mão de cinco cartas inválida; capture durante um duelo")
         chunks={}
         errors=[]
-        for addr in range(self.search_start,self.search_start+self.search_size,CHUNK_SIZE):
+        addresses=list(range(self.search_start,self.search_start+self.search_size,CHUNK_SIZE))
+        if (self.focused and FOCUS_CHUNK not in addresses):
+            # Leitura complementar de 4 KiB; nao e varredura de outro processo.
+            addresses.append(FOCUS_CHUNK)
+        for addr in addresses:
             try:
                 block=reader.read(addr,CHUNK_SIZE)
                 if not isinstance(block,bytes) or len(block)!=CHUNK_SIZE:
@@ -217,19 +231,26 @@ class FieldMemoryProbe:
                 ("sha","pid","timestamp_utc","hand_ids","unreadable_chunks")} | {
                     "readable_chunks":len(snapshot["chunks"])}
 
-    def capture_before(self, sha: str, target_id: int) -> dict:
+    def capture_before(self, sha: str, target_id: int, *,
+                       user_slot: int | None = None) -> dict:
+        if user_slot is not None and (type(user_slot) is not int or
+                                      not 1<=user_slot<=5):
+            raise ValueError("Slot observado deve estar entre 1 e 5")
         if type(target_id) is not int or not 1<=target_id<=722:
             raise ValueError("Informe o ID da carta a invocar entre 1 e 722")
         sample=self._capture(sha)
         if target_id not in sample["hand_ids"]:
             raise ValueError("Carta escolhida não consta da mão; captura ANTES rejeitada")
-        self.before={"snapshot":sample,"target_id":target_id}
+        self.before={"snapshot":sample,"target_id":target_id,
+                     "user_slot":user_slot}
         self.prepared=None
         self.after=None
         self.refreshed=None
         self.occupied_control=None
         self.removed_sample=None
         self.vacant_control=None
+        self.cancelled=False
+        self.cancel_file=None
         self.report=None
         self.file=None
         return self._public(sample)
@@ -249,6 +270,8 @@ class FieldMemoryProbe:
         """
         if self.after is not None:
             raise RuntimeError("A carta já foi registrada na mesa; reinicie o diagnóstico")
+        if self.cancelled:
+            raise RuntimeError("Jogada cancelada; inicie outro diagnóstico pelo botão ANTES")
         if face_state not in (None,"faceup","facedown"):
             raise ValueError("Posição da face inválida")
         sample=self._capture_same_session(sha)
@@ -272,6 +295,11 @@ class FieldMemoryProbe:
         """
         if self.before is None:
             raise RuntimeError("Primeiro capture o estado ANTES da invocação")
+        if self.cancelled:
+            raise RuntimeError("Invocação cancelada: inicie outro diagnóstico pelo botão ANTES")
+        if (self.before["user_slot"] is not None and user_slot is not None
+            and self.before["user_slot"] != user_slot):
+            raise ValueError("O slot mudou entre ANTES e NA MESA; reinicie o diagnóstico")
         if face_state not in (None,"faceup","facedown"):
             raise ValueError("FaceUp ou FaceDown inválido")
         if user_slot is not None and (
@@ -303,6 +331,20 @@ class FieldMemoryProbe:
             "after_removal":None,
             "after_occupied_control":None,
             "after_vacant_control":None,
+            "targeted_ram_monitor":(
+                {
+                    "status":"ENDERECOS_HIPOTETICOS_NAO_VALIDOS_COMO_CAMPO",
+                    "focus_chunk":f"0x{FOCUS_CHUNK:08X}",
+                    "before":self._focused_public(initial),
+                    "prepared":self._focused_public(self.prepared["snapshot"])
+                        if self.prepared else None,
+                    "set":self._focused_public(sample),
+                    "occupied_control":None,
+                    "removed":None,
+                    "vacant_control":None,
+                    "hand_refreshed":None,
+                    "field_slot_verified":False,
+                } if self.focused else None),
             "occupancy_analysis":{
                 "status":"AGUARDANDO_REMOCAO",
                 "field_slot_verified":False,
@@ -339,6 +381,10 @@ class FieldMemoryProbe:
             "scan":{"address_start":f"0x{self.search_start:08X}",
                     "size_bytes":self.search_size,"chunk_size":CHUNK_SIZE,
                     "mode":"AMPLIADA_1MIB" if self.expanded else "RESTRITA_96KIB",
+                    "focused_extra_chunk":(
+                        f"0x{FOCUS_CHUNK:08X}" if self.focused and not self.expanded
+                        else None),
+                    "focused_enabled":self.focused,
                     "purpose":"faixa experimental no processo ePSXe; NAO e mapa de campo"},
             "analysis":candidates,
             "phase_differences":{
@@ -388,6 +434,10 @@ class FieldMemoryProbe:
         self.refreshed=sample
         report=dict(self.report)
         report["after_hand_refresh"]=self._public(sample)
+        if self.focused:
+            monitor=dict(report["targeted_ram_monitor"])
+            monitor["hand_refreshed"]=self._focused_public(sample)
+            report["targeted_ram_monitor"]=monitor
         probe=dict(report["hypothetical_slot_probe"])
         probe["hand_refreshed"]=hypothetical_slot_u16_values(sample["chunks"])
         report["hypothetical_slot_probe"]=probe
@@ -440,6 +490,10 @@ class FieldMemoryProbe:
         self.occupied_control=sample
         report=dict(self.report)
         report["after_occupied_control"]=self._public(sample)
+        if self.focused:
+            monitor=dict(report["targeted_ram_monitor"])
+            monitor["occupied_control"]=self._focused_public(sample)
+            report["targeted_ram_monitor"]=monitor
         report["occupancy_analysis"]=self._occupancy_analysis()
         self._save(self.file,report)
         self.report=report
@@ -453,10 +507,122 @@ class FieldMemoryProbe:
         self.vacant_control=sample
         report=dict(self.report)
         report["after_vacant_control"]=self._public(sample)
+        if self.focused:
+            monitor=dict(report["targeted_ram_monitor"])
+            monitor["vacant_control"]=self._focused_public(sample)
+            report["targeted_ram_monitor"]=monitor
         report["occupancy_analysis"]=self._occupancy_analysis()
         self._save(self.file,report)
         self.report=report
         return report,self.file
+
+    @staticmethod
+    def _focused_public(snapshot: dict) -> dict:
+        """Exporta somente valores pontuais; NAO copia blocos de RAM."""
+        return {
+            "timestamp_utc": snapshot["timestamp_utc"],
+            "watch_values":focus_watch_values(snapshot["chunks"]),
+            "hypothetical_slot_u16":focus_slot_u16_values(snapshot["chunks"]),
+            "field_slot_verified":False,
+            "occupancy_verified":False,
+        }
+
+    def capture_cancelled(self, sha: str, *, user_slot: int | None = None
+                          ) -> tuple[dict, Path]:
+        """Controle NEGATIVO: preparar e cancelar SEM colocar no campo.
+
+        A captura depende do usuario informar que cancelou. Se usada, encerra
+        a sessao: nao e permitido registrar NA MESA depois dela.
+        """
+        if self.before is None or self.prepared is None:
+            raise RuntimeError("Capture ANTES e PREPARADA antes de CANCELADA")
+        if self.after is not None or self.report is not None:
+            raise RuntimeError("NA MESA ja registrada: cancelamento nao permitido")
+        if self.cancelled:
+            raise RuntimeError("CANCELADA ja registrada. Inicie novo teste com ANTES")
+        frozen_slot=self.before["user_slot"]
+        if frozen_slot is not None:
+            if user_slot is not None and user_slot != frozen_slot:
+                raise ValueError("O slot mudou desde ANTES; reinicie o diagnostico")
+            user_slot=frozen_slot
+        if type(user_slot) is not int or not 1<=user_slot<=5:
+            raise ValueError("Informe o slot visual escolhido (1 a 5)")
+        sample=self._capture_same_session(sha)
+        initial=self.before["snapshot"]
+        prepared=self.prepared["snapshot"]
+        target=self.before["target_id"]
+        report={
+            "schema":1,
+            "type":"CONTROLE_CANCELAMENTO_CAMPO_RAM",
+            "status":"CONTROLE_NEGATIVO — NENHUMA INVOCACAO CONFIRMADA",
+            "rom_sha256_selected_manually":sample["sha"],
+            "emulator_iso_verified":False,
+            "pid":sample["pid"],
+            "reference_card_id":target,
+            "before":self._public(initial),
+            "after_preparation":self._public(prepared),
+            "after_cancellation":self._public(sample),
+            "observed_by_user":{
+                "slot_position_1_to_5":user_slot,
+                "face_state":self.prepared["face_state"],
+                "cancellation_confirmed_visually":True,
+                "card_placed_on_board":False,
+                "interpretation":"DECLARADO PELO USUARIO, NAO DETECTADO PELA RAM",
+            },
+            "hand_analysis":{
+                "target_count_before":initial["hand_ids"].count(target),
+                "target_count_prepared":prepared["hand_ids"].count(target),
+                "target_count_cancelled":sample["hand_ids"].count(target),
+                "hand_unchanged_after_cancel":initial["hand_ids"]==sample["hand_ids"],
+                "proves_no_summon":False,
+            },
+            "scan":{
+                "address_start":f"0x{self.search_start:08X}",
+                "size_bytes":self.search_size,
+                "chunk_size":CHUNK_SIZE,
+                "mode":"AMPLIADA_1MIB" if self.expanded else "RESTRITA_96KIB",
+                "focused_enabled":self.focused,
+                "focused_extra_chunk":(
+                    f"0x{FOCUS_CHUNK:08X}" if self.focused and not self.expanded else None),
+                "purpose":"controle negativo; area experimental do mesmo ePSXe",
+            },
+            "negative_control_analysis":cancelled_preparation_analysis(
+                initial["chunks"],prepared["chunks"],sample["chunks"]),
+            "hypothetical_slot_probe":{
+                "before":hypothetical_slot_u16_values(initial["chunks"]),
+                "prepared":hypothetical_slot_u16_values(prepared["chunks"]),
+                "cancelled":hypothetical_slot_u16_values(sample["chunks"]),
+                "field_slot_verified":False,
+                "does_not_confirm_occupancy":True,
+            },
+            "targeted_ram_monitor":(
+                {
+                    "status":"HIPOTESES_DE_SELECAO_NAO_VALIDADAS_COMO_CAMPO",
+                    "before":self._focused_public(initial),
+                    "prepared":self._focused_public(prepared),
+                    "cancelled":self._focused_public(sample),
+                    "field_slot_verified":False,
+                } if self.focused else None),
+            "after_summon":None,
+            "duel_field_card_ids":None,
+            "duel_field_ram_verified":False,
+            "fusion_catalog_changed":False,
+            "notes":[
+                "Esta sessao NAO pode ser usada como prova de invocacao no campo.",
+                "Cancelar deve ocorrer antes da carta ser fisicamente posicionada.",
+                "Nao ha escrita na RAM, nem modificacao de ISO, saves ou fusoes.",
+                "Os enderecos sao candidatos, nao um mapa validado dos slots.",
+            ],
+        }
+        folder=self.home/"diagnosticos_campo"/sample["sha"]
+        folder.mkdir(parents=True,exist_ok=True)
+        path=folder/(
+            datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")+
+            "_CANCELADA_"+str(time.time_ns())+".json")
+        self._save(path,report)
+        self.cancelled=True
+        self.cancel_file=path
+        return report,path
 
     @staticmethod
     def _save(path,report):
@@ -477,6 +643,12 @@ class FieldMemoryProbe:
         # experimental e não atestam que houve realmente a remoção.
         report=dict(self.report)
         report["after_removal"]=self._public(sample)
+        if self.focused:
+            monitor=dict(report["targeted_ram_monitor"])
+            monitor["removed"]=self._focused_public(sample)
+            monitor["focus_set_to_removed"]=focus_phase_differences(
+                self.after["chunks"],sample["chunks"])
+            report["targeted_ram_monitor"]=monitor
         probe=dict(report["hypothetical_slot_probe"])
         probe["removed"]=hypothetical_slot_u16_values(sample["chunks"])
         report["hypothetical_slot_probe"]=probe
