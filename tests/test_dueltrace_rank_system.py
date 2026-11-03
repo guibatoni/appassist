@@ -34,7 +34,7 @@ class RankSystemTests(unittest.TestCase):
         self.assertEqual([x["label"] for x in result["groupOptions"]],list(CLASSIC_POOLS))
         self.assertEqual([x["groupLabel"] for x in result["rows"][:3]],["S/A POW","B/C/D POW/TEC","S/A TEC"])
         self.assertFalse(result["rankLabelsVerified"])
-        self.assertIn("presumido",result["status"] if "presumido" in result["status"] else "presumido")
+        self.assertIn("deve ser conferido em duelo",result["status"])
 
     def test_original_rank_filter_uses_exact_WA_bank_not_fabricated_ten_tables(self):
         p=fake_profile()
