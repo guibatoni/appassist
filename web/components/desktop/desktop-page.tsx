@@ -249,6 +249,16 @@ function Mods({mods,sha,onRefresh,configured}:{
               ["Cartas emolduradas",mod.framedCards??0]] as const).map(([label,n])=>
               <div key={label} className="rounded-lg border border-line/50 bg-background/70 p-2"><p className="font-display text-xl text-primary">{n}</p><p className="text-xs text-muted">{label}</p></div>)}
           </div>
+          <p className="mb-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted">
+            <span className="font-semibold text-primary">RANK automático: </span>
+            {mod.rankBinaryVerified
+              ? "Tabela e identidade do executável verificadas. A RAM ainda precisa de teste em duelo."
+              : mod.rankDetected
+                ? "Pontos encontrados no WA. O uso dessas regras pelo SLUS ainda está em investigação."
+                : "Tabela de pontos não confirmada para este mod."}
+            {mod.rankDetected&&typeof mod.rankOffset==="number"&&
+              <span className="ml-1 tabular-nums">Offset WA: 0x{mod.rankOffset.toString(16).toUpperCase()}</span>}
+          </p>
           <button type="button" disabled={busy||!desktopApi()||sha===mod.sha256}
             className="btn-gold w-full disabled:opacity-40" onClick={()=>{
               const ok=!mod.requiresReview||window.confirm("O mod requer revisão. Ativar somente os dados comprovados?")
