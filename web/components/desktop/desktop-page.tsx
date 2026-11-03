@@ -110,8 +110,8 @@ function RankPanel({sha}:{sha:string|null}) {
       </div>}
     {rank?.ready&&rank.counters&&
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted sm:grid-cols-4">
-        {[["Turnos",rank.counters.turns],["Fusões",rank.counters.fusions],
-          ["Magias",rank.counters.spells],["LP",rank.counters.remaining_lp]].map(([label,value])=>
+        {[["Turnos",rank.counters.turns??"—"],["Fusões",rank.counters.fusions??"—"],
+          ["Magias",rank.counters.spells??"—"],["LP",rank.counters.remaining_lp??"—"]].map(([label,value])=>
           <div key={label} className="rounded-md border border-line/50 bg-background/40 px-3 py-2">
             <span className="block">{label}</span><strong className="font-display text-base text-white">{value??"—"}</strong>
           </div>)}
