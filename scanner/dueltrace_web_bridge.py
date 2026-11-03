@@ -8,10 +8,13 @@ API HTTP aberta para comandos. As imagens são lidas localmente.
 from __future__ import annotations
 
 import threading
+import re
+from uuid import uuid4
+from datetime import datetime, timezone
 from pathlib import Path
 from time import monotonic
 
-from auto_mods import ModCatalog, load_json
+from auto_mods import ModCatalog, load_json, atomic_json
 from mod_autopilot import ModAutopilot, profile_summary
 from dueltrace_intelligence import MultiModIntelligence
 from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
@@ -24,6 +27,7 @@ from dueltrace_rank_profile_live import (
 )
 from epsxe_launcher import launch_epsxe
 from dueltrace_drops import get_drop_catalog
+from dueltrace_drop_rank_evidence import rank_drop_report, LABELS
 from dueltrace_library_sort import validate_sort,matches_type,sort_key
 from dueltrace_update_checker import (
     check_for_updates, open_official_releases, fetch_stable_release, CURRENT_VERSION
@@ -44,6 +48,7 @@ class DueltraceWebBridge:
         self._rank_mod_reader = rank_mod_reader or read_rank_from_verified_binding
         self._rank_calibration = None
         self._rank_last_turns = None
+        self._rank_last_snapshot = None
         self._process = None
         self._lock = threading.RLock()
         self._fusion_cache_key = None
@@ -359,6 +364,75 @@ class DueltraceWebBridge:
                 profile, opponent_id=opponent_id, group=group,
                 query=query, offset=offset, limit=limit,
                 sort=sort,card_type=card_type)
+
+    def _observations_path(self, sha):
+        if type(sha) is not str or not re.fullmatch("[0-9a-f]{64}",sha):
+            raise ValueError("SHA da ISO inválido")
+        return self.catalog.home / "rank_observations" / (sha+".json")
+
+    def get_duel_evidence(self):
+        """Apenas dados locais da ISO ativa, sem arquivo de jogo ou RAM bruta."""
+        with self._lock:
+            active,entry,profile=self._active()
+            sha=active.get("sha256")
+            if profile is None or not isinstance(sha,str):
+                return rank_drop_report(None,[])
+            raw=load_json(self._observations_path(sha),{})
+            observations=(raw.get("observations",[]) if isinstance(raw,dict) else [])
+            return rank_drop_report(profile,observations)
+
+    def record_duel_result(self, opponent_id, observed_rank, card_id,
+                           observed_points=None):
+        """Registra recompensa e nota VISTAS pelo jogador, jamais auto-verificadas.
+
+        A projeção do snapshot anterior não se torna verdade de treinamento:
+        fica explicitamente marcada como previsão para futura comparação.
+        """
+        if type(opponent_id) is not int or not 1<=opponent_id<=39:
+            raise ValueError("Selecione um oponente válido (1–39).")
+        if type(card_id) is not int or not 1<=card_id<=722:
+            raise ValueError("Informe o ID da carta recebida (1–722).")
+        if type(observed_rank) is not str or observed_rank not in LABELS:
+            raise ValueError("RANK observado inválido.")
+        if observed_points is not None and (type(observed_points) is not int
+                                             or not 0<=observed_points<=300):
+            raise ValueError("Pontuação observada inválida.")
+        with self._lock:
+            active,entry,profile=self._active()
+            sha=active.get("sha256")
+            if not profile or not profile.get("supported_features",{}).get("drops"):
+                raise ValueError("Carregue uma ISO com drops validados.")
+            # Validação estrutural de todos os pesos antes de salvar relatos.
+            catalog=get_drop_catalog(profile,limit=1)
+            if not catalog["available"]:
+                raise ValueError("Tabelas de drops não validadas para esta ISO.")
+            if opponent_id not in {o["id"] for o in catalog["opponents"]}:
+                raise ValueError("Oponente não identificado na ISO.")
+            path=self._observations_path(sha)
+            raw=load_json(path,{})
+            observations=list(raw.get("observations",[])) if isinstance(raw,dict) else []
+            if len(observations)>=500:
+                observations=observations[-499:]
+            snapshot=self._rank_last_snapshot
+            estimate=None
+            if (isinstance(snapshot,dict) and snapshot.get("rom_sha256")==sha
+                    and monotonic()-snapshot.get("monotonic_at",-1e9)<600):
+                estimate={"projected_score":snapshot.get("score"),
+                          "projected_rank":snapshot.get("category"),
+                          "counters":snapshot.get("counters"),
+                          "comparison_status":"projection_not_final"}
+            observation={
+                "duel_id":str(uuid4()),"rom_sha256":sha,
+                "opponent_id":opponent_id,"observed_rank":observed_rank,
+                "card_id":card_id,"observed_points":observed_points,
+                "recorded_at":datetime.now(timezone.utc).isoformat(),
+                "source":"manual_game_observation",
+                "rank_snapshot":estimate,
+            }
+            observations.append(observation)
+            atomic_json(path,{"schema":1,"rom_sha256":sha,
+                              "observations":observations})
+            return rank_drop_report(profile,observations)
 
     def activate_mod(self, sha, acknowledge=False):
         if not isinstance(sha,str) or len(sha)!=64:
