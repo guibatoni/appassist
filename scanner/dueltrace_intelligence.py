@@ -8,6 +8,7 @@ somente por adaptadores conhecidos e permanece na máquina local.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -142,7 +143,8 @@ class MultiModIntelligence:
             result["ai_message"] = status.get("message", "")
             return result
 
-        ai_path = work_dir / f"{sha}.{model.replace(':', '_').replace('/', '_')}.ollama.json"
+        safe_model = re.sub(r"[^a-zA-Z0-9_.-]", "_", model)[:100]
+        ai_path = work_dir / f"{sha}.{safe_model}.ollama.json"
         previous = load_json(ai_path, {})
         if previous.get("model") == model and previous.get("rom_sha256") == sha:
             result.update({"ai": "hipoteses_em_cache",
