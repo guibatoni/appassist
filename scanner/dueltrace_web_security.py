@@ -60,6 +60,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_drops(opponent_id,group,query,offset,limit,sort,card_type)
 
+    def export_rank_audit(self, credential):
+        self._authorize(credential)
+        return self._bridge.export_rank_audit()
+
     def get_rank_trace_status(self, credential):
         self._authorize(credential)
         return self._bridge.get_rank_trace_status()

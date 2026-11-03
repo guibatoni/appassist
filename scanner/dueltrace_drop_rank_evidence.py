@@ -8,6 +8,7 @@ Observação manual nunca comprova sozinha a execução da rotina MIPS.
 from __future__ import annotations
 
 from collections import defaultdict
+from dueltrace_rank_drop_solver import solve_rank_drop_labels
 
 LABELS=("Z-POW","S-POW","S-TEC")
 MAX_OBSERVATIONS=500
@@ -16,6 +17,8 @@ MAX_OBSERVATIONS=500
 def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
     empty={"status":"unavailable","observations":0,"usable":0,"ambiguous":0,
            "inconsistent":0,"rankMappings":{},"suspectedMappings":{},"lastDuelId":None,
+           "mappingHypotheses":[],"possibleGroups":{},"assignmentCount":0,
+           "mappingConsistency":"insufficient_evidence",
            "mismatches":[],"scoreComparisons":{"compared":0,"exact":0,"different":0,
                       "status":"sem_comparacao_independente"},
            "note":"As tabelas e os RANKs ainda não foram correlacionados com duelos reais."}
@@ -79,26 +82,31 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
             candidate[label].append((duel,oid,possible[0]))
         else:
             ambiguous+=1
-    inferred={}
-    for label,rows in candidate.items():
-        distinct={item[2] for item in rows}
-        if len(distinct)==1 and len(rows)>=2 and len({r[1] for r in rows})>=2:
-            inferred[label]={"group":next(iter(distinct)),
-                             "observations":len(rows),
-                             "opponents":len({r[1] for r in rows}),
-                             "status":"corroborado_manualmente"}
-        elif len(distinct)>1:
-            conflicts.append({"rank":label,
-                              "reason":"Observações discriminantes apontam para bancos incompatíveis"})
-    if len({v["group"] for v in inferred.values()}) != len(inferred):
-        conflicts.append({"reason":"RANKs diferentes apontam para a mesma tabela"})
+    solver=solve_rank_drop_labels(groups,by_opp,obs,profile["rom_sha256"])
+    inferred=solver["supportedMappings"]
+    # Os três bancos formam uma permutação bijetiva; nunca atribuir dois
+    # RANKs ao mesmo banco nem tratar um único drop como prova definitiva.
+    known_conflict=bool(conflicts)
+    if solver["contradictions"]:
+        conflicts.extend(solver["contradictions"])
+    if known_conflict:
         inferred={}
+
     return {
         **empty,"status":("mismatch" if conflicts else
                           "manual_corroboration" if inferred else "needs_more_duels"),
         "observations":len(unique),"lastDuelId":last_duel_id,
         "usable":sum(len(x) for x in candidate.values()),
         "ambiguous":ambiguous,"inconsistent":len(conflicts),
+        "mappingHypotheses":([{label:label for label in LABELS}]
+                              if known and not conflicts else solver["candidateAssignments"]),
+        "possibleGroups":({label:[label] for label in LABELS}
+                          if known and not conflicts else solver["possibleGroups"]),
+        "assignmentCount":(1 if known and not conflicts
+                           else solver["consistentAssignments"]),
+        "mappingConsistency":("identidade_sha_conhecida" if known and not conflicts
+                              else "inconsistent_known_mapping" if known and conflicts
+                              else solver["status"]),
         "rankMappings":({x:{"group":x,"status":"identidade_iso_conhecida"}
                          for x in LABELS} if known else {}),
         "suspectedMappings":({} if known else inferred),

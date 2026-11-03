@@ -153,12 +153,29 @@ export type RankPoints = {
   note: string
 }
 
+export type RankAuditExport = {
+  cancelled: boolean
+  file?: string
+  reportSha256?: string
+  bytes?: number
+  status?: string
+}
+
 export type MipsTraceResult = {
   cancelled?: boolean
   available?: boolean
   status: string
   records?: number
   correlatedDuels?: number
+  tableReadReports?: number
+  rankTableEvidence?: {
+    status:string
+    tableReadsObserved:boolean
+    matchedPairs:number
+    memoryEvents:number
+    candidateWindows:Array<{candidatePC:string;matchedPairs:number;memoryBaseCandidate:string}>
+    rankRoutineConfirmed:boolean
+  }
   duel_id?: string | null
   record_id?: string
   executionEvidence?: boolean
@@ -178,6 +195,9 @@ export type DuelEvidence = {
   ambiguous: number
   inconsistent: number
   rankMappings: Record<string,{group:string;status:string}>
+  assignmentCount?: number
+  mappingConsistency?: string
+  possibleGroups?: Record<string,string[]>
   suspectedMappings: Record<string,{group:string;observations:number;opponents:number;status:string}>
   mismatches: Array<{duelId?:string;rank?:string;opponentId?:number;cardId?:number;reason:string}>
   scoreComparisons: {compared:number;exact:number;different:number;status:string}
@@ -244,6 +264,7 @@ export interface DesktopAPI {
   get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<DropsPage>
   get_rank_trace_status(): Promise<MipsTraceResult>
   import_rank_trace(duelId?: string | null): Promise<MipsTraceResult>
+  export_rank_audit(): Promise<RankAuditExport>
   get_duel_evidence(): Promise<DuelEvidence>
   record_duel_result(opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string): Promise<DuelEvidence>
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
@@ -265,6 +286,7 @@ interface ProtectedNativeAPI {
   get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<DropsPage>
   get_rank_trace_status(token: string): Promise<MipsTraceResult>
   import_rank_trace(token: string, duelId?: string | null): Promise<MipsTraceResult>
+  export_rank_audit(token: string): Promise<RankAuditExport>
   get_duel_evidence(token: string): Promise<DuelEvidence>
   record_duel_result(token: string, opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string): Promise<DuelEvidence>
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
@@ -300,6 +322,7 @@ export function desktopApi(): DesktopAPI | null {
     get_drops: (opponentId, group, query, offset, limit, sort, cardType) => native.get_drops(token, opponentId, group, query, offset, limit, sort, cardType),
     get_rank_trace_status: () => native.get_rank_trace_status(token),
     import_rank_trace: (duelId) => native.import_rank_trace(token, duelId),
+    export_rank_audit: () => native.export_rank_audit(token),
     get_duel_evidence: () => native.get_duel_evidence(token),
     record_duel_result: (opponentId, observedRank, cardId, observedPoints, victoryType) =>
       native.record_duel_result(token, opponentId, observedRank, cardId, observedPoints, victoryType),
