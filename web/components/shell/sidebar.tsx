@@ -6,13 +6,10 @@ import { Cpu, House, Infinity as InfinityIcon, Layers, MonitorPlay, Settings, Sw
 import { cn } from "@/lib/utils"
 
 const navItems = [
-  { label: "Início", href: "/inicio", icon: House, enabled: false },
+  { label: "Início", href: "/inicio", icon: House, enabled: true },
+  { label: "Biblioteca de Mods", href: "/mods", icon: Cpu, enabled: true },
   { label: "Biblioteca de Cartas", href: "/biblioteca", icon: Layers, enabled: true },
   { label: "Fusões", href: "/fusoes", icon: InfinityIcon, enabled: true },
-  { label: "Duelos", href: "/duelos", icon: Swords, enabled: false },
-  { label: "Overlay", href: "/overlay", icon: MonitorPlay, enabled: false },
-  { label: "Diagnóstico", href: "/diagnostico", icon: Cpu, enabled: false },
-  { label: "Configurações", href: "/configuracoes", icon: Settings, enabled: false },
 ]
 
 function EyeOfHorus() {
