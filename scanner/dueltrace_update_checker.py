@@ -152,7 +152,10 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
                 result["previewBuildSha"] = sha[:10]
                 installed = (installed_run_id if installed_run_id is not None
                              else installed_preview_build_id())
-                if type(installed) is int and installed >= run_id:
+                if result["status"] == "update_available":
+                    # Uma release estável numericamente mais nova prevalece.
+                    pass
+                elif type(installed) is int and installed >= run_id:
                     result["status"] = "preview_current"
                     result["message"] = (
                         "Este pacote Preview já é igual ou mais recente que "
@@ -200,9 +203,11 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
 def open_official_releases(run_id: int | None = None) -> bool:
     """Abre apenas releases ou um ID numérico de Actions do repositório oficial."""
     if run_id is not None:
-        if type(run_id) is not int or not 0 < run_id < 10**15:
+        if type(run_id) is not int or not 0 <= run_id < 10**15:
             raise ValueError("ID do build inválido.")
-        url = f"https://github.com/guibatoni/appassist/actions/runs/{run_id}"
+        url = (f"https://github.com/guibatoni/appassist/actions/runs/{run_id}"
+               if run_id else
+               "https://github.com/guibatoni/appassist/actions/workflows/validar-webui-desktop.yml")
     else:
         url = RELEASE_PAGE
     return bool(webbrowser.open(url, new=2))
