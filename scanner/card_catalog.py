@@ -103,7 +103,9 @@ def attach_effect_document(cards: list[dict], data: dict, *,
         if c.get("id") in changes:
             c["effect_text"]=changes[c["id"]]
             c["effect_source"]=source
-            c["effect_status"]="texto_declarado_sem_validacao_de_execucao"
+            c["effect_status"]=("texto_embutido_na_iso_nao_validado_no_jogo"
+                                   if embedded_in_iso else
+                                   "fornecido_externamente_nao_verificado_na_iso")
         out.append(c)
     return out,{"status":source,"count":len(changes),
                 "sha256_matches":True if not embedded_in_iso else None,
