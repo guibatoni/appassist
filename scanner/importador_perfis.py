@@ -36,6 +36,16 @@ def integer(v, default=None):
 
 def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     cards = rows(extracted / "cartas.csv")
+    descriptions = rows(extracted / "descricoes.csv")
+    description_index={}
+    for row in descriptions:
+        cid=integer(row.get("id"))
+        if cid in range(1,723) and row.get("description_source")=="SLUS_014.11:tabela_descricoes":
+            description_index[cid]={
+                "description":str(row.get("description") or "")[:400],
+                "description_source":row["description_source"],
+                "description_offset":integer(row.get("description_offset")),
+            }
     opponents = rows(extracted / "oponentes.csv")
     drops = rows(extracted / "drops_por_oponente.csv")
     decks = rows(extracted / "decks.csv")
@@ -63,6 +73,12 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
          "type_id": integer(r.get("tipo"))}
         for r in cards
     ], known_fm_layout=True) if card_ok else []
+    # Texto impresso na carta é descrição, não prova execução do efeito.
+    # Só utilizar a tabela quando TODOS os textos foram validados no lote.
+    if result.get("description_audit",{}).get("status")=="texto_extraido_layout_fm_com_verificacao_estrutural":
+        for card in catalog:
+            card.update(description_index.get(card["id"],{}))
+
     effects_info = {"status": "nao_identificados", "count": 0, "sources": [],
                     "effects_executed_in_game_verified": False}
     effect_warnings=[]
@@ -128,6 +144,10 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "rank_labels": LABELS_X15 if known_x15 else None,
         "drop_group_labels": groups if weights_ok else [],
         "art_root": str((extracted / "artes_722").resolve()) if status["artes"] == "extraídas" else None,
+        "disc_metadata_revision": result.get("metadata_revision",0),
+        "description_audit": result.get("description_audit",{}),
+        "frame_palette_audit": result.get("frame_palette_audit",{}),
+        "frame_palettes": result.get("frame_palette_audit",{}).get("variants",{}),
         "cards": catalog,
         "category_counts": category_summary(catalog),
         "effects_provenance": effects_info,
