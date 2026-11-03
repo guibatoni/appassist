@@ -20,6 +20,7 @@ from dueltrace_fusion_planner import plan_fusion_chains
 from dueltrace_rank_live import (model_available, read_rank_candidate,
                                  project_lp_win_rank)
 from epsxe_launcher import launch_epsxe
+from dueltrace_drops import get_drop_catalog
 from dueltrace_update_checker import check_for_updates, open_official_releases
 
 
@@ -275,6 +276,14 @@ class DueltraceWebBridge:
                                  "source":str(item.get("validation") or "Não informada")})
                 total+=1
             return {"total":total,"offset":offset,"rows":rows}
+
+    def get_drops(self, opponent_id=0, group="", query="", offset=0, limit=36):
+        """Consulta exclusivamente tabelas validadas do perfil ISO ativo."""
+        with self._lock:
+            _active, _entry, profile = self._active()
+            return get_drop_catalog(
+                profile, opponent_id=opponent_id, group=group,
+                query=query, offset=offset, limit=limit)
 
     def activate_mod(self, sha, acknowledge=False):
         if not isinstance(sha,str) or len(sha)!=64:
