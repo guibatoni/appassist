@@ -92,6 +92,7 @@ class DueltraceWebBridge:
             "descriptions":len([c for c in (profile or {}).get("cards",[])
                                 if c.get("description_text") and c.get("description_source")]),
             "framedCards":(profile or {}).get("graphic_assets",{}).get("composed_cards",0),
+            "frameStyles":(profile or {}).get("graphic_assets",{}).get("frames",0),
             "requiresReview":summary.get("requires_review",True),
             "verified":summary.get("validated",{}),
         }
@@ -317,6 +318,7 @@ class DueltraceWebBridge:
                 "artCount":graphic.get("art_count",0),
                 "thumbnailCount":graphic.get("thumbnails",0),
                 "framedCards":graphic.get("composed_cards",0),
+                "frameStyles":graphic.get("frames",0),
                 "descriptionCount":provenance.get("descriptions_attached",0),
                 "effectTexts":provenance.get("effect_descriptions_attached",0),
                 "investigation":analysis.get("state","sem_relatorio"),
