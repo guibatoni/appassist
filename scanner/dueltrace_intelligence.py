@@ -66,9 +66,34 @@ def inventory_from_profile(profile: dict) -> dict:
         })
     features = profile.get("supported_features", {})
     cards = profile.get("cards", []) if features.get("cards") else []
+    drops = profile.get("drops", []) if features.get("drops") else []
+    opponents = profile.get("opponents", []) if features.get("opponents") else []
+    effect_samples = [
+        {"id": c.get("id"),
+         "text": str(c.get("effect_text") or "")[:320],
+         "source": str(c.get("effect_source") or "")[:100]}
+        for c in cards if c.get("effect_text") and c.get("effect_source")
+    ][:8]
     return {
         "iso_files_indexed": len(entries),
         "files_sample": records,
+        "card_samples": [
+            {"id": c.get("id"), "name": str(c.get("name") or "")[:80],
+             "category": c.get("category"),
+             "atk": c.get("atk"), "def": c.get("def")}
+            for c in cards[:16]
+        ],
+        "effect_samples": effect_samples,
+        "opponent_samples": [
+            {"id": x.get("id"), "name": str(x.get("name") or "")[:80]}
+            for x in opponents[:12]
+        ],
+        "drop_samples": [
+            {"opponent_id": x.get("opponent_id"),
+             "card_id": x.get("card_id"), "group": str(x.get("group") or "")[:80],
+             "weight": x.get("weight")}
+            for x in drops[:12]
+        ],
         "cards": len(cards),
         "opponents": len(profile.get("opponents", [])) if features.get("opponents") else 0,
         "drop_entries": len(profile.get("drops", [])) if features.get("drops") else 0,
