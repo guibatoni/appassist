@@ -32,15 +32,15 @@ def main() -> None:
         try:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             with log_path.open("a", encoding="utf-8") as output:
-                output.write(f"\\n=== {datetime.now().astimezone().isoformat()} — startup ===\\n")
+                output.write(f"\n=== {datetime.now().astimezone().isoformat()} — startup ===\n")
                 output.write(diagnostic)
             saved = str(log_path)
         except OSError:
             pass
         print(diagnostic, file=sys.stderr, flush=True)
         description = (
-            f"Não foi possível abrir DUELTRACE.\\n\\n"
-            f"Erro: {type(exc).__name__}: {exc}\\n\\n"
+            f"Não foi possível abrir DUELTRACE.\n\n"
+            f"Erro: {type(exc).__name__}: {exc}\n\n"
             + (f"Diagnóstico local: {saved}" if saved else
                "O log não pôde ser salvo; execute o .bat pelo terminal para obter o erro.")
         )
