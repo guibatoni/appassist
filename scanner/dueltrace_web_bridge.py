@@ -68,6 +68,10 @@ class DueltraceWebBridge:
                 "def": item.get("def") if type(item.get("def")) is int else None,
                 "effect": effect,
                 "effectSource": str(item["effect_source"])[:150] if effect else None,
+                "description": str(item.get("description") or "")[:400]
+                    if item.get("description_source") else None,
+                "descriptionSource": str(item["description_source"])[:130]
+                    if item.get("description_source") else None,
             })
         return sorted(prepared,key=lambda x:x["id"])
 
@@ -106,6 +110,10 @@ class DueltraceWebBridge:
                 "activeName":entry.get("file_name") if entry and profile else None,
                 "mods":mods,
                 "cards":self._cards(profile),
+                "framePalettes":profile.get("frame_palettes",{})
+                    if profile else {},
+                "descriptionAudit":profile.get("description_audit",{})
+                    if profile else {},
                 "fusionCount":len(profile.get("fusion_recipes",[]))
                     if profile and profile.get("supported_features",{}).get("fusions")
                     else 0,
