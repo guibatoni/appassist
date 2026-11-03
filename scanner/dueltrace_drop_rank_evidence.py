@@ -15,7 +15,7 @@ MAX_OBSERVATIONS=500
 
 def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
     empty={"status":"unavailable","observations":0,"usable":0,"ambiguous":0,
-           "inconsistent":0,"rankMappings":{},"suspectedMappings":{},
+           "inconsistent":0,"rankMappings":{},"suspectedMappings":{},"lastDuelId":None,
            "mismatches":[],"scoreComparisons":{"compared":0,"exact":0,"different":0,
                       "status":"sem_comparacao_independente"},
            "note":"As tabelas e os RANKs ainda não foram correlacionados com duelos reais."}
@@ -34,6 +34,7 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
     obs=observations if isinstance(observations,list) else []
     obs=obs[-MAX_OBSERVATIONS:]
     unique=set()
+    last_duel_id=None
     candidate=defaultdict(list)
     conflicts=[]
     ambiguous=0
@@ -52,6 +53,7 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
         if duel in unique:
             continue
         unique.add(duel)
+        last_duel_id=duel
         snap=row.get("rank_snapshot")
         points=row.get("observed_points")
         if (row.get("victory_type")=="lp" and type(points) is int
@@ -94,7 +96,7 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
     return {
         **empty,"status":("mismatch" if conflicts else
                           "manual_corroboration" if inferred else "needs_more_duels"),
-        "observations":len(unique),
+        "observations":len(unique),"lastDuelId":last_duel_id,
         "usable":sum(len(x) for x in candidate.values()),
         "ambiguous":ambiguous,"inconsistent":len(conflicts),
         "rankMappings":({x:{"group":x,"status":"identidade_iso_conhecida"}
