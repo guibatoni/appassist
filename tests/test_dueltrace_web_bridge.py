@@ -193,7 +193,14 @@ class BridgeTests(unittest.TestCase):
             try:
                 conn.request("GET","//evil.example/path")
                 response=conn.getresponse()
-                self.assertEqual(response.status,403)
+                # BaseHTTPRequestHandler pode normalizar // para / antes
+                # de chamar nosso handler; a resposta NÃO deve apontar
+                # para domínio externo.
+                self.assertIn(response.status,(403,404,308))
+                location=response.getheader("Location")
+                if location:
+                    self.assertTrue(location.startswith("/"))
+                    self.assertFalse(location.startswith("//"))
                 response.read()
             finally:
                 conn.close()
