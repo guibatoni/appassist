@@ -57,6 +57,8 @@ export function DropsPage({sha}:{sha:string|null}) {
   const [traceInfo,setTraceInfo]=useState<MipsTraceResult|null>(null)
   const [traceBusy,setTraceBusy]=useState(false)
   const [traceError,setTraceError]=useState<string|null>(null)
+  const [exportStatus,setExportStatus]=useState<string|null>(null)
+  const [exportBusy,setExportBusy]=useState(false)
   const [obsOpponent,setObsOpponent]=useState(0)
   const [obsRank,setObsRank]=useState("Z-POW")
   const [obsCard,setObsCard]=useState("")
@@ -78,6 +80,7 @@ export function DropsPage({sha}:{sha:string|null}) {
     setDuelEvidence(null)
     setTraceInfo(null)
     setTraceError(null)
+    setExportStatus(null)
     setObsOpponent(0)
     setObsCard("")
     setObsPoints("")
@@ -133,6 +136,18 @@ export function DropsPage({sha}:{sha:string|null}) {
     }).catch(()=>{if(active)setDuelEvidence(null)})
     return()=>{active=false}
   },[sha,revision])
+  const exportRankReport=async()=>{
+    const api=desktopApi()
+    if(!api)return
+    setExportBusy(true)
+    setExportStatus(null)
+    try{
+      const report=await api.export_rank_audit()
+      if(!report.cancelled)setExportStatus(report.status+" Arquivo: "+report.file)
+    }catch(e){
+      setExportStatus(e instanceof Error?e.message:"Erro ao salvar diagnóstico de RANK.")
+    }finally{setExportBusy(false)}
+  }
   const saveObservation=async()=>{
     const id=Number(obsCard),points=obsPoints.trim()?Number(obsPoints):null
     if(!Number.isInteger(obsOpponent)||obsOpponent<1||!Number.isInteger(id)||id<1||id>722||
@@ -298,7 +313,19 @@ export function DropsPage({sha}:{sha:string|null}) {
       </p>:null}
       <p className="mt-2 text-xs text-muted">Esses registros são relatos manuais de cada duelo. Eles não confirmam sozinhos as instruções MIPS executadas ou a fórmula de RANK.</p>
       <div className="mt-4 border-t border-line/50 pt-3">
-        <h3 className="font-semibold text-gold">Auditoria de execução MIPS do duelo</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-semibold text-gold">Auditoria de execução MIPS do duelo</h3>
+          <button type="button" className="btn-ghost" disabled={exportBusy||!desktopApi()}
+            onClick={()=>void exportRankReport()}>
+            {exportBusy?"Exportando…":"Exportar relatório RANK da ISO"}
+          </button>
+        </div>
+        {exportStatus&&<p className="mt-2 break-words text-xs text-primary" role="status">{exportStatus}</p>
+        }
+        <p className="mt-1 text-xs text-muted">
+          O relatório JSON contém apenas hashes, pontos, IDs e evidências de duelos.
+          Não inclui ROM, executável SLUS, imagens das cartas nem logs brutos.
+        </p>
         <p className="mt-1 text-xs text-muted">
           Importe um arquivo .log ou .txt de instruções executadas exportado pelo depurador do emulador durante um duelo. Quando houver um resultado registrado, o trace será associado explicitamente ao último duelo.
           O analisador compara os PCs executados com os candidatos do SLUS deste mod, sem enviar o log para a internet.
