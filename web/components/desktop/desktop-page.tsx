@@ -301,7 +301,7 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
       :a.id-b.id)
     return filtered
   },[cards,search,sort,cardType])
-  const chosen=cards.find(c=>c.id===selectedId)??visible[0]??null
+  const chosen=visible.find(c=>c.id===selectedId)??visible[0]??null
   const pages=Math.max(1,Math.ceil(visible.length/32))
   return <>
     <Heading title="Biblioteca de Cartas" subtitle="Cartas extraídas da ISO ativa, sem raridades e efeitos inventados"/>
