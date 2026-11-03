@@ -54,7 +54,8 @@ def solve_rank_drop_labels(groups, by_opponent, observations, iso_sha,
         oid=item.get("opponent_id")
         cid=item.get("card_id")
         rank=item.get("observed_rank")
-        label=(rank_to_label.get(rank) if rank_to_label is not None else rank)
+        label=(rank_to_label.get(rank) if type(rank) is str and rank_to_label is not None
+               else rank)
         if (type(duel) is not str or not 8<=len(duel)<=100
                 or type(oid) is not int or not 1<=oid<=39
                 or type(cid) is not int or not 1<=cid<=722
