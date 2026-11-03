@@ -98,8 +98,12 @@ class ModCatalog:
             return list(payload.get("entries", []))
 
     def lookup(self, path: Path) -> dict | None:
-        resolved = str(path.resolve())
-        return next((row for row in self.list() if row.get("source_path") == resolved), None)
+        # Resolve também aliases Windows 8.3 (RUNNER~1) e diferenças de caixa,
+        # evitando descartar revisões manuais ao reescanear a mesma imagem.
+        target=os.path.normcase(str(Path(path).expanduser().resolve()))
+        return next((row for row in self.list()
+                     if row.get("source_path")
+                     and os.path.normcase(str(Path(row["source_path"]).resolve())) == target),None)
 
     def profile_for(self, entry: dict) -> dict | None:
         path = Path(entry.get("profile_path", ""))
