@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dueltrace_rank_drop_solver import solve_rank_drop_labels
+from dueltrace_rank_system import (
+    available_ranks, drop_pool_labels, pool_index_for_rank,
+)
 
 LABELS=("Z-POW","S-POW","S-TEC")
 MAX_OBSERVATIONS=500
@@ -29,6 +32,11 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
     if not catalog["available"]:
         return empty
     groups=catalog["groups"]
+    sha=profile.get("rom_sha256")
+    rank_labels=available_ranks(sha)
+    pool_names=drop_pool_labels(sha)
+    rank_to_pool={rank:pool_names[pool_index_for_rank(sha,rank)]
+                  for rank in rank_labels}
     drops=profile.get("drops",[])
     by_opp=defaultdict(lambda:defaultdict(set))
     for d in drops:
@@ -49,7 +57,7 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
             continue
         oid,cid,label,duel=(row.get("opponent_id"),row.get("card_id"),
                             row.get("observed_rank"),row.get("duel_id"))
-        if (type(oid) is not int or type(cid) is not int or label not in LABELS
+        if (type(oid) is not int or type(cid) is not int or label not in rank_labels
                 or type(duel) is not str or not 8<=len(duel)<=100
                 or not 1<=oid<=39 or not 1<=cid<=722):
             continue
@@ -66,30 +74,38 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
             if snap["projected_score"]==points and snap["projected_rank"]==label:
                 score_exact+=1
         possible=[g for g in groups if cid in by_opp[oid][g]]
+        pool=rank_to_pool[label]
         if not possible:
             conflicts.append({"duelId":duel,"rank":label,
                               "opponentId":oid,"cardId":cid,
                               "reason":"Carta não consta em nenhuma das três tabelas deste oponente"})
             continue
         if known:
-            if label not in possible:
+            expected=groups[pool_index_for_rank(sha,label)]
+            if expected not in possible:
                 conflicts.append({"duelId":duel,"rank":label,
                                   "opponentId":oid,"cardId":cid,
                                   "reason":"Drop não consta da tabela do RANK informado"})
             else:
-                candidate[label].append((duel,oid,label))
+                candidate[pool].append((duel,oid,pool))
         elif len(possible)==1:
-            candidate[label].append((duel,oid,possible[0]))
+            candidate[pool].append((duel,oid,possible[0]))
         else:
             ambiguous+=1
-    solver=solve_rank_drop_labels(groups,by_opp,obs,profile["rom_sha256"])
-    inferred=solver["supportedMappings"]
+    solver=solve_rank_drop_labels(
+        groups,by_opp,obs,sha,labels=list(pool_names),
+        rank_to_label=rank_to_pool)
+    inferred={
+        rank:{**evidence,
+              "groupDisplay":pool_names[groups.index(evidence["group"])]}
+        for rank,evidence in solver["supportedMappings"].items()
+    }
     # Os três bancos formam uma permutação bijetiva; nunca atribuir dois
     # RANKs ao mesmo banco nem tratar um único drop como prova definitiva.
     known_conflict=bool(conflicts)
     if solver["contradictions"]:
         conflicts.extend(solver["contradictions"])
-    if known_conflict:
+    if known and known_conflict:
         inferred={}
 
     return {
@@ -98,17 +114,21 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
         "observations":len(unique),"lastDuelId":last_duel_id,
         "usable":sum(len(x) for x in candidate.values()),
         "ambiguous":ambiguous,"inconsistent":len(conflicts),
-        "mappingHypotheses":([{label:label for label in LABELS}]
+        "mappingHypotheses":([{pool_names[i]:groups[i] for i in range(3)}]
                               if known and not conflicts else solver["candidateAssignments"]),
-        "possibleGroups":({label:[label] for label in LABELS}
+        "possibleGroups":({pool_names[i]:[groups[i]] for i in range(3)}
                           if known and not conflicts else solver["possibleGroups"]),
         "assignmentCount":(1 if known and not conflicts
                            else solver["consistentAssignments"]),
         "mappingConsistency":("identidade_sha_conhecida" if known and not conflicts
                               else "inconsistent_known_mapping" if known and conflicts
                               else solver["status"]),
-        "rankMappings":({x:{"group":x,"status":"identidade_iso_conhecida"}
-                         for x in LABELS} if known else {}),
+        "rankMappings":{
+            rank:{"group":groups[pool_index_for_rank(sha,rank)],
+                  "status":("identidade_iso_conhecida" if known
+                            else "layout_original_presumido")}
+            for rank in rank_labels
+        },
         "suspectedMappings":({} if known else inferred),
         "mismatches":conflicts[:20],
         "scoreComparisons":{

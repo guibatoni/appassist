@@ -18,11 +18,11 @@ function DropArtwork({sha,id,name}:{sha:string|null;id:number;name:string}) {
   </div>
 }
 
-function DropCard({row,sha,rankConfirmed}:{row:DropRow;sha:string|null;rankConfirmed:boolean}) {
+function DropCard({row,sha}:{row:DropRow;sha:string|null}) {
   return <article className="flex items-center gap-3 rounded-xl border border-gold/20 bg-gradient-to-r from-[#122644] to-[#071426] p-3 transition-colors hover:border-primary/50">
     <DropArtwork sha={sha} id={row.cardId} name={row.cardName}/>
     <div className="min-w-0 flex-1">
-      <p className="text-xs text-gold">#{row.cardId} · {row.group}{!rankConfirmed?" (grupo bruto)":""}</p>
+      <p className="text-xs text-gold">#{row.cardId} · {row.groupLabel}</p>
       <p className="mt-1 truncate font-semibold text-white" title={row.cardName}>{row.cardName}</p>
       {row.category==="Monstros"&&<p className="mt-1 text-xs tabular-nums text-primary">ATK {row.atk??"—"} · DEF {row.def??"—"}</p>}
       <p className="mt-1 text-xs text-muted">{row.opponentName}</p>
@@ -44,7 +44,7 @@ const POINT_LABELS: Record<string,string> = {
 
 export function DropsPage({sha}:{sha:string|null}) {
   const [opponent,setOpponent]=useState(0)
-  const [group,setGroup]=useState("")
+  const [rankFilter,setRankFilter]=useState("")
   const [query,setQuery]=useState("")
   const [sort,setSort]=useState<"id"|"atk"|"def"|"type"|"name">("id")
   const [cardType,setCardType]=useState("")
@@ -60,7 +60,7 @@ export function DropsPage({sha}:{sha:string|null}) {
   const [exportStatus,setExportStatus]=useState<string|null>(null)
   const [exportBusy,setExportBusy]=useState(false)
   const [obsOpponent,setObsOpponent]=useState(0)
-  const [obsRank,setObsRank]=useState("Z-POW")
+  const [obsRank,setObsRank]=useState("")
   const [obsCard,setObsCard]=useState("")
   const [obsPoints,setObsPoints]=useState("")
   const [obsVictory,setObsVictory]=useState("lp")
@@ -71,7 +71,8 @@ export function DropsPage({sha}:{sha:string|null}) {
   // Nunca reutilizar filtros de um mod em outro perfil SHA.
   useEffect(()=>{
     setOpponent(0)
-    setGroup("")
+    setRankFilter("")
+    setObsRank("")
     setQuery("")
     setSort("id")
     setCardType("")
@@ -96,14 +97,18 @@ export function DropsPage({sha}:{sha:string|null}) {
       if(!mounted)return
       setLoading(true)
       try{
-        const response=await api.get_drops(opponent,group,query,offset,pageSize,sort,cardType)
-        if(mounted){setResult(response);setError(null)}
+        const response=await api.get_drops(opponent,"",query,offset,pageSize,sort,cardType,rankFilter)
+        if(mounted){
+          setResult(response)
+          setError(null)
+          setObsRank(previous=>response.rankOptions.includes(previous)?previous:response.rankOptions[0]??"")
+        }
       }catch(e){
         if(mounted){setResult(null);setError(e instanceof Error?e.message:"Erro ao consultar drops locais.")}
       }finally{if(mounted)setLoading(false)}
     },200)
     return()=>{mounted=false;window.clearTimeout(timer)}
-  },[sha,opponent,group,query,offset,sort,cardType,revision])
+  },[sha,opponent,rankFilter,query,offset,sort,cardType,revision])
 
   useEffect(()=>{
     let active=true
@@ -170,7 +175,7 @@ export function DropsPage({sha}:{sha:string|null}) {
   }
 
   const options=result?.opponents??[]
-  const rankGroups=result?.groups??[]
+  const rankOptions=result?.rankOptions??[]
   const types=result?.cardTypes??[]
   const rank=result?.rankPoints
   const rankRules=rank&&"available" in rank&&rank.available?rank.rules:null
@@ -193,11 +198,11 @@ export function DropsPage({sha}:{sha:string|null}) {
             {options.map(o=><option key={o.id} value={o.id}>#{o.id} {o.name}</option>)}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-xs text-muted">Tabela de drop
-          <select className="field w-full px-3 py-2 text-sm" value={group}
-            onChange={e=>{setGroup(e.target.value);setOffset(0)}}>
-            <option value="">Todos os grupos</option>
-            {rankGroups.map(g=><option key={g} value={g}>{g}</option>)}
+        <label className="flex flex-col gap-1 text-xs text-muted">RANK da recompensa
+          <select className="field w-full px-3 py-2 text-sm" value={rankFilter}
+            onChange={e=>{setRankFilter(e.target.value);setOffset(0)}}>
+            <option value="">Todos os RANKs</option>
+            {rankOptions.map(rank=><option key={rank} value={rank}>{rank}</option>)}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted">Buscar carta
@@ -229,9 +234,14 @@ export function DropsPage({sha}:{sha:string|null}) {
       {result&&!result.available&&<p className="mt-4 rounded-lg border border-gold/30 p-4 text-sm text-gold">{result.status}. Use a ISO compatível na Biblioteca de Mods e reanalise os dados.</p>}
       {result?.available&&<>
         <p className="mt-3 text-xs text-muted">{result.status}</p>
+        <p className="mt-1 text-xs text-primary">
+          {result.rankSystem==="x15"
+            ?"Remaster X15: Z-POW / S-POW / S-TEC."
+            :"Sistema original: 10 RANKs distribuídos em 3 tabelas. Em mods desconhecidos, conferir alterações do SLUS em duelo."}
+        </p>
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
           {result.rows.map(row=><DropCard key={row.opponentId+"-"+row.group+"-"+row.cardId}
-            row={row} sha={sha} rankConfirmed={result.rankLabelsVerified}/>)}
+            row={row} sha={sha}/>)}
         </div>
         {!result.rows.length&&<p className="py-8 text-center text-sm text-muted">Nenhuma carta para os filtros selecionados.</p>}
         <div className="mt-4 flex items-center justify-between gap-2">
@@ -260,7 +270,7 @@ export function DropsPage({sha}:{sha:string|null}) {
         <label className="flex flex-col gap-1 text-xs text-muted">RANK observado
           <select className="field px-3 py-2 text-sm" value={obsRank}
             onChange={e=>setObsRank(e.target.value)}>
-            {["Z-POW","S-POW","S-TEC"].map(v=><option key={v} value={v}>{v}</option>)}
+            {rankOptions.map(v=><option key={v} value={v}>{v}</option>)}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted">Resultado do duelo
@@ -306,7 +316,7 @@ export function DropsPage({sha}:{sha:string|null}) {
         <div className="mt-3 rounded-lg border border-gold/30 bg-background/40 p-3 text-xs text-gold">
           Correspondência sugerida por observações manuais (não comprovada pela execução MIPS):
           {Object.entries(duelEvidence.suspectedMappings).map(([rank,m])=>
-            <p key={rank} className="mt-1">{rank}: {m.group} · {m.observations} duelos, {m.opponents} oponentes</p>)}
+            <p key={rank} className="mt-1">{rank}: {m.groupDisplay??m.group} · {m.observations} duelos, {m.opponents} oponentes</p>)}
         </div>}
       {duelEvidence?.mismatches?.length ? <p className="mt-3 text-xs text-danger">
         Atenção: {duelEvidence.mismatches.length} divergência(s) entre os drops registrados e as tabelas do WA. Confira o mod ativo, o oponente e o RANK observado.

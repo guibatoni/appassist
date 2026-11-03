@@ -317,7 +317,12 @@ def process(path,output,with_art=False,digest=None,progress=None):
             write_csv(dest/'cartas.csv',cards)
             info['oponentes']=len(opponents);info['cartas']=len(cards)
         if progress:progress("Validando pesos das tabelas de drops",0,1)
-        drops,drop_status=decode_drops(wa,RANKS if info['sha256']==X15_SHA else None)
+        from dueltrace_rank_system import CLASSIC_POOLS
+        drops,drop_status=decode_drops(
+            wa,RANKS if info['sha256']==X15_SHA else CLASSIC_POOLS)
+        info['rank_display_model']=(
+            'x15_sha_verificado' if info['sha256']==X15_SHA
+            else 'padrao_original_presumido')
         info['rotulos_ranks_confirmados']=info['sha256']==X15_SHA
         info['drops_status']=drop_status
         info['drops_source']=wa_names[0]

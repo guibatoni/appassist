@@ -23,13 +23,13 @@ def observed(profile,opp,card,rank,duel):
 class DropRankEvidenceTests(unittest.TestCase):
     def test_unknown_mod_infers_only_from_exclusive_drops_multiple_opponents(self):
         p=fake_profile()
-        obs=[observed(p,1,1,"Z-POW","duel_a001"),
-             observed(p,2,1,"Z-POW","duel_b002")]
+        obs=[observed(p,1,1,"S-POW","duel_a001"),
+             observed(p,2,1,"A-POW","duel_b002")]
         r=rank_drop_report(p,obs)
         self.assertEqual(r["status"],"manual_corroboration")
-        self.assertFalse(r["rankMappings"])
+        self.assertEqual(r["rankMappings"]["A-POW"]["status"],"layout_original_presumido")
         self.assertEqual(
-            r["suspectedMappings"]["Z-POW"]["group"],
+            r["suspectedMappings"]["S/A POW"]["group"],
             "TABELA_1_RANK_DESCONHECIDO")
         self.assertEqual(r["usable"],2)
         self.assertIn("registros fornecidos",r["note"])
@@ -52,8 +52,8 @@ class DropRankEvidenceTests(unittest.TestCase):
             second["weight"]=1024
             p["drops"].append(entry(p,oid,p["drop_group_labels"][0],2,1024))
             p["drops"].append(entry(p,oid,p["drop_group_labels"][1],1,1024))
-        obs=[observed(p,1,1,"Z-POW","duel_a001"),
-             observed(p,2,1,"Z-POW","duel_b002")]
+        obs=[observed(p,1,1,"S-POW","duel_a001"),
+             observed(p,2,1,"S-POW","duel_b002")]
         r=rank_drop_report(p,obs)
         self.assertEqual(r["ambiguous"],2)
         self.assertEqual(r["suspectedMappings"],{})

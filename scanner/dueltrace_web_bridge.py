@@ -28,7 +28,8 @@ from dueltrace_rank_profile_live import (
 )
 from epsxe_launcher import launch_epsxe
 from dueltrace_drops import get_drop_catalog
-from dueltrace_drop_rank_evidence import rank_drop_report, LABELS
+from dueltrace_drop_rank_evidence import rank_drop_report
+from dueltrace_rank_system import available_ranks
 from dueltrace_mips_duel_trace import inspect_duel_mips_trace, MAX_TRACE_BYTES
 from dueltrace_rank_memory_trace import inspect_rank_memory_trace
 from dueltrace_rank_export import build_rank_evidence_report
@@ -367,14 +368,14 @@ class DueltraceWebBridge:
             return {"total":total,"offset":offset,"rows":rows[offset:offset+limit]}
 
     def get_drops(self, opponent_id=0, group="", query="", offset=0, limit=36,
-                  sort="id", card_type=""):
+                  sort="id", card_type="", rank=""):
         """Consulta exclusivamente tabelas validadas do perfil ISO ativo."""
         with self._lock:
             _active, _entry, profile = self._active()
             return get_drop_catalog(
                 profile, opponent_id=opponent_id, group=group,
                 query=query, offset=offset, limit=limit,
-                sort=sort,card_type=card_type)
+                sort=sort,card_type=card_type,rank=rank)
 
     def export_rank_audit(self):
         """Exporta evidências numéricas locais para validar uma ISO no Windows."""
@@ -533,7 +534,7 @@ class DueltraceWebBridge:
             raise ValueError("Selecione um oponente válido (1–39).")
         if type(card_id) is not int or not 1<=card_id<=722:
             raise ValueError("Informe o ID da carta recebida (1–722).")
-        if type(observed_rank) is not str or observed_rank not in LABELS:
+        if type(observed_rank) is not str or len(observed_rank)>32:
             raise ValueError("RANK observado inválido.")
         if observed_points is not None and (type(observed_points) is not int
                                              or not 0<=observed_points<=300):
@@ -541,6 +542,8 @@ class DueltraceWebBridge:
         with self._lock:
             active,entry,profile=self._active()
             sha=active.get("sha256")
+            if observed_rank not in available_ranks(sha):
+                raise ValueError("RANK observado incompatível com esta ISO.")
             if not profile or not profile.get("supported_features",{}).get("drops"):
                 raise ValueError("Carregue uma ISO com drops validados.")
             # Validação estrutural de todos os pesos antes de salvar relatos.

@@ -16,6 +16,7 @@ from scanner_multiiso import process, sha256, X15_SHA
 from card_catalog import enrich_cards, attach_effect_manifest, effect_sidecar_path, category_summary
 from mod_effects_iso import extract_embedded_effects
 from dueltrace_rank_profiles import rank_profile_for_image
+from dueltrace_rank_system import CLASSIC_RANKS
 
 SCHEMA = 1
 LABELS_X15 = ["Z-POW", "S-POW", "S-TEC"]
@@ -119,7 +120,7 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "cartas": "verificado" if card_ok else "pendente",
         "oponentes": "verificado" if opponent_ok else "pendente",
         "tabelas_drops": "verificado" if weights_ok else "pendente",
-        "nomes_dos_ranks": "verificado" if known_x15 else "não_identificado",
+        "nomes_dos_ranks": "verificado" if known_x15 else "padrao_original_presumido",
         "regras_de_pontuacao": "verificado_x15" if known_x15 else "não_extraídas",
         "fusoes": "não_extraídas",
         "artes": "extraídas" if result.get("artes_extraidas") == 722 else "indisponíveis",
@@ -139,7 +140,7 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "verified": status,
         "supported_features": {
             "cards": card_ok, "opponents": opponent_ok, "drops": weights_ok,
-            "ranks": known_x15, "scoring": known_x15, "fusions": False,
+            "ranks": bool(weights_ok), "scoring": known_x15, "fusions": False,
             "art": result.get("artes_extraidas") == 722,
             "thumbnails": result.get("miniaturas_extraidas") == 722,
             "card_frames": result.get("molduras_extraidas") == 6,
@@ -148,7 +149,10 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
             "categories": card_ok,
             "effects": effects_info["count"] > 0,
         },
-        "rank_labels": LABELS_X15 if known_x15 else None,
+        "rank_labels": LABELS_X15 if known_x15 else list(CLASSIC_RANKS),
+        "rank_system":("x15" if known_x15 else "classic"),
+        "rank_system_verification":("sha_x15_confirmado" if known_x15
+                                    else "layout_original_presumido"),
         "rank_points": rank_profile_for_image(result["sha256"],result.get("rank_analysis")),
         "rank_mips_evidence": result.get("rank_mips_evidence", {
             "status":"not_scanned","rank_routine_confirmed":False,"candidates":[]}),

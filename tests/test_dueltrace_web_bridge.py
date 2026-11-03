@@ -114,11 +114,11 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(protected.get_drops("x"*64,2,groups[1],"",0,20)["total"],1)
         with self.assertRaises(PermissionError):
             protected.record_duel_result("invalid",2,"Z-POW",2,95)
-        evidence=protected.record_duel_result("x"*64,2,"Z-POW",2,95)
+        evidence=protected.record_duel_result("x"*64,2,"S-POW",2,95)
         self.assertEqual(evidence["observations"],1)
-        evidence=protected.record_duel_result("x"*64,3,"Z-POW",2,94)
+        evidence=protected.record_duel_result("x"*64,3,"A-POW",2,94)
         self.assertEqual(evidence["observations"],2)
-        self.assertEqual(evidence["suspectedMappings"]["Z-POW"]["group"],groups[1])
+        self.assertEqual(evidence["suspectedMappings"]["S/A POW"]["group"],groups[1])
         self.assertEqual(protected.get_duel_evidence("x"*64)["observations"],2)
 
     def test_offline_rank_report_saved_only_as_json_and_never_overwritten(self):
