@@ -60,12 +60,14 @@ def audit_zip(directory: Path, archive: Path) -> dict:
                     raise ValueError("ZIP diverge da pasta aprovada em SHA-256.")
     if observed != set(expected):
         raise ValueError("ZIP não inclui todos os arquivos examinados.")
+    with archive.open("rb") as package:
+        package_sha256 = _sha256(package)
     return {
         "schema": 1,
         "status": "zip_matches_local_build",
         "files_verified": len(observed),
         "bytes_uncompressed": total,
-        "zip_sha256": _sha256(archive.open("rb")),
+        "zip_sha256": package_sha256,
         "authenticode_signature_verified": False,
         "note": "Integridade não prova autoria nem ausência de malware.",
     }
