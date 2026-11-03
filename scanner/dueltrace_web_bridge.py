@@ -259,11 +259,15 @@ class DueltraceWebBridge:
                     "category":None,"counters":None}
             result=(project_rank_for_mod(profile,counters)
                     if binding else project_lp_win_rank(counters))
+            visible_counters=dict(counters)
+            if binding:
+                visible_counters["turns"]=counters[binding["turns_criterion"]]
+                visible_counters["remaining_lp"]=counters[binding["life_points_criterion"]]
             return {"ready":True,"state":"provisional",
                     "status":"Projeção se vencer por LP; resultado e mapeamento RAM não verificados no jogo.",
                     "candidateLp":counters[binding["life_points_criterion"]] if binding else counters["remaining_lp"],
                     "score":result["score"],"category":result["category"],
-                    "counters":counters,"breakdown":result["breakdown"],
+                    "counters":visible_counters,"breakdown":result["breakdown"],
                     "model":result["model"],"final":False}
 
     def confirm_rank_lp(self, life_points):
