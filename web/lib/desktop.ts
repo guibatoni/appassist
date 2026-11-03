@@ -12,6 +12,8 @@ export type LocalCard = {
   def: number | null
   effect: string | null
   effectSource: string | null
+  description?: string | null
+  descriptionSource?: string | null
   slot?: number
 }
 
@@ -35,6 +37,8 @@ export type DesktopState = {
   fusionCount: number
   epsxeConfigured: boolean
   warning: string
+  framePalettes?: Record<string,{accent:string;source:string;wa_offset:number}>
+  descriptionAudit?: {status?:string;recognized?:number}
 }
 
 export type DirectFusion = {
