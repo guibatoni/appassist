@@ -59,7 +59,8 @@ def local_handler(directory: Path, bridge: DueltraceWebBridge):
             parts=decoded.split("/")
             if (not decoded.startswith("/") or decoded.startswith("//") or
                     "\\" in decoded or "\x00" in decoded or
-                    any(part in (".","..") for part in parts) or
+                    unquote(decoded)!=decoded or
+                    any(part.startswith(".") for part in parts[1:] if part) or
                     any(part=="" for part in parts[1:-1])):
                 self.send_error(403,"Caminho local inválido")
                 return None
@@ -151,6 +152,7 @@ def local_handler(directory: Path, bridge: DueltraceWebBridge):
             self.send_header("Content-Security-Policy",
                 "default-src 'none'; base-uri 'none'; form-action 'none'; "
                 "frame-ancestors 'none'; object-src 'none'; frame-src 'none'; "
+                "navigate-to 'self'; "
                 "script-src 'self' 'unsafe-inline'; "
                 "style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data:; font-src 'self' data:; connect-src 'self'")
