@@ -74,8 +74,8 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         opponents[oid] = name
     if set(opponents) != set(range(1, EXPECTED_OPPONENTS+1)):
         return empty
-    card_names = {
-        c["id"]: c.get("name") for c in cards
+    cards_by_id = {
+        c["id"]: c for c in cards
         if isinstance(c, dict) and type(c.get("id")) is int
         and 1 <= c["id"] <= MAX_CARDS and isinstance(c.get("name"), str)
     }
@@ -116,7 +116,8 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
             continue
         if group and rank != group:
             continue
-        name = card_names.get(cid) or f"Carta #{cid}"
+        card=cards_by_id.get(cid,{})
+        name = card.get("name") or f"Carta #{cid}"
         if text and text not in name.casefold() and text != str(cid):
             continue
         offset_repr = (f"0x{source_offset:X}"
@@ -125,6 +126,9 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         matched.append({
             "opponentId": oid, "opponentName": opponents[oid],
             "group": rank, "cardId": cid, "cardName": name,
+            "category":card.get("category") or "Não identificada",
+            "atk":card.get("atk") if type(card.get("atk")) is int else None,
+            "def":card.get("def") if type(card.get("def")) is int else None,
             "weight": weight,
             "chancePercent": round(weight * 100 / WEIGHT_TOTAL, 6),
             "sourceOffset": offset_repr,
