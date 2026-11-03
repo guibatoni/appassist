@@ -84,7 +84,12 @@ def decode_hand_frame(wa:bytes,color_index:int):
         for byte in wa[row:row+length]:
             raw.append(byte&15)
             raw.append(byte>>4)
-    return _paletted(bytes(raw),(FRAME_W,FRAME_H),colors).convert("RGBA")
+    frame=_paletted(bytes(raw),(FRAME_W,FRAME_H),colors)
+    # Na GPU do PS1 a entrada 0 da CLUT costuma ser transparente.
+    # Só aplicar alpha quando a paleta real confirmar cor 0.
+    if colors[0]==0:
+        frame.info["transparency"]=0
+    return frame.convert("RGBA")
 
 
 def _large(wa:bytes,card_id:int):
