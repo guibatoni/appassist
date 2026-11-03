@@ -274,9 +274,10 @@ class DueltraceDesktop(tk.Tk):
         tk.Label(bar,textvariable=self.home_fusion_count,
                  bg=PANEL,fg=BLUE,font=("Segoe UI",9)).pack(side="right")
         self.home_fusion_tree=self._table(
-            fusion_panel,("slots","materials","result","atk"),
+            fusion_panel,("slots","materials","result","atk","origin"),
             (("slots","Slots",68),("materials","Materiais",185),
-             ("result","Resultado",180),("atk","ATK",70)),height=6)
+             ("result","Resultado",180),("atk","ATK",70),
+             ("origin","Origem",115)),height=6)
         self.home_fusion_hint=tk.StringVar(
             value="Sugestões aparecem aqui após leitura de cinco cartas válidas.")
         tk.Label(fusion_panel,textvariable=self.home_fusion_hint,
@@ -318,7 +319,7 @@ class DueltraceDesktop(tk.Tk):
             def worker():
                 try:
                     result=read_hand_from_epsxe(preferred_pid=preferred)
-                except (OSError,ValueError,RuntimeError) as exc:
+                except Exception as exc:
                     result={"ready":False,"status":str(exc)[:140],
                             "hand_ids":None,"pid":None}
                 self.inbox.put({"event":"live_hand","profile_sha":sha,
@@ -357,11 +358,21 @@ class DueltraceDesktop(tk.Tk):
             a,b=row["a"],row["b"]
             a_name=self._home_cards.get(a,{}).get("name",f"#{a}")
             b_name=self._home_cards.get(b,{}).get("name",f"#{b}")
+            origin=row["validation"]
+            if origin=="observada_manualmente_no_jogo":
+                source="Testada"
+            elif origin=="extraida_sete_bancos_consistentes":
+                source="ISO ×7"
+            elif origin=="revisada_usuario_em_lote":
+                source="Revisada"
+            else:
+                source="Não informada"
             tree.insert("","end",values=(
                 f"{row['slot_a']} + {row['slot_b']}",
                 f"{a_name} + {b_name}",
                 f"#{row['result']} {row['result_name']}",
-                f"{row['atk']:,}" if row["atk"] is not None else "—"))
+                f"{row['atk']:,}" if row["atk"] is not None else "—",
+                source))
         if not ready:
             self.home_fusion_count.set("Sem leitura válida")
             self.home_fusion_hint.set(
