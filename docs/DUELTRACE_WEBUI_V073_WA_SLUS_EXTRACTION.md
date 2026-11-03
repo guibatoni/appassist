@@ -17,10 +17,18 @@ Extrair dados e recursos presentes na própria ISO/BIN local selecionada, vincul
 | Descrição | SLUS | ponteiros u16 `0x1B0A02 + 2*(id-1)` → texto `0x1B0800+ponteiro` | Texto e offset da origem se ≥500/722 válidos |
 | Imagem 102×96, 256 cores | WA_MRG | setor `722+7*(id-1)`, paleta `+0x2640` | PNG grande local por ID |
 | Miniatura 40×32, 64 cores | WA_MRG | setor `id-1` e cópia no registro `+0x2AE0` | PNG local por ID com comparação das duas cópias |
-| Moldura original do duelo | WA_MRG | pacote `0xB63000`, textura fase0/CLUT fase1 | Seis molduras 52×60 com paletas originais |
+| Moldura original do duelo | WA_MRG | pacote `0xB63000`, coluna 2 e linha UV 128, CLUT linhas 1–6 | Seis molduras 52×60 em **8bpp, 256 cores** |
 | Composição moldura + miniatura | WA_MRG | UV da mão do jogo, imagem x+6/y+6 | PNG local `cartas_com_moldura/###.png` |
 
-Os offsets seguem o formato clássico Forbidden Memories e engenharia reversa pública, **não são garantidos para todo mod**. O scanner não inventa descrições, efeitos, arquivos ou artes quando a estrutura diverge.
+Os offsets foram confirmados no Remaster X15 e no FM13 Drop x15 fornecidos anteriormente e seguem engenharia reversa pública, **não são garantidos para todo mod**. O scanner não inventa descrições, efeitos, arquivos ou artes quando a estrutura diverge.
+
+## Validação com duas mídias reais (sem redistribuição)
+- **Remaster X15** (WA_MRG.MRG: 37.748.736 bytes): 722 artes grandes, 722 miniaturas e seis molduras autênticas. Das 722 cópias da miniatura, 719 coincidem com a cópia no registro grande: três divergências são mantidas no diagnóstico, sem descartar as imagens.
+- **FM13 Drop x15** (WA_MRG.MRG: 37.748.736 bytes): 722 artes, 722 miniaturas, seis molduras e 722 cópias coincidentes.
+- **SLUS Remaster X15**: 497 descrições decodificadas, 225 campos vazios. Foram observados 292 textos com marcador explícito de efeito; isso é **texto declarado**, não validação da mecânica no ePSXe.
+- **SLUS FM13 Drop x15**: 722 descrições decodificadas, 79 textos com marcador explícito de efeito, associados aos IDs.
+- As imagens reais demonstraram que a **moldura é 8bpp**: a primeira hipótese de 4bpp produzia listras e foi corrigida. Cada paleta é uma CLUT de **256 cores**. O decodificador foi confrontado com imagens renderizadas dos arquivos reais.
+- Estas contagens não prometem os mesmos resultados para outras ISOs: cada mod tem seu próprio SHA e pode alterar tabelas/posições.
 
 ## Estrutura de saída local
 - `analises/<mod_sha>/artes_722/001.png`: arte grande
