@@ -19,6 +19,7 @@ from field_cancel_probe import (
     FOCUS_CHUNK, focus_watch_values, focus_slot_u16_values,
     focus_phase_differences, cancelled_preparation_analysis,
 )
+from field_priority_probe import analyze_priority
 
 HAND_ADDR = 0xBFF484
 HAND_SIZE = 140
@@ -351,6 +352,7 @@ class FieldMemoryProbe:
                     "hand_refreshed":None,
                     "field_slot_verified":False,
                 } if self.focused else None),
+            "priority_address_review":self._priority_analysis(),
             "occupancy_analysis":{
                 "status":"AGUARDANDO_REMOCAO",
                 "field_slot_verified":False,
@@ -496,6 +498,7 @@ class FieldMemoryProbe:
         self.occupied_control=sample
         report=dict(self.report)
         report["after_occupied_control"]=self._public(sample)
+        report["priority_address_review"]=self._priority_analysis()
         if self.focused:
             monitor=dict(report["targeted_ram_monitor"])
             monitor["occupied_control"]=self._focused_public(sample)
@@ -513,6 +516,7 @@ class FieldMemoryProbe:
         self.vacant_control=sample
         report=dict(self.report)
         report["after_vacant_control"]=self._public(sample)
+        report["priority_address_review"]=self._priority_analysis()
         if self.focused:
             monitor=dict(report["targeted_ram_monitor"])
             monitor["vacant_control"]=self._focused_public(sample)
@@ -521,6 +525,20 @@ class FieldMemoryProbe:
         self._save(self.file,report)
         self.report=report
         return report,self.file
+
+    def _priority_analysis(self) -> dict:
+        """Duas hipóteses observadas, nunca slots validados."""
+        return analyze_priority({
+            "before":self.before["snapshot"]["chunks"] if self.before else None,
+            "prepared":self.prepared["snapshot"]["chunks"] if self.prepared else None,
+            "set":self.after["chunks"] if self.after else None,
+            "occupied_control":(self.occupied_control["chunks"]
+                                if self.occupied_control else None),
+            "removed":(self.removed_sample["chunks"]
+                       if self.removed_sample else None),
+            "vacant_control":(self.vacant_control["chunks"]
+                              if self.vacant_control else None),
+        })
 
     @staticmethod
     def _focused_public(snapshot: dict) -> dict:
@@ -603,6 +621,7 @@ class FieldMemoryProbe:
                     f"0x{FOCUS_CHUNK:08X}" if self.focused and not self.expanded else None),
                 "purpose":"controle sem acao; faixa experimental limitada do mesmo ePSXe",
             },
+            "priority_address_review":analyze_priority({"before":a,"no_action":b}),
             "no_action_analysis":{
                 "before_to_no_action":summarize_phase_changes(a,b),
                 "focus_before_to_no_action":focus_phase_differences(a,b),
@@ -758,6 +777,7 @@ class FieldMemoryProbe:
         # experimental e não atestam que houve realmente a remoção.
         report=dict(self.report)
         report["after_removal"]=self._public(sample)
+        report["priority_address_review"]=self._priority_analysis()
         if self.focused:
             monitor=dict(report["targeted_ram_monitor"])
             monitor["removed"]=self._focused_public(sample)
