@@ -3,6 +3,7 @@ name: Validar integração v0 DUELTRACE Windows
 on:
   push:
     branches:
+      - main
       - feature/dueltrace-v070-v0-desktop-integration
       - security/dueltrace-v070-client-safety
     paths:
