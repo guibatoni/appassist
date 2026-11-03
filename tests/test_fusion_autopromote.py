@@ -97,6 +97,34 @@ class StructuralAutoImportTests(unittest.TestCase):
             self.assertEqual(sum(x["validation"]=="observada_manualmente_no_jogo"
                                  for x in updated["fusion_recipes"]),1)
 
+    def test_explicit_rescan_preserves_previous_manual_confirmation(self):
+        with tempfile.TemporaryDirectory() as root:
+            cat,e,r,pending=self.make_catalog(root)
+            iso=Path(e["source_path"])
+            iso.write_bytes(b"X"*100_001)
+            st=iso.stat()
+            e["size"]=st.st_size
+            e["mtime_ns"]=st.st_mtime_ns
+            original=cat.profile_for(e)
+            first=r["candidates"][0]
+            original["fusion_recipes"]=[
+                {**first,"validation":"observada_manualmente_no_jogo"}]
+            atomic_json(Path(e["profile_path"]),original)
+            atomic_json(cat.registry_file,{"schema":1,"entries":[e]})
+            def simulate_reimport(path,output,art=False,progress=None):
+                fresh=dict(original)
+                fresh["fusion_recipes"]=[]
+                fresh["fusion_review"]={}
+                fresh["supported_features"]=dict(original["supported_features"],fusions=False)
+                atomic_json(Path(e["profile_path"]),fresh)
+                return fresh,Path(e["profile_path"])
+            with patch("auto_mods.import_rom",side_effect=simulate_reimport):
+                new=cat.analyse(iso,force=True)
+            persisted=cat.profile_for(new)
+            self.assertEqual(len(persisted["fusion_recipes"]),1)
+            self.assertEqual(persisted["fusion_recipes"][0]["validation"],
+                             "observada_manualmente_no_jogo")
+
     def test_modified_rom_is_rejected(self):
         with tempfile.TemporaryDirectory() as root:
             cat,e,r,p=self.make_catalog(root)
