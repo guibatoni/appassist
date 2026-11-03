@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation"
+import { DesktopPage } from "@/components/desktop/desktop-page"
 
-export default function Home() {
-  redirect("/biblioteca")
+export default function Page() {
+  return <DesktopPage page="inicio" />
 }
