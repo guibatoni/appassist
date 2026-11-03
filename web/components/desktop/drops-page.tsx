@@ -282,6 +282,11 @@ export function DropsPage({sha}:{sha:string|null}) {
         {" "}coerentes em {duelEvidence.scoreComparisons.compared} vitórias por LP.
         {" "}Coerência não comprova execução da rotina MIPS.
       </p>:null}
+      {duelEvidence?.assignmentCount!==undefined&&duelEvidence.assignmentCount>1&&
+        <p className="mt-2 text-xs text-gold">
+          RANKs ainda têm {duelEvidence.assignmentCount} correspondências possíveis entre os bancos WA.
+          Cada novo duelo pode eliminar combinações; nenhuma será escolhida sem evidências.
+        </p>}
       {duelEvidence?.suspectedMappings&&Object.entries(duelEvidence.suspectedMappings).length>0&&
         <div className="mt-3 rounded-lg border border-gold/30 bg-background/40 p-3 text-xs text-gold">
           Correspondência sugerida por observações manuais (não comprovada pela execução MIPS):
@@ -301,13 +306,24 @@ export function DropsPage({sha}:{sha:string|null}) {
         <button type="button" className="btn-ghost mt-2" disabled={traceBusy||!desktopApi()}
           onClick={()=>void importTrace()}>{traceBusy?"Analisando log…":"Importar log MIPS de duelo"}</button>
         {traceError&&<p className="mt-2 text-xs text-danger" role="alert">{traceError}</p>}
+        {(traceInfo?.tableReadReports??0)>0&&
+          <p className="mt-2 text-xs text-primary">
+            {(traceInfo?.tableReadReports??0)} log(s) contêm pares de limiares e pontos da tabela WA
+            lidos por instruções MIPS. Resultado ainda sujeito à análise causal.
+          </p>}
         {(traceInfo?.correlatedDuels??0)>0&&<p className="mt-2 text-xs text-primary">{traceInfo?.correlatedDuels} duelo(s) com projeção de pontos igual à nota registrada e PCs candidatos observados. Isso é correlação, não prova de causalidade MIPS.</p>}
       {traceInfo?.last&&<div className="mt-2 text-xs text-muted">
           <p>Último trace: {traceInfo.last.status} · PCs distintos: {traceInfo.last.distinctPCs??"—"}
             {" "}· Instruções amostradas: {traceInfo.last.instructionSamples??"—"}</p>
           {traceInfo.last.executedCandidates?.map(x=>
             <p key={x.pc} className="mt-1 text-primary">{x.pc}: {x.hits} execução(ões) observada(s)</p>)}
-          <p className="mt-1 text-gold">PC executado não confirma por si só a rotina responsável pela pontuação RANK.</p>
+          {traceInfo.last.rankTableEvidence&&
+            <p className="mt-1 text-primary">
+              Leitura de tabela de pontos: {traceInfo.last.rankTableEvidence.status} ·
+              Pares limiar/pontos observados: {traceInfo.last.rankTableEvidence.matchedPairs}
+              {" "}· Eventos de leitura: {traceInfo.last.rankTableEvidence.memoryEvents}
+            </p>}
+          <p className="mt-1 text-gold">PC executado ou valores da tabela lidos não confirmam, isoladamente, a rotina responsável pela pontuação final.</p>
         </div>}
       </div>
     </section>
