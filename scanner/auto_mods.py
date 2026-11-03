@@ -26,8 +26,6 @@ from card_catalog import effect_sidecar_path
 EXTENSIONS = frozenset({".iso", ".bin"})
 REGISTRY_FILE = "registro_mods.json"
 ACTIVE_FILE = "perfil_ativo.json"
-# Incremente quando a lógica de decodificação das artes mudar.
-ART_PARSER_REVISION = 1
 
 
 def data_home() -> Path:
