@@ -88,6 +88,31 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(snapshot["cards"][1]["effectSource"],"ROM-offset-auditado")
         self.assertNotIn("source_path",str(snapshot))
 
+    def test_drops_from_active_iso_are_paged_and_authenticated(self):
+        groups=["TABELA_1_RANK_DESCONHECIDO","TABELA_2_RANK_DESCONHECIDO",
+                "TABELA_3_RANK_DESCONHECIDO"]
+        self.profile["supported_features"]["drops"]=True
+        self.profile["verified"]["tabelas_drops"]="verificado"
+        self.profile["verified"]["oponentes"]="verificado"
+        self.profile["drop_group_labels"]=groups
+        self.profile["opponents"]=[{"id":i,"name":f"Adversário {i}"} for i in range(1,40)]
+        self.profile["drops"]=[
+            {"opponent_id":i,"group":group,"card_id":j+1,"weight":2048,
+             "source_offset":0xE9B000+(i-1)*0x1800+(j+1)*0x5B4}
+            for i in range(1,40) for j,group in enumerate(groups)]
+        atomic_json(self.profile_path,self.profile)
+        page=self.bridge.get_drops(2,groups[1],"",0,20)
+        self.assertTrue(page["available"])
+        self.assertEqual(page["total"],1)
+        self.assertEqual(page["rows"][0]["opponentName"],"Adversário 2")
+        self.assertEqual(page["rows"][0]["cardId"],2)
+        self.assertEqual(page["rows"][0]["chancePercent"],100.0)
+        self.assertNotIn("source_path",str(page))
+        protected=ProtectedDesktopApi(self.bridge,"x"*64)
+        with self.assertRaises(PermissionError):
+            protected.get_drops("not-authorized",2,groups[1],"",0,20)
+        self.assertEqual(protected.get_drops("x"*64,2,groups[1],"",0,20)["total"],1)
+
     def test_live_hand_uses_existing_fusion_engine(self):
         result=self.bridge.get_hand()
         self.assertTrue(result["ready"])
