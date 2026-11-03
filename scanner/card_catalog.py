@@ -84,7 +84,7 @@ def attach_effect_manifest(cards: list[dict], path: Path, *, rom_sha256: str):
     if str(data.get("rom_sha256", "")).lower() != rom_sha256.lower():
         raise ValueError("Manifesto de efeitos não pertence a esta ISO (SHA divergente)")
     records = data.get("effects")
-    if not isinstance(records, list) or len(records) > len(cards):
+    if not isinstance(records, list) or len(records) > max(4096, len(cards)):
         raise ValueError("Quantidade ou formato de efeitos inválido")
     known = {c.get("id") for c in cards}
     changes = {}
