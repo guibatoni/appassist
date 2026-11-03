@@ -316,7 +316,7 @@ export function DropsPage({sha}:{sha:string|null}) {
         <div className="mt-3 rounded-lg border border-gold/30 bg-background/40 p-3 text-xs text-gold">
           Correspondência sugerida por observações manuais (não comprovada pela execução MIPS):
           {Object.entries(duelEvidence.suspectedMappings).map(([rank,m])=>
-            <p key={rank} className="mt-1">{rank}: {m.group} · {m.observations} duelos, {m.opponents} oponentes</p>)}
+            <p key={rank} className="mt-1">{rank}: {m.groupDisplay??m.group} · {m.observations} duelos, {m.opponents} oponentes</p>)}
         </div>}
       {duelEvidence?.mismatches?.length ? <p className="mt-3 text-xs text-danger">
         Atenção: {duelEvidence.mismatches.length} divergência(s) entre os drops registrados e as tabelas do WA. Confira o mod ativo, o oponente e o RANK observado.
