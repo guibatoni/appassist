@@ -27,11 +27,18 @@ def missing_runtime_globals(cls):
         if method.__module__ != cls.__module__:
             continue
         defined = method.__globals__
-        for instruction in dis.get_instructions(method):
-            if instruction.opname == "LOAD_GLOBAL":
-                name = instruction.argval
-                if name not in defined and not hasattr(builtins, name):
-                    missing.append(f"{cls.__name__}.{method_name}: {name}")
+        def inspect_code(code, label):
+            for instruction in dis.get_instructions(code):
+                if instruction.opname == "LOAD_GLOBAL":
+                    name = instruction.argval
+                    if name not in defined and not hasattr(builtins, name):
+                        missing.append(f"{label}: {name}")
+            # Captura callbacks criados dentro dos métodos, como _render_header,
+            # que só executam após eventos de redimensionamento do Tkinter.
+            for constant in code.co_consts:
+                if isinstance(constant, types.CodeType):
+                    inspect_code(constant, f"{label}.{constant.co_name}")
+        inspect_code(method.__code__,f"{cls.__name__}.{method_name}")
     return sorted(set(missing))
 
 
@@ -75,6 +82,9 @@ class DesktopBootstrapTests(unittest.TestCase):
                 if "display" in str(exc).lower() or "screen" in str(exc).lower():
                     self.skipTest(f"Runner sem sessão gráfica: {exc}")
                 raise
+            callbacks=[]
+            app.report_callback_exception=lambda cls,exc,tb: callbacks.append(
+                f"{cls.__name__}: {exc}")
             try:
                 app.withdraw()
                 app.update_idletasks()
@@ -82,6 +92,7 @@ class DesktopBootstrapTests(unittest.TestCase):
                     app.go(key)
                     app.update_idletasks()
                 self.assertIn("DUELTRACE", app.title())
+                self.assertEqual(callbacks,[],f"Callbacks Tk: {callbacks}")
             finally:
                 app.destroy()
 
