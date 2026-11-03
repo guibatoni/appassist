@@ -51,6 +51,15 @@ export function DropsPage({sha}:{sha:string|null}) {
   const [error,setError]=useState<string|null>(null)
   const pageSize=36
 
+  // Nunca reutilizar filtros de um mod em outro perfil SHA.
+  useEffect(()=>{
+    setOpponent(0)
+    setGroup("")
+    setQuery("")
+    setOffset(0)
+    setResult(null)
+  },[sha])
+
   useEffect(()=>{
     let mounted=true
     const api=desktopApi()
