@@ -68,6 +68,8 @@ class DueltraceWebBridge:
                 "def": item.get("def") if type(item.get("def")) is int else None,
                 "effect": effect,
                 "effectSource": str(item["effect_source"])[:150] if effect else None,
+                "effectStatus": str(item.get("effect_status") or "não_confirmado")[:120]
+                    if effect else None,
                 "description":str(item.get("description_text") or "")[:550] or None,
                 "descriptionSource":str(item.get("description_source") or "")[:150] or None,
                 "level":item.get("level") if type(item.get("level")) is int else None,
