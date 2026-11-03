@@ -6,6 +6,7 @@ on:
       - main
       - feature/dueltrace-v070-v0-desktop-integration
       - security/dueltrace-v070-client-safety
+      - fix/dueltrace-v070-tailwind-styles
     paths:
       - 'web/**'
       - 'scanner/dueltrace_web_*.py'
@@ -50,6 +51,8 @@ jobs:
       - name: Verificar tipagem e build estático
         working-directory: web
         run: npm run build
+      - name: Rejeitar CSS do Tailwind incompleto
+        run: python tools/security/verify_web_css.py
       - name: Registrar SBOM das dependências web
         shell: pwsh
         working-directory: web
