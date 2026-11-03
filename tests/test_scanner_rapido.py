@@ -70,7 +70,7 @@ class ScannerSpeedTests(unittest.TestCase):
             def __init__(self,p):
                 self.sector=2352
                 self.files={"SLUS_014.11":(10,3000000),
-                            "WA_MRG.MRG":(120,100000000)}
+                            "WA_MRG.MRG":(120,64*1024*1024)}
                 self.limit=None
             def get(self,name,limit_bytes=None):
                 if name=="WA_MRG.MRG":
@@ -91,9 +91,11 @@ class ScannerSpeedTests(unittest.TestCase):
                 info=process(path,out,digest="a"*64)
             self.assertEqual(info["sha256"],"a"*64)
             self.assertIsNone(info["hash_wa"])
-            self.assertLess(self_obj["disc"].limit,17*1024*1024)
-            self.assertGreater(self_obj["disc"].limit,14*1024*1024)
-            self.assertEqual(info["wa_total_bytes"],100000000)
+            self.assertIsNone(self_obj["disc"].limit)
+            # A busca de RANK exige o WA inteiro; o mock oferece só
+            # 64 bytes, portanto o SHA integral não é atribuído.
+            self.assertEqual(info["wa_total_bytes"],64*1024*1024)
+            self.assertFalse(info["wa_lido_integralmente"])
 
 
 if __name__=="__main__":
