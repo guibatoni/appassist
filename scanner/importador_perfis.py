@@ -120,7 +120,7 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "cartas": "verificado" if card_ok else "pendente",
         "oponentes": "verificado" if opponent_ok else "pendente",
         "tabelas_drops": "verificado" if weights_ok else "pendente",
-        "nomes_dos_ranks": "verificado" if known_x15 else "não_identificado",
+        "nomes_dos_ranks": "verificado" if known_x15 else "padrao_original_presumido",
         "regras_de_pontuacao": "verificado_x15" if known_x15 else "não_extraídas",
         "fusoes": "não_extraídas",
         "artes": "extraídas" if result.get("artes_extraidas") == 722 else "indisponíveis",
@@ -140,7 +140,7 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "verified": status,
         "supported_features": {
             "cards": card_ok, "opponents": opponent_ok, "drops": weights_ok,
-            "ranks": known_x15, "scoring": known_x15, "fusions": False,
+            "ranks": bool(weights_ok), "scoring": known_x15, "fusions": False,
             "art": result.get("artes_extraidas") == 722,
             "thumbnails": result.get("miniaturas_extraidas") == 722,
             "card_frames": result.get("molduras_extraidas") == 6,
