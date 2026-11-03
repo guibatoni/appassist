@@ -7,7 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 from field_ram_probe import FieldMemoryProbe, HAND_ADDR, SEARCH_START, SEARCH_SIZE, CHUNK_SIZE
-from field_cancel_probe import FOCUS_CHUNK
+from field_cancel_probe import FOCUS_CHUNK, FOCUS_TO, focus_watch_values
+from field_priority_probe import analyze_priority, PRIORITY_ADDRESSES
 
 
 def hand_bytes(ids):
@@ -127,6 +128,91 @@ class NoActionControlTests(unittest.TestCase):
         report,_=basic.capture_no_action(self.sha,user_slot=2)
         self.assertIsNone(report["targeted_ram_monitor"])
         self.assertIsNone(report["scan"]["focused_extra_chunk"])
+
+
+    def test_priority_addresses_in_focus_and_watch_list(self):
+        self.assertEqual(PRIORITY_ADDRESSES, (0xC393FA, 0xC39822))
+        self.assertTrue(all(FOCUS_CHUNK <= a < FOCUS_TO for a in PRIORITY_ADDRESSES))
+        found={row["address"] for row in focus_watch_values({})}
+        for a in PRIORITY_ADDRESSES:
+            self.assertIn(f"0x{a:08X}",found)
+
+    def test_no_action_reports_priority_volatility(self):
+        self.probe.capture_before(self.sha,291,user_slot=1)
+        self.reader.byte(0xC393FA,1)
+        report,path=self.probe.capture_no_action(self.sha,user_slot=1)
+        analysis=report["priority_address_review"]
+        self.assertEqual(analysis["experiment"],"SEM_ACAO")
+        states={x["address"]:x["status"] for x in analysis["candidates"]}
+        self.assertEqual(states["0x00C393FA"],"MUDOU_SEM_ACAO")
+        self.assertEqual(states["0x00C39822"],"ESTAVEL_SEM_ACAO")
+        self.assertEqual(report["no_action_analysis"]["focus_before_to_no_action"]["changed_bytes"],1)
+        self.assertFalse(analysis["field_slot_verified"])
+        self.assertFalse(analysis["occupancy_verified"])
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["priority_address_review"],analysis)
+
+    def test_real_invocation_priority_lifecycle_and_no_field_unlock(self):
+        self.probe.capture_before(self.sha,291,user_slot=1)
+        self.probe.capture_prepared(self.sha,face_state="faceup")
+        self.reader.byte(0xC393FA,63)
+        self.reader.byte(0xC39822,31)
+        initial,_=self.probe.capture_after(self.sha,user_slot=1)
+        self.assertTrue(all(x["status"]=="FALTAM_CONTROLES"
+                            for x in initial["priority_address_review"]["candidates"]))
+        occupied,_=self.probe.capture_occupied_control(self.sha)
+        self.assertTrue(all(x["status"]=="FALTAM_CONTROLES"
+                            for x in occupied["priority_address_review"]["candidates"]))
+        self.reader.byte(0xC393FA,0)
+        self.reader.byte(0xC39822,0)
+        removed,_=self.probe.capture_removed(self.sha)
+        self.assertTrue(all(x["status"]=="FALTAM_CONTROLES"
+                            for x in removed["priority_address_review"]["candidates"]))
+        vacant,path=self.probe.capture_vacant_control(self.sha)
+        result=vacant["priority_address_review"]
+        self.assertEqual([x["status"] for x in result["candidates"]],
+                         ["PADRAO_REVERSIVEL_PARA_RETESTE"]*2)
+        self.assertEqual(result["candidates"][0]["values_u8"],{
+            "before":0,"prepared":0,"set":63,"occupied_control":63,
+            "removed":0,"vacant_control":0
+        })
+        self.assertFalse(result["field_slot_verified"])
+        self.assertFalse(vacant["duel_field_ram_verified"])
+        self.assertFalse(vacant["fusion_catalog_changed"])
+        self.assertIn("0x00C39822",str(vacant["targeted_ram_monitor"]["set"]["watch_values"]))
+        saved=path.read_text(encoding="utf-8")
+        self.assertNotIn('"chunks":',saved)
+        self.assertEqual(json.loads(saved)["priority_address_review"],result)
+
+    def test_priority_rejects_volatile_and_missing_snapshots(self):
+        chunk=bytearray(CHUNK_SIZE)
+        base=FOCUS_CHUNK
+        def capture(one,two):
+            mem=bytearray(CHUNK_SIZE)
+            mem[0xC393FA-base]=one
+            mem[0xC39822-base]=two
+            return {base:bytes(mem)}
+        before=capture(0,0)
+        set_state=capture(63,31)
+        alt=capture(65,31)
+        baseline=capture(0,0)
+        def state(p,occ,removed,vacant):
+            return [x["status"] for x in analyze_priority({
+                "before":before,"prepared":p,"set":set_state,
+                "occupied_control":occ,"removed":removed,
+                "vacant_control":vacant})["candidates"]]
+        self.assertEqual(state(capture(1,0),set_state,baseline,baseline)[0],
+                         "MUDOU_NA_PREPARACAO")
+        self.assertEqual(state(before,alt,baseline,baseline)[0],
+                         "INSTAVEL_DURANTE_OCUPADA")
+        self.assertEqual(state(before,set_state,set_state,set_state)[0],
+                         "PERSISTE_APOS_REMOVIDA")
+        self.assertEqual(state(before,set_state,baseline,set_state)[0],
+                         "INSTAVEL_DURANTE_VAZIA")
+        self.assertEqual(state(before,set_state,capture(5,5),capture(5,5))[0],
+                         "NAO_RETORNOU_AO_INICIO")
+        result=analyze_priority({"before":{},"no_action":before})
+        self.assertEqual(result["candidates"][0]["status"],"LEITURA_INCOMPLETA")
+        self.assertFalse(result["field_slot_verified"])
 
 
 if __name__=="__main__":
