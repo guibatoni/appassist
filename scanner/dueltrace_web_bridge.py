@@ -296,12 +296,17 @@ class DueltraceWebBridge:
             source=Path(entry["source_path"]).resolve(strict=True)
             if not source.is_file() or source.suffix.lower() not in (".bin",".iso"):
                 raise ValueError("Imagem original não encontrada")
+            # Validar ANTES de reescrever registro ou perfil: uma ISO substituída
+            # não pode destruir o cadastro antigo quando o SHA mudou.
+            from scanner_multiiso import sha256 as hash_image
+            if hash_image(source)!=sha:
+                raise RuntimeError("ISO modificada desde o cadastro; o perfil original foi preservado")
             updated=self.catalog.analyse(source,with_art=True,force=True)
             if updated["sha256"]!=sha:
                 raise RuntimeError("A imagem da ISO mudou desde o último cadastro")
             self._fusion_cache_key=None
             self._rank_calibration=None
-            analysis=MultiModIntelligence(self.catalog).inspect(source)
+            analysis=MultiModIntelligence(self.catalog).inspect(source,use_ollama=False)
             profile=self.catalog.profile_for(updated)
             graphic=(profile or {}).get("graphic_assets",{})
             provenance=(profile or {}).get("descriptions_provenance",{})
