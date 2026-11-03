@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - feature/dueltrace-v070-v0-desktop-integration
+      - security/dueltrace-v070-client-safety
     paths:
       - 'web/**'
       - 'scanner/dueltrace_web_*.py'
       - 'tests/test_dueltrace_web_bridge.py'
+      - 'tools/security/**'
       - '.github/workflows/validar-webui-desktop.yml'
   pull_request:
     paths:
@@ -38,9 +40,21 @@ jobs:
       - name: Instalar dependências Next.js
         working-directory: web
         run: npm ci
+      - name: Auditar dependências de produção JavaScript (moderada ou superior)
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=moderate
+      - name: Auditar todas as dependências JavaScript (alta ou crítica)
+        working-directory: web
+        run: npm audit --audit-level=high
       - name: Verificar tipagem e build estático
         working-directory: web
         run: npm run build
+      - name: Registrar SBOM das dependências web
+        shell: pwsh
+        working-directory: web
+        run: |
+          New-Item -ItemType Directory -Force -Path ../dist/security | Out-Null
+          npm sbom --sbom-format cyclonedx | Out-File -FilePath ../dist/security/npm-sbom.cdx.json -Encoding utf8
       - name: Validar quatro páginas compiladas
         shell: pwsh
         run: |
@@ -48,17 +62,29 @@ jobs:
           foreach ($file in $needed) {
             if (-not (Test-Path $file)) { throw "Falta HTML da tela: $file" }
           }
-      - name: Instalar dependências Windows para prévia
-        run: python -m pip install pywebview pyinstaller pillow
+      - name: Instalar dependências Windows fixadas e auditor de CVEs
+        run: python -m pip install -r tools/security/requirements-webui-build.txt pip-audit
+      - name: Auditar dependências Python instaladas
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/security | Out-Null
+          python -m pip list --format=json | Out-File dist/security/python-dependencies.json -Encoding utf8
+          python -m pip_audit --local --format=json --output dist/security/python-audit.json
       - name: Empacotar UI v0 com motor Python
         shell: pwsh
         run: |
           python -m PyInstaller --noconfirm --clean --onedir --noconsole --name DUELTRACE-WebUI --paths scanner --collect-all webview --add-data "web/out;web/out" scanner/dueltrace_web_desktop.py
           if (-not (Test-Path dist/DUELTRACE-WebUI/DUELTRACE-WebUI.exe)) { throw "Executável experimental ausente" }
           Compress-Archive -Path dist/DUELTRACE-WebUI/* -DestinationPath dist/DUELTRACE-WebUI-Windows-Preview.zip -Force
+      - name: Escanear pacote com Microsoft Defender e gerar SHA-256
+        shell: pwsh
+        run: |
+          ./tools/security/gate_windows_package.ps1 -PackageDirectory dist/DUELTRACE-WebUI -ZipPath dist/DUELTRACE-WebUI-Windows-Preview.zip -OutputDirectory dist/security
       - uses: actions/upload-artifact@v4
         with:
-          name: DUELTRACE-WebUI-Windows-Preview
-          path: dist/DUELTRACE-WebUI-Windows-Preview.zip
+          name: DUELTRACE-WebUI-Windows-Preview-Security-Verified
+          path: |
+            dist/DUELTRACE-WebUI-Windows-Preview.zip
+            dist/security/
           if-no-files-found: error
           retention-days: 14

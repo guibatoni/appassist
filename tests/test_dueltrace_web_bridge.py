@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import functools
 import http.server
+import http.client
 import sys
 import tempfile
 import threading
@@ -10,13 +11,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 
 from auto_mods import ModCatalog, atomic_json, supported_for_runtime
 from dueltrace_web_bridge import DueltraceWebBridge
-from dueltrace_web_desktop import local_handler
+from dueltrace_web_desktop import local_handler, trusted_window_url
+from dueltrace_web_security import ProtectedDesktopApi
 
 
 class BridgeTests(unittest.TestCase):
@@ -108,11 +110,111 @@ class BridgeTests(unittest.TestCase):
             self.bridge.activate_mod(self.sha,False)
         self.assertEqual(self.bridge.activate_mod(self.sha,True)["activeSha"],self.sha)
 
+    def test_native_api_requires_capability_for_all_privileged_calls(self):
+        secret="S"*43
+        protected=ProtectedDesktopApi(self.bridge,secret)
+        for method,params in (
+            ("get_state",()),
+            ("get_hand",()),
+            ("get_fusions",("",0,10)),
+            ("activate_mod",(self.sha,False)),
+            ("import_iso",()),
+            ("configure_epsxe",()),
+            ("start_game",()),
+        ):
+            with self.subTest(method=method):
+                for credential in ("",None,"incorrect"):
+                    with self.assertRaises(PermissionError):
+                        getattr(protected,method)(credential,*params)
+        self.assertEqual(protected.get_state(secret)["activeSha"],self.sha)
+        self.assertEqual(len(protected.get_hand(secret)["hand"]),5)
+
+    def test_capability_only_injected_into_exact_loopback_origin(self):
+        origin="http://127.0.0.1:49321/"
+        self.assertTrue(trusted_window_url(origin,origin))
+        self.assertTrue(trusted_window_url(origin+"biblioteca/",origin))
+        for candidate in (
+            "https://127.0.0.1:49321/",
+            "http://localhost:49321/",
+            "http://127.0.0.1:49322/",
+            "http://evil.example/",
+            "http://evil.example@127.0.0.1:49321/",
+            "http://127.0.0.1:49321/#evil",
+            "not-a-url",None,
+        ):
+            with self.subTest(candidate=candidate):
+                self.assertFalse(trusted_window_url(candidate,origin))
+
     def test_web_without_native_picker_does_not_open_arbitrary_path(self):
         with self.assertRaises(RuntimeError):
             self.bridge.import_iso()
         with self.assertRaises(RuntimeError):
             self.bridge.configure_epsxe()
+
+    def test_static_server_rejects_cross_origin_and_dangerous_paths(self):
+        static=self.home/"www"
+        static.mkdir()
+        (static/"index.html").write_text("DUELTRACE",encoding="utf-8")
+        (static/"safe.js").write_text("console.log('safe')",encoding="utf-8")
+        (static/".env").write_text("SECRET_CANARY",encoding="utf-8")
+        (static/"empty").mkdir()
+        outside=self.home/"not_static.txt"
+        outside.write_text("PRIVATE_CANARY",encoding="utf-8")
+        handler=local_handler(static,self.bridge)
+        server=http.server.ThreadingHTTPServer(("127.0.0.1",0),handler)
+        worker=threading.Thread(target=server.serve_forever,daemon=True)
+        worker.start()
+        try:
+            base="http://127.0.0.1:"+str(server.server_port)
+            with urlopen(base+"/") as response:
+                self.assertEqual(response.read(),b"DUELTRACE")
+                self.assertEqual(response.headers["X-Frame-Options"],"DENY")
+                self.assertIn("script-src 'self'",response.headers["Content-Security-Policy"])
+                self.assertEqual(response.headers["Cross-Origin-Resource-Policy"],
+                                 "same-origin")
+            for url,headers,method,expected in (
+                ("/",{"Host":"evil.example"}, "GET",403),
+                ("/",{"Origin":"https://evil.example"}, "GET",403),
+                ("/",{"Sec-Fetch-Site":"cross-site"},"GET",403),
+                ("/%2e%2e/not_static.txt",{},"GET",403),
+                ("/%252e%252e/not_static.txt",{},"GET",403),
+                ("//evil.example/path",{},"GET",404),  # urllib normaliza a dupla barra
+                ("/.env",{},"GET",403),
+                ("/empty/",{},"GET",403),
+                ("/",{},"POST",405),
+                ("/__art__/"+"b"*64+"/1.png",{},"HEAD",405),
+            ):
+                with self.subTest(url=url,headers=headers,method=method):
+                    req=Request(base+url,headers=headers,method=method)
+                    with self.assertRaises(HTTPError) as denied:
+                        urlopen(req)
+                    self.assertEqual(denied.exception.code,expected)
+            conn=http.client.HTTPConnection("127.0.0.1",server.server_port)
+            try:
+                conn.request("GET","//evil.example/path")
+                response=conn.getresponse()
+                # BaseHTTPRequestHandler pode normalizar // para / antes
+                # de chamar nosso handler; a resposta NÃO deve apontar
+                # para domínio externo.
+                self.assertIn(response.status,(403,404,308))
+                location=response.getheader("Location")
+                if location:
+                    self.assertTrue(location.startswith("/"))
+                    self.assertFalse(location.startswith("//"))
+                response.read()
+            finally:
+                conn.close()
+            try:
+                (static/"outbound.txt").symlink_to(outside)
+            except (OSError,NotImplementedError):
+                pass  # Windows CI pode negar symlinks não privilegiados.
+            else:
+                with self.assertRaises(HTTPError) as denied:
+                    urlopen(base+"/outbound.txt")
+                self.assertEqual(denied.exception.code,403)
+        finally:
+            server.shutdown()
+            server.server_close()
 
     def test_art_route_never_leaks_other_profile_and_denies_post(self):
         (self.analysis/"artes_722").mkdir()
