@@ -56,6 +56,29 @@ class GenericRankTests(unittest.TestCase):
         self.assertEqual(deckout["score"],61)
         self.assertEqual(deckout["category"],"S-POW")
 
+    def test_other_iso_with_byte_identical_exe_and_scoring_table(self):
+        from dueltrace_rank_profile_live import x15_compatible_runtime
+        from fm_rank_tables import (
+            KNOWN_X15_SLUS_SHA256,KNOWN_X15_TABLE_SHA256,LEGACY_OFFSET,STRIDE
+        )
+        p=profile()
+        p["exe_sha256"]=KNOWN_X15_SLUS_SHA256
+        p["rank_points"].update({
+            "available":True,"structure_verified":True,
+            "table_sha256":KNOWN_X15_TABLE_SHA256,
+            "first_offset":LEGACY_OFFSET,"repeat_stride":STRIDE,
+        })
+        self.assertTrue(x15_compatible_runtime(p))
+        for key,bad in (
+            ("first_offset",LEGACY_OFFSET+2),
+            ("repeat_stride",STRIDE+2048),
+            ("table_sha256","e"*64),
+        ):
+            q={**p,"rank_points":{**p["rank_points"],key:bad}}
+            self.assertFalse(x15_compatible_runtime(q))
+        q={**p,"exe_sha256":"a"*64}
+        self.assertFalse(x15_compatible_runtime(q))
+
     def test_modified_file_hash_or_unvalidated_duels_disables_rank(self):
         for change in ({"verified_duels":1},{"table_sha256":"d"*64},
                        {"rom_sha256":"e"*64},{"validation_method":"pattern_only"},
