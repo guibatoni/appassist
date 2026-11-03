@@ -4,7 +4,7 @@ import Image from "next/image"
 import {useEffect, useState} from "react"
 import {ChevronLeft, ChevronRight, Database, RefreshCcw, Search, ShieldCheck} from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi} from "@/lib/desktop"
-import type {DropsPage, DropRow, DuelEvidence} from "@/lib/desktop"
+import type {DropsPage, DropRow, DuelEvidence, MipsTraceResult} from "@/lib/desktop"
 
 function DropArtwork({sha,id,name}:{sha:string|null;id:number;name:string}) {
   const [source,setSource]=useState<"frame"|"art"|"none">("frame")
@@ -54,6 +54,9 @@ export function DropsPage({sha}:{sha:string|null}) {
   const [loading,setLoading]=useState(false)
   const [error,setError]=useState<string|null>(null)
   const [duelEvidence,setDuelEvidence]=useState<DuelEvidence|null>(null)
+  const [traceInfo,setTraceInfo]=useState<MipsTraceResult|null>(null)
+  const [traceBusy,setTraceBusy]=useState(false)
+  const [traceError,setTraceError]=useState<string|null>(null)
   const [obsOpponent,setObsOpponent]=useState(0)
   const [obsRank,setObsRank]=useState("Z-POW")
   const [obsCard,setObsCard]=useState("")
@@ -73,6 +76,8 @@ export function DropsPage({sha}:{sha:string|null}) {
     setOffset(0)
     setResult(null)
     setDuelEvidence(null)
+    setTraceInfo(null)
+    setTraceError(null)
     setObsOpponent(0)
     setObsCard("")
     setObsPoints("")
@@ -96,6 +101,26 @@ export function DropsPage({sha}:{sha:string|null}) {
     return()=>{mounted=false;window.clearTimeout(timer)}
   },[sha,opponent,group,query,offset,sort,cardType,revision])
 
+  useEffect(()=>{
+    let active=true
+    const api=desktopApi()
+    if(api)void api.get_rank_trace_status().then(data=>{
+      if(active)setTraceInfo(data)
+    }).catch(()=>{if(active)setTraceInfo(null)})
+    return()=>{active=false}
+  },[sha,revision])
+  const importTrace=async()=>{
+    const api=desktopApi()
+    if(!api)return
+    setTraceBusy(true)
+    setTraceError(null)
+    try{
+      const result=await api.import_rank_trace()
+      if(!result.cancelled)setTraceInfo({status:"updated",last:result,records:(traceInfo?.records??0)+1})
+    }catch(e){
+      setTraceError(e instanceof Error?e.message:"Não foi possível importar log MIPS.")
+    }finally{setTraceBusy(false)}
+  }
   useEffect(()=>{
     let active=true
     const api=desktopApi()
@@ -263,6 +288,23 @@ export function DropsPage({sha}:{sha:string|null}) {
         Atenção: {duelEvidence.mismatches.length} divergência(s) entre os drops registrados e as tabelas do WA. Confira o mod ativo, o oponente e o RANK observado.
       </p>:null}
       <p className="mt-2 text-xs text-muted">Esses registros são relatos manuais de cada duelo. Eles não confirmam sozinhos as instruções MIPS executadas ou a fórmula de RANK.</p>
+      <div className="mt-4 border-t border-line/50 pt-3">
+        <h3 className="font-semibold text-gold">Auditoria de execução MIPS do duelo</h3>
+        <p className="mt-1 text-xs text-muted">
+          Importe um arquivo .log ou .txt de instruções executadas exportado pelo depurador do emulador durante um duelo.
+          O analisador compara os PCs executados com os candidatos do SLUS deste mod, sem enviar o log para a internet.
+        </p>
+        <button type="button" className="btn-ghost mt-2" disabled={traceBusy||!desktopApi()}
+          onClick={()=>void importTrace()}>{traceBusy?"Analisando log…":"Importar log MIPS de duelo"}</button>
+        {traceError&&<p className="mt-2 text-xs text-danger" role="alert">{traceError}</p>}
+        {traceInfo?.last&&<div className="mt-2 text-xs text-muted">
+          <p>Último trace: {traceInfo.last.status} · PCs distintos: {traceInfo.last.distinctPCs??"—"}
+            {" "}· Instruções amostradas: {traceInfo.last.instructionSamples??"—"}</p>
+          {traceInfo.last.executedCandidates?.map(x=>
+            <p key={x.pc} className="mt-1 text-primary">{x.pc}: {x.hits} execução(ões) observada(s)</p>)}
+          <p className="mt-1 text-gold">PC executado não confirma por si só a rotina responsável pela pontuação RANK.</p>
+        </div>}
+      </div>
     </section>
     <section className="panel rounded-xl p-4">
       <h2 className="font-display text-xl font-semibold text-gold">Pontos de RANK</h2>
