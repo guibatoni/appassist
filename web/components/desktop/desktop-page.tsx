@@ -7,7 +7,7 @@ import {
   GitMerge, Layers, Play, RefreshCcw, Search, Shield, Swords, Upload,
 } from "lucide-react"
 import {cardArt, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
-import type {LocalCard, HandState, FusionPage, LocalMod} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes"
 
@@ -32,6 +32,81 @@ function Empty({children}:{children:React.ReactNode}) {
   return <p className="rounded-lg border border-line/60 bg-[#06152c]/70 px-4 py-6 text-center text-sm text-muted">{children}</p>
 }
 
+function RankPanel({sha}:{sha:string|null}) {
+  const [rank,setRank]=useState<RankState|null>(null)
+  const [lp,setLp]=useState("")
+  const [busy,setBusy]=useState(false)
+  useEffect(()=>{
+    let mounted=true,busyRead=false
+    setRank(null)
+    const refresh=async()=>{
+      const api=desktopApi()
+      if(!api||busyRead)return
+      busyRead=true
+      try{const result=await api.get_rank();if(mounted)setRank(result)}
+      catch{if(mounted)setRank({ready:false,state:"unavailable",status:"Leitura de RANK indisponível",score:null,category:null,counters:null})}
+      finally{busyRead=false}
+    }
+    void refresh()
+    const id=window.setInterval(()=>void refresh(),2200)
+    return()=>{mounted=false;window.clearInterval(id)}
+  },[sha])
+  const confirm=async()=>{
+    if(!/^\d{1,5}$/.test(lp))return
+    const value=Number(lp)
+    if(!Number.isInteger(value)||value<0||value>32766)return
+    const api=desktopApi()
+    if(!api)return
+    setBusy(true)
+    try{setRank(await api.confirm_rank_lp(value))}
+    catch{setRank({ready:false,state:"unavailable",status:"Não foi possível confirmar os LP",score:null,category:null,counters:null})}
+    finally{setBusy(false)}
+  }
+  return <section className="panel rounded-xl p-4" aria-label="Contador de RANK">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 className="font-display text-xl font-semibold text-gold">Contador de RANK</h2>
+        <p className="mt-1 text-xs text-muted">Projeção de pontuação · somente leitura</p>
+      </div>
+      <div className="flex min-w-36 items-baseline justify-end gap-2 rounded-lg border border-gold/30 bg-gradient-to-r from-[#152c4a] to-background px-3 py-2">
+        <span className="font-display text-3xl font-bold tabular-nums text-primary">{rank?.ready?rank.score:"—"}</span>
+        <span className="text-xs text-muted">pontos</span>
+      </div>
+    </div>
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+      <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
+        {rank?.ready?rank.category:"RANK indisponível"}
+      </span>
+      {rank?.ready&&<span className="text-xs text-gold">Estimativa · não é resultado final</span>}
+    </div>
+    <p className="mt-2 text-sm text-muted" role="status">{rank?.status??"Consultando leitura e modelo do mod…"}</p>
+    {(rank?.state==="needs_lp_confirmation"||rank?.state==="lp_mismatch")&&
+      <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-line/60 bg-panel-strong/60 p-3">
+        <label className="flex flex-col gap-1 text-xs text-foreground">
+          LP atuais mostrados no jogo
+          <input type="number" min={0} max={32766} inputMode="numeric"
+            value={lp} onChange={e=>setLp(e.target.value)}
+            className="field w-44 rounded-md px-3 py-2 text-sm" placeholder="Ex.: 8000"/>
+        </label>
+        <button type="button" className="btn-gold disabled:opacity-40" disabled={busy||!lp||!desktopApi()}
+          onClick={()=>void confirm()}>Confirmar LP</button>
+        <span className="text-xs text-muted">Candidato da RAM: {rank?.candidateLp??"—"} LP</span>
+      </div>}
+    {rank?.ready&&rank.counters&&
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted sm:grid-cols-4">
+        {[["Turnos",rank.counters.turns],["Fusões",rank.counters.fusions],
+          ["Magias",rank.counters.spells],["LP",rank.counters.remaining_lp]].map(([label,value])=>
+          <div key={label} className="rounded-md border border-line/50 bg-background/40 px-3 py-2">
+            <span className="block">{label}</span><strong className="font-display text-base text-white">{value??"—"}</strong>
+          </div>)}
+      </div>}
+    <p className="mt-3 text-xs text-muted">
+      A contagem só é habilitada para o modelo Remaster X15 de SHA conhecido, após confirmação dos LP.
+      A origem do endereço no ePSXe ainda é experimental. Outros mods exigem análise própria.
+    </p>
+  </section>
+}
+
 function Home({sha}:{sha:string|null}) {
   const [hand,setHand]=useState<HandState|null>(null)
   const [mode,setMode]=useState<"pairs"|"chains">("pairs")
@@ -50,7 +125,8 @@ function Home({sha}:{sha:string|null}) {
     return()=>{mounted=false;window.clearInterval(timer)}
   },[sha])
   return <>
-    <Heading title="Central de Duelo" subtitle="Sua mão e as melhores combinações identificadas no perfil ativo"/>
+    <Heading title="Central de Duelo" subtitle="Sua mão, projeção de RANK e combinações do perfil ativo"/>
+    <RankPanel sha={sha}/>
     <div className="panel rounded-xl p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-xl font-semibold text-primary">Sua mão · 5 slots</h2>
