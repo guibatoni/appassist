@@ -21,6 +21,17 @@ export type LocalCard = {
   slot?: number
 }
 
+export type DeepScanResult = {
+  sha256: string
+  artCount: number
+  thumbnailCount: number
+  framedCards: number
+  descriptionCount: number
+  effectTexts: number
+  investigation: string
+  status: string
+}
+
 export type LocalMod = {
   sha256: string
   name: string
@@ -28,6 +39,8 @@ export type LocalMod = {
   cards: number
   fusions: number
   effects: number
+  descriptions?: number
+  framedCards?: number
   requiresReview: boolean
 }
 
@@ -121,6 +134,7 @@ export interface DesktopAPI {
   confirm_rank_lp(lifePoints: number): Promise<RankState>
   get_fusions(query: string, offset: number, limit: number): Promise<FusionPage>
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
+  scan_sources(sha: string): Promise<DeepScanResult>
   import_iso(): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(): Promise<{started: boolean; status: string}>
@@ -135,6 +149,7 @@ interface ProtectedNativeAPI {
   confirm_rank_lp(token: string, lifePoints: number): Promise<RankState>
   get_fusions(token: string, query: string, offset: number, limit: number): Promise<FusionPage>
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
+  scan_sources(token: string, sha: string): Promise<DeepScanResult>
   import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(token: string): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(token: string): Promise<{started: boolean; status: string}>
@@ -163,6 +178,7 @@ export function desktopApi(): DesktopAPI | null {
     confirm_rank_lp: (lifePoints) => native.confirm_rank_lp(token, lifePoints),
     get_fusions: (query, offset, limit) => native.get_fusions(token, query, offset, limit),
     activate_mod: (sha, acknowledge) => native.activate_mod(token, sha, acknowledge),
+    scan_sources: (sha) => native.scan_sources(token, sha),
     import_iso: () => native.import_iso(token),
     configure_epsxe: () => native.configure_epsxe(token),
     start_game: () => native.start_game(token),
