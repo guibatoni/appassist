@@ -1,0 +1,371 @@
+"""Bridge local do design v0 para o motor Python do DUELTRACE.
+
+Não envia ISO, cartas, RAM nem chaves para a nuvem. Objetos JSON contêm
+somente dados do perfil validado e deixam explícita a origem dos efeitos.
+O JavaScript da interface acessa os métodos via pywebview.api, não por uma
+API HTTP aberta para comandos. As imagens são lidas localmente.
+"""
+from __future__ import annotations
+
+import threading
+from pathlib import Path
+from time import monotonic
+
+from auto_mods import ModCatalog, load_json
+from mod_autopilot import ModAutopilot, profile_summary
+from dueltrace_intelligence import MultiModIntelligence
+from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
+                                 suggest_hand_pairs)
+from dueltrace_fusion_planner import plan_fusion_chains
+from dueltrace_rank_live import (model_available, read_rank_candidate,
+                                 project_lp_win_rank)
+from epsxe_launcher import launch_epsxe
+from dueltrace_update_checker import check_for_updates, open_official_releases
+
+
+class DueltraceWebBridge:
+    def __init__(self, catalog: ModCatalog | None = None, *,
+                 file_picker=None, ram_reader=None, rank_reader=None):
+        self.catalog = catalog or ModCatalog()
+        self._file_picker = file_picker
+        self._ram_reader = ram_reader or read_hand_from_epsxe
+        self._rank_reader = rank_reader or read_rank_candidate
+        self._rank_calibration = None
+        self._rank_last_turns = None
+        self._process = None
+        self._lock = threading.RLock()
+        self._fusion_cache_key = None
+        self._fusion_cache = {}
+        self.settings_path = self.catalog.home / "dueltrace_desktop_settings.json"
+
+    def _active(self):
+        active = self.catalog.current() or {}
+        entry = next((x for x in self.catalog.list()
+                      if x.get("sha256") == active.get("sha256")), None)
+        profile = self.catalog.profile_for(entry) if entry else None
+        return active, entry, profile
+
+    def _cards(self, profile):
+        if not profile or not profile.get("supported_features", {}).get("cards"):
+            return []
+        prepared = []
+        for item in profile.get("cards", []):
+            try:
+                cid = int(item["id"])
+            except (ValueError, KeyError, TypeError):
+                continue
+            if not 1 <= cid <= 722:
+                continue
+            effect = (str(item.get("effect_text")) if
+                      item.get("effect_text") and item.get("effect_source")
+                      else None)
+            prepared.append({
+                "id": cid, "name": str(item.get("name") or f"Carta #{cid}")[:150],
+                "type": str(item.get("type_label") or "")[:100],
+                "category": str(item.get("category") or "Não identificada")[:100],
+                "attribute": str(item.get("attribute") or "")[:60],
+                "atk": item.get("atk") if type(item.get("atk")) is int else None,
+                "def": item.get("def") if type(item.get("def")) is int else None,
+                "effect": effect,
+                "effectSource": str(item["effect_source"])[:150] if effect else None,
+                "effectStatus": str(item.get("effect_status") or "não_confirmado")[:120]
+                    if effect else None,
+                "description":str(item.get("description_text") or "")[:550] or None,
+                "descriptionSource":str(item.get("description_source") or "")[:150] or None,
+                "level":item.get("level") if type(item.get("level")) is int else None,
+                "attributeId":item.get("attribute_id") if type(item.get("attribute_id")) is int else None,
+                "guardianStar1":item.get("guardian_star_1") if type(item.get("guardian_star_1")) is int else None,
+                "guardianStar2":item.get("guardian_star_2") if type(item.get("guardian_star_2")) is int else None,
+            })
+        return sorted(prepared,key=lambda x:x["id"])
+
+    def _mod(self, entry):
+        profile = self.catalog.profile_for(entry)
+        summary = profile_summary(entry, profile)
+        return {
+            "sha256":entry.get("sha256",""),
+            "name":entry.get("file_name") or summary.get("name") or "Mod local",
+            "level":entry.get("level","desconhecido"),
+            "cards":summary.get("cards_total",0),
+            "fusions":summary.get("fusion_count",0),
+            "effects":summary.get("effect_count",0),
+            "descriptions":len([c for c in (profile or {}).get("cards",[])
+                                if c.get("description_text") and c.get("description_source")]),
+            "framedCards":(profile or {}).get("graphic_assets",{}).get("composed_cards",0),
+            "requiresReview":summary.get("requires_review",True),
+            "verified":summary.get("validated",{}),
+        }
+
+    def check_updates(self):
+        """Consulta somente o endpoint público de releases, sob demanda."""
+        return check_for_updates()
+
+    def open_updates_page(self):
+        """Abre no navegador padrão apenas a página oficial de releases."""
+        if not open_official_releases():
+            raise RuntimeError("Não foi possível abrir o navegador padrão.")
+        return {"opened":True}
+
+    def get_state(self):
+        with self._lock:
+            active, entry, profile = self._active()
+            settings = load_json(self.settings_path,{})
+            mods = [self._mod(e) for e in self.catalog.list()]
+            return {
+                "connected":True,"source":"DUELTRACE Windows / dados locais",
+                "activeSha":active.get("sha256") if profile else None,
+                "activeName":entry.get("file_name") if entry and profile else None,
+                "mods":mods,
+                "cards":self._cards(profile),
+                "fusionCount":len(profile.get("fusion_recipes",[]))
+                    if profile and profile.get("supported_features",{}).get("fusions")
+                    else 0,
+                "epsxeConfigured":bool(settings.get("epsxe_executable")),
+                "warning":"O DUELTRACE não confirma automaticamente qual ISO o ePSXe abriu.",
+            }
+
+    def _fusion_index(self, sha, profile):
+        profile_path=Path(self.catalog.home)/"profiles"/sha[:16]/"profile.json"
+        try:
+            stamp=profile_path.stat().st_mtime_ns
+        except OSError:
+            stamp=0
+        key=(sha,stamp)
+        if self._fusion_cache_key != key:
+            recipes=(profile or {}).get("fusion_recipes",[])
+            allowed=bool((profile or {}).get("supported_features",{}).get("fusions"))
+            self._fusion_cache=build_fusion_index(recipes if allowed else [])
+            self._fusion_cache_key=key
+        return self._fusion_cache
+
+    def get_hand(self):
+        with self._lock:
+            active,entry,profile=self._active()
+            if not profile:
+                return {"ready":False,"status":"Ative uma ISO na Biblioteca de Mods",
+                        "hand":[],"pairs":[],"chains":[]}
+            preferred=(self._process.pid if self._process is not None and
+                       self._process.poll() is None else None)
+            try:
+                sample=self._ram_reader(preferred_pid=preferred)
+            except (OSError,RuntimeError,ValueError) as exc:
+                sample={"ready":False,"status":f"Leitura não disponível: {exc}",
+                        "hand_ids":None}
+            ids=sample.get("hand_ids") if sample.get("ready") else None
+            if not (isinstance(ids,list) and len(ids)==5):
+                return {"ready":False,"status":sample.get("status","Mão indisponível"),
+                        "hand":[],"pairs":[],"chains":[]}
+            cards={c["id"]:c for c in self._cards(profile)}
+            enriched=[{"slot":i+1,**cards.get(cid,{
+                "id":cid,"name":f"Carta #{cid}","atk":None,"def":None,
+                "effect":None,"effectSource":None})}
+                for i,cid in enumerate(ids)]
+            index=self._fusion_index(active["sha256"],profile)
+            pairs=suggest_hand_pairs(ids,index,cards,limit=24)
+            chains=plan_fusion_chains(ids,index,cards,limit=16)
+            return {"ready":True,"status":sample.get("status","Mão identificada"),
+                    "hand":enriched,"pairs":pairs,
+                    "chains":chains["routes"],
+                    "chainsComplete":chains["complete"]}
+
+    def _rank_sample(self):
+        active,entry,profile=self._active()
+        sha=active.get("sha256") if profile else None
+        if not model_available(sha):
+            self._rank_calibration=None
+            return None,sha,{"state":"unsupported","ready":False,
+                "status":"Pontuação ainda não validada nesta ISO. Não aplicar o modelo de outro mod.",
+                "score":None,"category":None,"counters":None}
+        preferred=(self._process.pid if self._process is not None and
+                   self._process.poll() is None else None)
+        try:
+            sample=self._rank_reader(preferred_pid=preferred)
+        except (OSError,RuntimeError,ValueError) as exc:
+            sample={"ready":False,"status":str(exc)[:150],"pid":None,"counters":None}
+        if not sample.get("ready"):
+            self._rank_calibration=None
+            self._rank_last_turns=None
+            return None,sha,{"state":"unavailable","ready":False,
+                "status":sample.get("status","Leitura indisponível"),
+                "score":None,"category":None,"counters":None}
+        return sample,sha,None
+
+    def get_rank(self):
+        """Sem pontuação até o usuário validar os LP do duelo atual."""
+        with self._lock:
+            sample,sha,issue=self._rank_sample()
+            if issue is not None:
+                return issue
+            counters=sample["counters"]
+            pid=sample["pid"]
+            turns=counters["turns"]
+            if (self._rank_last_turns is not None and
+                    self._rank_last_turns[0]==(sha,pid) and
+                    turns < self._rank_last_turns[1]):
+                self._rank_calibration=None  # novo duelo ou contador reiniciado
+            self._rank_last_turns=((sha,pid),turns)
+            calibrated=(self._rank_calibration is not None and
+                self._rank_calibration["sha"]==sha and
+                self._rank_calibration["pid"]==pid and
+                monotonic()-self._rank_calibration["at"]<7200)
+            if not calibrated:
+                self._rank_calibration=None
+                return {"ready":False,"state":"needs_lp_confirmation",
+                    "status":"Confirme os LP exibidos pelo jogo neste duelo para habilitar a projeção.",
+                    "candidateLp":counters["remaining_lp"],"score":None,
+                    "category":None,"counters":None}
+            result=project_lp_win_rank(counters)
+            return {"ready":True,"state":"provisional",
+                    "status":"Projeção se vencer por LP; resultado e mapeamento RAM não verificados no jogo.",
+                    "candidateLp":counters["remaining_lp"],
+                    "score":result["score"],"category":result["category"],
+                    "counters":counters,"breakdown":result["breakdown"],
+                    "model":result["model"],"final":False}
+
+    def confirm_rank_lp(self, life_points):
+        if type(life_points) is not int or not 0<=life_points<=32766:
+            raise ValueError("Informe os LP exatos mostrados no duelo (0 a 32766).")
+        with self._lock:
+            sample,sha,issue=self._rank_sample()
+            if issue is not None:
+                return issue
+            if sample["counters"]["remaining_lp"]!=life_points:
+                self._rank_calibration=None
+                return {"ready":False,"state":"lp_mismatch",
+                    "status":"LP do jogo divergentes do candidato RAM. Contador não habilitado.",
+                    "candidateLp":sample["counters"]["remaining_lp"],
+                    "score":None,"category":None,"counters":None}
+            self._rank_calibration={"sha":sha,"pid":sample["pid"],"at":monotonic()}
+            self._rank_last_turns=((sha,sample["pid"]),sample["counters"]["turns"])
+            return self.get_rank()
+
+    def get_fusions(self, query="", offset=0, limit=100):
+        if type(query) is not str or len(query)>100:
+            raise ValueError("Consulta inválida")
+        if type(offset) is not int or offset<0 or offset>1000000:
+            raise ValueError("Página inválida")
+        if type(limit) is not int or not 1<=limit<=150:
+            raise ValueError("Limite inválido")
+        with self._lock:
+            active,entry,profile=self._active()
+            if not profile or not profile.get("supported_features",{}).get("fusions"):
+                return {"total":0,"offset":0,"rows":[]}
+            cards={c["id"]:c for c in self._cards(profile)}
+            q=query.strip().casefold()
+            rows=[]
+            total=0
+            for item in profile.get("fusion_recipes",[]):
+                try:
+                    a,b,result=(int(item[k]) for k in ("a","b","result"))
+                except (KeyError,ValueError,TypeError):
+                    continue
+                if not all(1<=v<=722 for v in (a,b,result)):
+                    continue
+                names=[cards.get(cid,{}).get("name") or f"Carta #{cid}"
+                       for cid in (a,b,result)]
+                if q and not any(q in text.casefold() or q==str(cid)
+                                 for text,cid in zip(names,(a,b,result))):
+                    continue
+                if total>=offset and len(rows)<limit:
+                    rows.append({"a":a,"b":b,"result":result,
+                                 "nameA":names[0],"nameB":names[1],
+                                 "nameResult":names[2],
+                                 "atk":cards.get(result,{}).get("atk"),
+                                 "source":str(item.get("validation") or "Não informada")})
+                total+=1
+            return {"total":total,"offset":offset,"rows":rows}
+
+    def activate_mod(self, sha, acknowledge=False):
+        if not isinstance(sha,str) or len(sha)!=64:
+            raise ValueError("Identificador de mod inválido")
+        if type(acknowledge) is not bool:
+            raise ValueError("Confirmação inválida")
+        self.catalog.activate(sha,acknowledge_uncertainty=acknowledge)
+        self._fusion_cache_key=None
+        self._rank_calibration=None
+        self._rank_last_turns=None
+        return self.get_state()
+
+    def scan_sources(self, sha):
+        """Releia a ISO local e seus WA_MRG/SLUS; não envie dados à nuvem."""
+        if type(sha) is not str or len(sha)!=64 or any(
+                ch not in "0123456789abcdef" for ch in sha):
+            raise ValueError("Identificador SHA-256 inválido")
+        with self._lock:
+            entry=next((e for e in self.catalog.list() if e.get("sha256")==sha),None)
+            if not entry or not entry.get("source_path"):
+                raise ValueError("Mod não cadastrado")
+            source=Path(entry["source_path"]).resolve(strict=True)
+            if not source.is_file() or source.suffix.lower() not in (".bin",".iso"):
+                raise ValueError("Imagem original não encontrada")
+            # Validar ANTES de reescrever registro ou perfil: uma ISO substituída
+            # não pode destruir o cadastro antigo quando o SHA mudou.
+            from scanner_multiiso import sha256 as hash_image
+            if hash_image(source)!=sha:
+                raise RuntimeError("ISO modificada desde o cadastro; o perfil original foi preservado")
+            updated=self.catalog.analyse(source,with_art=True,force=True)
+            if updated["sha256"]!=sha:
+                raise RuntimeError("A imagem da ISO mudou desde o último cadastro")
+            self._fusion_cache_key=None
+            self._rank_calibration=None
+            analysis=MultiModIntelligence(self.catalog).inspect(source,use_ollama=False)
+            profile=self.catalog.profile_for(updated)
+            graphic=(profile or {}).get("graphic_assets",{})
+            provenance=(profile or {}).get("descriptions_provenance",{})
+            return {
+                "sha256":sha,
+                "artCount":graphic.get("art_count",0),
+                "thumbnailCount":graphic.get("thumbnails",0),
+                "framedCards":graphic.get("composed_cards",0),
+                "descriptionCount":provenance.get("descriptions_attached",0),
+                "effectTexts":provenance.get("effect_descriptions_attached",0),
+                "investigation":analysis.get("state","sem_relatorio"),
+                "status":"Análise local de WA_MRG.MRG e SLUS_014.11 concluída.",
+            }
+
+    def import_iso(self):
+        if self._file_picker is None:
+            raise RuntimeError("Seleção de arquivo disponível somente no aplicativo Windows.")
+        files=self._file_picker("iso")
+        if not files:
+            return {"cancelled":True}
+        image=Path(files[0]).expanduser().resolve(strict=True)
+        if image.suffix.lower() not in (".iso",".bin"):
+            raise ValueError("Selecione ISO ou BIN.")
+        with self._lock:
+            entry=self.catalog.analyse(image,with_art=True)
+            intelligence=MultiModIntelligence(self.catalog)
+            report=intelligence.inspect(image)
+            return {"cancelled":False,"mod":self._mod(entry),
+                    "investigation":report.get("state","não concluída")}
+
+    def configure_epsxe(self):
+        if self._file_picker is None:
+            raise RuntimeError("Seletor disponível somente no Windows.")
+        files=self._file_picker("epsxe")
+        if not files:
+            return {"cancelled":True}
+        from epsxe_launcher import command_for_epsxe
+        path=Path(files[0]).resolve(strict=True)
+        if not path.is_file() or path.suffix.lower()!=".exe" or "epsxe" not in path.stem.casefold():
+            raise ValueError("Selecione o executável ePSXe.exe.")
+        from auto_mods import atomic_json
+        with self._lock:
+            settings=load_json(self.settings_path,{})
+            settings["epsxe_executable"]=str(path)
+            atomic_json(self.settings_path,settings)
+        return {"cancelled":False,"configured":True}
+
+    def start_game(self):
+        with self._lock:
+            active,entry,profile=self._active()
+            if not profile:
+                raise ValueError("Ative o perfil do mod antes de iniciar.")
+            settings=load_json(self.settings_path,{})
+            executable=settings.get("epsxe_executable")
+            if not executable:
+                raise ValueError("Configure o caminho do ePSXe.exe.")
+            if self._process is not None and self._process.poll() is None:
+                return {"started":False,"status":"ePSXe já iniciado por DUELTRACE"}
+            self._process=launch_epsxe(self.catalog,executable,active["sha256"])
+            return {"started":True,"status":"ePSXe iniciado com o mod selecionado"}

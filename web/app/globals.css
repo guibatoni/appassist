@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+:root {
+  --background: #040a1a;
+  --foreground: #e6f0ff;
+  --panel: #081530;
+  --panel-strong: #0b1c3d;
+  --border: #1b3f78;
+  --primary: #38c8ff;
+  --gold: #f5b83d;
+  --violet: #a35cf5;
+  --success: #2fd27a;
+  --danger: #f0444f;
+  --muted: #8ea3c7;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-panel-strong: var(--panel-strong);
+  --color-line: var(--border);
+  --color-primary: var(--primary);
+  --color-gold: var(--gold);
+  --color-violet: var(--violet);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-geist-sans);
+  --font-display: var(--font-exo);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+@layer components {
+  .panel {
+    @apply relative rounded-xl border border-line/80 bg-panel/80 backdrop-blur-md;
+    box-shadow:
+      inset 0 1px 0 rgb(56 200 255 / 0.08),
+      0 0 24px rgb(20 90 200 / 0.18);
+  }
+  .frame-glow {
+    box-shadow:
+      0 0 0 1px rgb(245 184 61 / 0.55),
+      0 0 18px rgb(56 200 255 / 0.45),
+      0 0 60px rgb(56 200 255 / 0.15),
+      inset 0 0 30px rgb(56 200 255 / 0.12);
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-line bg-panel-strong/70 px-3 py-2 text-sm text-foreground transition-all hover:border-primary/70 hover:bg-primary/10 hover:shadow-[0_0_14px_rgb(56_200_255/0.35)] focus-visible:outline-2 focus-visible:outline-primary;
+  }
+  .btn-gold {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-gold/80 bg-gradient-to-b from-gold/25 to-gold/5 px-3 py-2 text-sm font-semibold text-gold transition-all hover:from-gold/40 hover:shadow-[0_0_16px_rgb(245_184_61/0.45)] focus-visible:outline-2 focus-visible:outline-gold;
+  }
+  .field {
+    @apply rounded-md border border-line bg-[#06102a]/90 text-sm text-foreground transition-colors hover:border-primary/60 focus-within:border-primary;
+  }
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--primary) transparent;
+}

@@ -1,0 +1,121 @@
+name: Validar integração v0 DUELTRACE Windows
+
+on:
+  push:
+    branches:
+      - main
+      - feature/dueltrace-v070-v0-desktop-integration
+      - security/dueltrace-v070-client-safety
+      - fix/dueltrace-v070-tailwind-styles
+      - feature/dueltrace-v071-rank-and-fusion-images
+      - feature/dueltrace-v072-check-updates
+      - feature/dueltrace-v073-iso-deep-assets-and-card-text
+    paths:
+      - 'web/**'
+      - 'scanner/dueltrace_web_*.py'
+      - 'scanner/dueltrace_rank_live.py'
+      - 'scanner/dueltrace_update_checker.py'
+      - 'scanner/fm_deep_assets.py'
+      - 'scanner/fm_card_text.py'
+      - 'scanner/scanner_multiiso.py'
+      - 'scanner/importador_perfis.py'
+      - 'scanner/auto_mods.py'
+      - 'tests/test_fm_deep_assets.py'
+      - 'tests/test_fm_card_text.py'
+      - 'tests/test_dueltrace_update_checker.py'
+      - 'tests/test_dueltrace_web_bridge.py'
+      - 'tests/test_dueltrace_rank_live.py'
+      - 'tools/security/**'
+      - '.github/workflows/validar-webui-desktop.yml'
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'scanner/dueltrace_web_*.py'
+      - 'scanner/dueltrace_rank_live.py'
+      - 'scanner/dueltrace_update_checker.py'
+      - 'scanner/fm_deep_assets.py'
+      - 'scanner/fm_card_text.py'
+      - 'scanner/scanner_multiiso.py'
+      - 'scanner/importador_perfis.py'
+      - 'scanner/auto_mods.py'
+      - 'tests/test_fm_deep_assets.py'
+      - 'tests/test_fm_card_text.py'
+      - 'tests/test_dueltrace_update_checker.py'
+      - 'tests/test_dueltrace_web_bridge.py'
+      - 'tests/test_dueltrace_rank_live.py'
+
+permissions:
+  contents: read
+
+jobs:
+  build-web-and-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Preparar Pillow para testes de extração de arte PS1
+        run: python -m pip install pillow==13.0.0
+      - name: Executar toda a suíte Python (inclui extração WA/SLUS)
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Instalar dependências Next.js
+        working-directory: web
+        run: npm ci
+      - name: Auditar dependências de produção JavaScript (moderada ou superior)
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=moderate
+      - name: Auditar todas as dependências JavaScript (alta ou crítica)
+        working-directory: web
+        run: npm audit --audit-level=high
+      - name: Verificar tipagem e build estático
+        working-directory: web
+        run: npm run build
+      - name: Rejeitar CSS do Tailwind incompleto
+        run: python tools/security/verify_web_css.py
+      - name: Registrar SBOM das dependências web
+        shell: pwsh
+        working-directory: web
+        run: |
+          New-Item -ItemType Directory -Force -Path ../dist/security | Out-Null
+          npm sbom --sbom-format cyclonedx | Out-File -FilePath ../dist/security/npm-sbom.cdx.json -Encoding utf8
+      - name: Validar quatro páginas compiladas
+        shell: pwsh
+        run: |
+          $needed = @('web/out/index.html', 'web/out/inicio/index.html', 'web/out/mods/index.html', 'web/out/biblioteca/index.html', 'web/out/fusoes/index.html')
+          foreach ($file in $needed) {
+            if (-not (Test-Path $file)) { throw "Falta HTML da tela: $file" }
+          }
+      - name: Instalar dependências Windows fixadas e auditor de CVEs
+        run: python -m pip install -r tools/security/requirements-webui-build.txt pip-audit
+      - name: Auditar dependências Python instaladas
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/security | Out-Null
+          python -m pip list --format=json | Out-File dist/security/python-dependencies.json -Encoding utf8
+          python -m pip_audit --local --format=json --output dist/security/python-audit.json
+      - name: Empacotar UI v0 com motor Python
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onedir --noconsole --name DUELTRACE-WebUI --paths scanner --collect-all webview --add-data "web/out;web/out" scanner/dueltrace_web_desktop.py
+          if (-not (Test-Path dist/DUELTRACE-WebUI/DUELTRACE-WebUI.exe)) { throw "Executável experimental ausente" }
+          Compress-Archive -Path dist/DUELTRACE-WebUI/* -DestinationPath dist/DUELTRACE-WebUI-Windows-Preview.zip -Force
+      - name: Escanear pacote com Microsoft Defender e gerar SHA-256
+        shell: pwsh
+        run: |
+          ./tools/security/gate_windows_package.ps1 -PackageDirectory dist/DUELTRACE-WebUI -ZipPath dist/DUELTRACE-WebUI-Windows-Preview.zip -OutputDirectory dist/security
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DUELTRACE-WebUI-Windows-Preview-Security-Verified
+          path: |
+            dist/DUELTRACE-WebUI-Windows-Preview.zip
+            dist/security/
+          if-no-files-found: error
+          retention-days: 14
