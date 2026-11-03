@@ -72,6 +72,19 @@ class RankSystemTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             get_drop_catalog(fake_profile(),rank="S-POW",group="TABELA_2_RANK_DESCONHECIDO")
 
+    def test_malformed_rank_observation_does_not_crash_solver(self):
+        sha="a"*64
+        groups=list(CLASSIC_POOLS)
+        wa={1:{pool:set() for pool in groups}}
+        report=solve_rank_drop_labels(
+            groups,wa,[{
+                "rom_sha256":sha,"duel_id":"duel-a0001",
+                "opponent_id":1,"card_id":9,"observed_rank":["S-POW"],
+            }],sha,labels=groups,
+            rank_to_label={"S-POW":"S/A POW"})
+        self.assertEqual(report["distinctDuels"],0)
+        self.assertFalse(report["executionVerified"])
+
     def test_score_labels_only_for_independently_observed_result(self):
         for score,label in (
             (99,"S-POW"),(90,"S-POW"),(89,"A-POW"),(80,"A-POW"),
