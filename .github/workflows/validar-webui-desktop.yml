@@ -6,6 +6,7 @@ on:
       - main
       - feature/dueltrace-v070-v0-desktop-integration
       - security/dueltrace-v070-client-safety
+      - fix/dueltrace-v070-tailwind-styles
     paths:
       - 'web/**'
       - 'scanner/dueltrace_web_*.py'
@@ -41,6 +42,17 @@ jobs:
       - name: Instalar dependências Next.js
         working-directory: web
         run: npm ci
+      - name: Atualizar dependências Tailwind PostCSS e preparar lockfile
+        working-directory: web
+        run: npm install --save-dev --save-exact @tailwindcss/postcss@4.3.4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DUELTRACE-Nextjs-PostCSS-Lockfile
+          path: |
+            web/package.json
+            web/package-lock.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Auditar dependências de produção JavaScript (moderada ou superior)
         working-directory: web
         run: npm audit --omit=dev --audit-level=moderate
@@ -50,6 +62,8 @@ jobs:
       - name: Verificar tipagem e build estático
         working-directory: web
         run: npm run build
+      - name: Rejeitar CSS do Tailwind incompleto
+        run: python tools/security/verify_web_css.py
       - name: Registrar SBOM das dependências web
         shell: pwsh
         working-directory: web
