@@ -146,21 +146,46 @@ class ModCatalog:
                 return dict(old)
 
         profile, profile_path = import_rom(path, self.home, art=with_art, progress=progress)
-        # Reanálises não podem apagar confirmações individuais feitas em duelo.
-        # O catálogo estrutural é recalculado pela etapa de investigação.
-        if (previous_profile and previous_profile.get("rom_sha256")==profile.get("rom_sha256")
-                and profile.get("verified",{}).get("cartas")=="verificado"):
-            manual=[dict(row) for row in previous_profile.get("fusion_recipes",[])
-                    if isinstance(row,dict)
-                    and row.get("validation")=="observada_manualmente_no_jogo"]
-            if manual:
-                profile["fusion_recipes"]=manual
+        # Reanalisar imagens não pode apagar receitas já vinculadas ao MESMO
+        # SHA e verificadas por sete bancos, nem confirmações manuais.
+        # Nunca herdamos receitas de outra mídia nem de um banco divergente.
+        if (previous_profile and
+                previous_profile.get("rom_sha256")==profile.get("rom_sha256") and
+                profile.get("verified",{}).get("cartas")=="verificado"):
+            previous_review=previous_profile.get("fusion_review") or {}
+            fingerprint=previous_review.get("candidate_fingerprint")
+            saved=[]
+            manual_count=0
+            structural_count=0
+            for row in previous_profile.get("fusion_recipes",[]):
+                if not isinstance(row,dict):
+                    continue
+                tag=row.get("validation")
+                values=tuple(row.get(key) for key in ("a","b","result"))
+                if not all(type(v) is int and 1<=v<=722 for v in values):
+                    continue
+                if tag=="observada_manualmente_no_jogo":
+                    manual_count+=1
+                elif (tag=="extraida_sete_bancos_consistentes" and
+                      isinstance(fingerprint,str) and len(fingerprint)==64 and
+                      row.get("fusion_candidate_fingerprint")==fingerprint):
+                    structural_count+=1
+                else:
+                    continue
+                saved.append(dict(row))
+            if saved:
+                profile["fusion_recipes"]=saved
                 profile["supported_features"]["fusions"]=True
-                profile["verified"]["fusoes"]=f"parcial_usuario_{len(manual)}"
+                profile["verified"]["fusoes"]=(
+                    "extraidas_sete_bancos_nao_testadas_no_jogo"
+                    if structural_count else f"parcial_usuario_{manual_count}")
                 profile["fusion_review"]={
-                    "status":"confirmacoes_manuais_preservadas_aguardando_reanalise",
+                    **previous_review,
+                    "status":"preservadas_apos_reanalise_grafica",
                     "rom_sha256":profile["rom_sha256"],
-                    "in_game_individually_verified":len(manual),
+                    "in_game_individually_verified":manual_count,
+                    "structurally_validated":structural_count,
+                    "recipe_count":len(saved),
                 }
                 atomic_json(profile_path,profile)
         after = path.stat()
