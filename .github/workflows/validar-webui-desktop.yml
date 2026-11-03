@@ -1,0 +1,64 @@
+name: Validar integração v0 DUELTRACE Windows
+
+on:
+  push:
+    branches:
+      - feature/dueltrace-v070-v0-desktop-integration
+    paths:
+      - 'web/**'
+      - 'scanner/dueltrace_web_*.py'
+      - 'tests/test_dueltrace_web_bridge.py'
+      - '.github/workflows/validar-webui-desktop.yml'
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'scanner/dueltrace_web_*.py'
+      - 'tests/test_dueltrace_web_bridge.py'
+
+permissions:
+  contents: read
+
+jobs:
+  build-web-and-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Testar Python bridge
+        run: python -m unittest discover -s tests -p "test_dueltrace_web_bridge.py" -v
+      - name: Instalar dependências Next.js
+        working-directory: web
+        run: npm ci
+      - name: Verificar tipagem e build estático
+        working-directory: web
+        run: npm run build
+      - name: Validar quatro páginas compiladas
+        shell: pwsh
+        run: |
+          $needed = @('web/out/index.html', 'web/out/inicio/index.html', 'web/out/mods/index.html', 'web/out/biblioteca/index.html', 'web/out/fusoes/index.html')
+          foreach ($file in $needed) {
+            if (-not (Test-Path $file)) { throw "Falta HTML da tela: $file" }
+          }
+      - name: Instalar dependências Windows para prévia
+        run: python -m pip install pywebview pyinstaller pillow
+      - name: Empacotar UI v0 com motor Python
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onedir --noconsole --name DUELTRACE-WebUI --paths scanner --collect-all webview --add-data "web/out;web/out" scanner/dueltrace_web_desktop.py
+          if (-not (Test-Path dist/DUELTRACE-WebUI/DUELTRACE-WebUI.exe)) { throw "Executável experimental ausente" }
+          Compress-Archive -Path dist/DUELTRACE-WebUI/* -DestinationPath dist/DUELTRACE-WebUI-Windows-Preview.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DUELTRACE-WebUI-Windows-Preview
+          path: dist/DUELTRACE-WebUI-Windows-Preview.zip
+          if-no-files-found: error
+          retention-days: 14
