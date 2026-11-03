@@ -93,6 +93,32 @@ class RankRulesTests(unittest.TestCase):
         self.assertEqual(kernel.addresses,[(CANDIDATE_RANK_ADDRESS,RECORD_BYTES)]*2)
         self.assertEqual(kernel.closed,[789])
 
+    def test_custom_mod_reader_uses_its_own_host_address_not_ps1_virtual(self):
+        from dueltrace_rank_live import read_rank_from_verified_binding
+        binding={
+            "record_address":0xBA1000,"record_length":32,
+            "criterion_offsets":{
+                "criterion_01":{"type":"u8","offset":1},
+                "criterion_02":{"type":"u16le","offset":20},
+            },
+        }
+        blob=make_record(lp=6500,turns=3)
+        kernel=FakeKernel([blob,blob])
+        output=read_rank_from_verified_binding(binding,kernel=kernel,pids=[4321])
+        self.assertTrue(output["ready"])
+        self.assertEqual(output["counters"]["criterion_01"],3)
+        self.assertEqual(output["counters"]["criterion_02"],6500)
+        self.assertEqual(kernel.addresses,[(0xBA1000,32)]*2)
+        self.assertEqual(kernel.closed,[789])
+
+    def test_custom_mod_reader_rejects_bad_address_before_memory_access(self):
+        from dueltrace_rank_live import read_rank_from_verified_binding
+        kernel=FakeKernel([])
+        with self.assertRaises(ValueError):
+            read_rank_from_verified_binding(
+                {"record_address":0,"record_length":32},kernel=kernel,pids=[4321])
+        kernel.OpenProcess.assert_not_called()
+
     def test_transition_is_rejected_and_no_stale_memory(self):
         kernel=FakeKernel([make_record(turns=2),make_record(turns=3)])
         result=read_rank_candidate(kernel=kernel,pids=[4321])
