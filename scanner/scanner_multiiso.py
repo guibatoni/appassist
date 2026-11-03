@@ -21,7 +21,7 @@ WA_CARD_SECTOR_START=722
 WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
-ART_PARSER_REVISION=5  # integra decodificação forense das 40 tabelas WA RANK
+ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
 
 
 def sha256(path:Path, progress=None):
@@ -273,20 +273,27 @@ def process(path,output,with_art=False,digest=None,progress=None):
         wa_required=max(
             WA_OPP_BASE+(OPP_COUNT-1)*WA_OPP_STEP+3*WA_RANK_STRIDE+WA_ARRAY_BYTES,
             ((CARD_COUNT-1)*WA_CARD_SECTORS+WA_CARD_SECTOR_START)*2048+0x2840,
+            7475*2048+0x16D0+39*3*2048+200,
         )
         if progress:progress("Lendo executável do jogo",0,1)
         sl=disc.get(sl_names[0])
-        if progress:progress("Lendo tabelas necessárias do WA_MRG",0,1)
+        if progress:progress("Lendo WA_MRG completo para localizar RANK",0,1)
         wa_size=disc.files[wa_names[0]][1]
         if wa_size>96*1024*1024:
             raise ValueError('WA_MRG maior que 96 MiB: análise interrompida por segurança')
-        wa=disc.get(wa_names[0]) if with_art else disc.get(wa_names[0],limit_bytes=wa_required)
+        if wa_size<wa_required:
+            raise ValueError('WA_MRG muito curto: tabelas de drops/ranqueamento incompletas')
+        # O RANK pode estar deslocado em outros mods. Sem a leitura integral,
+        # um scan sem artes ignorava os últimos 216 bytes do bloco conhecido
+        # e nunca conseguiria identificar tabelas realocadas.
+        wa=disc.get(wa_names[0])
         info['executavel']=sl_names[0]
         info['hash_executavel']=hashlib.sha256(sl).hexdigest()
         info['wa_prefix_bytes']=len(wa)
         info['wa_total_bytes']=disc.files[wa_names[0]][1]
-        info['hash_wa_prefix']=hashlib.sha256(wa).hexdigest()
-        info['hash_wa']=hashlib.sha256(wa).hexdigest() if len(wa)==wa_size else None
+        wa_sha=hashlib.sha256(wa).hexdigest()
+        info['hash_wa_prefix']=wa_sha
+        info['hash_wa']=wa_sha
         info['wa_lido_integralmente']=len(wa)==wa_size
         from fm_rank_tables import extract_rank_table
         info['rank_analysis']=extract_rank_table(
