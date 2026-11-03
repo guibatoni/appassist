@@ -306,9 +306,12 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
               {chosen.descriptionSource&&<p className="mt-2 break-all text-[11px] text-muted">Fonte: {chosen.descriptionSource}</p>}
             </div>
             <div className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3">
-              <h3 className="mb-1 font-semibold text-primary">Efeito com fonte</h3>
-              <p className="text-sm text-foreground/85">{chosen.effect??"Efeito não identificado de forma verificável."}</p>
-              {chosen.effectSource&&<p className="mt-2 text-xs text-gold">Fonte: {chosen.effectSource}</p>}
+              <h3 className="mb-1 font-semibold text-primary">Texto indicativo de efeito</h3>
+              <p className="whitespace-pre-line text-sm text-foreground/85">{chosen.effect??"Nenhum efeito individual foi identificado com procedência."}</p>
+              {chosen.effect&&<p className="mt-2 text-xs text-gold">
+                Mecânica no duelo ainda não confirmada — descrição não é prova de execução.
+              </p>}
+              {chosen.effectSource&&<p className="mt-1 break-all text-xs text-muted">Fonte: {chosen.effectSource}</p>}
             </div></>:<Empty>Selecione uma carta.</Empty>}
         </aside>
       </div>
