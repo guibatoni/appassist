@@ -1,0 +1,1 @@
+DUELTRACE v0.4.12: monitor prioritario de C393FA e C39822, com revisao de estabilidade em SEM ACAO e invocacao real. Sem validacao de slots, somente leitura. Testes automatizados.
