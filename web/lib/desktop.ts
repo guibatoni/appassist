@@ -10,6 +10,10 @@ export type LocalCard = {
   attribute: string
   atk: number | null
   def: number | null
+  level?: number | null
+  attributeId?: number | null
+  guardianStar1?: number | null
+  guardianStar2?: number | null
   effect: string | null
   effectSource: string | null
   description?: string | null
