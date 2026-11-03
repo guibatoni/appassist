@@ -72,7 +72,7 @@ class DiscMetadataTests(unittest.TestCase):
         tagged=effect_hint_from_description("<Effect> Attack again.")
         self.assertEqual(tagged["effect_hint_trigger"],"effect")
         self.assertFalse(tagged["effect_hint_verified_in_game"])
-        self.assertIn("nao_validacao",tagged["effect_hint_source"].replace("sem_validacao_de_execucao","nao_validacao"))
+        self.assertEqual(tagged["effect_hint_source"],"texto_descritivo_SLUS_sem_validacao_de_execucao")
         self.assertIsNone(effect_hint_from_description("A strong monster."))
         self.assertIsNone(effect_hint_from_description("Destroy a monster."))
         self.assertIsNone(effect_hint_from_description("x"*401))
