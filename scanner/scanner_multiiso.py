@@ -21,7 +21,7 @@ WA_CARD_SECTOR_START=722
 WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
-ART_PARSER_REVISION=3  # arte grande + miniatura 40x32 + moldura autêntica + texto de SLUS
+ART_PARSER_REVISION=4  # extração completa com proveniência de drops e arte por ID
 
 
 def sha256(path:Path, progress=None):
