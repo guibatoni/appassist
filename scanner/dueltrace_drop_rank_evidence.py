@@ -16,7 +16,9 @@ MAX_OBSERVATIONS=500
 def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
     empty={"status":"unavailable","observations":0,"usable":0,"ambiguous":0,
            "inconsistent":0,"rankMappings":{},"suspectedMappings":{},
-           "mismatches":[],"note":"As tabelas e os RANKs ainda não foram correlacionados com duelos reais."}
+           "mismatches":[],"scoreComparisons":{"compared":0,"exact":0,"different":0,
+                      "status":"sem_comparacao_independente"},
+           "note":"As tabelas e os RANKs ainda não foram correlacionados com duelos reais."}
     if not isinstance(profile,dict):
         return empty
     from dueltrace_drops import get_drop_catalog
@@ -35,6 +37,8 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
     candidate=defaultdict(list)
     conflicts=[]
     ambiguous=0
+    score_compared=0
+    score_exact=0
     known=bool(catalog.get("rankLabelsVerified"))
     for row in obs:
         if not isinstance(row,dict) or row.get("rom_sha256")!=profile.get("rom_sha256"):
@@ -48,6 +52,14 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
         if duel in unique:
             continue
         unique.add(duel)
+        snap=row.get("rank_snapshot")
+        points=row.get("observed_points")
+        if (row.get("victory_type")=="lp" and type(points) is int
+                and isinstance(snap,dict) and type(snap.get("projected_score")) is int
+                and type(snap.get("projected_rank")) is str):
+            score_compared+=1
+            if snap["projected_score"]==points and snap["projected_rank"]==label:
+                score_exact+=1
         possible=[g for g in groups if cid in by_opp[oid][g]]
         if not possible:
             conflicts.append({"duelId":duel,"rank":label,
@@ -89,6 +101,14 @@ def rank_drop_report(profile: dict | None, observations: list | None) -> dict:
                          for x in LABELS} if known else {}),
         "suspectedMappings":({} if known else inferred),
         "mismatches":conflicts[:20],
+        "scoreComparisons":{
+            "compared":score_compared,"exact":score_exact,
+            "different":score_compared-score_exact,
+            "status":("duelos_coerentes_sem_prova_mips"
+                      if score_compared>=2 and score_compared==score_exact else
+                      "divergencia_modelo" if score_compared>score_exact else
+                      "amostra_insuficiente"),
+        },
         "note":("Mapeamentos sugeridos por registros fornecidos pelo jogador "
                 "não substituem confirmação por rastros MIPS e resultados "
                 "capturados no ePSXe. Pesos WA são verificados independentemente."),
