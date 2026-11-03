@@ -188,6 +188,7 @@ export type UpdateCheck = {
 export interface DesktopAPI {
   check_updates(): Promise<UpdateCheck>
   open_updates_page(runId?: number): Promise<{opened: boolean}>
+  install_signed_update(): Promise<{started: boolean; status: string; version?: string}>
   get_state(): Promise<DesktopState>
   get_hand(): Promise<HandState>
   get_rank(): Promise<RankState>
@@ -204,6 +205,7 @@ export interface DesktopAPI {
 interface ProtectedNativeAPI {
   check_updates(token: string): Promise<UpdateCheck>
   open_updates_page(token: string, runId?: number): Promise<{opened: boolean}>
+  install_signed_update(token: string): Promise<{started: boolean; status: string; version?: string}>
   get_state(token: string): Promise<DesktopState>
   get_hand(token: string): Promise<HandState>
   get_rank(token: string): Promise<RankState>
@@ -234,6 +236,7 @@ export function desktopApi(): DesktopAPI | null {
   return {
     check_updates: () => native.check_updates(token),
     open_updates_page: (runId) => native.open_updates_page(token, runId),
+    install_signed_update: () => native.install_signed_update(token),
     get_state: () => native.get_state(token),
     get_hand: () => native.get_hand(token),
     get_rank: () => native.get_rank(token),
