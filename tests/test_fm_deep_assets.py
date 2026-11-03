@@ -130,9 +130,9 @@ class WAAssetTests(unittest.TestCase):
             self.assertEqual([x["frame_selected_by"] for x in manifest["records"]],
                              ["SLUS.type_id","SLUS.type_id"])
             from PIL import Image
-            with Image.open(Path(temp)/"cartas_com_moldura"/"001.png") as a, \\
-                 Image.open(Path(temp)/"cartas_com_moldura"/"002.png") as b:
-                self.assertNotEqual(a.getpixel((1,0)),b.getpixel((1,0)))
+            with Image.open(Path(temp)/"cartas_com_moldura"/"001.png") as a:
+                with Image.open(Path(temp)/"cartas_com_moldura"/"002.png") as b:
+                    self.assertNotEqual(a.getpixel((1,0)),b.getpixel((1,0)))
 
     def test_mismatched_duplicate_does_not_invalidate_real_assets(self):
         wa=bytearray(synthetic_wa())
