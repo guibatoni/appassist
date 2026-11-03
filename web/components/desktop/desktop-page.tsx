@@ -18,10 +18,22 @@ function Heading({title,subtitle}:{title:string;subtitle:string}) {
   </div>
 }
 
-function CardThumbnail({card,sha}:{card:LocalCard|null;sha:string|null}) {
+type FramePalettes = Record<string,{accent:string;source:string;wa_offset:number}>
+function frameAccent(card:LocalCard|null, palettes:FramePalettes):string|undefined {
+  if(!card)return undefined
+  const key=card.category==="Mágicas"?"magia":card.category==="Armadilhas"?"armadilha":
+    card.category==="Rituais"?"ritual":card.category==="Equipamentos"?"magia":"normal"
+  const color=palettes[key]?.accent
+  return typeof color==="string"&&/^#[0-9a-fA-F]{6}$/.test(color)?color:undefined
+}
+function CardThumbnail({card,sha,palettes={}}:{
+  card:LocalCard|null;sha:string|null;palettes?:FramePalettes
+}) {
   const [broken,setBroken]=useState(false)
   const url=card?cardArt(sha,card.id):null
-  return <div className="relative mx-auto flex aspect-[3/4] w-full max-w-32 items-center justify-center overflow-hidden rounded-lg border-2 border-gold/50 bg-gradient-to-b from-[#19466d] via-[#102449] to-[#060e23] p-2 shadow-[0_0_18px_rgb(56_200_255/0.18)]">
+  const accent=frameAccent(card,palettes)
+  return <div style={accent?{borderColor:accent,boxShadow:"0 0 15px "+accent+"55"}:undefined}
+    className="relative mx-auto flex aspect-[3/4] w-full max-w-32 items-center justify-center overflow-hidden rounded-lg border-2 border-gold/50 bg-gradient-to-b from-[#19466d] via-[#102449] to-[#060e23] p-2 shadow-[0_0_18px_rgb(56_200_255/0.18)]">
     {url&&!broken?<Image src={url} alt={card?.name??""} fill unoptimized sizes="160px" className="object-contain" onError={()=>setBroken(true)}/>:
       <Layers className="size-9 text-primary/45" aria-label="Imagem não extraída"/>}
     {card&&<span className="absolute left-1 top-1 rounded bg-black/70 px-1 text-[10px] text-gold">#{card.id}</span>}
@@ -107,7 +119,7 @@ function RankPanel({sha}:{sha:string|null}) {
   </section>
 }
 
-function Home({sha}:{sha:string|null}) {
+function Home({sha,palettes}:{sha:string|null;palettes:FramePalettes}) {
   const [hand,setHand]=useState<HandState|null>(null)
   const [mode,setMode]=useState<"pairs"|"chains">("pairs")
   useEffect(()=>{
@@ -137,7 +149,7 @@ function Home({sha}:{sha:string|null}) {
           const card=hand?.ready?hand.hand[slot]??null:null
           return <div key={slot} className="rounded-lg border border-line bg-gradient-to-b from-panel-strong to-background p-2.5">
             <p className="mb-2 text-center text-xs text-gold">SLOT {slot+1}</p>
-            <CardThumbnail key={String(sha)+"-"+String(card?.id??"empty")} card={card} sha={sha}/>
+            <CardThumbnail key={String(sha)+"-"+String(card?.id??"empty")} card={card} sha={sha} palettes={palettes}/>
             <p className="mt-2 min-h-9 text-center text-xs font-semibold text-white">{card?.name??"Aguardando carta"}</p>
             <p className="text-center text-[11px] text-primary">ATK {card?.atk??"—"} · DEF {card?.def??"—"}</p>
           </div>
@@ -222,7 +234,7 @@ function Mods({mods,sha,onRefresh,configured}:{
   </>
 }
 
-function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
+function Library({cards,sha,palettes}:{cards:LocalCard[];sha:string|null;palettes:FramePalettes}) {
   const [search,setSearch]=useState("")
   const [sort,setSort]=useState<"id"|"atk"|"name">("id")
   const [page,setPage]=useState(0)
@@ -255,7 +267,7 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
             {visible.slice(page*32,(page+1)*32).map(card=><button type="button" key={card.id}
               className={"rounded-lg border p-2 text-center transition hover:border-primary "+(chosen?.id===card.id?"border-primary bg-primary/10":"border-line/70 bg-panel-strong/60")}
               onClick={()=>setSelectedId(card.id)}>
-              <CardThumbnail key={String(sha)+"-"+card.id} card={card} sha={sha}/>
+              <CardThumbnail key={String(sha)+"-"+card.id} card={card} sha={sha} palettes={palettes}/>
               <p className="mt-2 min-h-9 text-xs font-semibold text-white">{card.name}</p>
               <p className="text-[11px] text-primary">ATK {card.atk??"—"} · DEF {card.def??"—"}</p>
             </button>)}
@@ -269,10 +281,17 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
         </div>
         <aside className="rounded-xl border border-gold/40 bg-gradient-to-b from-[#142b50] to-background p-4">
           {chosen?<><h2 className="font-display text-xl font-semibold text-gold">#{chosen.id} {chosen.name}</h2>
-            <div className="my-4"><CardThumbnail key={String(sha)+"-"+chosen.id} card={chosen} sha={sha}/></div>
+            <div className="my-4"><CardThumbnail key={String(sha)+"-"+chosen.id} card={chosen} sha={sha} palettes={palettes}/></div>
             <p className="text-sm text-primary">ATK {chosen.atk??"—"} · DEF {chosen.def??"—"}</p>
             <p className="mt-2 text-sm text-muted">Tipo: {chosen.type||"Não identificado"}</p>
             <p className="text-sm text-muted">Categoria: {chosen.category}</p>
+            <div className="mt-4 rounded-lg border border-gold/30 bg-background/60 p-3">
+              <h3 className="mb-1 font-semibold text-gold">Descrição da carta</h3>
+              <p className="whitespace-pre-line text-sm text-foreground/85">
+                {chosen.description??"Descrição ainda não reconhecida no SLUS desta ISO."}
+              </p>
+              {chosen.descriptionSource&&<p className="mt-2 text-xs text-muted">Origem: {chosen.descriptionSource}</p>}
+            </div>
             <div className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3">
               <h3 className="mb-1 font-semibold text-primary">Efeito com fonte</h3>
               <p className="text-sm text-foreground/85">{chosen.effect??"Efeito não identificado de forma verificável."}</p>
@@ -284,8 +303,8 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
   </>
 }
 
-function FusionIllustration({id,name,sha,card,role}:{
-  id:number;name:string;sha:string|null;card:LocalCard|null;role:string
+function FusionIllustration({id,name,sha,card,role,palettes}:{
+  id:number;name:string;sha:string|null;card:LocalCard|null;role:string;palettes:FramePalettes
 }) {
   const displayed:LocalCard=card??{
     id,name,type:"",attribute:"",category:"Não identificada",
@@ -294,14 +313,14 @@ function FusionIllustration({id,name,sha,card,role}:{
   return <div className="flex min-w-0 flex-col items-center gap-1.5" title={name}>
     <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{role}</span>
     <div className="w-16 sm:w-20">
-      <CardThumbnail key={String(sha)+"-"+id} card={displayed} sha={sha}/>
+      <CardThumbnail key={String(sha)+"-"+id} card={displayed} sha={sha} palettes={palettes}/>
     </div>
     <span className="text-center text-[11px] font-semibold text-gold">#{id}</span>
     <span className="line-clamp-2 min-h-8 break-words text-center text-xs font-medium text-foreground">{name}</span>
   </div>
 }
 
-function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
+function Fusions({sha,cards,palettes}:{sha:string|null;cards:LocalCard[];palettes:FramePalettes}) {
   const [query,setQuery]=useState("")
   const [offset,setOffset]=useState(0)
   const [records,setRecords]=useState<FusionPage|null>(null)
@@ -337,11 +356,11 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         {records?.rows.map((r,i)=><article key={r.a+"-"+r.b+"-"+r.result+"-"+i}
           className="rounded-xl border border-line/80 bg-gradient-to-br from-panel-strong/90 via-[#0b1a35] to-background p-3 shadow-[inset_0_1px_0_rgb(245_184_61/0.09)] transition-colors hover:border-primary/60">
           <div className="grid grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)_24px_minmax(0,1fr)] items-start gap-1">
-            <FusionIllustration id={r.a} name={r.nameA} card={cardsById.get(r.a)??null} sha={sha} role="Material A"/>
+            <FusionIllustration id={r.a} name={r.nameA} card={cardsById.get(r.a)??null} sha={sha} role="Material A" palettes={palettes}/>
             <span className="pt-14 text-center font-display text-xl font-bold text-primary" aria-hidden>+</span>
-            <FusionIllustration id={r.b} name={r.nameB} card={cardsById.get(r.b)??null} sha={sha} role="Material B"/>
+            <FusionIllustration id={r.b} name={r.nameB} card={cardsById.get(r.b)??null} sha={sha} role="Material B" palettes={palettes}/>
             <span className="pt-14 text-center font-display text-xl font-bold text-gold" aria-hidden>→</span>
-            <FusionIllustration id={r.result} name={r.nameResult} card={cardsById.get(r.result)??null} sha={sha} role="Resultado"/>
+            <FusionIllustration id={r.result} name={r.nameResult} card={cardsById.get(r.result)??null} sha={sha} role="Resultado" palettes={palettes}/>
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/50 pt-2">
             <span className="text-xs text-muted">{sourceLabel(r.source)}</span>
@@ -384,9 +403,9 @@ export function DesktopPage({page}:{page:Page}) {
     </div>
     {error&&<p className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm text-gold" role="status">{error}</p>}
     {loading&&<p className="text-sm text-muted">Carregando dados locais...</p>}
-    {page==="inicio"&&<Home sha={state?.activeSha??null}/>}
+    {page==="inicio"&&<Home sha={state?.activeSha??null} palettes={state?.framePalettes??{}}/>}
     {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>}
-    {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}
-    {page==="fusoes"&&<Fusions sha={state?.activeSha??null} cards={state?.cards??[]}/>}
+    {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]} palettes={state?.framePalettes??{}}/>}
+    {page==="fusoes"&&<Fusions sha={state?.activeSha??null} cards={state?.cards??[]} palettes={state?.framePalettes??{}}/>}
   </div>
 }
