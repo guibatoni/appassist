@@ -67,9 +67,12 @@ class ModAutopilot:
     def __init__(self, catalog: ModCatalog):
         self.catalog=catalog
 
-    def analyze_file(self, image: Path, progress=None) -> dict:
-        """Determinístico e local; pode ser executado fora da thread Tk."""
-        entry=self.catalog.analyse(image, progress=progress)
+    def analyze_file(self, image: Path, progress=None, *, with_art=False) -> dict:
+        """Determinístico e local; artes locais opcionais quando o parser suportar."""
+        if with_art:
+            entry=self.catalog.analyse(image, with_art=True, progress=progress)
+        else:
+            entry=self.catalog.analyse(image, progress=progress)
         return profile_summary(entry,self.catalog.profile_for(entry))
 
     def analyze_folder(self, folder: Path, callback=None, *, recursive=False) -> list[dict]:
