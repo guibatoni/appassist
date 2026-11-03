@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import queue
 import threading
+import subprocess
+import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk, filedialog, messagebox
@@ -56,6 +58,7 @@ class DueltraceDesktop(tk.Tk):
         self.page_frame=None
         self._buttons={}
         self._legacy_window=None
+        self._legacy_process=None
         self._build_shell()
         self.go("inicio")
         self.after(140,self._poll_events)
@@ -215,7 +218,9 @@ class DueltraceDesktop(tk.Tk):
                             "exigem investigação antes da ativação.",
                        color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(0,10))
         self._action(left,"Ativar ou trocar mod",lambda:self.go("mods"),
-                     accent=GOLD,width=198).pack(anchor="w",pady=(2,12))
+                     accent=GOLD,width=198).pack(anchor="w",pady=(2,8))
+        self._action(left,"Abrir Assistente Clássico",self.open_legacy,
+                     width=215).pack(anchor="w",pady=(0,10))
         text_label(left,f"MODS CADASTRADOS  {len(entries)}",color=MUTED,
                    size=10,bg=PANEL).pack(anchor="w",pady=3)
         text_label(left,f"PERFIS VALIDADOS  {sum(e.get('level')=='conhecido_validado' for e in entries)}",
@@ -473,7 +478,9 @@ class DueltraceDesktop(tk.Tk):
                          "O reconhecimento de cartas no campo não foi validado.",
                    color=TEXT,size=11,bg=PANEL).pack(anchor="w",pady=(10,15))
         self._action(panel,"Abrir diagnóstico avançado",self.open_advanced,
-                     accent=GOLD,width=247).pack(anchor="w")
+                     accent=GOLD,width=247).pack(anchor="w",pady=(0,8))
+        self._action(panel,"Abrir Assistente Clássico",self.open_legacy,
+                     width=247).pack(anchor="w")
         text_label(root,"Nenhuma barra de utilização ou porcentagem de confiança "
                         "é exibida sem medição real.",color=MUTED,size=10).pack(anchor="w",pady=18)
 
@@ -614,6 +621,28 @@ class DueltraceDesktop(tk.Tk):
             "O perfil foi enviado ao DUELTRACE. "
             "Isso não inicia o ePSXe nem confirma qual ISO ele está executando.",
             parent=self)
+
+    def open_legacy(self):
+        """Executa o assistente antigo em outro processo, sem alterar seus dados."""
+        script=Path(__file__).resolve().parent.parent / "assistente_x15.py"
+        if not script.is_file():
+            messagebox.showwarning(
+                "Assistente clássico indisponível",
+                "Não foi possível localizar assistente_x15.py na pasta app.",
+                parent=self)
+            return
+        if self._legacy_process is not None and self._legacy_process.poll() is None:
+            self.status.set("O Assistente Clássico já está em execução.")
+            return
+        try:
+            self._legacy_process=subprocess.Popen(
+                [sys.executable, str(script), "--legacy"],
+                cwd=str(script.parent))
+        except OSError as exc:
+            messagebox.showerror("Falha ao abrir o Assistente Clássico",
+                                 str(exc), parent=self)
+            return
+        self.status.set("Assistente Clássico iniciado em uma janela separada.")
 
     def open_advanced(self):
         if self._legacy_window and self._legacy_window.winfo_exists():
