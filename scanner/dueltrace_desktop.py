@@ -19,6 +19,7 @@ from auto_mods import ModCatalog, atomic_json, load_json
 from card_catalog import CARD_CATEGORIES
 from mod_autopilot import ModAutopilot, profile_summary, discover_images
 from dueltrace_intelligence import MultiModIntelligence
+from dueltrace_diagnostics import art_diagnostic, mod_diagnostic, format_diagnostic
 from ia_local import DEFAULT_MODEL
 from integracao_overlay import overlay_snapshot
 from dueltrace_brand import apply_window_icon
@@ -42,7 +43,7 @@ USER_PAGES=tuple(p for p in PAGES if p[1] in ("inicio","mods","cartas","fusoes")
 class DueltraceDesktop(tk.Tk):
     def __init__(self, *, catalog=None, developer=False):
         super().__init__()
-        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.0")
+        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.1")
         self.geometry("1360x780")
         self.minsize(1100,690)
         self.configure(background=BACKGROUND)
@@ -278,6 +279,7 @@ class DueltraceDesktop(tk.Tk):
         self._action(toolbar,"Escanear pasta",self.choose_folder).pack(side="left",padx=(0,9))
         self._action(toolbar,"Reanalisar pasta",self.scan_folder).pack(side="left")
         self._action(toolbar,"Ativar perfil",self.activate_selected,accent=GREEN).pack(side="right")
+        self._action(toolbar,"Ver diagnóstico",self.show_mod_diagnostic,width=154).pack(side="right",padx=(0,10))
         automation=Panel(root)
         automation.pack(fill="x",pady=(0,12))
         left=tk.Frame(automation,background=PANEL)
@@ -330,13 +332,57 @@ class DueltraceDesktop(tk.Tk):
         entry,profile=self._profile()
         if not entry or not profile:return
         summary=profile_summary(entry,profile)
-        counts=summary["categories"]
-        parts=[f"{k}: {v}" for k,v in counts.items() if v]
-        text=(f"SHA: {entry['sha256'][:16]}…  •  "
-              f"Categorias: {', '.join(parts) or 'não identificadas'}  •  "
-              f"Efeitos: {summary['effect_source']}  •  "
-              f"{'REVISÃO NECESSÁRIA' if summary['requires_review'] else 'PERFIL CONHECIDO'}")
+        status=self.last_intelligence.get(entry["sha256"],{})
+        diagnostic=mod_diagnostic(entry,profile,intelligence=status)
+        art=diagnostic["art"]
+        count=art["count"]
+        art_label=(f"{count}/722" if count is not None else art["state"])
+        text=(f"Cartas: {summary['cards_total']} · "
+              f"Drops: {diagnostic['drop_entries']} entradas · "
+              f"Artes: {art_label} · "
+              f"Efeitos: {summary['effect_count']} · "
+              f"Fusões: {summary['fusion_count']} · "
+              f"Revisão: {'sim' if summary['requires_review'] else 'não'}")
         self.mod_info.configure(text=text)
+        self.intelligence_note.set(
+            f"Mod selecionado: {entry.get('file_name','')} · Artes: {art_label} · "
+            f"Ollama: {diagnostic['ai']}")
+
+    def show_mod_diagnostic(self):
+        """Exibe diagnóstico do mod selecionado; sem caminhos privados ou ROM."""
+        entry,profile=self._profile()
+        if not entry:
+            messagebox.showinfo("Diagnóstico de mod",
+                                "Selecione uma ISO/BIN na lista.",parent=self)
+            return
+        diagnostic=mod_diagnostic(
+            entry,profile,intelligence=self.last_intelligence.get(entry["sha256"]))
+        body=format_diagnostic(diagnostic)
+        window=tk.Toplevel(self)
+        window.title("DUELTRACE · Diagnóstico de mod")
+        window.geometry("690x620")
+        window.minsize(560,420)
+        window.configure(background=BACKGROUND)
+        frame=Panel(window)
+        frame.pack(fill="both",expand=True,padx=17,pady=15)
+        text_label(frame,"DIAGNÓSTICO DO MOD",color=BLUE,size=16,
+                   strong=True,bg=PANEL).pack(anchor="w",pady=(0,10))
+        content=tk.Text(frame,wrap="word",background=PANEL_ALT,
+                        foreground=TEXT,insertbackground=TEXT,relief="flat",
+                        font=("Consolas",10),padx=12,pady=12)
+        content.pack(fill="both",expand=True)
+        content.insert("1.0",body)
+        content.configure(state="disabled")
+        commands=tk.Frame(frame,background=PANEL)
+        commands.pack(fill="x",pady=(12,0))
+        def copy_text():
+            window.clipboard_clear()
+            window.clipboard_append(body)
+            self.status.set("Diagnóstico copiado. Nenhum caminho privado incluído.")
+        self._action(commands,"Copiar diagnóstico",copy_text,
+                     width=190).pack(side="left")
+        self._action(commands,"Fechar",window.destroy,
+                     width=100).pack(side="right")
 
     def _page_cartas(self,page):
         root=tk.Frame(page,background=BACKGROUND)
@@ -652,7 +698,7 @@ class DueltraceDesktop(tk.Tk):
                     self.status.set(event.get("message","Analisando evidências…"))
                 elif kind=="intelligence_done":
                     info=event.get("result",{})
-                    self.last_intelligence[event.get("file","")]=info
+                    self.last_intelligence[info.get("sha256") or event.get("file","")]=info
                     ai=info.get("ai","não_iniciada")
                     overview=info.get("inventory",{})
                     self.intelligence_note.set(
@@ -661,6 +707,8 @@ class DueltraceDesktop(tk.Tk):
                         f"Ollama: {ai}")
                     self.status.set("Investigação local concluída: "+
                                     event.get("file",""))
+                    if hasattr(self,"mod_tree") and self.mod_tree.winfo_exists():
+                        self._on_select_mod()
                 elif kind=="error":
                     self.status.set("Análise incompleta: "+event.get("message","Erro"))
                 elif kind=="finished":
