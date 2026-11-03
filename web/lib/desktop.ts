@@ -158,6 +158,8 @@ export type MipsTraceResult = {
   available?: boolean
   status: string
   records?: number
+  correlatedDuels?: number
+  duel_id?: string | null
   record_id?: string
   executionEvidence?: boolean
   rankRoutineConfirmed?: boolean
@@ -171,6 +173,7 @@ export type MipsTraceResult = {
 export type DuelEvidence = {
   status: string
   observations: number
+  lastDuelId: string | null
   usable: number
   ambiguous: number
   inconsistent: number
@@ -240,7 +243,7 @@ export interface DesktopAPI {
   get_fusions(query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
   get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<DropsPage>
   get_rank_trace_status(): Promise<MipsTraceResult>
-  import_rank_trace(): Promise<MipsTraceResult>
+  import_rank_trace(duelId?: string | null): Promise<MipsTraceResult>
   get_duel_evidence(): Promise<DuelEvidence>
   record_duel_result(opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string): Promise<DuelEvidence>
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
@@ -261,7 +264,7 @@ interface ProtectedNativeAPI {
   get_fusions(token: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
   get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<DropsPage>
   get_rank_trace_status(token: string): Promise<MipsTraceResult>
-  import_rank_trace(token: string): Promise<MipsTraceResult>
+  import_rank_trace(token: string, duelId?: string | null): Promise<MipsTraceResult>
   get_duel_evidence(token: string): Promise<DuelEvidence>
   record_duel_result(token: string, opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string): Promise<DuelEvidence>
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
@@ -296,7 +299,7 @@ export function desktopApi(): DesktopAPI | null {
     get_fusions: (query, offset, limit, sort, cardType) => native.get_fusions(token, query, offset, limit, sort, cardType),
     get_drops: (opponentId, group, query, offset, limit, sort, cardType) => native.get_drops(token, opponentId, group, query, offset, limit, sort, cardType),
     get_rank_trace_status: () => native.get_rank_trace_status(token),
-    import_rank_trace: () => native.import_rank_trace(token),
+    import_rank_trace: (duelId) => native.import_rank_trace(token, duelId),
     get_duel_evidence: () => native.get_duel_evidence(token),
     record_duel_result: (opponentId, observedRank, cardId, observedPoints, victoryType) =>
       native.record_duel_result(token, opponentId, observedRank, cardId, observedPoints, victoryType),
