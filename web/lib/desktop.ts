@@ -110,6 +110,8 @@ export type FusionRow = {
   nameB: string
   nameResult: string
   atk: number | null
+  def: number | null
+  type: string
   source: string
 }
 
@@ -121,6 +123,7 @@ export type DropRow = {
   group: string
   cardId: number
   cardName: string
+  cardType: string
   category: string
   atk: number | null
   def: number | null
@@ -158,6 +161,7 @@ export type DropsPage = {
   rows: DropRow[]
   opponents: Array<{id:number; name:string}>
   groups: string[]
+  cardTypes: string[]
   rankLabelsVerified: boolean
   weightTotal: number
   source: string
@@ -205,8 +209,8 @@ export interface DesktopAPI {
   get_hand(): Promise<HandState>
   get_rank(): Promise<RankState>
   confirm_rank_lp(lifePoints: number): Promise<RankState>
-  get_fusions(query: string, offset: number, limit: number): Promise<FusionPage>
-  get_drops(opponentId: number, group: string, query: string, offset: number, limit: number): Promise<DropsPage>
+  get_fusions(query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
+  get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<DropsPage>
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(sha: string): Promise<DeepScanResult>
   import_iso(): Promise<{cancelled: boolean; investigation?: string}>
@@ -222,8 +226,8 @@ interface ProtectedNativeAPI {
   get_hand(token: string): Promise<HandState>
   get_rank(token: string): Promise<RankState>
   confirm_rank_lp(token: string, lifePoints: number): Promise<RankState>
-  get_fusions(token: string, query: string, offset: number, limit: number): Promise<FusionPage>
-  get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number): Promise<DropsPage>
+  get_fusions(token: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
+  get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<DropsPage>
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(token: string, sha: string): Promise<DeepScanResult>
   import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
@@ -253,8 +257,8 @@ export function desktopApi(): DesktopAPI | null {
     get_hand: () => native.get_hand(token),
     get_rank: () => native.get_rank(token),
     confirm_rank_lp: (lifePoints) => native.confirm_rank_lp(token, lifePoints),
-    get_fusions: (query, offset, limit) => native.get_fusions(token, query, offset, limit),
-    get_drops: (opponentId, group, query, offset, limit) => native.get_drops(token, opponentId, group, query, offset, limit),
+    get_fusions: (query, offset, limit, sort, cardType) => native.get_fusions(token, query, offset, limit, sort, cardType),
+    get_drops: (opponentId, group, query, offset, limit, sort, cardType) => native.get_drops(token, opponentId, group, query, offset, limit, sort, cardType),
     activate_mod: (sha, acknowledge) => native.activate_mod(token, sha, acknowledge),
     scan_sources: (sha) => native.scan_sources(token, sha),
     import_iso: () => native.import_iso(token),
