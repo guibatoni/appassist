@@ -171,8 +171,8 @@ def extract_rank_table(wa: bytes, *, slus: bytes | None = None,
         "available": True,
         "structure_verified": True,
         "binary_verified": known_binary,
-        # Mantido por compatibilidade com perfis v0.7.5; não é prova de duelo real.
-        "runtime_verified": known_binary,
+        # Assinaturas confirmam arquivos, não resultados executados no ePSXe.
+        "runtime_verified": False,
         "table_sha256": table_sha,
         "table_count": BLOCK_COUNT,
         "identical_copies": BLOCK_COUNT,
