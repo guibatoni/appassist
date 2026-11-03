@@ -17,9 +17,11 @@ from urllib.request import Request, urlopen
 from auto_mods import ModCatalog, atomic_json, load_json
 from ia_local import DEFAULT_MODEL, analyse_with_local_ai, save_suggestion, minimal_evidence
 from investigador_iso import investigate
+from fusion_autopromote import import_structural_fusions
+from effects_audit import audit_effect_sources
 
 MODEL_LIST_URL = "http://127.0.0.1:11434/api/tags"
-REPORT_SCHEMA = 2
+REPORT_SCHEMA = 3
 MAX_FILE_RECORDS = 80
 
 
@@ -146,6 +148,8 @@ class MultiModIntelligence:
         sha = entry["sha256"]
         work_dir = self.catalog.home / "investigacoes"
         report_path = work_dir / f"{sha}.json"
+        fusion_path = work_dir / f"{sha}.fusoes.json"
+        effects_path = work_dir / f"{sha}.efeitos-auditoria.json"
         cached = load_json(report_path, {})
         profile_digest = local_report_fingerprint(entry, profile)
         if (cached.get("hash_rom") == sha and
@@ -158,7 +162,7 @@ class MultiModIntelligence:
                 emit({"event": "intelligence", "message": "Investigando evidências do mod…"})
             # Pode falhar para mods não reconhecidos. Não suspende o catálogo.
             try:
-                report = investigate(image, profile)
+                report = investigate(image, profile, output_path=report_path)
             except (OSError, ValueError, RuntimeError) as exc:
                 report = {
                     "file": image.name, "hash_rom": sha,
@@ -169,13 +173,33 @@ class MultiModIntelligence:
                     "candidates": {},
                 }
             report_state = "analisado"
+        fusion_status={"status":"sem_banco_validado","count":0}
+        if fusion_path.is_file():
+            try:
+                fusion_status=import_structural_fusions(self.catalog,sha)
+                profile=self.catalog.profile_for(entry) or profile
+            except (OSError, ValueError, RuntimeError) as exc:
+                fusion_status={"status":"revisao_necessaria","count":0,
+                               "reason":str(exc)[:200]}
+        audit_state={"status":"não_inspecionado","candidate_files":[]}
+        if report_state!="cache" or not effects_path.is_file():
+            try:
+                audit_state=audit_effect_sources(image,rom_sha256=sha)
+                atomic_json(effects_path,audit_state)
+            except (OSError,ValueError,RuntimeError) as exc:
+                audit_state={"status":"não_inspecionado","reason":str(exc)[:180]}
+        else:
+            audit_state=load_json(effects_path,{"status":"sem_auditoria"})
+        report["effects_audit_status"]=audit_state.get("status","sem_auditoria")
+        report["effects_audit_candidate_sources"]=len(audit_state.get("candidate_files",[]))
         report["analysis_schema"] = REPORT_SCHEMA
-        report["profile_digest"] = profile_digest
+        report["profile_digest"] = local_report_fingerprint(entry,profile)
         report["hash_rom"] = sha
         report["inventory"] = inventory_from_profile(profile)
         report["analysis_notice"] = (
-            "Ollama não valida tabelas. Candidatos não são importados "
-            "ao catálogo sem critérios independentes."
+            "Ollama não valida fusões. Somente sete bancos idênticos e "
+            "sem conflitos permitem importar receitas com status estrutural; "
+            "não equivalem a teste dentro do jogo."
         )
         atomic_json(report_path, report)
         result = {
@@ -184,6 +208,12 @@ class MultiModIntelligence:
             "report_path": str(report_path),
             "ai": "desativada",
             "inventory": report["inventory"],
+            "fusions": fusion_status,
+            "effects_audit": {
+                "status": audit_state.get("status"),
+                "candidate_sources":len(audit_state.get("candidate_files",[])),
+                "report_path":str(effects_path) if effects_path.is_file() else None,
+            },
         }
         if not use_ollama:
             return result

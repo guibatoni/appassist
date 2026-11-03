@@ -21,7 +21,7 @@ WA_CARD_SECTOR_START=722
 WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
-ART_PARSER_REVISION=1  # invalida o cache negativo após mudanças no decodificador
+ART_PARSER_REVISION=2  # revisão da validação de imagens e retry da extração
 
 
 def sha256(path:Path, progress=None):
@@ -191,8 +191,13 @@ def art_extract(wa,cards,dest):
         return 0, "Pillow indisponível: nenhuma arte exportada"
     dest.mkdir(parents=True,exist_ok=True)
     n=0
+    low_detail=0
+    seen_ids=set()
     for card in cards:
         cid=int(card['id'])
+        if not 1 <= cid <= CARD_COUNT or cid in seen_ids:
+            return n, f"ID de arte inválido ou duplicado: {cid}"
+        seen_ids.add(cid)
         base=((cid-1)*7+WA_CARD_SECTOR_START)*2048
         if base+0x2840>len(wa):
             return n, (f"Arquivo WA_MRG insuficiente para a arte ID {cid}; "
@@ -200,6 +205,8 @@ def art_extract(wa,cards,dest):
         raw_pixels=wa[base:base+0x2640]
         if len(raw_pixels)!=102*96:
             return n, f"Pixels incompletos na arte ID {cid}; exportadas {n}/{len(cards)}"
+        if len(set(raw_pixels[::37])) < 4:
+            low_detail+=1
         try:
             palette_raw=struct.unpack_from('<256H',wa,base+0x2640)
             pal=[]
@@ -212,7 +219,12 @@ def art_extract(wa,cards,dest):
             n+=1
         except (OSError,ValueError,struct.error) as exc:
             return n, f"Falha na arte ID {cid}: {type(exc).__name__}: {str(exc)[:130]}"
-    return n, f"{n}/{len(cards)} imagens exportadas no layout 8 bpp BGR555"
+    if n==CARD_COUNT and low_detail>int(n*.80):
+        return 0, ("Layout gráfico incompatível: muitas imagens uniformes; "
+                   "as figuras não serão marcadas como extraídas.")
+    return n, (f"{n}/{len(cards)} imagens exportadas e identificadas pelo ID, "
+               f"102×96 PNG, origem WA_MRG 7 setores/carta. "
+               f"Prévia visual em jogo ainda requer confirmação.")
 
 def write_csv(path,rows):
     if not rows:return
@@ -281,6 +293,8 @@ def process(path,output,with_art=False,digest=None,progress=None):
                 count,desc=art_extract(wa,cards,dest/'artes_722')
                 info['artes_extraidas']=count
                 info['artes_obs']=desc
+                info['artes_origem']="WA_MRG.MRG: 7 setores por carta, 102x96, paleta BGR555"
+                info['artes_layout_confirmado_na_versao']=info['sha256']==X15_SHA
             else:
                 info['artes_extraidas']=0
                 info['artes_obs']="O scanner não reconheceu uma tabela de cartas compatível com a extração de artes."

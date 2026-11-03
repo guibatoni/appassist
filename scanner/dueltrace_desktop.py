@@ -22,6 +22,7 @@ from mod_autopilot import ModAutopilot, profile_summary, discover_images
 from dueltrace_intelligence import MultiModIntelligence
 from dueltrace_diagnostics import art_diagnostic, mod_diagnostic, format_diagnostic
 from ia_local import DEFAULT_MODEL
+from epsxe_launcher import launch_epsxe
 from integracao_overlay import overlay_snapshot
 from dueltrace_brand import apply_window_icon, png_icon
 from dueltrace_visuals import HeroArt, QuickTile, CardArt, CategoryMeters, NAV_SYMBOLS
@@ -44,7 +45,7 @@ USER_PAGES=tuple(p for p in PAGES if p[1] in ("inicio","mods","cartas","fusoes")
 class DueltraceDesktop(tk.Tk):
     def __init__(self, *, catalog=None, developer=False):
         super().__init__()
-        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.2")
+        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.3")
         self.geometry("1360x780")
         self.minsize(1100,690)
         self.configure(background=BACKGROUND)
@@ -64,6 +65,9 @@ class DueltraceDesktop(tk.Tk):
         self.ai_enabled=tk.BooleanVar(value=settings.get("ollama_auto",True))
         self.art_enabled=tk.BooleanVar(value=settings.get("extract_local_art",True))
         self.ai_model=tk.StringVar(value=settings.get("ollama_model",DEFAULT_MODEL))
+        self.epsxe_executable=tk.StringVar(value=settings.get("epsxe_executable",""))
+        self.epsxe_autostart=tk.BooleanVar(value=settings.get("epsxe_autostart_on_activation",False))
+        self._epsxe_process=None
         self.intelligence_note=tk.StringVar(value="Análise de evidências disponível · Ollama opcional")
         self.last_intelligence={}
         self.status=tk.StringVar(value="Pronto — selecione uma ISO/BIN ou uma pasta de mods.")
@@ -160,8 +164,8 @@ class DueltraceDesktop(tk.Tk):
         button=NeonButton(parent,caption,fn,width=width,height=43,accent=accent)
         return button
 
-    def go(self,key):
-        if key==self.active_page and self.page_frame:
+    def go(self,key,*,refresh=False):
+        if key==self.active_page and self.page_frame and not refresh:
             return
         self.active_page=key
         for k,b in self._buttons.items():
@@ -374,6 +378,18 @@ class DueltraceDesktop(tk.Tk):
         tk.Label(right,textvariable=self.mod_details_ai,bg=PANEL,fg=BLUE,
                  wraplength=260,justify="left",anchor="w",
                  font=("Segoe UI",9)).pack(anchor="w")
+        text_label(right,"ePSXe  /  JOGAR",color=GOLD,
+                   strong=True,size=10,bg=PANEL).pack(anchor="w",pady=(10,4))
+        self._action(right,"Selecionar ePSXe.exe",self.configure_epsxe,
+                     width=240).pack(anchor="w",pady=(0,5))
+        self._action(right,"Iniciar mod no ePSXe",self.launch_active_game,
+                     accent=GOLD,width=240).pack(anchor="w")
+        tk.Checkbutton(right,text="Iniciar após ativar o perfil",
+                       variable=self.epsxe_autostart,
+                       command=self._save_settings,bg=PANEL,fg=TEXT,
+                       activebackground=PANEL,activeforeground=TEXT,
+                       selectcolor=PANEL_ALT,font=("Segoe UI",9)).pack(
+                           anchor="w",pady=(6,0))
         self._refresh_mods()
 
     def _refresh_mods(self):
@@ -566,34 +582,92 @@ class DueltraceDesktop(tk.Tk):
 
     def _page_fusoes(self,page):
         root=tk.Frame(page,background=BACKGROUND)
-        root.pack(fill="both",expand=True,padx=20,pady=19)
+        root.pack(fill="both",expand=True,padx=18,pady=15)
         self._label(root,"Fusões",
-                    "Receitas ligadas ao mod selecionado, sem probabilidades inventadas.")
+                    "Receitas decodificadas da ISO ativa. Proveniência visível, sem probabilidades fictícias.")
         _,profile=self._profile()
         valid=bool(profile and profile.get("supported_features",{}).get("fusions"))
-        recipes=profile.get("fusion_recipes",[]) if valid else []
-        panel=Panel(root);panel.pack(fill="both",expand=True)
-        text_label(panel,"◎   BANCO DE FUSÕES DO PERFIL",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
-        text_label(panel,"Somente receitas obtidas e autorizadas pelo mod ativo. Rotas não validadas continuam indisponíveis.",
-                   color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(7,9))
-        tree=self._table(panel,("a","b","result","origin"),
-                         (("a","Material A",120),("b","Material B",120),
-                          ("result","Resultado",120),("origin","Procedência",300)))
-        cards={c["id"]:c.get("name",str(c["id"])) for c in (profile or {}).get("cards",[])}
-        for row in recipes:
+        self.fusion_rows=list(profile.get("fusion_recipes",[])) if valid else []
+        self.fusion_names={int(c["id"]):c.get("name",str(c["id"]))
+                           for c in (profile or {}).get("cards",[]) if "id" in c}
+        self.fusion_offset=0
+        panel=Panel(root)
+        panel.pack(fill="both",expand=True)
+        text_label(panel,"◎  BANCO DE FUSÕES DO MOD",color=BLUE,
+                   size=13,strong=True,bg=PANEL).pack(anchor="w")
+        review=(profile or {}).get("fusion_review") or {}
+        origin=review.get("status") or "sem banco decodificado"
+        text_label(panel,f"Origem: {origin}. "
+                          "Extração estrutural não equivale à execução de cada receita no duelo.",
+                   color=GOLD,size=10,bg=PANEL).pack(anchor="w",pady=(5,9))
+        tools=tk.Frame(panel,background=PANEL)
+        tools.pack(fill="x",pady=(0,8))
+        text_label(tools,"Pesquisar carta, resultado ou ID:",color=TEXT,
+                   bg=PANEL).pack(side="left",padx=(0,8))
+        self.fusion_query=tk.StringVar()
+        ttk.Entry(tools,textvariable=self.fusion_query,
+                  width=32,style="DT.TEntry").pack(side="left")
+        self.fusion_count_label=text_label(tools,"",color=MUTED,bg=PANEL,size=9)
+        self.fusion_count_label.pack(side="right")
+        self.fusion_query.trace_add("write",lambda *_:self._filter_fusions())
+        self.fusion_tree=self._table(panel,("a","b","result","origin"),
+            (("a","Material A",160),("b","Material B",160),
+             ("result","Resultado",160),("origin","Procedência",260)),height=14)
+        buttons=tk.Frame(panel,background=PANEL)
+        buttons.pack(fill="x",pady=(8,2))
+        self._action(buttons,"◀ Anteriores",lambda:self._fusion_step(-1),
+                     width=135).pack(side="left",padx=(0,8))
+        self._action(buttons,"Próximas ▶",lambda:self._fusion_step(1),
+                     width=135).pack(side="left")
+        text_label(buttons,"Até 250 receitas por página. Pesquise nas receitas completas.",
+                   color=MUTED,bg=PANEL,size=9).pack(side="right",padx=5)
+        self._filter_fusions()
+
+    def _filter_fusions(self):
+        if not hasattr(self,"fusion_tree") or not self.fusion_tree.winfo_exists():
+            return
+        query=self.fusion_query.get().casefold().strip()
+        if query:
+            def matches(row):
+                try:
+                    nums=(int(row[k]) for k in ("a","b","result"))
+                    pieces=[f"{n} {self.fusion_names.get(n,'')}" for n in nums]
+                    return any(query in piece.casefold() for piece in pieces)
+                except (KeyError,TypeError,ValueError):
+                    return False
+            self._fusion_filtered=[r for r in self.fusion_rows if matches(r)]
+        else:
+            self._fusion_filtered=self.fusion_rows
+        self.fusion_offset=0
+        self._display_fusion_page()
+
+    def _fusion_step(self, delta):
+        limit=250
+        total=len(getattr(self,"_fusion_filtered",[]))
+        new=self.fusion_offset+int(delta)*limit
+        if 0<=new<total:
+            self.fusion_offset=new
+            self._display_fusion_page()
+
+    def _display_fusion_page(self):
+        tree=self.fusion_tree
+        tree.delete(*tree.get_children())
+        total=len(self._fusion_filtered)
+        first=self.fusion_offset
+        end=min(total,first+250)
+        for row in self._fusion_filtered[first:end]:
             try:
-                a,b,result=(int(row[k]) for k in ("a","b","result"))
-            except (KeyError,TypeError,ValueError):
+                a,b,r=(int(row[k]) for k in ("a","b","result"))
+            except (ValueError,KeyError,TypeError):
                 continue
-            tree.insert("","end",values=(f"#{a} {cards.get(a,'')}",
-                                                 f"#{b} {cards.get(b,'')}",
-                                                 f"#{result} {cards.get(result,'')}",
-                                                 row.get("validation","origem não informada")))
-        text_label(panel,f"{len(recipes)} receitas disponíveis no perfil. "
-                         "As hipóteses ainda não revisadas não aparecem como válidas.",
-                   color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(9,7))
-        self._action(panel,"Abrir ferramentas avançadas",self.open_advanced,
-                     accent=GOLD,width=242).pack(anchor="w")
+            label=str(row.get("validation","origem não informada"))
+            tree.insert("","end",values=(
+                f"#{a} {self.fusion_names.get(a,'')}",
+                f"#{b} {self.fusion_names.get(b,'')}",
+                f"#{r} {self.fusion_names.get(r,'')}",
+                label))
+        self.fusion_count_label.configure(
+            text=f"{first+1 if total else 0}–{end} / {total:,} receitas")
 
     def _page_overlay(self,page):
         root=tk.Frame(page,background=BACKGROUND)
@@ -681,7 +755,9 @@ class DueltraceDesktop(tk.Tk):
             "auto_scan_on_start":bool(self.auto_start.get()),
             "ollama_auto":bool(self.ai_enabled.get()),
             "extract_local_art":bool(self.art_enabled.get()),
-            "ollama_model":self.ai_model.get().strip() or DEFAULT_MODEL
+            "ollama_model":self.ai_model.get().strip() or DEFAULT_MODEL,
+            "epsxe_executable":self.epsxe_executable.get(),
+            "epsxe_autostart_on_activation":bool(self.epsxe_autostart.get())
         })
 
     def choose_folder(self):
@@ -798,10 +874,18 @@ class DueltraceDesktop(tk.Tk):
                         f"ISO: {overview.get('iso_files_indexed',0)} arquivos · "
                         f"Artes: {'extraídas' if overview.get('art_extracted') else 'indisponíveis'} · "
                         f"Ollama: {ai}")
-                    self.status.set("Investigação local concluída: "+
-                                    event.get("file",""))
+                    fusion=info.get("fusions") or {}
+                    if fusion.get("count"):
+                        self.status.set(
+                            f"Fusões importadas da ISO: {fusion['count']} receitas "
+                            f"(estrutura, sem prova de duelo).")
+                    else:
+                        self.status.set("Investigação local concluída: "+
+                                        event.get("file",""))
                     if hasattr(self,"mod_tree") and self.mod_tree.winfo_exists():
-                        self._on_select_mod()
+                        self._refresh_mods()
+                    if self.active_page=="fusoes":
+                        self.go("fusoes",refresh=True)
                 elif kind=="error":
                     self.status.set("Análise incompleta: "+event.get("message","Erro"))
                 elif kind=="finished":
@@ -828,7 +912,7 @@ class DueltraceDesktop(tk.Tk):
                 return
             if not messagebox.askyesno("Perfil parcialmente reconhecido",
                 "Este mod possui dados parciais. Somente recursos identificados "
-                "serão ativados; ranks, fusões e efeitos desconhecidos ficam "
+                "serão ativados; funções não identificadas continuam "
                 "indisponíveis. Deseja ativar este perfil mesmo assim?",
                 parent=self):
                 return
@@ -840,10 +924,58 @@ class DueltraceDesktop(tk.Tk):
             return
         self.status.set("Perfil ativo: "+entry.get("file_name",""))
         self.go("inicio")
-        messagebox.showinfo("Perfil ativado",
-            "O perfil foi enviado ao DUELTRACE. "
-            "Isso não inicia o ePSXe nem confirma qual ISO ele está executando.",
-            parent=self)
+        if self.epsxe_autostart.get():
+            self.after(100,self.launch_active_game)
+        else:
+            self.status.set("Perfil ativado. Use 'Iniciar mod no ePSXe' para jogar.")
+
+    def configure_epsxe(self):
+        """Seleciona o ePSXe existente, sem instalar nem modificar emuladores."""
+        current=self.epsxe_executable.get()
+        initial=Path(current).parent if current else Path.home()
+        picked=filedialog.askopenfilename(
+            parent=self,title="Localize o executável ePSXe.exe",
+            initialdir=str(initial),
+            filetypes=(("Executáveis Windows","*.exe"),))
+        if not picked:
+            return
+        exe=Path(picked)
+        if not exe.is_file() or exe.suffix.lower()!=".exe" or "epsxe" not in exe.stem.lower():
+            messagebox.showerror(
+                "Executável inválido","Selecione o aplicativo ePSXe.exe do Windows.",
+                parent=self)
+            return
+        self.epsxe_executable.set(str(exe.resolve()))
+        self._save_settings()
+        self.status.set("Caminho do ePSXe configurado. A ISO não será iniciada até ativar o mod.")
+
+    def launch_active_game(self):
+        """Inicia o emulador somente para o perfil selecionado e ativado."""
+        entry=self._selected_entry()
+        if not entry:
+            messagebox.showinfo("Iniciar jogo","Selecione um mod cadastrado.",
+                                parent=self)
+            return
+        if self._epsxe_process is not None and self._epsxe_process.poll() is None:
+            self.status.set("O ePSXe iniciado pelo DUELTRACE já está em execução.")
+            return
+        exe=self.epsxe_executable.get().strip()
+        if not exe:
+            messagebox.showinfo(
+                "Configurar ePSXe",
+                "Escolha o caminho do ePSXe.exe na Biblioteca de Mods antes de jogar.",
+                parent=self)
+            return
+        try:
+            self._epsxe_process=launch_epsxe(
+                self.catalog,exe,entry["sha256"])
+        except (OSError,ValueError,PermissionError) as exc:
+            messagebox.showerror("Não foi possível iniciar o ePSXe",
+                                 str(exc),parent=self)
+            return
+        self.status.set(
+            f"ePSXe iniciado com {entry.get('file_name','ISO')}. "
+            "A execução do duelo ainda precisa ser confirmada.")
 
     def open_legacy(self):
         """Executa o assistente antigo em outro processo, sem alterar seus dados."""

@@ -82,7 +82,7 @@ class PerModDiagnosticTests(unittest.TestCase):
                     "evidence":[]}
             with (
                 patch("dueltrace_intelligence.investigate",
-                      side_effect=lambda _image, p: {**report, "features": dict(p["verified"])}) as inspect,
+                      side_effect=lambda _image, p, **_kw: {**report, "features": dict(p["verified"])}) as inspect,
                 patch("dueltrace_intelligence.ollama_status",
                       return_value={"available":True,"state":"pronto"}) as status,
                 patch("dueltrace_intelligence.analyse_with_local_ai",

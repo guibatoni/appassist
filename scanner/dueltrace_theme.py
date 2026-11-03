@@ -7,6 +7,7 @@ aprovadas, sem afirmar que os mockups são componentes executáveis.
 from __future__ import annotations
 
 import tkinter as tk
+import math
 from tkinter import ttk
 
 BACKGROUND="#040B18"
@@ -134,22 +135,30 @@ class NeonButton(tk.Canvas):
         h = max(20, self.winfo_height())
         illuminated = max(self.hover, 0.9 if self.selected else 0.0)
         border = blend(BORDER, self.accent, 0.5 + illuminated * 0.5)
-        # Three-stage cyan/gold glow; corner cuts imitate metal framing.
-        self.create_rectangle(1, 1, w-2, h-2, outline=blend(SIDEBAR, self.accent,
-                              illuminated*.24), width=2)
-        self.create_polygon(5, 3, w-11, 3, w-4, 10, w-4, h-5,
-                            11, h-5, 4, h-12, fill=PANEL_ALT, outline="")
-        for y in range(5, max(h-5, 6), 2):
-            t = (y-5)/max(1,h-10)
-            color = blend(blend(PANEL_ALT,BLUE_DARK, illuminated*0.75),
-                          blend("#071326",PANEL,illuminated*.20),t)
-            self.create_line(6,y,w-7,y,fill=color,width=2)
-        # Top highlight + frame edges.
-        self.create_line(12,4,w-12,4,fill=blend(BLUE,self.accent,illuminated),width=1)
-        self.create_line(5,h-8,5,11,11,5,fill=border,width=2)
-        self.create_line(w-11,5,w-5,11,w-5,h-10,fill=border,width=2)
-        self.create_line(11,h-5,w-11,h-5,fill=border,width=2)
-        self.create_line(13,h-8,w-13,h-8,fill=blend(BLUE,self.accent,illuminated*.8))
+        # Bordas realmente arredondadas por raio em cada linha do gradiente.
+        radius=min(12,h//3)
+        x0,y0,x1,y1=4,4,w-5,h-5
+        for y in range(y0,y1+1,2):
+            t=(y-y0)/max(1,y1-y0)
+            dist=min(y-y0,y1-y)
+            inset=0 if dist>=radius else radius-math.sqrt(max(0,radius*radius-(radius-dist)**2))
+            tone=blend(blend(PANEL_ALT,BLUE_DARK,illuminated*.75),
+                       blend("#071326",PANEL,illuminated*.20),t)
+            self.create_line(x0+inset,y,x1-inset,y,fill=tone,width=2)
+        self.create_line(x0+radius,y0,x1-radius,y0,
+                         fill=blend(BLUE,self.accent,illuminated),width=2)
+        self.create_line(x0+radius,y1,x1-radius,y1,fill=border,width=2)
+        self.create_line(x0,y0+radius,x0,y1-radius,fill=border,width=2)
+        self.create_line(x1,y0+radius,x1,y1-radius,fill=border,width=2)
+        for box,start in (
+            ((x0,y0,x0+2*radius,y0+2*radius),90),
+            ((x1-2*radius,y0,x1,y0+2*radius),0),
+            ((x0,y1-2*radius,x0+2*radius,y1),180),
+            ((x1-2*radius,y1-2*radius,x1,y1),270),
+        ):
+            self.create_arc(*box,start=start,extent=90,style="arc",outline=border,width=2)
+        self.create_line(13,y0+4,w-13,y0+4,
+                         fill=blend(BLUE,self.accent,illuminated*.8),width=1)
         if self.selected:
             self.create_rectangle(5, 12, 8, h-13,fill=GOLD,outline="")
         if illuminated>0.05:
@@ -169,10 +178,10 @@ class Panel(tk.Frame):
     existentes permanecem Tk nativos, acessíveis e funcionais.
     """
     def __init__(self,parent,**kwargs):
-        super().__init__(parent,background=PANEL,highlightbackground=BORDER,
-                         highlightcolor=BLUE,highlightthickness=1,
+        parent_bg=parent.cget("background")
+        super().__init__(parent,background=parent_bg,highlightthickness=0,
                          padx=13,pady=12,**kwargs)
-        self._skin = tk.Canvas(self, background=PANEL, highlightthickness=0,
+        self._skin = tk.Canvas(self, background=parent_bg, highlightthickness=0,
                                borderwidth=0, takefocus=0)
         self._skin.place(x=0,y=0,relwidth=1,relheight=1)
         # Canvas.lower() manipula itens internos; chamar 'lower' do Tk
@@ -186,19 +195,27 @@ class Panel(tk.Frame):
         if w < 5 or h < 5:
             return
         c.delete("all")
-        for y in range(0,h,4):
-            t = y/max(h-1,1)
-            color = blend(blend(PANEL_ALT,PANEL,.48),PANEL,min(1,t*.85))
-            c.create_rectangle(0,y,w,y+4,fill=color,outline=color)
-        c.create_line(0,0,w,0,fill=blend(GOLD,BLUE,.55),width=2)
-        c.create_line(0,0,0,h,fill=blend(GOLD,BLUE,.35),width=1)
-        c.create_line(w-2,0,w-2,h,fill=BLUE_DARK,width=1)
-        c.create_line(0,h-2,w,h-2,fill=GOLD,width=1)
-        # Ornamentos laterais sem deslocar o conteúdo.
-        c.create_line(6,4,28,4,fill=GOLD,width=2)
-        c.create_line(w-28,4,w-6,4,fill=BLUE,width=2)
-        c.create_line(6,h-6,32,h-6,fill=BLUE,width=1)
-        c.create_line(w-32,h-6,w-6,h-6,fill=GOLD,width=1)
+        radius=min(17,h//5,w//6)
+        x0,y0,x1,y1=2,2,w-3,h-3
+        for y in range(y0,y1+1,3):
+            t=y/max(h-1,1)
+            color=blend(blend(PANEL_ALT,PANEL,.48),PANEL,min(1,t*.85))
+            dist=min(y-y0,y1-y)
+            inset=0 if dist>=radius else radius-math.sqrt(max(0,radius*radius-(radius-dist)**2))
+            c.create_line(x0+inset,y,x1-inset,y,fill=color,width=3)
+        c.create_line(x0+radius,y0,x1-radius,y0,fill=blend(GOLD,BLUE,.55),width=2)
+        c.create_line(x0+radius,y1,x1-radius,y1,fill=GOLD,width=2)
+        c.create_line(x0,y0+radius,x0,y1-radius,fill=blend(GOLD,BLUE,.35),width=1)
+        c.create_line(x1,y0+radius,x1,y1-radius,fill=BLUE_DARK,width=1)
+        for box,start in (
+            ((x0,y0,x0+2*radius,y0+2*radius),90),
+            ((x1-2*radius,y0,x1,y0+2*radius),0),
+            ((x0,y1-2*radius,x0+2*radius,y1),180),
+            ((x1-2*radius,y1-2*radius,x1,y1),270),
+        ):
+            c.create_arc(*box,start=start,extent=90,style="arc",outline=GOLD,width=1)
+        c.create_line(8,5,30,5,fill=GOLD,width=2)
+        c.create_line(w-30,5,w-8,5,fill=BLUE,width=2)
 
 
 def text_label(parent,label,*,color=TEXT,size=10,strong=False,bg=None):
