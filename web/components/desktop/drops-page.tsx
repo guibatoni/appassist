@@ -58,6 +58,7 @@ export function DropsPage({sha}:{sha:string|null}) {
   const [obsRank,setObsRank]=useState("Z-POW")
   const [obsCard,setObsCard]=useState("")
   const [obsPoints,setObsPoints]=useState("")
+  const [obsVictory,setObsVictory]=useState("lp")
   const [obsBusy,setObsBusy]=useState(false)
   const [obsError,setObsError]=useState<string|null>(null)
   const pageSize=36
@@ -115,7 +116,7 @@ export function DropsPage({sha}:{sha:string|null}) {
     setObsBusy(true)
     setObsError(null)
     try{
-      const report=await api.record_duel_result(obsOpponent,obsRank,id,points)
+      const report=await api.record_duel_result(obsOpponent,obsRank,id,points,obsVictory)
       setDuelEvidence(report)
       setObsCard("")
       setObsPoints("")
@@ -204,7 +205,7 @@ export function DropsPage({sha}:{sha:string|null}) {
     <section className="panel rounded-xl p-4">
       <h2 className="font-display text-xl font-semibold text-gold">Conferir drops obtidos em duelo</h2>
       <p className="mt-1 text-sm text-muted">Após o duelo, registre o RANK e o ID da carta exibidos no jogo. O DUELTRACE compara com os três bancos do oponente da ISO ativa, sem copiar dados de outros mods.</p>
-      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <label className="flex flex-col gap-1 text-xs text-muted">Oponente do duelo
           <select className="field px-3 py-2 text-sm" value={obsOpponent}
             onChange={e=>setObsOpponent(Number(e.target.value))}>
@@ -216,6 +217,14 @@ export function DropsPage({sha}:{sha:string|null}) {
           <select className="field px-3 py-2 text-sm" value={obsRank}
             onChange={e=>setObsRank(e.target.value)}>
             {["Z-POW","S-POW","S-TEC"].map(v=><option key={v} value={v}>{v}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted">Resultado do duelo
+          <select className="field px-3 py-2 text-sm" value={obsVictory}
+            onChange={e=>setObsVictory(e.target.value)}>
+            <option value="lp">Vitória por LP</option>
+            <option value="deckout">Vitória por deck-out</option>
+            <option value="other">Outro resultado</option>
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted">ID da carta recebida
@@ -239,6 +248,11 @@ export function DropsPage({sha}:{sha:string|null}) {
         {" "}{duelEvidence?.usable??0} · Ambíguas: {duelEvidence?.ambiguous??0}
         {" "}· Divergentes: {duelEvidence?.inconsistent??0}
       </div>
+      {duelEvidence?.scoreComparisons?.compared ? <p className="mt-2 text-xs text-primary">
+        Projeção de RANK × pontos mostrados: {duelEvidence.scoreComparisons.exact}
+        {" "}coerentes em {duelEvidence.scoreComparisons.compared} vitórias por LP.
+        {" "}Coerência não comprova execução da rotina MIPS.
+      </p>:null}
       {duelEvidence?.suspectedMappings&&Object.entries(duelEvidence.suspectedMappings).length>0&&
         <div className="mt-3 rounded-lg border border-gold/30 bg-background/40 p-3 text-xs text-gold">
           Correspondência sugerida por observações manuais (não comprovada pela execução MIPS):
