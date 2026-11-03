@@ -186,6 +186,7 @@ class FieldMemoryProbe:
         self.removed_sample=None
         self.vacant_control=None
         self.cancelled=False
+        self.no_action_done=False
         self.cancel_file=None
         self.report=None
         self.file=None
@@ -250,6 +251,7 @@ class FieldMemoryProbe:
         self.removed_sample=None
         self.vacant_control=None
         self.cancelled=False
+        self.no_action_done=False
         self.cancel_file=None
         self.report=None
         self.file=None
@@ -270,6 +272,8 @@ class FieldMemoryProbe:
         """
         if self.after is not None:
             raise RuntimeError("A carta já foi registrada na mesa; reinicie o diagnóstico")
+        if self.no_action_done:
+            raise RuntimeError("Controle SEM AÇÃO encerrado; clique novamente em ANTES")
         if self.cancelled:
             raise RuntimeError("Jogada cancelada; inicie outro diagnóstico pelo botão ANTES")
         if face_state not in (None,"faceup","facedown"):
@@ -295,6 +299,8 @@ class FieldMemoryProbe:
         """
         if self.before is None:
             raise RuntimeError("Primeiro capture o estado ANTES da invocação")
+        if self.no_action_done:
+            raise RuntimeError("Controle SEM AÇÃO encerrado; clique novamente em ANTES")
         if self.cancelled:
             raise RuntimeError("Invocação cancelada: inicie outro diagnóstico pelo botão ANTES")
         if (self.before["user_slot"] is not None and user_slot is not None
@@ -527,6 +533,115 @@ class FieldMemoryProbe:
             "occupancy_verified":False,
         }
 
+    def capture_no_action(self, sha: str, *, user_slot: int | None = None
+                          ) -> tuple[dict, Path]:
+        """Controle negativo realista: duas leituras SEM qualquer jogada.
+
+        O usuario garante que nao houve selecao, FaceUp/Down, turno, movimento
+        ou invocacao e que o slot permaneceu vazio. Os dados nao o verificam.
+        """
+        if self.before is None:
+            raise RuntimeError("Capture 1. ANTES antes de 2X. SEM AÇÃO")
+        if self.prepared is not None or self.after is not None or self.report is not None:
+            raise RuntimeError("Controle SEM AÇÃO exige ANTES sem PREPARADA/NA MESA")
+        if self.no_action_done or self.cancelled:
+            raise RuntimeError("Controle já encerrado; clique novamente em ANTES")
+        selected=self.before["user_slot"]
+        if selected is not None and user_slot is not None and selected!=user_slot:
+            raise ValueError("O slot mudou desde ANTES; reinicie a captura")
+        user_slot=selected if selected is not None else user_slot
+        if type(user_slot) is not int or not 1<=user_slot<=5:
+            raise ValueError("Informe o slot visual de 1 a 5")
+        sample=self._capture_same_session(sha)
+        initial=self.before["snapshot"]
+        target=self.before["target_id"]
+        a,b=initial["chunks"],sample["chunks"]
+        watch_start={item["address"]:item["u8"] for item in focus_watch_values(a)}
+        watch_finish={item["address"]:item["u8"] for item in focus_watch_values(b)}
+        changes=[
+            {
+                "address":key,"u8_before":value,
+                "u8_after":watch_finish[key],
+                "field_slot_verified":False,
+            }
+            for key,value in watch_start.items()
+            if value is not None and watch_finish[key] is not None
+            and value!=watch_finish[key]
+        ]
+        report={
+            "schema":1,
+            "type":"CONTROLE_SEM_ACAO_CAMPO_RAM",
+            "status":"CONTROLE NEGATIVO — SEM JOGADA, DECLARADO PELO USUARIO",
+            "rom_sha256_selected_manually":sample["sha"],
+            "emulator_iso_verified":False,
+            "pid":sample["pid"],
+            "reference_card_id":target,
+            "before":self._public(initial),
+            "after_no_action":self._public(sample),
+            "after_preparation":None,
+            "after_summon":None,
+            "observed_by_user":{
+                "slot_position_1_to_5":user_slot,
+                "slot_stayed_empty":True,
+                "no_game_actions_between_samples":True,
+                "card_placed_on_board":False,
+                "interpretation":"DECLARADO PELO USUARIO, NAO DETECTADO PELA RAM",
+            },
+            "hand_analysis":{
+                "target_count_before":initial["hand_ids"].count(target),
+                "target_count_after":sample["hand_ids"].count(target),
+                "hand_ids_unchanged":initial["hand_ids"]==sample["hand_ids"],
+                "proves_no_summon":False,
+            },
+            "scan":{
+                "address_start":f"0x{self.search_start:08X}",
+                "size_bytes":self.search_size,
+                "chunk_size":CHUNK_SIZE,
+                "mode":"AMPLIADA_1MIB" if self.expanded else "RESTRITA_96KIB",
+                "focused_enabled":self.focused,
+                "focused_extra_chunk":(
+                    f"0x{FOCUS_CHUNK:08X}" if self.focused and not self.expanded else None),
+                "purpose":"controle sem acao; faixa experimental limitada do mesmo ePSXe",
+            },
+            "no_action_analysis":{
+                "before_to_no_action":summarize_phase_changes(a,b),
+                "focus_before_to_no_action":focus_phase_differences(a,b),
+                "watched_changed_values":changes,
+                "field_slot_verified":False,
+                "occupancy_verified":False,
+                "note":"Comparacao de volatilidade; nao demonstra ocupacao nem cancelamento.",
+            },
+            "hypothetical_slot_probe":{
+                "before":hypothetical_slot_u16_values(a),
+                "no_action":hypothetical_slot_u16_values(b),
+                "field_slot_verified":False,
+                "does_not_confirm_occupancy":True,
+            },
+            "targeted_ram_monitor":(
+                {
+                    "before":self._focused_public(initial),
+                    "no_action":self._focused_public(sample),
+                    "field_slot_verified":False,
+                } if self.focused else None),
+            "duel_field_card_ids":None,
+            "duel_field_ram_verified":False,
+            "fusion_catalog_changed":False,
+            "notes":[
+                "Controle realizado sem invocacao, selecao ou cancelamento no jogo.",
+                "Este controle nao e equivalente a cancelar apos FaceUp/FaceDown.",
+                "A ausencia de jogadas depende da confirmacao visual do usuario.",
+                "Sem escrita RAM/ISO/ROM/saves, sem dump bruto, sem validar slots.",
+            ],
+        }
+        folder=self.home/"diagnosticos_campo"/sample["sha"]
+        folder.mkdir(parents=True,exist_ok=True)
+        path=folder/(
+            datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")+
+            "_SEM_ACAO_"+str(time.time_ns())+".json")
+        self._save(path,report)
+        self.no_action_done=True
+        return report,path
+
     def capture_cancelled(self, sha: str, *, user_slot: int | None = None
                           ) -> tuple[dict, Path]:
         """Controle NEGATIVO: preparar e cancelar SEM colocar no campo.
@@ -538,8 +653,8 @@ class FieldMemoryProbe:
             raise RuntimeError("Capture ANTES e PREPARADA antes de CANCELADA")
         if self.after is not None or self.report is not None:
             raise RuntimeError("NA MESA ja registrada: cancelamento nao permitido")
-        if self.cancelled:
-            raise RuntimeError("CANCELADA ja registrada. Inicie novo teste com ANTES")
+        if self.cancelled or self.no_action_done:
+            raise RuntimeError("Controle ja concluido. Inicie novo teste com ANTES")
         frozen_slot=self.before["user_slot"]
         if frozen_slot is not None:
             if user_slot is not None and user_slot != frozen_slot:
