@@ -121,11 +121,14 @@ def plan_fusion_chains(hand: list[int] | tuple[int, ...] | None,
         defense = _stat(cards, result, "def")
         all_manual = all(s["validation"]=="observada_manualmente_no_jogo"
                          for s in steps)
+        order = [steps[0]["slot_initial"], steps[0]["slot"]]
+        order.extend(step["slot"] for step in steps[1:])
         route = {
             "result": result,
             "result_name": str(cards.get(result,{}).get("name") or f"Carta #{result}"),
             "atk": attack, "def": defense,
             "used_slots": used,
+            "slot_order": order,
             "cards_consumed": len(used),
             "steps": [dict(s) for s in steps],
             "manual_steps": _manual_count(steps),
