@@ -204,6 +204,29 @@ class BridgeTests(unittest.TestCase):
         counters["criterion_01"]=0
         self.assertEqual(self.bridge.get_rank()["state"],"needs_lp_confirmation")
 
+    def test_identical_executable_and_rank_table_enable_other_mod_after_lp_check(self):
+        from fm_rank_tables import (
+            KNOWN_X15_SLUS_SHA256,KNOWN_X15_TABLE_SHA256,LEGACY_OFFSET,STRIDE
+        )
+        self.profile["exe_sha256"]=KNOWN_X15_SLUS_SHA256
+        self.profile["rank_points"]={
+            "available":True,"structure_verified":True,
+            "table_sha256":KNOWN_X15_TABLE_SHA256,
+            "first_offset":LEGACY_OFFSET,"repeat_stride":STRIDE,
+        }
+        atomic_json(self.profile_path,self.profile)
+        counters={"turns":1,"effective_attacks":0,"defense_wins":0,
+                  "face_down":0,"spells":0,"traps":0,
+                  "fusions":0,"equips":0,"remaining_lp":8000,"cards_used":0}
+        self.bridge._rank_reader=Mock(return_value={
+            "ready":True,"status":"Amostras estáveis","pid":1234,"counters":counters})
+        start=self.bridge.get_rank()
+        self.assertEqual(start["state"],"needs_lp_confirmation")
+        result=self.bridge.confirm_rank_lp(8000)
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["category"],"Z-POW")
+        self.assertIn("idênticos ao X15",result["status"])
+
     def test_rank_requires_lp_confirmation_and_resets_on_new_duel(self):
         sha=X15_SHA
         path=self.home/"profiles"/sha[:16]/"profile.json"
