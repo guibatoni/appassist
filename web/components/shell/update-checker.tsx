@@ -22,7 +22,7 @@ export function UpdateChecker() {
   useEffect(() => {
     let mounted = true
     let attempts = 0
-    let handle: ReturnType<typeof setTimeout> | undefined
+    let handle: number | undefined
     const probe = () => {
       if (!mounted) return
       const api = desktopApi()
