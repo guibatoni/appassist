@@ -66,7 +66,7 @@ def effect_sidecar_path(rom_path: Path) -> Path:
 
 
 def attach_effect_document(cards: list[dict], data: dict, *,
-                           rom_sha256: str, source: str):
+                           rom_sha256: str, source: str, embedded_in_iso: bool = False):
     """Valida metadados de efeitos explicitamente fornecidos por um mod.
 
     A validação do conteúdo NÃO comprova que o efeito funciona no jogo.
@@ -75,8 +75,14 @@ def attach_effect_document(cards: list[dict], data: dict, *,
         raise ValueError("SHA-256 da ISO inválido")
     if not isinstance(data, dict) or data.get("schema") != 1:
         raise ValueError("Manifesto de efeitos: schema desconhecido")
-    if str(data.get("rom_sha256", "")).lower() != rom_sha256.lower():
-        raise ValueError("Manifesto de efeitos não pertence a esta ISO (SHA divergente)")
+    # Um manifesto embutido não pode conter o SHA final da própria ISO:
+    # inserir o manifesto modifica o digest. A procedência é o contêiner
+    # já identificado pelo scanner, não um digest autorreferente.
+    if not embedded_in_iso:
+        if str(data.get("rom_sha256", "")).lower() != rom_sha256.lower():
+            raise ValueError("Manifesto de efeitos não pertence a esta ISO (SHA divergente)")
+    elif data.get("rom_sha256"):
+        raise ValueError("Manifesto embutido não deve declarar SHA autorreferente")
     records = data.get("effects")
     if not isinstance(records,list) or len(records) > max(4096,len(cards)):
         raise ValueError("Quantidade ou formato de efeitos inválido")
@@ -100,7 +106,9 @@ def attach_effect_document(cards: list[dict], data: dict, *,
             c["effect_status"]="texto_declarado_sem_validacao_de_execucao"
         out.append(c)
     return out,{"status":source,"count":len(changes),
-                "sha256_matches":True,"effects_executed_in_game_verified":False}
+                "sha256_matches":True if not embedded_in_iso else None,
+                "embedded_in_iso":bool(embedded_in_iso),
+                "effects_executed_in_game_verified":False}
 
 
 def attach_effect_manifest(cards: list[dict],path:Path,*,rom_sha256:str):
