@@ -78,6 +78,27 @@ class RankTableTests(unittest.TestCase):
         self.assertFalse(report["binary_verified"])
         self.assertEqual(report["rules"]["criterion_07"][0]["points"],15)
 
+    def test_infers_modified_duelist_block_stride(self):
+        # Um mod pode mudar a dimensão de cada registro de duelista.
+        step=8192
+        start=forensic.LEGACY_OFFSET+2
+        size=start+forensic.BLOCK_COUNT*step+2048
+        wa=bytearray(size)
+        table=reference_table()
+        for i in range(forensic.BLOCK_COUNT):
+            pos=start+i*step
+            wa[pos:pos+len(table)]=table
+        result=forensic.extract_rank_table(bytes(wa),slus=b"MOD",
+                                           rom_sha256="b"*64,
+                                           known_rom_sha256=X15_SHA)
+        self.assertTrue(result["available"])
+        self.assertEqual(result["first_offset"],start)
+        self.assertEqual(result["repeat_stride"],8192)
+        self.assertTrue(result["layout_moved"])
+        self.assertFalse(result["binary_verified"])
+        self.assertEqual(result["rules"]["criterion_01"][0],
+                         {"below":5,"points":12})
+
     def test_rejects_two_independent_valid_scoring_tables(self):
         first=sample_wa()
         second_start=forensic.LEGACY_OFFSET+(forensic.BLOCK_COUNT+4)*forensic.STRIDE
