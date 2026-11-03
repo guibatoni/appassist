@@ -358,10 +358,10 @@ class BibliotecaMods(tk.Toplevel):
                    command=self.capture_field_refresh).pack(side="left",padx=5)
         negative=ttk.Frame(field_page)
         negative.pack(fill="x",pady=(0,7))
-        ttk.Label(negative,text="Teste NEGATIVO (alternativa a 3. NA MESA):").pack(
+        ttk.Label(negative,text="Teste de controle SEM JOGADA (alternativa a PREPARADA):").pack(
             side="left",padx=(0,8))
-        ttk.Button(negative,text="3X. CANCELADA — sem invocar",
-                   command=self.capture_field_cancelled).pack(side="left")
+        ttk.Button(negative,text="2X. SEM AÇÃO (slot vazio)",
+                   command=self.capture_field_no_action).pack(side="left")
         ttk.Label(field_page,textvariable=self.field_status,
                   wraplength=960,justify="left").pack(fill="x",pady=(5,8))
         ttk.Label(field_page,text=(
@@ -374,9 +374,12 @@ class BibliotecaMods(tk.Toplevel):
             "MÃO ATUALIZADA pode ocorrer quando o turno mudar, em qualquer ordem "
             "posterior à captura NA MESA. "
             "Na região ampliada, somente o mesmo ePSXe é lido, sem dump bruto. "
-            "Teste negativo: ANTES → PREPARADA → cancelar a escolha NO JOGO "
-            "sem colocar a carta no campo → 3X CANCELADA; gera um JSON separado. "
-            "Apos CANCELADA, clique novamente em ANTES para realizar uma invocacao real. "
+            "IMPORTANTE: no jogo, a escolha FaceUp/FaceDown pode ser irreversivel. "
+            "Nao tente cancelar depois de escolher a face. "
+            "Controle SEM AÇÃO: clique 1. ANTES, nao interaja com o jogo "
+            "nem com a selecao de cartas/turno e clique 2X. SEM AÇÃO. "
+            "Isso salva um JSON separado, sem invocacao e sem PREPARADA. "
+            "Para testar a invocacao real, comece novamente por 1. ANTES. "
             "Monitor direcionado e escopo so mudam no proximo ANTES. "
             "Todos os enderecos seguem NAO VALIDADOS."
         ),wraplength=960,justify="left").pack(anchor="w")
@@ -551,8 +554,8 @@ class BibliotecaMods(tk.Toplevel):
                 f"ANTES registrada: PID {snap['pid']}; carta #{target:03d} na mão. "
                 f"{snap['readable_chunks']} blocos legíveis; "
                 f"{len(snap['unreadable_chunks'])} indisponíveis. "
-                "Prepare a carta e escolha: 3. NA MESA (invocar de verdade) OU "
-                "3X. CANCELADA (cancelar sem invocar).")
+                "Para controle sem jogada, nao toque no jogo e clique 2X. SEM AÇÃO. "
+                "Para invocação real, prepare a carta e prossiga a 3. NA MESA.")
         except Exception as exc:
             messagebox.showwarning("Investigação do campo",str(exc),parent=self)
 
@@ -571,39 +574,41 @@ class BibliotecaMods(tk.Toplevel):
             self.field_status.set(
                 f"PREPARADA registrada: {diff['changed_bytes']} bytes alterados "
                 f"na região experimental. Agora POSICIONE a carta no slot e "
-                "clique 3. NA MESA se invocar OU cancele a selecao no jogo e "
-                "clique 3X. CANCELADA. Nao use os dois caminhos na mesma captura.")
+                "avance para 3. NA MESA quando ela estiver realmente no campo. "
+                "Nao tente cancelar apos escolher FaceUp/FaceDown.")
         except Exception as exc:
             messagebox.showwarning("Investigação do campo",str(exc),parent=self)
 
-    def capture_field_cancelled(self):
-        """Controle negativo isolado de uma invocacao real."""
+    def capture_field_no_action(self):
+        """Controle negativo: o jogo permanece intacto entre as leituras."""
         try:
             sha=self._field_selected_sha()
             if not messagebox.askyesno(
-                "Teste NEGATIVO — selecao cancelada",
-                "Voce capturou 1. ANTES e 2. PREPARADA e DEPOIS CANCELOU "
-                "a selecao no jogo, sem colocar a carta em nenhum slot? "
-                "O slot escolhido continua vazio? "
-                "Nao use esta captura se a carta chegou a entrar no campo. "
-                "Esta sessao termina aqui; para invocar de verdade, "
-                "inicie outro teste em 1. ANTES.",
+                "Controle SEM AÇÃO — nenhuma jogada",
+                "Você já registrou 1. ANTES com a carta na mão e o slot vazio? "
+                "DESDE ENTÃO, manteve o jogo no mesmo estado, sem selecionar "
+                "cartas, clicar em FaceUp/FaceDown, passar o turno, atacar "
+                "ou mover nada? O slot continua vazio? "
+                "Este procedimento não envolve cancelar uma jogada. "
+                "Depois deste controle, clique novamente 1. ANTES para "
+                "uma invocação real.",
                 parent=self):
                 return
-            report,path=self.field_probe.capture_cancelled(
+            report,path=self.field_probe.capture_no_action(
                 sha,user_slot=int(self.field_slot.get()))
-            a=report["negative_control_analysis"]
+            changes=report["no_action_analysis"]
+            summary=changes["before_to_no_action"]
+            focus=changes["focus_before_to_no_action"]
             self.field_status.set(
-                f"CANCELADA (sem invocar) registrada: "
-                f"{a['prepared_changes']} bytes mudaram em PREPARADA, "
-                f"{a['restored_after_cancel']} voltaram ao estado inicial, "
-                f"{a['persisted_after_cancel']} persistiram. "
-                f"Arquivo: {path}. Para nova invocacao, clique 1. ANTES. "
-                "Nenhuma carta do campo foi detectada.")
-            self.status.set("Controle negativo de cancelamento salvo: "+str(path))
+                f"SEM AÇÃO registrado: {summary['changed_bytes']} bytes mudaram "
+                f"na leitura de controle; na região direcionada, "
+                f"{focus['changed_bytes']} bytes. "
+                f"JSON: {path}. Inicie 1. ANTES para invocar de verdade. "
+                "Nenhum slot foi validado.")
+            self.status.set("Controle negativo sem jogada salvo: "+str(path))
         except Exception as exc:
             messagebox.showwarning(
-                "Controle negativo de campo",str(exc),parent=self)
+                "Controle de leitura sem jogada",str(exc),parent=self)
 
     def capture_field_after(self):
         try:
