@@ -158,7 +158,9 @@ export function DropsPage({sha}:{sha:string|null}) {
             Cópias estruturais validadas: {rank.table_count}
             {typeof rank.first_offset==="number"&&
               <> · Offset identificado: 0x{rank.first_offset.toString(16).toUpperCase()}</>}
-            {rank.layout_moved&&" · Tabela deslocada em relação ao X15"}
+            {rank.layout_moved&&" · Layout diferente do X15"}
+            {typeof rank.repeat_stride==="number"&&
+              <> · Espaçamento: {rank.repeat_stride} bytes</>}
             {" · SHA: "}{rank.table_sha256?.slice(0,16)??"—"}…
           </p>}
         <div className="mt-4 grid gap-2 md:grid-cols-2">
