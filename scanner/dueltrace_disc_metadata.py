@@ -133,6 +133,25 @@ def extract_descriptions(exe: bytes) -> tuple[dict[int,dict],dict]:
     return result,note
 
 
+def effect_hint_from_description(text: str) -> dict | None:
+    """Reconhece um marcador textual EXPLÍCITO, não o efeito implementado.
+
+    Não usa palavras vagas como 'destroy' nem atribui efeito a monstros
+    normais por semelhança. O código de execução continua desconhecido.
+    """
+    if not isinstance(text,str) or len(text)>400:
+        return None
+    match=re.search(r"<(Effect|Flip|Summon|Draw|Combat)>",text,re.IGNORECASE)
+    if match is None:
+        return None
+    return {
+        "effect_hint_text":text,
+        "effect_hint_source":"texto_descritivo_SLUS_sem_validacao_de_execucao",
+        "effect_hint_trigger":match.group(1).lower(),
+        "effect_hint_verified_in_game":False,
+    }
+
+
 def _rgb555(word: int) -> tuple[int,int,int]:
     return ((word&31)*255//31,((word>>5)&31)*255//31,
             ((word>>10)&31)*255//31)
