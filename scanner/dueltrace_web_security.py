@@ -50,14 +50,15 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.confirm_rank_lp(life_points)
 
-    def get_fusions(self, credential, query="", offset=0, limit=100):
+    def get_fusions(self, credential, query="", offset=0, limit=100,
+                    sort="id", card_type=""):
         self._authorize(credential)
-        return self._bridge.get_fusions(query,offset,limit)
+        return self._bridge.get_fusions(query,offset,limit,sort,card_type)
 
     def get_drops(self, credential, opponent_id=0, group="", query="",
-                  offset=0, limit=36):
+                  offset=0, limit=36, sort="id", card_type=""):
         self._authorize(credential)
-        return self._bridge.get_drops(opponent_id,group,query,offset,limit)
+        return self._bridge.get_drops(opponent_id,group,query,offset,limit,sort,card_type)
 
     def activate_mod(self, credential, sha, acknowledge=False):
         self._authorize(credential)
