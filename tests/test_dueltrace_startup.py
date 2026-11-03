@@ -53,10 +53,12 @@ class DesktopBootstrapTests(unittest.TestCase):
             def simulate_failure():
                 raise RuntimeError("Falha de inicialização de teste")
             fake_desktop = types.SimpleNamespace(main=simulate_failure)
-            with patch.object(abrir_biblioteca, "startup_log_path", return_value=path), \\
-                 patch.dict(sys.modules, {"dueltrace_desktop": fake_desktop}), \\
-                 patch("tkinter.Tk") as tk_root, \\
-                 patch("tkinter.messagebox.showerror") as showerror:
+            with (
+                patch.object(abrir_biblioteca, "startup_log_path", return_value=path),
+                patch.dict(sys.modules, {"dueltrace_desktop": fake_desktop}),
+                patch("tkinter.Tk") as tk_root,
+                patch("tkinter.messagebox.showerror") as showerror,
+            ):
                 with self.assertRaisesRegex(RuntimeError, "Falha de inicialização"):
                     abrir_biblioteca.main()
                 self.assertTrue(tk_root.called)
