@@ -166,9 +166,10 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
                     result["status"] = "preview_update_available"
                     result["updateAvailable"] = True
                     result["message"] = (
-                        "Existe um build Preview mais recente, aprovado nos "
-                         "
-                        "manualmente o pacote em Artifacts."
+                        "Existe um build Preview mais recente, aprovado nos testes "
+                        "de integração. É uma prévia não assinada; "
+                        "não ignore alertas de segurança do navegador. "
+                        "Consulte a página do build para avaliá-lo."
                     )
                 elif current < parse_version(CURRENT_VERSION):
                     result["status"] = "preview_update_available"
