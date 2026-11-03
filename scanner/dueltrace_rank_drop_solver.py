@@ -1,6 +1,7 @@
 """Inferência exaustiva e conservadora da correspondência RANK ↔ banco WA.
 
-Três bancos, três classes: no máximo 3! = 6 permutações. Cada resultado
+Três bancos, três classes de RECOMPENSA: no máximo 3! = 6 permutações.
+O original tem dez RANKs, mas apenas três classes de recompensa. Cada resultado
 observado elimina apenas bancos que NÃO poderiam produzir sua carta.
 Nenhum duelo observado permite afirmar o algoritmo MIPS do emulador.
 """
