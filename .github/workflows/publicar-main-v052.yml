@@ -1,0 +1,167 @@
+name: Publicar Entrada Principal DUELTRACE Desktop v0.5.2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scanner/RELEASE_V052.txt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-dueltrace-main-v052
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verificar sintaxe e testes
+        shell: bash
+        run: |
+          python -m compileall -q scanner tests
+          python -m unittest discover -s tests -v
+
+      - name: Montar patch incremental seguro
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, zipfile
+
+          sources = {
+            'app/tools/scanner_multiiso.py': 'scanner/scanner_multiiso.py',
+            'app/tools/importador_perfis.py': 'scanner/importador_perfis.py',
+            'app/tools/auto_mods.py': 'scanner/auto_mods.py',
+            'app/tools/gerenciador_mods.py': 'scanner/gerenciador_mods.py',
+            'app/tools/integracao_overlay.py': 'scanner/integracao_overlay.py',
+            'app/tools/overlay_profile_bridge.py': 'scanner/overlay_profile_bridge.py',
+            'app/tools/overlay_card_labels.py': 'scanner/overlay_card_labels.py',
+            'app/tools/investigador_iso.py': 'scanner/investigador_iso.py',
+            'app/tools/extrator_fusoes.py': 'scanner/extrator_fusoes.py',
+            'app/tools/ia_local.py': 'scanner/ia_local.py',
+            'app/tools/biblioteca_mods.py': 'scanner/biblioteca_mods.py',
+            'app/tools/fusion_ram_probe.py': 'scanner/fusion_ram_probe.py',
+            'app/tools/ram_temporal.py': 'scanner/ram_temporal.py',
+            'app/tools/field_fusion_engine.py': 'scanner/field_fusion_engine.py',
+            'app/tools/field_ram_probe.py': 'scanner/field_ram_probe.py',
+            'app/tools/field_occupancy_probe.py': 'scanner/field_occupancy_probe.py',
+            'app/tools/field_cancel_probe.py': 'scanner/field_cancel_probe.py',
+            'app/tools/field_priority_probe.py': 'scanner/field_priority_probe.py',
+            'app/tools/card_catalog.py': 'scanner/card_catalog.py',
+            'app/tools/mod_effects_iso.py': 'scanner/mod_effects_iso.py',
+            'app/tools/mod_autopilot.py': 'scanner/mod_autopilot.py',
+            'app/tools/dueltrace_theme.py': 'scanner/dueltrace_theme.py',
+            'app/tools/dueltrace_brand.py': 'scanner/dueltrace_brand.py',
+            'app/tools/dueltrace_desktop.py': 'scanner/dueltrace_desktop.py',
+            'app/tools/dueltrace_visuals.py': 'scanner/dueltrace_visuals.py',
+            'app/tools/instalar_inicio_dueltrace.py': 'scanner/instalar_inicio_dueltrace.py',
+            'app/tools/instalar_biblioteca.py': 'scanner/instalar_biblioteca.py',
+            'app/tools/abrir_biblioteca.py': 'scanner/abrir_biblioteca.py',
+          }
+          def batch(script):
+              return script.replace('\n','\r\n').encode('utf-8')
+          b_launch = batch('''@echo off
+          setlocal
+          cd /d "%~dp0"
+          where py >nul 2>nul
+          if not errorlevel 1 (
+            py -3 "tools\\abrir_biblioteca.py"
+          ) else (
+            python "tools\\abrir_biblioteca.py"
+          )
+          if errorlevel 1 pause
+          ''')
+          b_hook = batch('''@echo off
+          setlocal
+          cd /d "%~dp0"
+          echo Iniciando integracao da Biblioteca de Mods no overlay...
+          where py >nul 2>nul
+          if not errorlevel 1 (
+            py -3 "tools\\instalar_biblioteca.py" --app "assistente_x15.py"
+          ) else (
+            python "tools\\instalar_biblioteca.py" --app "assistente_x15.py"
+          )
+          pause
+          ''')
+          files={dst:Path(src).read_bytes() for dst,src in sources.items()}
+          import sys
+          sys.path.insert(0,'scanner')
+          # Compatibilidade com Launcher 0.3: somente .py e .bat.
+          # O ícone da janela é renderizado por dueltrace_brand.py em tempo de execução.
+          files['app/ABRIR_BIBLIOTECA_MODS.bat']=b_launch
+          b_activate = batch('''@echo off
+          setlocal
+          cd /d "%~dp0"
+          echo Ativando o novo DUELTRACE como interface principal...
+          where py >nul 2>nul
+          if not errorlevel 1 (
+            py -3 "tools\\instalar_inicio_dueltrace.py" --app "assistente_x15.py"
+          ) else (
+            python "tools\\instalar_inicio_dueltrace.py" --app "assistente_x15.py"
+          )
+          echo.
+          pause
+          ''')
+          b_restore = batch('''@echo off
+          setlocal
+          cd /d "%~dp0"
+          echo Restaurando a interface antiga como entrada principal...
+          where py >nul 2>nul
+          if not errorlevel 1 (
+            py -3 "tools\\instalar_inicio_dueltrace.py" --app "assistente_x15.py" --restore
+          ) else (
+            python "tools\\instalar_inicio_dueltrace.py" --app "assistente_x15.py" --restore
+          )
+          echo.
+          pause
+          ''')
+          files['app/INTEGRAR_BIBLIOTECA_MODS.bat']=b_hook
+          files['app/ATIVAR_NOVA_INTERFACE.bat']=b_activate
+          files['app/RESTAURAR_INTERFACE_ANTIGA.bat']=b_restore
+          for name,data in files.items():
+              assert name.startswith('app/') and '..' not in Path(name).parts
+              assert Path(name).suffix.lower() in {'.py','.bat'}, name
+              assert len(data)<1_000_000
+          records=[{'path':name,'size':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+                   for name,data in sorted(files.items())]
+          meta={'schema':1,'version':'0.5.2',
+                'notes':'Integração reversível da nova interface DUELTRACE como entrada principal após ativação manual. Preserva o assistente clássico, scanner e overlays. Patch compatível com Launcher 0.3.',
+                'files':records}
+          dist=Path('dist');dist.mkdir(exist_ok=True)
+          patch=dist/'patch.zip'
+          with zipfile.ZipFile(patch,'w',compression=zipfile.ZIP_DEFLATED) as z:
+              z.writestr('patch_manifest.json',json.dumps(meta,ensure_ascii=False,indent=2))
+              for name,data in sorted(files.items()): z.writestr(name,data)
+          with zipfile.ZipFile(patch) as z:
+              for name,data in files.items():
+                  assert z.read(name)==data
+              assert len(z.namelist())==len(files)+1
+          update={'schema':1,'version':'0.5.2','notes':meta['notes'],
+                  'patch_sha256':hashlib.sha256(patch.read_bytes()).hexdigest()}
+          (dist/'update-manifest.json').write_text(json.dumps(update,indent=2,ensure_ascii=False),
+                                                   encoding='utf-8')
+          print('Patch validado:',len(files),'arquivos.',patch.stat().st_size,'bytes')
+          PY
+
+      - name: Criar GitHub Release v0.5.2
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.5.2 >/dev/null 2>&1; then
+            echo "A Release v0.5.2 já existe; não a substituir automaticamente."
+            exit 0
+          fi
+          gh release create v0.5.2 dist/patch.zip dist/update-manifest.json \
+            --target "$GITHUB_SHA" \
+            --latest \
+            --title "DUELTRACE v0.5.2 — Interface principal, migração reversível e modo clássico" \
+            --notes "Corrige a abertura da interface moderna: execute ATIVAR_NOVA_INTERFACE.bat uma vez após atualizar. INICIAR ASSISTENTE passará a abrir DUELTRACE Desktop. Acesso ao clássico e restauração preservados; nenhuma ROM alterada."
