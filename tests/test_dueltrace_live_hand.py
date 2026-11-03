@@ -111,5 +111,55 @@ class HandFusionTests(unittest.TestCase):
         self.assertTrue(result["ready"])
 
 
+@unittest.skipUnless(sys.platform=="win32","Requer sessão gráfica Windows")
+class HomeWindowSmokeTests(unittest.TestCase):
+    def test_home_renders_five_cards_and_refreshes_fusion_results(self):
+        import tempfile
+        import tkinter as tk
+        from auto_mods import ModCatalog
+        from dueltrace_desktop import DueltraceDesktop
+        with tempfile.TemporaryDirectory() as td:
+            try:
+                app=DueltraceDesktop(catalog=ModCatalog(Path(td)))
+            except tk.TclError as exc:
+                if "display" in str(exc).lower():
+                    self.skipTest(str(exc))
+                raise
+            try:
+                app.withdraw()
+                app.update_idletasks()
+                self.assertEqual(app.active_page,"inicio")
+                self.assertEqual(len(app.home_hand_tiles),5)
+                app._home_cards={
+                    1:{"id":1,"name":"Material A","atk":100,"def":200},
+                    2:{"id":2,"name":"Material B","atk":300,"def":400},
+                    3:{"id":3,"name":"Material C","atk":500,"def":600},
+                    5:{"id":5,"name":"Material E","atk":800,"def":900},
+                    10:{"id":10,"name":"Resultado","atk":2500,"def":1000},
+                }
+                app._home_fusions=build_fusion_index([
+                    {"a":1,"b":2,"result":10,
+                     "validation":"extraida_sete_bancos_consistentes"},
+                ])
+                app._render_live_hand({
+                    "ready":True,"hand_ids":[1,2,3,5,3],"pid":1234,
+                    "status":"Mão lida ao vivo",
+                })
+                app.update_idletasks()
+                self.assertEqual(len(app.home_fusion_tree.get_children()),1)
+                first=app.home_fusion_tree.item(
+                    app.home_fusion_tree.get_children()[0])["values"]
+                self.assertEqual(first[0],"1 + 2")
+                self.assertEqual(first[-1],"ISO ×7")
+                app._render_live_hand({
+                    "ready":False,"hand_ids":None,"pid":None,
+                    "status":"ePSXe desconectado",
+                })
+                self.assertEqual(len(app.home_fusion_tree.get_children()),0)
+                self.assertTrue(all(tile.card is None for tile in app.home_hand_tiles))
+            finally:
+                app.destroy()
+
+
 if __name__=="__main__":
     unittest.main()
