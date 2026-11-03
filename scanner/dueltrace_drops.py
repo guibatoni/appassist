@@ -7,6 +7,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from scanner_multiiso import X15_SHA
+from dueltrace_rank_system import (
+    available_ranks, drop_pool_labels, pool_ranks,
+    pool_index_for_rank, rank_system, is_x15_sha,
+)
 from dueltrace_library_sort import validate_sort,card_type_value,matches_type,sort_key
 
 EXPECTED_OPPONENTS = 39
@@ -23,10 +27,13 @@ def _integer(value):
 def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
                      group: str = "", query: str = "",
                      offset: int = 0, limit: int = 36,
-                     sort: str = "id", card_type: str = "") -> dict:
+                     sort: str = "id", card_type: str = "",
+                     rank: str = "") -> dict:
     validate_sort(sort,card_type)
     if type(opponent_id) is not int or not 0 <= opponent_id <= EXPECTED_OPPONENTS:
         raise ValueError("Oponente inválido")
+    if type(rank) is not str or len(rank)>32:
+        raise ValueError("RANK de recompensa inválido")
     if type(group) is not str or len(group) > 80:
         raise ValueError("Grupo de drop inválido")
     if type(query) is not str or len(query) > 100:
@@ -41,6 +48,8 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         "total": 0, "offset": offset, "rows": [], "opponents": [], "groups": [],
         "rankLabelsVerified": False, "weightTotal": WEIGHT_TOTAL,
         "cardTypes": [], "sort": sort, "cardType": card_type,
+        "rankOptions": [], "rankSelected": rank,
+        "rankSystem": None, "groupOptions": [],
         "source": "DATA/WA_MRG.MRG + SLUS_014.11",
         "rankPoints": (profile.get("rank_points", {}) if isinstance(profile,dict) else {}),
     }
@@ -65,6 +74,18 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         return empty
     if len(set(raw_groups)) != 3:
         return empty
+    iso_sha=profile.get("rom_sha256")
+    ranks=available_ranks(iso_sha)
+    labels=drop_pool_labels(iso_sha)
+    grouped_ranks=pool_ranks(iso_sha)
+    if rank and rank not in ranks:
+        raise ValueError("O RANK não pertence ao sistema desta ISO.")
+    selected_group=(raw_groups[pool_index_for_rank(iso_sha,rank)]
+                    if rank else "")
+    if group and selected_group and group!=selected_group:
+        raise ValueError("O RANK solicitado pertence a outro banco de drops.")
+    labels_by_raw=dict(zip(raw_groups,labels))
+    grouped_by_raw=dict(zip(raw_groups,grouped_ranks))
     opponents = {}
     for opponent in raw_opponents:
         if not isinstance(opponent, dict):
@@ -122,6 +143,8 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
             continue
         if group and rank != group:
             continue
+        if selected_group and rank != selected_group:
+            continue
         card=cards_by_id.get(cid,{})
         if not matches_type(card,card_type):
             continue
@@ -133,7 +156,10 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
                        else None)
         matched.append({
             "opponentId": oid, "opponentName": opponents[oid],
-            "group": rank, "cardId": cid, "cardName": name,
+            "group": rank,
+            "groupLabel":labels_by_raw[rank],
+            "eligibleRanks":list(grouped_by_raw[rank]),
+            "cardId": cid, "cardName": name,
             "category":card.get("category") or "Não identificada",
             "cardType":card_type_value(card),
             "atk":card.get("atk") if type(card.get("atk")) is int else None,
@@ -152,16 +178,24 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
                      row["cardName"],sort),
             row["opponentId"],raw_groups.index(row["group"])))
     image_sha = profile.get("rom_sha256")
-    is_known = (isinstance(image_sha, str) and image_sha.lower() == X15_SHA.lower()
+    is_known = (is_x15_sha(image_sha)
                 and profile.get("verified", {}).get("nomes_dos_ranks") == "verificado")
     return {
         **empty, "available": True,
-        "status": ("Drops validados: 117 tabelas × 2048 pesos; os grupos de rank "
-                   + ("foram identificados." if is_known else
-                      "não têm equivalência Z-POW/S-POW/S-TEC confirmada.")),
+        "status": ("Drops validados: 117 tabelas × 2048 pesos; "
+                   + ("RANKs Z-POW, S-POW e S-TEC do Remaster X15 identificados."
+                      if is_known else
+                      "padrão original: dez RANKs compartilham três bancos; "
+                      "mapeamento de mods sem SHA conhecido deve ser conferido em duelo.")),
         "total": len(matched), "rows": matched[offset:offset+limit],
         "opponents": [{"id": key, "name": opponents[key]} for key in sorted(opponents)],
         "groups": list(raw_groups),
+        "groupOptions":[
+            {"value":raw,"label":labels[i],"ranks":list(grouped_ranks[i])}
+            for i,raw in enumerate(raw_groups)
+        ],
+        "rankOptions":list(ranks),"rankSelected":rank,
+        "rankSystem":rank_system(iso_sha),
         "cardTypes": card_types,
         "rankLabelsVerified": is_known,
     }
