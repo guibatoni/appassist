@@ -222,7 +222,15 @@ function Mods({mods,sha,onRefresh,configured}:{
             {([["Cartas",mod.cards],["Fusões",mod.fusions],["Efeitos",mod.effects]] as const).map(([label,n])=>
               <div key={label} className="rounded-lg border border-line/50 bg-background/70 p-2"><p className="font-display text-xl text-primary">{n}</p><p className="text-xs text-muted">{label}</p></div>)}
           </div>
-          <button type="button" disabled={busy||!desktopApi()||sha===mod.sha256}
+          <button type="button" disabled={busy||!desktopApi()}
+            className="btn-ghost mb-2 w-full disabled:opacity-40"
+            onClick={()=>void run(
+              ()=>desktopApi()!.reanalyze_mod(mod.sha256),
+              "Arquivos SLUS e WA_MRG reanalisados e vinculados à ISO."
+            )}>
+            <RefreshCcw className="size-4"/> Reanalisar arte, descrições e molduras
+          </button>
+        <button type="button" disabled={busy||!desktopApi()||sha===mod.sha256}
             className="btn-gold w-full disabled:opacity-40" onClick={()=>{
               const ok=!mod.requiresReview||window.confirm("O mod requer revisão. Ativar somente os dados comprovados?")
               if(ok)void run(()=>desktopApi()!.activate_mod(mod.sha256,mod.requiresReview),"Perfil ativado.")
