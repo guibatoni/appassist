@@ -68,6 +68,12 @@ class DueltraceWebBridge:
                 "def": item.get("def") if type(item.get("def")) is int else None,
                 "effect": effect,
                 "effectSource": str(item["effect_source"])[:150] if effect else None,
+                "description":str(item.get("description_text") or "")[:550] or None,
+                "descriptionSource":str(item.get("description_source") or "")[:150] or None,
+                "level":item.get("level") if type(item.get("level")) is int else None,
+                "attributeId":item.get("attribute_id") if type(item.get("attribute_id")) is int else None,
+                "guardianStar1":item.get("guardian_star_1") if type(item.get("guardian_star_1")) is int else None,
+                "guardianStar2":item.get("guardian_star_2") if type(item.get("guardian_star_2")) is int else None,
             })
         return sorted(prepared,key=lambda x:x["id"])
 
@@ -81,6 +87,9 @@ class DueltraceWebBridge:
             "cards":summary.get("cards_total",0),
             "fusions":summary.get("fusion_count",0),
             "effects":summary.get("effect_count",0),
+            "descriptions":len([c for c in (profile or {}).get("cards",[])
+                                if c.get("description_text") and c.get("description_source")]),
+            "framedCards":(profile or {}).get("graphic_assets",{}).get("composed_cards",0),
             "requiresReview":summary.get("requires_review",True),
             "verified":summary.get("validated",{}),
         }
