@@ -71,7 +71,11 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     catalog = enrich_cards([
         {"id": integer(r["id"]), "name": r["nome"],
          "atk": integer(r["atk"]), "def": integer(r["def"]),
-         "type_id": integer(r.get("tipo"))}
+         "type_id": integer(r.get("tipo")),
+         "level": integer(r.get("level")),
+         "attribute_id": integer(r.get("attribute_id")),
+         "guardian_star_1": integer(r.get("guardian_star_1")),
+         "guardian_star_2": integer(r.get("guardian_star_2"))}
         for r in cards
     ], known_fm_layout=True) if card_ok else []
     # Texto impresso na carta é descrição, não prova execução do efeito.
