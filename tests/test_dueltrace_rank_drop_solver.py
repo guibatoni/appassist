@@ -78,13 +78,13 @@ class RankDropSolverTests(unittest.TestCase):
 
     def test_integrated_catalog_exposes_remaining_hypotheses(self):
         p=fake_profile()
-        obs=[observation(p["rom_sha256"],1,1,"Z-POW","duel-A100"),
-             observation(p["rom_sha256"],2,1,"Z-POW","duel-B200")]
+        obs=[observation(p["rom_sha256"],1,1,"S-POW","duel-A100"),
+             observation(p["rom_sha256"],2,1,"A-POW","duel-B200")]
         r=rank_drop_report(p,obs)
         self.assertEqual(r["assignmentCount"],2)
         self.assertEqual(r["mappingConsistency"],"corroborated")
         self.assertEqual(len(r["mappingHypotheses"]),2)
-        self.assertEqual(r["suspectedMappings"]["Z-POW"]["group"],p["drop_group_labels"][0])
+        self.assertEqual(r["suspectedMappings"]["S/A POW"]["group"],p["drop_group_labels"][0])
 
 
 if __name__=="__main__":
