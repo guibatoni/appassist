@@ -315,6 +315,10 @@ class BibliotecaMods(tk.Toplevel):
         ttk.Label(field_page,text="Diagnóstico por fases — preparação, mesa e atualização da mão",
                   font=("Segoe UI",10,"bold")).pack(anchor="w",pady=5)
         ttk.Label(field_page,text=(
+            "v0.4.12: avaliação especial dos endereços C393FA e C39822, "
+            "incluindo o controle SEM AÇÃO. São hipóteses, não slots identificados."
+        ),wraplength=940,justify="left",foreground="#4A6785").pack(anchor="w",pady=(0,7))
+        ttk.Label(field_page,text=(
             "Monitor de ocupação experimental: compara slot VAZIO → OCUPADO → REMOVIDO. "
             "Pode usar controles opcionais para excluir bytes voláteis. "
             "Nenhuma ocorrência valida automaticamente o campo ou libera fusões."
@@ -335,7 +339,7 @@ class BibliotecaMods(tk.Toplevel):
         ttk.Checkbutton(options,text="Ampliar 96 KiB → 1 MiB (experimental)",
                         variable=self.field_expand).pack(side="left",padx=12)
         ttk.Checkbutton(field_page,text=(
-            "Monitor direcionado: IDs de 28 B e candidatos C39000–C39400 "
+            "Monitor direcionado: IDs de 28 B e candidatos C39000–C39A00 "
             "(+4 KiB se escolher 96 KiB)"),
             variable=self.field_focus).pack(anchor="w",pady=(0,7))
         controls=ttk.Frame(field_page)
@@ -599,10 +603,15 @@ class BibliotecaMods(tk.Toplevel):
             changes=report["no_action_analysis"]
             summary=changes["before_to_no_action"]
             focus=changes["focus_before_to_no_action"]
+            priority=report["priority_address_review"]["candidates"]
+            summary_candidates="; ".join(
+                f"{x['address'][-6:]}: {x['status']}"
+                for x in priority)
             self.field_status.set(
                 f"SEM AÇÃO registrado: {summary['changed_bytes']} bytes mudaram "
                 f"na leitura de controle; na região direcionada, "
                 f"{focus['changed_bytes']} bytes. "
+                f"Prioritários: {summary_candidates}. "
                 f"JSON: {path}. Inicie 1. ANTES para invocar de verdade. "
                 "Nenhum slot foi validado.")
             self.status.set("Controle negativo sem jogada salvo: "+str(path))
@@ -674,12 +683,18 @@ class BibliotecaMods(tk.Toplevel):
                 return
             report,path=self.field_probe.capture_vacant_control(sha)
             analysis=report["occupancy_analysis"]
+            priority=report["priority_address_review"]["candidates"]
+            summary_candidates="; ".join(
+                f"{x['address'][-6:]}: {x['status']}"
+                for x in priority)
             self.field_status.set(
                 f"VAZIA (controle) registrada: {analysis['matched_total']} "
                 "bytes correlacionados restantes, "
                 f"{analysis['reversible_total']} reversíveis; "
                 f"{analysis['discarded_due_to_unstable_controls']} descartados "
-                f"por controles instáveis. Não comprova nenhum slot. JSON: {path}")
+                f"por controles instáveis. "
+                f"Prioritários: {summary_candidates}. "
+                f"Não comprova nenhum slot. JSON: {path}")
             self.status.set("Controle de slot vazio salvo: "+str(path))
         except Exception as exc:
             messagebox.showwarning("Investigação da ocupação",str(exc),parent=self)
