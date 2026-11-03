@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from scanner_multiiso import process, sha256, X15_SHA
 from card_catalog import enrich_cards, attach_effect_manifest, effect_sidecar_path, category_summary
+from mod_effects_iso import extract_embedded_effects
 
 SCHEMA = 1
 LABELS_X15 = ["Z-POW", "S-POW", "S-TEC"]
@@ -62,15 +63,33 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
          "type_id": integer(r.get("tipo"))}
         for r in cards
     ], known_fm_layout=True) if card_ok else []
-    effects_info = {"status": "nao_fornecido", "count": 0}
-    effect_warning = None
+    effects_info = {"status": "nao_identificados", "count": 0, "sources": [],
+                    "effects_executed_in_game_verified": False}
+    effect_warnings=[]
     if card_ok:
-        try:
-            catalog, effects_info = attach_effect_manifest(
-                catalog, effect_sidecar_path(iso), rom_sha256=result["sha256"])
-        except (OSError, ValueError, UnicodeError) as exc:
-            # Nenhum efeito é atribuído se o manifesto for inválido.
-            effect_warning = str(exc)[:240]
+        # A primeira fonte é o próprio ISO, APENAS quando traz um arquivo
+        # estruturado e reconhecível. Não varrer textos binários às cegas.
+        if result.get("executavel") and result.get("wa_prefix_bytes"):
+            try:
+                catalog, embedded=extract_embedded_effects(
+                    iso,catalog,rom_sha256=result["sha256"])
+                if embedded["count"]:
+                    effects_info["sources"].append(embedded)
+            except (OSError,ValueError,UnicodeError) as exc:
+                effect_warnings.append("Metadados embutidos ignorados: "+str(exc)[:220])
+        sidecar=effect_sidecar_path(iso)
+        if sidecar.is_file():
+            try:
+                catalog, external=attach_effect_manifest(
+                    catalog,sidecar,rom_sha256=result["sha256"])
+                if external["count"]:
+                    effects_info["sources"].append(external)
+            except (OSError,ValueError,UnicodeError) as exc:
+                effect_warnings.append("Manifesto local ignorado: "+str(exc)[:220])
+        effects_info["count"]=sum(bool(c.get("effect_text")) for c in catalog)
+        if effects_info["count"]:
+            effects_info["status"]="texto_declarado_com_procedencia_nao_validado_no_jogo"
+
 
     groups = []
     if weights_ok:
@@ -134,10 +153,10 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
             "Imagem original nunca é alterada; as artes permanecem em pasta local.",
         ],
     }
-    if effect_warning:
-        payload["notes"].append("Manifesto de efeitos ignorado: " + effect_warning)
+    for warning in effect_warnings:
+        payload["notes"].append(warning)
     if effects_info["count"]:
-        payload["notes"].append("Efeitos fornecidos por manifesto local e SHA coincidente; não extraídos nem confirmados na ISO.")
+        payload["notes"].append("Textos de efeitos extraídos de fonte declarada no ISO ou manifesto vinculado ao SHA; sua execução no jogo NÃO foi confirmada.")
     if not all([card_ok, opponent_ok, weights_ok]):
         payload["notes"].append("Perfil incompleto: informações ausentes NÃO são inferidas.")
     return payload
