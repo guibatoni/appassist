@@ -65,6 +65,26 @@ class DropRankEvidenceTests(unittest.TestCase):
         self.assertEqual(r["inconsistent"],1)
         self.assertEqual(r["rankMappings"]["Z-POW"]["group"],"Z-POW")
 
+    def test_actual_lp_scores_compare_but_never_claim_mips_proof(self):
+        p=fake_profile(X15_SHA,["Z-POW","S-POW","S-TEC"])
+        first=observed(p,1,1,"Z-POW","duel_a001")
+        second=observed(p,2,1,"Z-POW","duel_b002")
+        for row in (first,second):
+            row.update({
+                "victory_type":"lp","observed_points":95,
+                "rank_snapshot":{"projected_score":95,"projected_rank":"Z-POW"},
+            })
+        report=rank_drop_report(p,[first,second])
+        self.assertEqual(report["scoreComparisons"]["exact"],2)
+        self.assertEqual(report["scoreComparisons"]["status"],"duelos_coerentes_sem_prova_mips")
+        second["observed_points"]=90
+        report=rank_drop_report(p,[first,second])
+        self.assertEqual(report["scoreComparisons"]["different"],1)
+        self.assertEqual(report["scoreComparisons"]["status"],"divergencia_modelo")
+        second["victory_type"]="deckout"
+        report=rank_drop_report(p,[first,second])
+        self.assertEqual(report["scoreComparisons"]["compared"],1)
+
     def test_bad_profile_or_cross_sha_is_never_mapped(self):
         p=fake_profile()
         different=observed(p,1,1,"Z-POW","duel_a001")
