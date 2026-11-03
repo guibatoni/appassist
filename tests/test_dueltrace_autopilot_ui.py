@@ -16,6 +16,7 @@ from card_catalog import enrich_cards
 from mod_autopilot import ModAutopilot, discover_images, profile_summary
 from dueltrace_brand import ico_icon, png_icon
 from dueltrace_theme import blend
+from dueltrace_visuals import category_color, CATEGORY_SYMBOLS, NAV_SYMBOLS, QuickTile, HeroArt, CardArt, CategoryMeters
 from dueltrace_desktop import DueltraceDesktop
 
 
@@ -76,6 +77,16 @@ class BrandAndUITests(unittest.TestCase):
         icon=ico_icon()
         self.assertEqual(struct.unpack("<HHH",icon[:6]),(0,1,5))
         self.assertGreater(len(icon),1500)
+
+    def test_redesign_components_are_integrated(self):
+        self.assertIn("inicio", NAV_SYMBOLS)
+        self.assertIn("Monstros", CATEGORY_SYMBOLS)
+        self.assertEqual(category_color("Mágicas"), "#38D8AE")
+        self.assertEqual(category_color("inexistente"), "#93B5CC")
+        for component in (QuickTile, HeroArt, CardArt, CategoryMeters):
+            self.assertTrue(callable(component))
+        self.assertIn("CardArt", DueltraceDesktop._page_cartas.__code__.co_names)
+        self.assertIn("HeroArt", DueltraceDesktop._page_inicio.__code__.co_names)
 
     def test_palette_and_ui_methods(self):
         self.assertEqual(blend("#000000","#FFFFFF",0),"#000000")

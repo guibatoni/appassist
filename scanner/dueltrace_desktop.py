@@ -17,6 +17,7 @@ from card_catalog import CARD_CATEGORIES
 from mod_autopilot import ModAutopilot, profile_summary
 from integracao_overlay import overlay_snapshot
 from dueltrace_brand import apply_window_icon
+from dueltrace_visuals import HeroArt, QuickTile, CardArt, CategoryMeters, NAV_SYMBOLS
 from dueltrace_theme import (
     BACKGROUND,SIDEBAR,PANEL,PANEL_ALT,BLUE,GOLD,GREEN,RED,TEXT,MUTED,
     Panel,NeonButton,setup_theme,text_label,card_stat,
@@ -33,9 +34,9 @@ PAGES=(
 class DueltraceDesktop(tk.Tk):
     def __init__(self, *, catalog=None):
         super().__init__()
-        self.title("DUELTRACE — MultiMod Companion")
-        self.geometry("1330x830")
-        self.minsize(1080,700)
+        self.title("DUELTRACE — MultiMod Companion · v0.5.1")
+        self.geometry("1480x900")
+        self.minsize(1160,770)
         self.configure(background=BACKGROUND)
         try:apply_window_icon(self)
         except tk.TclError:pass
@@ -60,42 +61,54 @@ class DueltraceDesktop(tk.Tk):
         self.after(140,self._poll_events)
         if self.auto_start.get() and self.folder.get() and Path(self.folder.get()).is_dir():
             self.after(650,self.scan_folder)
+        for index,(_,key) in enumerate(PAGES,1):
+            self.bind_all(f"<Control-Key-{index}>",lambda _e,k=key:self.go(k))
         self.protocol("WM_DELETE_WINDOW",self._close)
 
     def _build_shell(self):
-        top=tk.Frame(self,background=SIDEBAR,height=78,
-                     highlightbackground=BLUE,highlightthickness=1)
+        top=tk.Frame(self,background=SIDEBAR,height=85,
+                     highlightbackground=GOLD,highlightthickness=1)
         top.pack(fill="x",side="top")
         top.pack_propagate(False)
-        brand=tk.Frame(top,background=SIDEBAR)
-        brand.pack(side="left",padx=25,pady=9)
-        text_label(brand,"▽  DUELTRACE",color=BLUE,size=24,strong=True,bg=SIDEBAR).pack(anchor="w")
-        text_label(brand,"MULTIMOD COMPANION  •  WINDOWS",color=GOLD,size=9,bg=SIDEBAR).pack(anchor="w")
-        self.header_status=text_label(top,"●  Sistema local",color=GREEN,size=10,bg=SIDEBAR)
-        self.header_status.pack(side="right",padx=26)
+        logo=tk.Frame(top,background=SIDEBAR)
+        logo.pack(side="left",padx=26,pady=11)
+        text_label(logo,"▽  D U E L T R A C E",color=BLUE,size=22,
+                   strong=True,bg=SIDEBAR).pack(anchor="w")
+        text_label(logo,"MULTIMOD COMPANION  /  WINDOWS",color=GOLD,size=9,
+                   strong=True,bg=SIDEBAR).pack(anchor="w")
+        statusbox=tk.Frame(top,background=PANEL_ALT,highlightbackground=BORDER,
+                           highlightthickness=1,padx=15,pady=9)
+        statusbox.pack(side="right",padx=24,pady=16)
+        self.header_status=text_label(statusbox,"●  Pronto para analisar",
+                                      color=GREEN,size=10,strong=True,bg=PANEL_ALT)
+        self.header_status.pack(anchor="center")
         body=tk.Frame(self,background=BACKGROUND)
         body.pack(fill="both",expand=True)
-        sidebar=tk.Frame(body,background=SIDEBAR,width=240,
-                         highlightbackground="#1A4662",highlightthickness=1)
+        sidebar=tk.Frame(body,background=SIDEBAR,width=220,
+                         highlightbackground=BORDER,highlightthickness=1)
         sidebar.pack(side="left",fill="y")
         sidebar.pack_propagate(False)
-        text_label(sidebar,"NAVEGAÇÃO",color=GOLD,size=10,strong=True,bg=SIDEBAR).pack(
-            anchor="w",padx=20,pady=(24,10))
+        text_label(sidebar,"EXPLORAR",color=GOLD,size=10,strong=True,
+                   bg=SIDEBAR).pack(anchor="w",padx=18,pady=(27,14))
         for name,key in PAGES:
-            button=NeonButton(sidebar,name,lambda p=key:self.go(p),
-                              width=213,height=46)
-            button.pack(pady=4,padx=13)
+            symbol=NAV_SYMBOLS.get(key,"◇")
+            button=NeonButton(sidebar,f"{symbol}  {name}",
+                              lambda p=key:self.go(p),width=194,height=47)
+            button.pack(pady=5,padx=12)
             self._buttons[key]=button
         tk.Frame(sidebar,background=SIDEBAR).pack(fill="both",expand=True)
-        text_label(sidebar,"✧  Análise local e segura",color=MUTED,size=9,bg=SIDEBAR).pack(
-            anchor="w",padx=20,pady=8)
+        art=HeroArt(sidebar,width=190,height=115)
+        art.pack(padx=14,pady=(0,8))
+        text_label(sidebar,"✧  Conteúdo do mod processado localmente",
+                   color=MUTED,size=8,bg=SIDEBAR).pack(padx=12,pady=(0,16))
         self.stage=tk.Frame(body,background=BACKGROUND)
         self.stage.pack(side="left",fill="both",expand=True)
-        footer=tk.Frame(self,background=SIDEBAR,height=32)
+        footer=tk.Frame(self,background=SIDEBAR,height=34,
+                        highlightbackground=BORDER,highlightthickness=1)
         footer.pack(side="bottom",fill="x")
         tk.Label(footer,textvariable=self.status,background=SIDEBAR,
                  foreground=MUTED,anchor="w",font=("Segoe UI",9)).pack(
-                     fill="x",padx=18,pady=5)
+                     fill="x",padx=20,pady=7)
 
     def _label(self,parent,title,description=None):
         text_label(parent,title,color=GOLD,size=21,strong=True).pack(anchor="w",pady=(3,3))
@@ -139,50 +152,85 @@ class DueltraceDesktop(tk.Tk):
 
     def _page_inicio(self,page):
         body=tk.Frame(page,background=BACKGROUND)
-        body.pack(fill="both",expand=True,padx=22,pady=19)
+        body.pack(fill="both",expand=True,padx=18,pady=15)
         hero=Panel(body)
-        hero.pack(fill="x",pady=(0,16))
-        text_label(hero,"BEM-VINDO AO DUELTRACE",color=GOLD,size=23,strong=True,bg=PANEL).pack(anchor="w")
-        text_label(hero,
-            "Detecte o mod, identifique cartas e prepare o perfil em poucos cliques. "
-            "Dados não reconhecidos permanecem sob revisão.",
-            color=TEXT,size=11,bg=PANEL).pack(anchor="w",pady=(7,11))
-        buttons=tk.Frame(hero,background=PANEL)
-        buttons.pack(anchor="w")
-        self._action(buttons,"Selecionar ISO/BIN",self.choose_file,accent=GOLD).pack(side="left",padx=(0,10))
-        self._action(buttons,"Biblioteca de Mods",lambda:self.go("mods")).pack(side="left",padx=(0,10))
-        self._action(buttons,"Biblioteca de Cartas",lambda:self.go("cartas")).pack(side="left")
-        stats=tk.Frame(body,background=BACKGROUND)
-        stats.pack(fill="x",pady=(0,15))
-        entries=self.catalog.list()
+        hero.pack(fill="x",pady=(0,11))
+        hero_art=HeroArt(hero,width=365,height=173)
+        hero_art.pack(side="right",padx=(7,2))
+        copy=tk.Frame(hero,background=PANEL)
+        copy.pack(side="left",fill="both",expand=True)
+        text_label(copy,"A NOVA EXPERIÊNCIA DUELTRACE",color=BLUE,
+                   size=10,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(copy,"Cada carta. Cada fusão. Cada jogada.",
+                   color=GOLD,size=18,strong=True,bg=PANEL).pack(anchor="w",pady=(12,7))
+        text_label(copy,"Escolha seu mod e deixe o scanner identificar as estruturas "
+                        "que consegue validar. Nenhum efeito ou resultado é inventado.",
+                   color=TEXT,size=10,bg=PANEL).pack(anchor="w",pady=(0,13))
+        actions=tk.Frame(copy,background=PANEL)
+        actions.pack(anchor="w")
+        self._action(actions,"Selecionar ISO / BIN",self.choose_file,
+                     accent=GOLD,width=190).pack(side="left",padx=(0,10))
+        self._action(actions,"Analisar pasta",self.choose_folder,
+                     width=155).pack(side="left")
+        tiles=tk.Frame(body,background=BACKGROUND)
+        tiles.pack(fill="x",pady=(0,12))
+        shortcuts=(
+            ("Biblioteca de Mods","Detectar e validar","⬡","mods"),
+            ("Biblioteca de Cartas","Buscar e filtrar","▣","cartas"),
+            ("Fusões","Receitas revisadas","◎","fusoes"),
+            ("Overlay","Perfil de duelo","▤","overlay"),
+            ("Diagnóstico","Ferramentas RAM","▥","diagnostico"),
+            ("Configurações","Preferências locais","⚙","configuracoes"),
+        )
+        for caption,subtitle,symbol,key in shortcuts:
+            item=QuickTile(tiles,caption,subtitle,symbol,
+                           lambda k=key:self.go(k),width=140,height=106,
+                           accent=GOLD if key=="fusoes" else BLUE)
+            item.pack(side="left",fill="x",expand=True,padx=3)
+        lower=tk.Frame(body,background=BACKGROUND)
+        lower.pack(fill="both",expand=True)
+        left=Panel(lower)
+        left.pack(side="left",fill="both",expand=True,padx=(0,6))
+        right=Panel(lower)
+        right.pack(side="left",fill="both",expand=True,padx=(6,0))
         active=self.catalog.current()
-        known=sum(x.get("level")=="conhecido_validado" for x in entries)
-        for t,v in (("MODS CADASTRADOS",len(entries)),
-                    ("PERFIS CONHECIDOS",known),
-                    ("MOD ATIVO","Sim" if active else "Nenhum")):
-            card_stat(stats,t,v).pack(side="left",fill="both",expand=True,padx=6)
-        panels=tk.Frame(body,background=BACKGROUND)
-        panels.pack(fill="both",expand=True)
-        left=Panel(panels);left.pack(side="left",fill="both",expand=True,padx=(0,7))
-        text_label(left,"MOD ATIVO",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
+        entries=self.catalog.list()
         profile=None
         if active:
-            entry=next((x for x in entries if x["sha256"]==active.get("sha256")),None)
-            if entry:profile=self.catalog.profile_for(entry)
+            match=next((x for x in entries if x.get("sha256")==active.get("sha256")),None)
+            if match:profile=self.catalog.profile_for(match)
+        text_label(left,"⬡   MOD ATIVO",color=BLUE,size=13,strong=True,
+                   bg=PANEL).pack(anchor="w")
         if profile:
-            text_label(left,profile.get("name","Mod local"),color=GOLD,size=17,strong=True,bg=PANEL).pack(anchor="w",pady=9)
-            text_label(left,"Perfil vinculado ao arquivo selecionado. A ISO ativa no emulador não é verificada automaticamente.",
-                       color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(3,12))
+            text_label(left,str(profile.get("name") or "Mod local"),
+                       color=GOLD,size=18,strong=True,bg=PANEL).pack(
+                           anchor="w",pady=(12,9))
+            text_label(left,"Perfil ativo no DUELTRACE. Ainda não há confirmação "
+                            "da ISO executada pelo emulador.",
+                       color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(0,10))
         else:
-            text_label(left,"Nenhum perfil ativo",color=MUTED,size=14,bg=PANEL).pack(anchor="w",pady=(15,12))
-        self._action(left,"Ativar ou trocar mod",lambda:self.go("mods"),accent=GOLD).pack(anchor="w")
-        right=Panel(panels);right.pack(side="left",fill="both",expand=True,padx=(7,0))
-        text_label(right,"ANÁLISE AUTOMÁTICA",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
-        for caption in ("01   Identificar ISO/BIN local","02   Ler estruturas conhecidas",
-                        "03   Organizar categorias de cartas","04   Anexar efeitos com fonte identificada",
-                        "05   Sinalizar dados que precisam de revisão"):
-            text_label(right,caption,color=TEXT,size=11,bg=PANEL).pack(anchor="w",pady=8)
-        self._action(right,"Analisar pasta salva",self.scan_folder).pack(anchor="w",pady=(10,0))
+            text_label(left,"Nenhum perfil ativo",color=GOLD,size=17,
+                       strong=True,bg=PANEL).pack(anchor="w",pady=(12,10))
+            text_label(left,"Importe uma ISO/BIN para iniciar. Mods desconhecidos "
+                            "exigem investigação antes da ativação.",
+                       color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(0,10))
+        self._action(left,"Ativar ou trocar mod",lambda:self.go("mods"),
+                     accent=GOLD,width=198).pack(anchor="w",pady=(2,12))
+        text_label(left,f"MODS CADASTRADOS  {len(entries)}",color=MUTED,
+                   size=10,bg=PANEL).pack(anchor="w",pady=3)
+        text_label(left,f"PERFIS VALIDADOS  {sum(e.get('level')=='conhecido_validado' for e in entries)}",
+                   color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=3)
+        text_label(right,"▣   BIBLIOTECA INTELIGENTE",color=BLUE,size=13,
+                   strong=True,bg=PANEL).pack(anchor="w",pady=(0,10))
+        if profile and profile.get("supported_features",{}).get("cards"):
+            from card_catalog import category_summary
+            counts=category_summary(profile.get("cards",[]))
+        else:
+            counts={}
+        CategoryMeters(right,counts).pack(fill="x",expand=True)
+        text_label(right,"Valores extraídos do perfil local; categorias não "
+                         "confirmadas não são estimadas.",color=MUTED,
+                   size=9,bg=PANEL).pack(anchor="w",pady=(8,0))
 
     def _table(self,parent,columns,specs,height=14):
         container=tk.Frame(parent,background=PANEL)
@@ -272,6 +320,11 @@ class DueltraceDesktop(tk.Tk):
         self.card_category_var.trace_add("write",lambda *_:self._refresh_cards())
         self.card_counter=text_label(toolbar,"",color=GOLD,size=10,bg=PANEL)
         self.card_counter.pack(side="right")
+        self.card_sort_var=tk.StringVar(value="ID")
+        ttk.Combobox(toolbar,textvariable=self.card_sort_var,state="readonly",
+                     values=("ID","ATK ↓","DEF ↓","Nome"),width=11,
+                     style="DT.TCombobox").pack(side="right",padx=12)
+        self.card_sort_var.trace_add("write",lambda *_:self._refresh_cards())
         sections=tk.Frame(root,background=BACKGROUND)
         sections.pack(fill="both",expand=True)
         main=Panel(sections);main.pack(side="left",fill="both",expand=True,padx=(0,8))
@@ -281,7 +334,11 @@ class DueltraceDesktop(tk.Tk):
         self.card_tree.bind("<<TreeviewSelect>>",self._on_select_card)
         detail=Panel(sections,width=300);detail.pack(side="left",fill="y",padx=(8,0))
         detail.pack_propagate(False)
-        text_label(detail,"DETALHES DA CARTA",color=BLUE,size=12,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(detail,"CARTA SELECIONADA",color=BLUE,size=12,strong=True,bg=PANEL).pack(anchor="w")
+        self.card_art=CardArt(detail,width=265,height=230)
+        self.card_art.pack(fill="x",pady=(8,6))
+        text_label(detail,"Prévia simbólica · sem arte extraída da ISO",
+                   color=MUTED,size=8,bg=PANEL).pack(anchor="w",pady=(0,7))
         self.card_title=text_label(detail,"Selecione uma carta",color=GOLD,size=12,strong=True,bg=PANEL)
         self.card_title.pack(anchor="w",pady=(15,10))
         self.card_details=text_label(detail,"",color=MUTED,size=10,bg=PANEL)
@@ -304,6 +361,15 @@ class DueltraceDesktop(tk.Tk):
                    and (not query or query in str(x.get("name","")).casefold()
                         or query in str(x.get("id",""))
                         or query in str(x.get("effect_text") or "").casefold())]
+        order=self.card_sort_var.get() if hasattr(self,"card_sort_var") else "ID"
+        if order=="ATK ↓":
+            displayed.sort(key=lambda c:(-(int(c.get("atk") or 0)),int(c.get("id") or 0)))
+        elif order=="DEF ↓":
+            displayed.sort(key=lambda c:(-(int(c.get("def") or 0)),int(c.get("id") or 0)))
+        elif order=="Nome":
+            displayed.sort(key=lambda c:(str(c.get("name") or "").casefold(),int(c.get("id") or 0)))
+        else:
+            displayed.sort(key=lambda c:int(c.get("id") or 0))
         for item in displayed:
             self.card_tree.insert("","end",iid=str(item["id"]),
                 values=(item["id"],item.get("name",""),item.get("category","Não identificado"),
@@ -315,6 +381,7 @@ class DueltraceDesktop(tk.Tk):
         if not ids:return
         card=next((x for x in self.visible_cards if str(x.get("id"))==ids[0]),None)
         if not card:return
+        self.card_art.set_card(card)
         self.card_title.configure(text=f"#{card['id']}  {card.get('name','')}")
         self.card_details.configure(text=(
             f"Categoria: {card.get('category','Não identificado')}\n"
@@ -337,7 +404,9 @@ class DueltraceDesktop(tk.Tk):
         valid=bool(profile and profile.get("supported_features",{}).get("fusions"))
         recipes=profile.get("fusion_recipes",[]) if valid else []
         panel=Panel(root);panel.pack(fill="both",expand=True)
-        text_label(panel,"BANCO DE FUSÕES DO PERFIL",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(panel,"◎   BANCO DE FUSÕES DO PERFIL",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(panel,"Somente receitas obtidas e autorizadas pelo mod ativo. Rotas não validadas continuam indisponíveis.",
+                   color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(7,9))
         tree=self._table(panel,("a","b","result","origin"),
                          (("a","Material A",120),("b","Material B",120),
                           ("result","Resultado",120),("origin","Procedência",300)))
@@ -382,6 +451,10 @@ class DueltraceDesktop(tk.Tk):
                        color=MUTED,size=10,bg=PANEL).pack(anchor="w",pady=(0,11))
         self._action(left,"Selecionar perfil",lambda:self.go("mods")).pack(anchor="w",pady=6)
         info=Panel(root);info.pack(fill="x",pady=8)
+        text_label(info,"▤  Estado de integração",color=BLUE,size=12,strong=True,
+                   bg=PANEL).pack(anchor="w",pady=(0,8))
+        text_label(info,"LP e estatísticas só aparecerão quando houver telemetria real e validada.",
+                   color=TEXT,size=10,bg=PANEL).pack(anchor="w",pady=(0,10))
         text_label(info,"Leitura de cartas no campo: não validada. "
                         "Fusões envolvendo a mesa continuam desativadas.",
                    color=MUTED,size=11,bg=PANEL).pack(anchor="w")
@@ -392,7 +465,9 @@ class DueltraceDesktop(tk.Tk):
         self._label(root,"Diagnóstico",
                     "Ferramentas técnicas de investigação, somente leitura e sem acesso presumido ao campo.")
         panel=Panel(root);panel.pack(fill="x",pady=8)
-        text_label(panel,"MODO AVANÇADO",color=BLUE,size=14,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(panel,"▥   FERRAMENTAS DE DIAGNÓSTICO",color=BLUE,size=14,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(panel,"Investigação local  •  somente leitura",color=GOLD,size=10,
+                   bg=PANEL).pack(anchor="w",pady=(8,0))
         text_label(panel,"RAM experimental, leitor temporal e revisão de fusões "
                          "permanecem disponíveis na Biblioteca técnica. "
                          "O reconhecimento de cartas no campo não foi validado.",
@@ -408,7 +483,7 @@ class DueltraceDesktop(tk.Tk):
         self._label(root,"Configurações",
                     "Preferências locais. Nenhum arquivo de jogo será modificado.")
         panel=Panel(root);panel.pack(fill="x",pady=8)
-        text_label(panel,"PASTA DE MODS",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
+        text_label(panel,"⚙   PASTA DE MODS",color=BLUE,size=13,strong=True,bg=PANEL).pack(anchor="w")
         ttk.Entry(panel,textvariable=self.folder,width=80,
                   style="DT.TEntry").pack(fill="x",pady=(12,10))
         self._action(panel,"Escolher pasta",self.choose_folder).pack(anchor="w")
