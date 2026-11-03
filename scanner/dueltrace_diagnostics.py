@@ -15,9 +15,9 @@ def art_diagnostic(profile: dict) -> dict:
     n = report.get("artes_extraidas")
     count = n if type(n) is int and n >= 0 else None
     requested = report.get("art_requested")
-    if requested is None:
-        requested = count is not None  # relatórios v0.6.0
-    if not requested:
+    if requested is None and count is None:
+        state = "sem registro"
+    elif requested is False:
         state = "não solicitada"
     elif count is None:
         state = "tentativa sem contagem"
@@ -71,6 +71,8 @@ def format_diagnostic(item: dict) -> str:
     art = item["art"]
     if art["state"] == "não solicitada":
         art_line = "não solicitadas neste relatório"
+    elif art["state"] == "sem registro":
+        art_line = "nenhuma tentativa de extração registrada"
     elif art["count"] is None:
         art_line = "extração sem contagem"
     else:
