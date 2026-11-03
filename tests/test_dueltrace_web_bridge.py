@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import functools
 import http.server
+import http.client
 import sys
 import tempfile
 import threading
@@ -177,7 +178,7 @@ class BridgeTests(unittest.TestCase):
                 ("/",{"Sec-Fetch-Site":"cross-site"},"GET",403),
                 ("/%2e%2e/not_static.txt",{},"GET",403),
                 ("/%252e%252e/not_static.txt",{},"GET",403),
-                ("//evil.example/path",{},"GET",403),
+                ("//evil.example/path",{},"GET",404),  # urllib normaliza a dupla barra
                 ("/.env",{},"GET",403),
                 ("/empty/",{},"GET",403),
                 ("/",{},"POST",405),
@@ -188,6 +189,14 @@ class BridgeTests(unittest.TestCase):
                     with self.assertRaises(HTTPError) as denied:
                         urlopen(req)
                     self.assertEqual(denied.exception.code,expected)
+            conn=http.client.HTTPConnection("127.0.0.1",server.server_port)
+            try:
+                conn.request("GET","//evil.example/path")
+                response=conn.getresponse()
+                self.assertEqual(response.status,403)
+                response.read()
+            finally:
+                conn.close()
             try:
                 (static/"outbound.txt").symlink_to(outside)
             except (OSError,NotImplementedError):
