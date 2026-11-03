@@ -28,11 +28,11 @@ def synthetic_wa():
     frame=assets.DUEL_IMAGE_START+2*assets.DUEL_COL_SIZE
     for y in range(assets.FRAME_H):
         p=frame+(assets.FRAME_V+y)*assets.FRAME_ROW_STRIDE
-        for x in range(26):
-            data[p+x]=(x%16)|(((x+1)%16)<<4)
+        for x in range(52):
+            data[p+x]=(x+y)%64
     for idx in range(6):
-        struct.pack_into("<16H",data,
-                         assets.DUEL_CLUT_START+(idx+1)*256*2,*colors[:16])
+        struct.pack_into("<256H",data,
+                         assets.DUEL_CLUT_START+(idx+1)*256*2,*colors)
     return bytes(data)
 
 
@@ -46,6 +46,17 @@ class WAAssetTests(unittest.TestCase):
         self.assertEqual(assets.frame_index(22),3)
         self.assertIsNone(assets.frame_index(26))
         self.assertIsNone(assets.frame_index("Dragão"))
+
+    def test_frames_use_8bit_original_256_color_cluts(self):
+        wa=synthetic_wa()
+        first=assets.decode_hand_frame(wa,0)
+        second=assets.decode_hand_frame(wa,1)
+        self.assertEqual(first.size,(52,60))
+        self.assertEqual(second.size,(52,60))
+        # Pixel x=51 e início da linha seguinte provam leitura de 52 bytes
+        # por linha, em vez de nibbles 4bpp.
+        self.assertNotEqual(first.getpixel((0,0)),first.getpixel((51,0)))
+        self.assertNotEqual(first.getpixel((0,0)),first.getpixel((0,1)))
 
     def test_frame_decoder_and_invalid_palette_are_bounded(self):
         wa=synthetic_wa()
