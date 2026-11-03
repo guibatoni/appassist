@@ -182,9 +182,9 @@ def decode_drops(wa,rank_names=None):
             if len(candidates)!=1:
                 return None,f'Drops não validados para ID {i+1} / {rank}: formato desconhecido (opções={len(candidates)}), sem probabilidades atribuídas'
             enc,weights=candidates[0];encodings.append(enc)
-            check.append({'oponente_id':i+1,'rank':rank,'peso_total':sum(weights),'codificacao':enc})
+            check.append({'oponente_id':i+1,'rank':rank,'peso_total':sum(weights),'codificacao':enc,'source_offset':a})
             for cid,w in enumerate(weights,1):
-                if w: rows.append({'oponente_id':i+1,'rank':rank,'carta_id':cid,'peso':w,'chance_percentual':round(w*100/2048,6)})
+                if w: rows.append({'oponente_id':i+1,'rank':rank,'carta_id':cid,'peso':w,'chance_percentual':round(w*100/2048,6),'source_offset':a+(cid-1)*2})
     return {'drops':rows,'decks':deck,'verificacao':check,'codificacoes':sorted(set(encodings))},'117/117 tabelas validadas; soma 2048 por tabela'
 
 def art_extract(wa,cards,dest):
@@ -305,6 +305,7 @@ def process(path,output,with_art=False,digest=None,progress=None):
         drops,drop_status=decode_drops(wa,RANKS if info['sha256']==X15_SHA else None)
         info['rotulos_ranks_confirmados']=info['sha256']==X15_SHA
         info['drops_status']=drop_status
+        info['drops_source']=wa_names[0]
         if drops is not None:
             info['tabelas_drops']=len(drops['verificacao']);info['drops']=len(drops['drops'])
             for keyname,filename in [('drops','drops_por_oponente.csv'),('decks','decks.csv'),('verificacao','validacao_pesos.csv')]:write_csv(dest/filename,drops[keyname])
