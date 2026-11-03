@@ -34,21 +34,47 @@ def main():
         for number,(name,level) in enumerate(labels,1):
             sha=f"{number:064x}"
             p=home/"profiles"/sha[:16]/"profile.json"
+            fake_cards=([{"id":n,"name":f"CARTA TESTE {n}",
+                          "atk":n*400,"def":n*200} for n in range(1,6)]
+                        + [{"id":200,"name":"RESULTADO SINTÉTICO",
+                            "atk":2800,"def":1900}]) if number==3 else []
+            fake_fusions=([{"a":1,"b":2,"result":200,
+                             "validation":"extraida_sete_bancos_consistentes"}]
+                          if number==3 else [])
             atomic_json(p,{
                 "rom_sha256":sha,"name":name,
-                "supported_features":{"cards":False,"effects":False,
-                                      "drops":False,"fusions":False,"art":False},
-                "verified":{"cartas":"PENDENTE — SINTÉTICO"},
-                "cards":[],"opponents":[],"drops":[],
-                "fusion_recipes":[],
+                "supported_features":{"cards":number==3,"effects":False,
+                                      "drops":False,"fusions":number==3,"art":False},
+                "verified":{"cartas":"TESTE SINTÉTICO"},
+                "cards":fake_cards,"opponents":[],"drops":[],
+                "fusion_recipes":fake_fusions,
             })
             entries.append({"sha256":sha,"file_name":name,"level":level,
                             "profile_path":str(p),"source_path":str(home/name)})
         atomic_json(catalog.registry_file,{"schema":1,"entries":entries})
+        active_sha=f"{3:064x}"
+        atomic_json(catalog.active_file,{
+            "sha256":active_sha,"features":{"nomes_cartas":True,"fusoes":True},
+            "level":"TESTE_SINTETICO",
+        })
         app=DueltraceDesktop(catalog=catalog,developer=False)
         try:
             app.geometry("1360x780+80+80")
             app.update()
+            app._render_live_hand({
+                "ready":True,"hand_ids":[1,2,3,4,5],
+                "pid":None,"status":"SIMULAÇÃO — NÃO CONECTADO À RAM",
+            })
+            app.update_idletasks()
+            x,y=app.winfo_rootx(),app.winfo_rooty()
+            w,h=app.winfo_width(),app.winfo_height()
+            dest=Path("dist")/"DUELTRACE-PREVIA-INICIO-TESTE.png"
+            dest.parent.mkdir(exist_ok=True)
+            try:
+                ImageGrab.grab(bbox=(x,y,x+w,y+h)).save(dest)
+                print("Prévia inicial de dados sintéticos:",dest.resolve())
+            except OSError as exc:
+                print(f"Prévia Inicial indisponível: {exc}")
             app.go("mods")
             # Desenho nativo de componentes e transições após navegação.
             for _ in range(8):
