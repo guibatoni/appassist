@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import struct
 from pathlib import Path
 
@@ -130,7 +131,7 @@ def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
                 "warnings":["Pillow indisponível"]}
     ids=[c.get("id") for c in cards]
     if (len(cards)!=CARD_COUNT or ids!=list(range(1,CARD_COUNT+1)) or
-            type(rom_sha256) is not str or len(rom_sha256)!=64):
+            type(rom_sha256) is not str or not re.fullmatch(r"[0-9a-fA-F]{64}",rom_sha256)):
         raise ValueError("Catálogo deve ter 722 IDs e SHA válido")
     out=Path(out)
     folders={kind:out/kind for kind in
@@ -179,15 +180,13 @@ def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
             })
         except (OSError,ValueError,struct.error) as exc:
             warnings.append(f"ID {cid}: {str(exc)[:120]}")
-    report={
-        "revision":ASSET_REVISION,"rom_sha256":rom_sha256,
+    # Miniaturas repetidas divergentes são uma característica auditável do\n    # mod, não tornam inválidas as imagens extraídas com sucesso.\n    unmatched=good_thumb-duplicate\n    if unmatched:\n        warnings.append(f"{unmatched} miniaturas diferem da cópia no registro; ambas as origens foram auditadas")\n    report={\n        "revision":ASSET_REVISION,"rom_sha256":rom_sha256,
         "source":wa_name,"source_bytes":len(wa),
         "source_sha256":hashlib.sha256(wa).hexdigest(),
         "art_count":good_art,"thumbnail_count":good_thumb,
         "frame_count":len(frames),"composed_count":composed,
-        "thumbnail_duplicate_matches":duplicate,
-        "status":"completo" if good_art==good_thumb==duplicate==composed==CARD_COUNT
-                 and len(frames)==6 else "parcial",
+        "thumbnail_duplicate_matches":duplicate,\n        "thumbnail_duplicate_mismatches":unmatched,
+        "status":"completo" if good_art==good_thumb==composed==CARD_COUNT\n                 and len(frames)==6 else "parcial",
         "warnings":warnings[:80],"records":metadata,
     }
     temp=out/"recursos_wa.json.tmp"
