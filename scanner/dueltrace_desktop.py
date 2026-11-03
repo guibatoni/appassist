@@ -31,7 +31,7 @@ from dueltrace_brand import apply_window_icon, png_icon
 from dueltrace_visuals import HeroArt, QuickTile, CardArt, CategoryMeters, HandCardTile, NAV_SYMBOLS
 from dueltrace_theme import (
     BACKGROUND,SIDEBAR,PANEL,PANEL_ALT,BORDER,BLUE,GOLD,GREEN,RED,TEXT,MUTED,
-    Panel,NeonButton,setup_theme,text_label,card_stat,
+    Panel,NeonButton,setup_theme,text_label,card_stat,blend,
 )
 
 PAGES=(
@@ -48,7 +48,7 @@ USER_PAGES=tuple(p for p in PAGES if p[1] in ("inicio","mods","cartas","fusoes")
 class DueltraceDesktop(tk.Tk):
     def __init__(self, *, catalog=None, developer=False):
         super().__init__()
-        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.5")
+        self.title("DUELTRACE — MultiMod Companion · Alpha 0.6.6")
         self.geometry("1360x780")
         self.minsize(1100,690)
         self.configure(background=BACKGROUND)
