@@ -6,6 +6,7 @@ Não baixa nem distribui imagens de jogos. Para formatos desconhecidos, não inv
 from __future__ import annotations
 import argparse, csv, hashlib, json, re, struct, sys, unicodedata
 from pathlib import Path
+from dueltrace_disc_metadata import extract_descriptions, inspect_frame_palettes, save_metadata
 
 OPP_COUNT=39
 CARD_COUNT=722
@@ -21,7 +22,8 @@ WA_CARD_SECTOR_START=722
 WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
-ART_PARSER_REVISION=2  # revisão da validação de imagens e retry da extração
+ART_PARSER_REVISION=3
+DISC_METADATA_REVISION=1  # revisão da validação de imagens e retry da extração
 
 
 def sha256(path:Path, progress=None):
@@ -243,7 +245,7 @@ def process(path,output,with_art=False,digest=None,progress=None):
     info['resultado_dir']=str(dest.resolve())
     # Não reaproveitar CSVs desatualizados de uma tentativa anterior.
     for previous in ('cartas.csv','oponentes.csv','drops_por_oponente.csv',
-                     'decks.csv','validacao_pesos.csv'):
+                     'decks.csv','validacao_pesos.csv','descricoes.csv'):
         (dest/previous).unlink(missing_ok=True)
     disc=None
     try:
@@ -276,6 +278,19 @@ def process(path,output,with_art=False,digest=None,progress=None):
         if progress:progress("Decodificando cartas e adversários",0,1)
         opponents,cards,nomes_status=decode_names(sl)
         info['nomes_status']=nomes_status
+        info['metadata_revision']=DISC_METADATA_REVISION
+        # Ambos os arquivos são lidos em TODA reanálise da imagem, sem rede.
+        descriptions, desc_report=extract_descriptions(sl)
+        info['description_audit']=desc_report
+        if descriptions:
+            write_csv(dest/'descricoes.csv',[
+                {'id':cid,'description':entry['description'],
+                 'description_source':entry['description_source'],
+                 'description_offset':entry['description_offset']}
+                for cid,entry in sorted(descriptions.items())])
+        frame_palettes, frame_report=inspect_frame_palettes(wa)
+        info['frame_palette_audit']=frame_report
+        save_metadata(dest/'molduras_paletas.json',frame_report)
         if opponents:
             write_csv(dest/'oponentes.csv',opponents)
             write_csv(dest/'cartas.csv',cards)
