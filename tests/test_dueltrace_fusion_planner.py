@@ -51,6 +51,17 @@ class FusionChainPlannerTests(unittest.TestCase):
         self.assertEqual(result["routes"][0]["result"],40)
         self.assertIn("resultado anterior",describe_route(by_id[40],cards))
 
+    def test_play_order_is_not_confused_with_sorted_consumed_slots(self):
+        idx=build_fusion_index([
+            {"a":2,"b":4,"result":10},
+            {"a":10,"b":1,"result":20},
+        ])
+        result=plan_fusion_chains([1,2,3,4,5],idx,{})
+        route=next(r for r in result["routes"] if r["result"]==20)
+        self.assertEqual(route["used_slots"],[1,2,4])
+        self.assertEqual(route["slot_order"],[2,4,1])
+        self.assertEqual([step["slot"] for step in route["steps"]],[4,1])
+
     def test_never_reuse_consumed_slot_even_with_repeated_card_ids(self):
         recipes=[
             {"a":4,"b":4,"result":10},
