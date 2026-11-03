@@ -8,6 +8,7 @@ API HTTP aberta para comandos. As imagens são lidas localmente.
 from __future__ import annotations
 
 import threading
+import json
 import re
 from uuid import uuid4
 from datetime import datetime, timezone
