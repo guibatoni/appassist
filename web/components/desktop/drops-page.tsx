@@ -3,16 +3,17 @@
 import Image from "next/image"
 import {useEffect, useState} from "react"
 import {ChevronLeft, ChevronRight, Database, RefreshCcw, Search, ShieldCheck} from "lucide-react"
-import {cardWithFrame, desktopApi} from "@/lib/desktop"
+import {cardArt, cardWithFrame, desktopApi} from "@/lib/desktop"
 import type {DropsPage, DropRow} from "@/lib/desktop"
 
 function DropArtwork({sha,id,name}:{sha:string|null;id:number;name:string}) {
-  const [failed,setFailed]=useState(false)
-  useEffect(()=>setFailed(false),[sha,id])
-  const src=cardWithFrame(sha,id)
+  const [source,setSource]=useState<"frame"|"art"|"none">("frame")
+  useEffect(()=>setSource("frame"),[sha,id])
+  const src=source==="frame"?cardWithFrame(sha,id):source==="art"?cardArt(sha,id):null
   return <div className="relative h-[90px] w-[78px] shrink-0 overflow-hidden rounded border border-gold/40 bg-[#0b1932]">
-    {src&&!failed?<Image src={src} alt={"Moldura original e carta "+name} fill unoptimized sizes="78px"
-      className="object-fill [image-rendering:pixelated]" onError={()=>setFailed(true)}/>:
+    {src?<Image src={src} alt={"Arte extraída da carta "+name} fill unoptimized sizes="78px"
+      className={source==="frame"?"object-fill [image-rendering:pixelated]":"object-contain [image-rendering:pixelated]"}
+      onError={()=>setSource(source==="frame"?"art":"none")}/>:
       <span className="flex h-full items-center justify-center text-xs text-muted">#{id}</span>}
   </div>
 }
