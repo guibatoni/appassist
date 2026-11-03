@@ -119,7 +119,7 @@ export function DropsPage({sha}:{sha:string|null}) {
       const result=await api.import_rank_trace(duelEvidence?.lastDuelId??null)
       if(!result.cancelled){
         if(result.available===false)setTraceError("Log não reconhecido: "+result.status)
-        else setTraceInfo({status:"updated",last:result,records:(traceInfo?.records??0)+1})
+        else setTraceInfo(await api.get_rank_trace_status())
       }
     }catch(e){
       setTraceError(e instanceof Error?e.message:"Não foi possível importar log MIPS.")
