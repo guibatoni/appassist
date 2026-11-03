@@ -25,8 +25,12 @@ function CardThumbnail({card,sha}:{card:LocalCard|null;sha:string|null}) {
   const framed=card?cardWithFrame(sha,card.id):null
   const large=card?cardArt(sha,card.id):null
   const url=source==="composite"?framed:source==="large"?large:null
-  return <div className="relative mx-auto flex aspect-[3/4] w-full max-w-32 items-center justify-center overflow-hidden rounded-lg border-2 border-gold/50 bg-gradient-to-b from-[#19466d] via-[#102449] to-[#060e23] p-2 shadow-[0_0_18px_rgb(56_200_255/0.18)]">
-    {url?<Image src={url} alt={card?.name??""} fill unoptimized sizes="160px" className="object-contain p-1"
+  return <div className={"relative mx-auto flex w-full max-w-32 items-center justify-center overflow-hidden bg-[#061126] shadow-[0_0_18px_rgb(56_200_255/0.18)] "+
+      (source==="composite"
+        ? "aspect-[52/60] rounded-sm border border-gold/20"
+        : "aspect-[102/96] rounded-lg border border-line/50 p-1")}>
+    {url?<Image src={url} alt={card?.name??""} fill unoptimized sizes="160px"
+      className={source==="composite"?"object-fill [image-rendering:pixelated]":"object-contain p-1"}
       onError={()=>setSource(source==="composite"?"large":"none")}/>:
       <Layers className="size-9 text-primary/45" aria-label="Imagem não extraída"/>}
     {card&&<span className="absolute left-1 top-1 rounded bg-black/70 px-1 text-[10px] text-gold">#{card.id}</span>}
@@ -395,7 +399,7 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             <FusionIllustration id={r.result} name={r.nameResult} card={cardsById.get(r.result)??null} sha={sha} role="Resultado"/>
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/50 pt-2">
-            <span className="text-xs text-muted">{sourceLabel(r.source)}</span>
+            <span className="text-xs text-muted">#{r.a} + #{r.b} → #{r.result}</span>
             <MonsterStats card={cardsById.get(r.result)??null} className="text-sm"/>
           </div>
         </article>)}
