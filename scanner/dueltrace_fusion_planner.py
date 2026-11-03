@@ -39,7 +39,7 @@ def _prefer(candidate: tuple[dict, ...], existing: tuple[dict, ...]) -> bool:
 
 def plan_fusion_chains(hand: list[int] | tuple[int, ...] | None,
                        fusion_index: dict, cards: dict[int, dict], *,
-                       min_cards: int = 3, max_cards: int = 5,
+                       min_cards: int = 2, max_cards: int = 5,
                        limit: int = 12,
                        max_states: int = DEFAULT_MAX_STATES) -> dict:
     """Explora pares iniciais e continuações com cartas ainda na mão.
@@ -51,8 +51,8 @@ def plan_fusion_chains(hand: list[int] | tuple[int, ...] | None,
     """
     if not all(type(n) is int for n in (min_cards, max_cards, limit, max_states)):
         raise ValueError("Parâmetros de busca inválidos")
-    if not 3 <= min_cards <= max_cards <= MAX_HAND:
-        raise ValueError("Buscar entre três e cinco cartas da mão")
+    if not 2 <= min_cards <= max_cards <= MAX_HAND:
+        raise ValueError("Buscar entre duas e cinco cartas da mão")
     if not 1 <= limit <= 100 or not 100 <= max_states <= 200_000:
         raise ValueError("Limite de resultados/estados fora do intervalo")
     empty = {"routes": [], "complete": True,
