@@ -7,6 +7,7 @@ ferramentas avançadas. A análise é local e roda fora da thread da interface.
 from __future__ import annotations
 
 import os
+import base64
 import queue
 import threading
 import subprocess
@@ -22,7 +23,7 @@ from dueltrace_intelligence import MultiModIntelligence
 from dueltrace_diagnostics import art_diagnostic, mod_diagnostic, format_diagnostic
 from ia_local import DEFAULT_MODEL
 from integracao_overlay import overlay_snapshot
-from dueltrace_brand import apply_window_icon
+from dueltrace_brand import apply_window_icon, png_icon
 from dueltrace_visuals import HeroArt, QuickTile, CardArt, CategoryMeters, NAV_SYMBOLS
 from dueltrace_theme import (
     BACKGROUND,SIDEBAR,PANEL,PANEL_ALT,BORDER,BLUE,GOLD,GREEN,RED,TEXT,MUTED,
@@ -84,16 +85,38 @@ class DueltraceDesktop(tk.Tk):
         self.protocol("WM_DELETE_WINDOW",self._close)
 
     def _build_shell(self):
-        top=tk.Frame(self,background=SIDEBAR,height=85,
+        top=tk.Frame(self,background=SIDEBAR,height=84,
                      highlightbackground=GOLD,highlightthickness=1)
         top.pack(fill="x",side="top")
         top.pack_propagate(False)
+        backdrop=tk.Canvas(top,background=SIDEBAR,bd=0,highlightthickness=0)
+        backdrop.place(x=0,y=0,relwidth=1,relheight=1)
+        backdrop.tk.call("lower",str(backdrop))
+        def _render_header(e):
+            backdrop.delete("all")
+            for y in range(0,e.height,4):
+                mix=y/max(1,e.height)
+                tone=blend("#09284A","#030B18",mix)
+                backdrop.create_line(0,y,e.width,y,fill=tone,width=4)
+            backdrop.create_line(0,e.height-4,e.width,e.height-4,
+                                 fill=GOLD,width=2)
+            backdrop.create_line(0,e.height-8,e.width,e.height-8,
+                                 fill=BLUE,width=2)
+        backdrop.bind("<Configure>",_render_header)
         logo=tk.Frame(top,background=SIDEBAR)
-        logo.pack(side="left",padx=26,pady=11)
-        text_label(logo,"▽  D U E L T R A C E",color=BLUE,size=22,
+        logo.pack(side="left",padx=21,pady=9)
+        try:
+            self._brand_photo=tk.PhotoImage(data=base64.b64encode(png_icon(64)))
+            tk.Label(logo,image=self._brand_photo,bg=SIDEBAR,bd=0).pack(
+                side="left",padx=(0,12))
+        except tk.TclError:
+            pass
+        wordmark=tk.Frame(logo,background=SIDEBAR)
+        wordmark.pack(side="left")
+        text_label(wordmark,"DUELTRACE",color=GOLD,size=24,
                    strong=True,bg=SIDEBAR).pack(anchor="w")
-        text_label(logo,"MULTIMOD COMPANION  /  WINDOWS",color=GOLD,size=9,
-                   strong=True,bg=SIDEBAR).pack(anchor="w")
+        text_label(wordmark,"FORBIDDEN MEMORIES  /  MULTIMOD COMPANION",
+                   color=BLUE,size=9,strong=True,bg=SIDEBAR).pack(anchor="w")
         statusbox=tk.Frame(top,background=PANEL_ALT,highlightbackground=BORDER,
                            highlightthickness=1,padx=15,pady=9)
         statusbox.pack(side="right",padx=24,pady=16)
@@ -102,7 +125,7 @@ class DueltraceDesktop(tk.Tk):
         self.header_status.pack(anchor="center")
         body=tk.Frame(self,background=BACKGROUND)
         body.pack(fill="both",expand=True)
-        sidebar=tk.Frame(body,background=SIDEBAR,width=220,
+        sidebar=tk.Frame(body,background=SIDEBAR,width=236,
                          highlightbackground=BORDER,highlightthickness=1)
         sidebar.pack(side="left",fill="y")
         sidebar.pack_propagate(False)
@@ -111,7 +134,7 @@ class DueltraceDesktop(tk.Tk):
         for name,key in self.pages:
             symbol=NAV_SYMBOLS.get(key,"◇")
             button=NeonButton(sidebar,f"{symbol}  {name}",
-                              lambda p=key:self.go(p),width=194,height=47)
+                              lambda p=key:self.go(p),width=208,height=49)
             button.pack(pady=5,padx=12)
             self._buttons[key]=button
         tk.Frame(sidebar,background=SIDEBAR).pack(fill="both",expand=True)
@@ -177,12 +200,12 @@ class DueltraceDesktop(tk.Tk):
         hero_art.pack(side="right",padx=(7,2))
         copy=tk.Frame(hero,background=PANEL)
         copy.pack(side="left",fill="both",expand=True)
-        text_label(copy,"A NOVA EXPERIÊNCIA DUELTRACE",color=BLUE,
+        text_label(copy,"◈  DUELTRACE  /  MULTIMOD COMPANION",color=BLUE,
                    size=10,strong=True,bg=PANEL).pack(anchor="w")
-        text_label(copy,"Cada carta. Cada fusão. Cada jogada.",
+        text_label(copy,"Bem-vindo ao DUELTRACE",
                    color=GOLD,size=18,strong=True,bg=PANEL).pack(anchor="w",pady=(12,7))
-        text_label(copy,"Escolha seu mod e deixe o scanner identificar as estruturas "
-                        "que consegue validar. Nenhum efeito ou resultado é inventado.",
+        text_label(copy,"Selecione seu mod e explore cartas, imagens e fusões identificadas. "
+                        "O scanner separa dados extraídos de hipóteses do Ollama.",
                    color=TEXT,size=10,bg=PANEL).pack(anchor="w",pady=(0,13))
         actions=tk.Frame(copy,background=PANEL)
         actions.pack(anchor="w")
