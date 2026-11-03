@@ -293,7 +293,7 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['wa_total_bytes']=disc.files[wa_names[0]][1]
         wa_sha=hashlib.sha256(wa).hexdigest()
         info['hash_wa_prefix']=wa_sha
-        info['hash_wa']=wa_sha
+        info['hash_wa']=wa_sha if len(wa)==wa_size else None
         info['wa_lido_integralmente']=len(wa)==wa_size
         from fm_rank_tables import extract_rank_table
         info['rank_analysis']=extract_rank_table(
