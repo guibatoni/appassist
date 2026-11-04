@@ -73,6 +73,17 @@ export type ModScanDiagnostic = {
   cardsVerified: boolean
   dropsVerified: boolean
   artVerified: boolean
+  opponentPointerProbe?: {
+    state: string
+    verified: false
+    candidates: Array<{
+      startIndex: number
+      plausible: number
+      distinct: number
+      samples: string[]
+      validated: false
+    }>
+  }
   nameLayoutProbe?: {
     state: string
     cardSamples: Array<{index: number|null; pointer: number|null; name: string; status: string; invalidGlyphs: number|null}>
@@ -174,6 +185,8 @@ export type LocalMod = {
   opponents?: number
   dropEntries?: number
   dropTables?: number
+  dropCandidateEntries?: number
+  dropCandidateTables?: number
   rankDetected?: boolean
   rankBinaryVerified?: boolean
   rankOffset?: number | null

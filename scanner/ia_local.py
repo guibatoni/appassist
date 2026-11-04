@@ -93,6 +93,15 @@ def minimal_evidence(report: dict) -> dict:
                    if isinstance(row,dict)],
             },
             "systemCnf":(report.get("scan_diagnostic") or {}).get("systemCnf"),
+            "opponentPointerHypotheses":[{
+                "startIndex":row.get("startIndex"),
+                "plausible":row.get("plausible"),
+                "distinct":row.get("distinct"),
+                "samples":[str(x)[:52] for x in row.get("samples",[])[:5]
+                           if isinstance(x,str)],
+            } for row in (report.get("scan_diagnostic") or {}).get(
+                "opponentPointerProbe",{}).get("candidates",[])[:5]
+               if isinstance(row,dict)],
             "files":[{
                 "name":str(row.get("name") or "")[:150],
                 "size":row.get("size"),"signature":str(row.get("signature") or "")[:40]

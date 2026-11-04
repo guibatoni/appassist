@@ -129,6 +129,20 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
                 "validated":False,
             })
         return rows
+    pointer_report=report.get("opponent_pointer_candidates")
+    if not isinstance(pointer_report,dict):
+        pointer_report={}
+    pointer_candidates=[]
+    for candidate in pointer_report.get("candidates",[])[:5]:
+        if not isinstance(candidate,dict):continue
+        pointer_candidates.append({
+            "startIndex":candidate.get("startIndex"),
+            "plausible":candidate.get("plausible",0),
+            "distinct":candidate.get("distinct",0),
+            "samples":[str(x)[:52] for x in
+                       candidate.get("samples",[])[:5] if isinstance(x,str)],
+            "validated":False,
+        })
     flags=profile.get("supported_features") or {}
     if status.startswith("incerto") or status.startswith("erro"):
         level="estrutura_desconhecida"
@@ -211,6 +225,11 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
         "cardsVerified":bool(flags.get("cards")),
         "dropsVerified":bool(flags.get("drops")),
         "artVerified":bool(flags.get("art")),
+        "opponentPointerProbe":{
+            "state":str(pointer_report.get("state") or "não pesquisado")[:85],
+            "candidates":pointer_candidates,
+            "verified":False,
+        },
         "nameLayoutProbe":{
             "state":str(name_probe.get("state") or "não investigado")[:60],
             "cardSamples":safe_name_samples("cardSamples",10),

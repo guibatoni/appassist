@@ -140,6 +140,15 @@ class DueltraceWebBridge:
                 if (profile or {}).get("supported_features",{}).get("opponents") else 0,
             "dropEntries":len((profile or {}).get("drops",[]))
                 if (profile or {}).get("supported_features",{}).get("drops") else 0,
+            "dropCandidateEntries":((profile or {}).get("drops_provenance",{})
+                                     .get("candidate_entry_count",0)
+                                     if not (profile or {}).get("supported_features",{})
+                                     .get("drops") else 0),
+            "dropCandidateTables":((profile or {}).get("drops_provenance",{})
+                                    .get("candidate_table_count",0)
+                                    if not (profile or {}).get("supported_features",{})
+                                    .get("drops") else 0),
+
             "dropTables":(profile or {}).get("drops_provenance",{}).get("table_count",0)
                 if (profile or {}).get("supported_features",{}).get("drops") else 0,
             "rankDetected":(profile or {}).get("rank_points",{}).get("available") is True,

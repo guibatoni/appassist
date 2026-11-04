@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse, csv, hashlib, json, re, struct, sys, unicodedata
 from pathlib import Path
 from dueltrace_layout_discovery import discover_disc_layout, candidate_files_for_decoder
+from dueltrace_name_layout_probe import find_opponent_pointer_candidates
 
 OPP_COUNT=39
 CARD_COUNT=722
@@ -538,6 +539,12 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['nomes_status']=nomes_status
         if not opponents or not cards:
             info["amostras_layout_nomes"]=inspect_known_name_layout(sl)
+            # Quando 722 nomes parecem possíveis e a lista de oponentes
+            # falha, sondar deslocamentos limitados na tabela de ponteiros.
+            # Resultados são SOMENTE hipóteses de investigação.
+            info["opponent_pointer_candidates"]=find_opponent_pointer_candidates(
+                sl,pointer_base=SLUS_PTR_BASE,text_base=SLUS_TEXT_BASE,
+                glyph_base=SLUS_GLYPHS)
         from fm_card_text import extract_descriptions
         descriptions,desc_state=extract_descriptions(sl,exe_name=selected_exe)
         info['descricoes_slus']=desc_state
