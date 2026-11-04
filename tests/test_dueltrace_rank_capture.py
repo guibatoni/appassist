@@ -78,6 +78,35 @@ class CapturedRankTests(unittest.TestCase):
         self.assertEqual(report["missing_prediction"],1)
         self.assertEqual(report["matches"],0)
 
+    def test_automatic_spoils_begins_at_101_and_tracks_actual_actions(self):
+        """Poll get_rank without entering each metric; normal X15 score engine."""
+        manual=self.bridge.calculate_spoils({
+            "turns":0,"effective_attacks":0,"defense_wins":0,
+            "face_down":0,"spells":0,"traps":0,"cards_used":0,
+            "remaining_lp":8000,"fusions":0,"equips":0
+        },"lp")
+        self.assertEqual(manual["score"],101)
+        self.assertEqual(manual["category"],"Z-POW")
+        self.assertEqual(self.bridge.get_rank()["state"],"needs_lp_confirmation")
+        self.bridge.confirm_rank_lp(8000)
+        start=self.bridge.get_rank()
+        self.assertEqual(start["score"],101)
+        self.assertEqual(start["category"],"Z-POW")
+        self.assertEqual(start["breakdown"]["spells"],2)
+        self.counters["spells"]=1
+        after_spell=self.bridge.get_rank()
+        self.assertEqual(after_spell["score"],95)
+        self.assertEqual(after_spell["breakdown"]["spells"],-4)
+        self.counters["spells"]=4
+        after_more=self.bridge.get_rank()
+        self.assertEqual(after_more["score"],91)
+        self.assertEqual(after_more["category"],"S-POW")
+        self.counters["remaining_lp"]=7000
+        after_damage=self.bridge.get_rank()
+        self.assertEqual(after_damage["score"],89)
+        self.assertEqual(after_damage["category"],"S-POW")
+        self.assertFalse(after_damage["final"])
+
     def test_capture_expires_and_never_attaches_to_later_duel(self):
         self.bridge.confirm_rank_lp(8000)
         captured=self.bridge.capture_rank_prediction()
