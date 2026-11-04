@@ -726,6 +726,16 @@ function Mods({mods,sha,onRefresh,configured}:{
                     #{row.index} ponteiro {row.pointer??"?"}: {row.name||"(vazio)"} · {row.status}
                   </p>)}
               </div>}
+              {(diagnostics[mod.sha256].opponentPointerProbe?.candidates?.length??0)>0&&
+                <div className="mt-3 rounded-lg border border-gold/30 p-2">
+                  <p className="font-semibold text-gold">Possíveis tabelas de nomes de oponentes — não confirmadas</p>
+                  {(diagnostics[mod.sha256].opponentPointerProbe?.candidates??[]).map((c,i)=>
+                    <div key={i} className="mt-2 text-muted">
+                      <p>Índice inicial {c.startIndex} · {c.plausible}/39 nomes plausíveis · {c.distinct} diferentes</p>
+                      <p className="mt-1 break-words">{c.samples.join(" · ")}</p>
+                    </div>)}
+                  <p className="mt-2">Somente evidências. Nenhuma lista foi atribuída à ISO.</p>
+                </div>}
               {diagnostics[mod.sha256].nextSteps.map((step,i)=><p key={"step-"+i} className="mt-1">{i+1}. {step}</p>)}
             </details>
             {diagnostics[mod.sha256].ai&&diagnostics[mod.sha256].ai!.state!=="nao_solicitada"&&
