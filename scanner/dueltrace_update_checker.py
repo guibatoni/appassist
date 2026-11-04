@@ -16,7 +16,7 @@ from dueltrace_preview_updates import (
     fetch_latest_preview, installed_preview_build_id, version_for_branch
 )
 
-CURRENT_VERSION = "0.8.1"
+CURRENT_VERSION = "0.8.2"
 CURRENT_CHANNEL = "preview"
 RELEASE_API = "https://api.github.com/repos/guibatoni/appassist/releases/latest"
 RELEASE_PAGE = "https://github.com/guibatoni/appassist/releases/latest"
