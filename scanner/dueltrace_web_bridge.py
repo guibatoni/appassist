@@ -164,10 +164,14 @@ class DueltraceWebBridge:
             status["previewError"]=(
                 "Pré-lançamentos temporariamente indisponíveis. "
                 "Nenhum download foi iniciado.")
-        if status.get("status")!="update_available":
+        if status.get("status")=="preview_update_available" and status.get("automaticPreviewReady"):
             status["automaticInstallReason"]=(
-                "Não há release estável mais recente. As builds Preview "
-                "continuam sem instalação automática por segurança.")
+                "Prévia pública verificável por SHA-256 disponível. "
+                "Instale com confirmação explícita; não há assinatura digital.")
+        elif status.get("status")!="update_available":
+            status["automaticInstallReason"]=(
+                "Nenhuma versão estável assinada mais recente foi encontrada. "
+                "Para Previews, consulte as pré-releases públicas do GitHub.")
         elif not trusted_installer_ready():
             status["automaticInstallReason"]=(
                 "Esta instalação não possui assinatura Authenticode "
