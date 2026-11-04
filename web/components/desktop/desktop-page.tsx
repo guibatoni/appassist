@@ -736,6 +736,11 @@ function Mods({mods,sha,onRefresh,configured}:{
                     {" "}Sem 0xFF: {diagnostics[mod.sha256].opponentNameBoundaries?.noFFBeforeNext??0}.
                   </p>
                   <p className="mt-1">
+                    Primeiro byte ilegível mais comum:
+                    {" "}{diagnostics[mod.sha256].opponentNameBoundaries?.commonFirstInvalidByte??"não observado"}
+                    {" "}({diagnostics[mod.sha256].opponentNameBoundaries?.commonFirstInvalidCount??0} registros).
+                  </p>
+                  <p className="mt-1">
                     Byte mais frequente no fim dos registros:
                     {" "}{diagnostics[mod.sha256].opponentNameBoundaries?.commonEndByte??"?"}
                     {" "}({diagnostics[mod.sha256].opponentNameBoundaries?.commonEndByteCount??0} ocorrências).
