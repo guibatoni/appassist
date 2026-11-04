@@ -166,6 +166,43 @@ class CapturedRankTests(unittest.TestCase):
         self.assertEqual(self.bridge.confirm_rank_lp(8000)["state"],"lp_mismatch")
         self.assertFalse(self.bridge.get_pending_rank_capture()["ready"])
 
+    def test_short_same_process_ram_gap_keeps_lp_confirmation_without_stale_score(self):
+        self.bridge.confirm_rank_lp(8000)
+        self.assertEqual(self.bridge.get_rank()["score"],101)
+        previous=dict(self.reader.return_value)
+        self.reader.return_value={"ready":False,"status":"Memória em transição",
+                                  "pid":3456,"counters":None}
+        missed=self.bridge.get_rank()
+        self.assertEqual(missed["state"],"unavailable")
+        self.assertIsNone(missed["score"])
+        self.assertIn("temporariamente",missed["status"])
+        self.assertIsNotNone(self.bridge._rank_calibration)
+        self.reader.return_value=previous
+        resumed=self.bridge.get_rank()
+        self.assertTrue(resumed["ready"])
+        self.assertEqual(resumed["score"],101)
+        self.assertIsNone(self.bridge._rank_gap_started)
+
+    def test_long_gap_and_other_pid_require_new_lp_confirmation(self):
+        self.bridge.confirm_rank_lp(8000)
+        previous=dict(self.reader.return_value)
+        self.reader.return_value={"ready":False,"status":"Amostra instável",
+                                  "pid":3456,"counters":None}
+        self.bridge.get_rank()
+        self.bridge._rank_gap_started-=3
+        lost=self.bridge.get_rank()
+        self.assertEqual(lost["state"],"unavailable")
+        self.assertIsNone(self.bridge._rank_calibration)
+        self.reader.return_value=previous
+        self.assertEqual(self.bridge.get_rank()["state"],"needs_lp_confirmation")
+        self.bridge.confirm_rank_lp(8000)
+        self.reader.return_value={"ready":False,"status":"Outro ePSXe",
+                                  "pid":9876,"counters":None}
+        self.bridge.get_rank()
+        self.assertIsNone(self.bridge._rank_calibration)
+        self.reader.return_value=previous
+        self.assertEqual(self.bridge.get_rank()["state"],"needs_lp_confirmation")
+
     def test_ram_gap_after_final_turn_preserves_capture_until_observation(self):
         self.bridge.confirm_rank_lp(8000)
         captured=self.bridge.capture_rank_prediction()
