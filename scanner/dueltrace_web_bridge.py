@@ -435,6 +435,10 @@ class DueltraceWebBridge:
                     project_spoils_with_adjustment(counters,observed_adjustment)
                     if observed_adjustment is not None else
                     project_lp_win_rank(counters))
+            if experimental:
+                result["model"]=(
+                    "Modelo de SPOILS legado em teste nesta ISO; "
+                    "pontuação ainda não validada no jogo.")
             # A classificação é SEMPRE decidida pelo SHA da ISO selecionada.
             # Mesmo que os pontos e as tabelas numéricas sejam iguais, Z-POW
             # não é exibido para Original, FM13 nem outros mods.
@@ -497,9 +501,10 @@ class DueltraceWebBridge:
         with self._lock:
             current=self.get_rank()
             snap=self._rank_last_snapshot
-            if (not current.get("ready")
-                    or current.get("sourceMode")=="experimental"
-                    or not isinstance(snap,dict)):
+            if current.get("sourceMode")=="experimental":
+                raise ValueError("Uma leitura experimental não pode ser capturada "
+                                 "como RANK validado. Confirme em duelos reais.")
+            if not current.get("ready") or not isinstance(snap,dict):
                 raise ValueError("Confirme os LP e obtenha um RANK válido antes de capturar.")
             sha=snap["rom_sha256"]
             capture={
