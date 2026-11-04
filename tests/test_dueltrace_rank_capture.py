@@ -107,6 +107,35 @@ class CapturedRankTests(unittest.TestCase):
         self.assertEqual(after_damage["category"],"S-POW")
         self.assertFalse(after_damage["final"])
 
+    def test_verified_lp_calibration_exposes_x15_result_marker_without_recalculating_rules(self):
+        self.bridge.confirm_rank_lp(8000)
+        before=self.bridge.get_rank()
+        self.assertEqual(before["score"],101)
+        self.assertEqual(before["category"],"Z-POW")
+        self.assertEqual(before["rankSystem"],"x15")
+        self.assertEqual(before["victorySource"],"projected_lp")
+        self.assertEqual(before["victoryBonus"],2)
+
+        # O assistente v10.5 lê 0xD8 como -40 assinado, nunca 216.
+        self.reader.return_value["result_adjustment"]=-40
+        final_marker=self.bridge.get_rank()
+        self.assertEqual(final_marker["score"],59)
+        self.assertEqual(final_marker["category"],"S-POW")
+        self.assertEqual(final_marker["victoryBonus"],-40)
+        self.assertEqual(final_marker["victorySource"],"ram_deckout")
+        self.assertFalse(final_marker["final"])  # não prova resultado visual do jogo
+        self.assertIn("deck-out",final_marker["status"])
+
+        self.reader.return_value["result_adjustment"]=2
+        lp_marker=self.bridge.get_rank()
+        self.assertEqual(lp_marker["score"],101)
+        self.assertEqual(lp_marker["victorySource"],"ram_lp")
+
+        self.reader.return_value["result_adjustment"]=None
+        predicted=self.bridge.get_rank()
+        self.assertEqual(predicted["score"],101)
+        self.assertEqual(predicted["victorySource"],"projected_lp")
+
     def test_capture_expires_and_never_attaches_to_later_duel(self):
         self.bridge.confirm_rank_lp(8000)
         captured=self.bridge.capture_rank_prediction()
