@@ -48,8 +48,8 @@ def _cards(profile: dict) -> list[dict]:
     return list(indexed.values())
 
 
-def _art_fingerprints(profile: dict, home: Path, cards: list[dict]) -> dict[int, str]:
-    """Hash SHA-256 dos pixels RGB 102x96, nunca dos bytes PNG/metadados.
+def _art_fingerprints(profile: dict, home: Path, cards: list[dict]) -> dict[int, tuple[str,int]]:
+    """SHA-256 RGB e dHash de luminância, nunca dos metadados PNG.
 
     O diretório de arte é derivado apenas da pasta de análise já aprovada.
     Nem art_root nem caminhos arbitrários fornecidos pelo modelo são lidos.
@@ -85,7 +85,13 @@ def _art_fingerprints(profile: dict, home: Path, cards: list[dict]) -> dict[int,
                 if rgb.getcolors(maxcolors=7) is not None:
                     continue
                 pixels = rgb.tobytes()
-            result[cid] = hashlib.sha256(pixels).hexdigest()
+                gray = rgb.convert("L").resize((9,8),Image.Resampling.BILINEAR)
+                values = list(gray.getdata())
+                dhash = 0
+                for y in range(8):
+                    for x in range(8):
+                        dhash=(dhash<<1) | int(values[y*9+x]>values[y*9+x+1])
+            result[cid] = (hashlib.sha256(pixels).hexdigest(),dhash)
         except (OSError, ValueError, RuntimeError):
             continue
     return result
@@ -103,7 +109,7 @@ def _type(card: dict):
         ("label", _name(card.get("type_label"))) if _name(card.get("type_label")) else None)
 
 
-def _score(a: dict, b: dict, *, name_unique: bool, art_same: bool) -> tuple[int, list[str]]:
+def _score(a: dict, b: dict, *, name_unique: bool, art_same: bool, art_similar: bool = False) -> tuple[int, list[str]]:
     evidence = []
     score = 0
     an, bn = _name(a.get("name")), _name(b.get("name"))
@@ -120,6 +126,11 @@ def _score(a: dict, b: dict, *, name_unique: bool, art_same: bool) -> tuple[int,
     if art_same:
         evidence.append("arte_rgb_identica")
         score += 85
+    elif art_similar:
+        # Recolorização sem alterar a estrutura de luminância. Evidência
+        # FRACA: requer ATK/DEF iguais e nunca gera match forte sozinho.
+        evidence.append("arte_visual_semelhante")
+        score += 40
     atk_a, atk_b = _number(a, "atk"), _number(b, "atk")
     def_a, def_b = _number(a, "def"), _number(b, "def")
     if (atk_a is not None and def_a is not None
@@ -155,7 +166,10 @@ def compare_profiles(source: dict, target: dict, home: Path) -> dict:
     image_b = _art_fingerprints(target, home, b)
     name_count_a = Counter(_name(c.get("name")) for c in a)
     name_count_b = Counter(_name(c.get("name")) for c in b)
-    art_count_a, art_count_b = Counter(image_a.values()), Counter(image_b.values())
+    art_count_a = Counter(value[0] for value in image_a.values())
+    art_count_b = Counter(value[0] for value in image_b.values())
+    shape_count_a = Counter(value[1] for value in image_a.values())
+    shape_count_b = Counter(value[1] for value in image_b.values())
     by_name = defaultdict(list)
     by_art = defaultdict(list)
     by_stats = defaultdict(list)
@@ -164,7 +178,7 @@ def compare_profiles(source: dict, target: dict, home: Path) -> dict:
         by_name[key].append(row)
         picture = image_b.get(row["id"])
         if picture:
-            by_art[picture].append(row)
+            by_art[picture[0]].append(row)
         atk, defense = _number(row, "atk"), _number(row, "def")
         if atk is not None and defense is not None:
             by_stats[(atk, defense)].append(row)
@@ -178,8 +192,8 @@ def compare_profiles(source: dict, target: dict, home: Path) -> dict:
         # Nunca comparar somente pelo número do ID.
         for other in by_name[name_key]:
             candidates[other["id"]] = other
-        if art and art_count_a[art] == 1 and art_count_b[art] == 1:
-            for other in by_art[art]:
+        if art and art_count_a[art[0]] == 1 and art_count_b[art[0]] == 1:
+            for other in by_art[art[0]]:
                 candidates[other["id"]] = other
         atk, defense = _number(card, "atk"), _number(card, "def")
         if atk is not None and defense is not None:
@@ -187,23 +201,45 @@ def compare_profiles(source: dict, target: dict, home: Path) -> dict:
             # Atributos sem nome ou arte NÃO formam um match sozinhos.
             for other in by_stats[(atk, defense)]:
                 name_other = _name(other["name"])
-                if (name_key[:3] == name_other[:3]
-                        and SequenceMatcher(None, name_key, name_other,
-                                            autojunk=False).ratio() >= .90):
+                fuzzy=(name_key[:3] == name_other[:3]
+                       and SequenceMatcher(None, name_key, name_other,
+                                           autojunk=False).ratio() >= .90)
+                # Comparação visual robusta a pequenas alterações de cor:
+                # exige mesmas estatísticas e assinatura estrutural única.
+                artwork=image_b.get(other["id"])
+                shape_match=(
+                    art is not None and artwork is not None
+                    and art[0]!=artwork[0]
+                    and shape_count_a[art[1]]==1
+                    and shape_count_b[artwork[1]]==1
+                    and (art[1]^artwork[1]).bit_count()<=4)
+                if fuzzy or shape_match:
                     candidates[other["id"]] = other
 
         ranked = []
         for other in candidates.values():
             unique_name = (name_count_a[name_key] == 1
                            and name_count_b[name_key] == 1)
-            same_art = (art is not None
-                        and image_b.get(other["id"]) == art
-                        and art_count_a[art] == 1 and art_count_b[art] == 1)
-            points, evidence = _score(card, other, name_unique=unique_name,
-                                      art_same=same_art)
+            other_art=image_b.get(other["id"])
+            same_art=(art is not None and other_art is not None
+                      and art[0] == other_art[0]
+                      and art_count_a[art[0]]==1 and art_count_b[art[0]]==1)
+            same_stats=(_number(card,"atk") is not None
+                        and _number(card,"def") is not None
+                        and _number(card,"atk")==_number(other,"atk")
+                        and _number(card,"def")==_number(other,"def"))
+            similar_art=(
+                not same_art and same_stats and art is not None
+                and other_art is not None
+                and shape_count_a[art[1]]==1
+                and shape_count_b[other_art[1]]==1
+                and (art[1]^other_art[1]).bit_count()<=4)
+            points, evidence = _score(
+                card,other,name_unique=unique_name,art_same=same_art,
+                art_similar=similar_art)
             # Sem um âncora identificador (nome ou arte), não existe match.
             if not any(x in evidence for x in (
-                    "nome_exato", "arte_rgb_identica", "nome_parecido")):
+                    "nome_exato", "arte_rgb_identica", "nome_parecido", "arte_visual_semelhante")):
                 continue
             ranked.append((points, other["id"], other, evidence))
         ranked.sort(key=lambda row: (-row[0], row[1]))
