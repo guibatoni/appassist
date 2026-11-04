@@ -9,7 +9,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 
 from auto_mods import ModCatalog, atomic_json
 from dueltrace_mod_diagnostic import diagnose_layout
-from scanner_multiiso import select_known_executable_layout, inspect_system_cnf
+from scanner_multiiso import select_known_executable_layout, inspect_system_cnf, inspect_file_signatures
 from dueltrace_web_bridge import DueltraceWebBridge
 from dueltrace_web_security import ProtectedDesktopApi
 from ia_local import minimal_evidence
@@ -189,6 +189,79 @@ class UnknownISOTests(unittest.TestCase):
                 return b"BOOT = cdrom:\\..\\MALWARE.EXE;1\r\n"
         info=inspect_system_cnf(FakeDisc())
         self.assertIsNone(info["boot_target"])
+
+    def test_nonstandard_gog_boot_missing_from_index_not_called_empty_game(self):
+        self.report["system_cnf"]={
+            "found":True,"boot_target":"GOG_VNT.223",
+            "status":"BOOT identificado, apenas como indicação de arquivo",
+        }
+        diagnosis=diagnose_layout(self.report,self.profile)
+        self.assertFalse(diagnosis["automaticExtractionComplete"])
+        self.assertEqual(diagnosis["systemCnf"]["bootTarget"],"GOG_VNT.223")
+        self.assertFalse(diagnosis["systemCnf"]["bootTargetIndexed"])
+        self.assertTrue(any("GOG_VNT.223" in x for x in diagnosis["issues"]))
+        self.assertTrue(any("outra trilha" in x for x in diagnosis["nextSteps"]))
+        self.assertFalse(diagnosis["cardsVerified"])
+
+    def test_nonstandard_indexed_boot_with_psx_signature_still_not_verified(self):
+        self.report["system_cnf"]={
+            "found":True,"boot_target":"GOG_VNT.223","status":"BOOT identificado"}
+        self.report["arquivos_discos"].append({
+            "nome":"GOG_VNT.223","lba":8000,"tamanho":2000000})
+        self.report["assinaturas_arquivos"]=[
+            {"nome":"GOG_VNT.223","assinatura":"psx_executavel",
+             "prefix_sha256":"f"*16},
+        ]
+        diagnosis=diagnose_layout(self.report,self.profile)
+        self.assertTrue(diagnosis["systemCnf"]["bootTargetIndexed"])
+        self.assertEqual(diagnosis["systemCnf"]["bootFileSignature"],
+                         "psx_executavel")
+        self.assertIn("GOG_VNT.223",diagnosis["executableCandidates"])
+        self.assertFalse(diagnosis["automaticExtractionComplete"])
+
+    def test_bounded_signature_scan_does_not_read_large_binary(self):
+        class FakeDisc:
+            files={"GOG_VNT.223":(100,2500000),
+                   "UNKNOWN.DAT":(300,100000000)}
+            def __init__(self):self.calls=[]
+            def get(self,name,limit_bytes=None):
+                self.calls.append((name,limit_bytes))
+                if name=="GOG_VNT.223":
+                    return b"PS-X EXE" + bytes(24)
+                return bytes(range(32))
+        disc=FakeDisc()
+        signatures=inspect_file_signatures(disc)
+        self.assertEqual(len(signatures),2)
+        self.assertEqual(signatures[0]["assinatura"],"psx_executavel")
+        self.assertEqual(disc.calls,[("GOG_VNT.223",32),
+                                     ("UNKNOWN.DAT",32)])
+        self.assertEqual(len(signatures[0]["prefix_sha256"]),16)
+
+    def test_cached_ollama_claims_about_empty_iso_are_suppressed(self):
+        atomic_json(self.scan/"relatorio.json",self.report)
+        profile_path=self.home/"profiles"/SHA[:16]/"profile.json"
+        atomic_json(profile_path,self.profile)
+        source=self.home/"gog-mod.iso"
+        source.write_bytes(b"test not a game ISO")
+        catalog=ModCatalog(self.home)
+        atomic_json(catalog.registry_file,{"schema":1,"entries":[{
+            "sha256":SHA,"file_name":source.name,"source_path":str(source),
+            "profile_path":str(profile_path)}]})
+        ai_file=self.home/"investigacoes"/"report.ollama.json"
+        atomic_json(ai_file,{
+            "resumo":"Foi verificado que a ISO não contém cartas, oponentes ou drops",
+            "prioridades":["cartas","oponentes","tabelas_drops"],
+        })
+        api=ProtectedDesktopApi(DueltraceWebBridge(catalog),"t"*64)
+        with patch("dueltrace_web_bridge.MultiModIntelligence.inspect",
+                   return_value={"ai":"hipoteses_em_cache",
+                                 "ai_report_path":str(ai_file)}):
+            result=api.get_mod_scan_diagnostic("t"*64,SHA,True)
+        self.assertEqual(result["ai"]["state"],"hipoteses_em_cache")
+        self.assertTrue(result["ai"]["summarySuppressed"])
+        self.assertIn("NÃO comprova ausência",result["ai"]["resumo"])
+        self.assertNotIn("Foi verificado",result["ai"]["resumo"])
+        self.assertFalse(result["automaticExtractionComplete"])
 
     def test_scan_report_error_is_visible(self):
         info=diagnose_layout({
