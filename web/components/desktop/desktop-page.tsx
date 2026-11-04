@@ -111,7 +111,8 @@ function RankPanel({sha}:{sha:string|null}) {
       setCaptureError(e instanceof Error?e.message:"Não foi possível capturar a previsão.")
     }finally{setCaptureBusy(false)}
   }
-  return <section className="panel rounded-xl p-4" aria-label="Contador de RANK">
+  return <>
+  <section className="panel rounded-xl p-4" aria-label="Contador de RANK">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h2 className="font-display text-xl font-semibold text-gold">Contador de RANK</h2>
@@ -153,7 +154,7 @@ function RankPanel({sha}:{sha:string|null}) {
       <p className="text-xs font-semibold text-primary">Conferência com o resultado real</p>
       <p className="mt-1 text-xs text-muted">
         No final do duelo, a previsão de LP pode ser capturada para futura auditoria.
-        O cálculo manual de Spoils fica logo abaixo, independente da leitura RAM.
+        O painel de Spoils abaixo acompanha automaticamente a leitura RAM quando validada.
       </p>
       <button type="button" disabled={!rank?.ready||captureBusy||!desktopApi()}
         className="btn-gold mt-2 disabled:opacity-40" onClick={()=>void capture()}>
@@ -173,9 +174,6 @@ function RankPanel({sha}:{sha:string|null}) {
             disabled={diagnosing||!sha||!desktopApi()} onClick={()=>void diagnose()}>
             {diagnosing?"Investigando…":"Diagnosticar RANK desta ISO"}
           </button>
-          <a href="/drops/" className="btn-ghost">
-            Registrar RANK final em Drops
-          </a>
         </div>
         {diagnosticError&&<p className="mt-2 text-xs text-danger" role="alert">{diagnosticError}</p>}
         {diagnostic&&<div className="mt-3 rounded-lg border border-gold/30 bg-background/50 p-3 text-xs" role="status">
@@ -200,6 +198,8 @@ function RankPanel({sha}:{sha:string|null}) {
       e LP confirmados; mods sem mapeamento validado continuam indisponíveis.
     </p>
   </section>
+  <SpoilsCalculator sha={sha} liveRank={rank}/>
+  </>
 }
 
 const SPOILS_FIELDS: Array<{key:keyof SpoilsCounters;label:string}> = [
@@ -219,93 +219,84 @@ const SPOILS_DEFAULTS: SpoilsCounters = {
   traps:0,cards_used:0,remaining_lp:8000,fusions:0,equips:0,
 }
 
-function SpoilsCalculator({sha}:{sha:string|null}) {
-  const [counters,setCounters]=useState<SpoilsCounters>({...SPOILS_DEFAULTS})
-  const [victory,setVictory]=useState<"lp"|"deckout"|"exodia">("lp")
-  const [result,setResult]=useState<SpoilsResult|null>(null)
-  const [error,setError]=useState<string|null>(null)
-  const [busy,setBusy]=useState(false)
+function SpoilsCalculator({sha,liveRank}:{sha:string|null;liveRank:RankState|null}) {
+  const [baseline,setBaseline]=useState<SpoilsResult|null>(null)
+  const [baselineError,setBaselineError]=useState<string|null>(null)
+  // Não duplicar a fórmula no JavaScript: calculadora Python existente fornece a referência.
   useEffect(()=>{
-    setCounters({...SPOILS_DEFAULTS})
-    setResult(null)
-    setError(null)
-  },[sha])
-  const calculate=async()=>{
+    let mounted=true
+    setBaseline(null)
+    setBaselineError(null)
     const api=desktopApi()
-    if(!api||!sha)return
-    setBusy(true)
-    setError(null)
-    try{setResult(await api.calculate_spoils(counters,victory))}
-    catch(e){setResult(null);setError(e instanceof Error?e.message:"Falha ao calcular Spoils.")}
-    finally{setBusy(false)}
-  }
-  return <section className="panel rounded-xl p-4" aria-label="Calculadora manual de Spoils">
-    <h2 className="font-display text-xl font-semibold text-gold">Calculadora de Spoils</h2>
-    <p className="mt-1 text-sm text-muted">Modelo manual recuperado da calculadora anterior:
-      50 pontos iniciais, 10 critérios e bônus por condição de vitória.
-      Funciona sem ler a RAM; a fórmula de outros mods ainda precisa de comparação com o jogo.
+    if(!sha||!api)return()=>{mounted=false}
+    void api.calculate_spoils({...SPOILS_DEFAULTS},"lp")
+      .then(result=>{if(mounted)setBaseline(result)})
+      .catch(()=>{if(mounted)setBaselineError("Referência inicial indisponível.")})
+    return()=>{mounted=false}
+  },[sha])
+
+  const live=liveRank?.ready===true &&
+    liveRank.score!==null && liveRank.category!==null && liveRank.counters!==null
+  const score=live?(liveRank?.score??null):baseline?.score??null
+  const category=live?(liveRank?.category??null):baseline?.category??null
+  const counters=live?(liveRank?.counters??SPOILS_DEFAULTS):SPOILS_DEFAULTS
+  const breakdown=live?liveRank?.breakdown:baseline?.breakdown
+  const pointsFor=(key:string)=>(breakdown as Record<string,number>|undefined)?.[key]
+  const entries=live
+    ? Object.entries(counters).filter(([key])=>pointsFor(key)!==undefined)
+        .map(([key,value])=>({key,label:SPOILS_FIELDS.find(x=>x.key===key)?.label??key,value}))
+    : SPOILS_FIELDS.map(({key,label})=>({key,label,value:SPOILS_DEFAULTS[key]}))
+
+  return <section className="panel rounded-xl p-4" aria-label="Calculadora automática de Spoils">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 className="font-display text-xl font-semibold text-gold">Calculadora automática de Spoils</h2>
+        <p className="mt-1 text-sm text-muted">
+          Acompanha os contadores do ePSXe automaticamente quando existe leitura RAM validada
+          e os LP do duelo foram confirmados. Não é necessário digitar os dez critérios.
+        </p>
+      </div>
+      <div className="min-w-36 rounded-lg border border-gold/30 bg-background/60 px-4 py-3 text-right">
+        <p className="text-xs text-muted">{live?"Projeção ao vivo (vitória por LP)":"Referência inicial, sem leitura do jogo"}</p>
+        <p className="font-display text-3xl font-bold tabular-nums text-primary">
+          {score??"—"} <span className="text-sm text-muted">pontos</span>
+        </p>
+        <p className="font-display text-lg font-semibold text-gold">{category??"RANK indisponível"}</p>
+      </div>
+    </div>
+    <p className={"mt-3 text-xs font-semibold "+(live?"text-success":"text-gold")} role="status">
+      {live
+        ?"Leitura ativa: os pontos mudam automaticamente conforme os contadores do duelo."
+        :"Abertura hipotética: 101 pontos, considerando 8.000 LP, zero ações e vitória futura por LP. NÃO é uma leitura do ePSXe."}
     </p>
-    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-      {SPOILS_FIELDS.map(item=><label key={item.key} className="flex flex-col gap-1 text-xs text-muted">
-        {item.label}
-        <input type="number" min={0} max={item.key==="remaining_lp"?32766:255}
-          inputMode="numeric" className="field w-full rounded-md px-3 py-2 text-sm"
-          value={counters[item.key]}
-          onChange={e=>{
-            const n=Number(e.target.value)
-            setCounters(old=>({...old,[item.key]:Number.isFinite(n)?n:0}))
-            setResult(null)
-          }}/>
-      </label>)}
+    {!live&&<p className="mt-1 text-xs text-muted">
+      {liveRank?.status??"Aguardando o ePSXe e o perfil da ISO."}
+      {" "}Use a confirmação de LP no Contador de RANK acima se solicitada.
+      Mods sem mapeamento verificado não terão pontuação ao vivo.
+    </p>}
+    {baselineError&&!live&&<p className="mt-2 text-xs text-danger" role="alert">{baselineError}</p>}
+    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+      {entries.map(item=><div key={item.key}
+        className="rounded-lg border border-line/60 bg-background/40 p-3">
+        <p className="min-h-7 text-xs text-muted">{item.label}</p>
+        <p className="mt-1 text-lg font-semibold tabular-nums text-white">
+          {item.value}
+          <span className="ml-2 text-xs font-normal text-primary">
+            {pointsFor(item.key)!==undefined
+              ? `${pointsFor(item.key)!>0?"+":""}${pointsFor(item.key)} pts`
+              :"—"}
+          </span>
+        </p>
+      </div>)}
     </div>
-    <div className="mt-3 flex flex-wrap items-end gap-3">
-      <label className="flex flex-col gap-1 text-xs text-muted">
-        Resultado do duelo
-        <select className="field rounded-md px-3 py-2 text-sm" value={victory}
-          onChange={e=>{setVictory(e.target.value as typeof victory);setResult(null)}}>
-          <option value="lp">Vitória por LP (+2)</option>
-          <option value="deckout">Vitória por deck-out (−40)</option>
-          <option value="exodia">Vitória por Exodia (+40)</option>
-        </select>
-      </label>
-      <button type="button" className="btn-gold disabled:opacity-40"
-        disabled={!sha||busy||!desktopApi()} onClick={()=>void calculate()}>
-        {busy?"Calculando…":"Calcular Spoils"}
-      </button>
-      <button type="button" className="btn-ghost" onClick={()=>{
-        setCounters({...SPOILS_DEFAULTS});setResult(null);setError(null);setVictory("lp")
-      }}>Limpar</button>
-    </div>
-    {error&&<p className="mt-3 text-sm text-danger" role="alert">{error}</p>}
-    {result&&<div className="mt-4 rounded-lg border border-primary/40 bg-background/60 p-3" role="status">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs text-muted">Pontuação estimada</p>
-          <p className="font-display text-3xl font-bold tabular-nums text-primary">
-            {result.score} <span className="text-base text-muted">pontos</span>
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-muted">RANK para ISO selecionada</p>
-          <p className="font-display text-2xl font-bold text-gold">{result.category}</p>
-        </div>
-      </div>
-      <p className="mt-3 text-xs text-muted">Base: {result.basePoints} ·
-        Resultado: {result.victoryBonus>0?"+":""}{result.victoryBonus} ·
-        Critérios: {Object.values(result.breakdown).reduce((a,b)=>a+b,0)>0?"+":""}
-        {Object.values(result.breakdown).reduce((a,b)=>a+b,0)}
-      </p>
-      <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
-        {SPOILS_FIELDS.map(item=><span key={item.key} className="text-muted">
-          {item.label}: <strong className="text-primary">{result.breakdown[item.key]>0?"+":""}{result.breakdown[item.key]}</strong>
-        </span>)}
-      </div>
-      <p className="mt-3 text-xs text-gold">{result.note}</p>
-    </div>}
     <p className="mt-3 text-xs text-muted">
-      Ataques efetivos são destruições de monstros adversários em posição de ataque,
-      não ataques diretos. Uma divergência de 1 ponto já foi observada na validação histórica
-      e permanece em investigação.
+      Base da fórmula: 50. Com 8.000 LP, dez critérios no estado inicial
+      e bônus hipotético de vitória por LP (+2), a projeção inicial é 101.
+      Os critérios já contribuem para a pontuação de abertura.
+    </p>
+    <p className="mt-2 text-xs text-gold">
+      Esta projeção supõe vitória por LP. O jogo pode terminar por deck-out ou Exodia;
+      o resultado final e a ISO aberta no emulador ainda precisam ser confirmados.
     </p>
   </section>
 }
@@ -331,7 +322,6 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   return <>
     <Heading title="Central de Duelo" subtitle="Sua mão, projeção de RANK e combinações do perfil ativo"/>
     <RankPanel sha={sha}/>
-        <SpoilsCalculator sha={sha}/>
     <div className="panel rounded-xl p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-xl font-semibold text-primary">Sua mão · 5 slots</h2>
