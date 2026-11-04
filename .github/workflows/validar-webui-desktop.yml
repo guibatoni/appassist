@@ -75,6 +75,8 @@ on:
       - 'scanner/auto_mods.py'
       - 'scanner/dueltrace_card_matcher.py'
       - 'scanner/dueltrace_mod_diagnostic.py'
+      - 'scanner/dueltrace_layout_discovery.py'
+      - 'tests/test_dueltrace_layout_discovery.py'
       - 'tests/test_dueltrace_mod_diagnostic.py'
       - 'scanner/dueltrace_card_match_ai.py'
       - 'tests/test_dueltrace_card_matcher.py'
@@ -212,7 +214,7 @@ jobs:
         env:
           DUELTRACE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          $identity = @{ schema = 1; run_id = [long]$env:GITHUB_RUN_ID; head_sha = $env:DUELTRACE_HEAD_SHA; version = "0.9.3" } | ConvertTo-Json -Compress
+          $identity = @{ schema = 1; run_id = [long]$env:GITHUB_RUN_ID; head_sha = $env:DUELTRACE_HEAD_SHA; version = "0.9.4" } | ConvertTo-Json -Compress
           [System.IO.File]::WriteAllText((Join-Path (Get-Location) "scanner/dueltrace-build.json"), $identity, [System.Text.UTF8Encoding]::new($false))
       - name: Empacotar UI v0 com motor Python
         shell: pwsh
