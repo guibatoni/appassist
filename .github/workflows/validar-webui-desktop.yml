@@ -78,6 +78,8 @@ on:
       - 'scanner/dueltrace_layout_discovery.py'
       - 'tests/test_dueltrace_layout_discovery.py'
       - 'tests/test_dueltrace_partial_iso_evidence.py'
+      - 'tests/test_dueltrace_opponent_pointer_probe.py'
+      - 'scanner/dueltrace_name_layout_probe.py'
       - 'tests/test_dueltrace_mod_diagnostic.py'
       - 'scanner/dueltrace_card_match_ai.py'
       - 'tests/test_dueltrace_card_matcher.py'
