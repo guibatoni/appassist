@@ -282,6 +282,8 @@ export type RankState = {
   counters: Record<string, number> | null
   breakdown?: Record<string, number>
   model?: string
+  victorySource?: "projected_lp" | "ram_lp" | "ram_deckout"
+  victoryBonus?: number
   final?: boolean
 }
 

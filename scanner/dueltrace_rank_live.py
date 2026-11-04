@@ -52,7 +52,8 @@ def decode_rank_record(raw: bytes) -> dict | None:
         return None
     lp=int.from_bytes(raw[20:22],"little",signed=True)
     cards_used=int.from_bytes(raw[24:25],"little",signed=True)
-    if not 0<=lp<=32766 or not 0<=cards_used<=80:
+    # Mesmos filtros de plausibilidade do Assistente X15 v10.5.
+    if not 0<=lp<=32766 or not 0<=cards_used<=40:
         return None
     fields={
         "turns":raw[1],
@@ -66,25 +67,57 @@ def decode_rank_record(raw: bytes) -> dict | None:
         "remaining_lp":lp,
         "cards_used":cards_used,
     }
-    # Mod desconhecido e bytes incoerentes não devem virar pontuação.
-    if fields["turns"]>100:
+    # Apenas leituras coerentes com uma estrutura de duelo real.
+    # Esses limites filtram RAM não inicializada, mas NÃO validam endereço.
+    if fields["turns"]>80 or any(fields[name]>60 for name in (
+            "effective_attacks","defense_wins","face_down","spells",
+            "traps","fusions","equips")):
+        return None
+    if lp==0 and not any(fields[name] for name in (
+            "turns","fusions","effective_attacks","face_down","cards_used")):
         return None
     return fields
 
 
-def project_lp_win_rank(counters: dict) -> dict:
-    """Projeção APENAS para vitória futura por LP, não nota final do duelo."""
+def decode_rank_result_adjustment(raw: bytes) -> int | None:
+    """Resultado assinado do X15 v10.5, byte +0 do registro de 32 bytes.
+
+    0x02 = +2 vitória por LP; 0xD8 = -40 vitória por deck-out.
+    Zero e quaisquer outros valores NÃO comprovam resultado. O leitor deve
+    obter duas amostras estáveis e a ISO deve ser a X15 exata antes de usar.
+    """
+    if not isinstance(raw,bytes) or len(raw)!=RECORD_BYTES:
+        return None
+    marker=int.from_bytes(raw[:1],"little",signed=True)
+    return marker if marker in (2,-40) else None
+
+
+def project_spoils_with_adjustment(counters: dict, adjustment: int) -> dict:
+    """Aplica o bônus decodificado X15 sem mudar nenhuma das dez tabelas.
+
+    O nome da classificação neste núcleo é X15; a bridge aplica a
+    classificação da ISO ativa antes de qualquer exibição na interface.
+    """
     if set(counters)!=set(RULES):
         raise ValueError("Contadores do RANK incompletos.")
     if any(type(x) is not int or x<0 for x in counters.values()):
         raise ValueError("Contador inválido.")
+    if type(adjustment) is not int or adjustment not in (2,-40,40):
+        raise ValueError("Bônus de vitória não comprovado na tabela X15.")
     breakdown={key:_points(counters[key],steps) for key,steps in RULES.items()}
-    raw_score=50+2+sum(breakdown.values())  # 2 = vitória futura por LP
-    # Para drops Remaster X15: agrupamento das três bolsas confirmadas na ISO.
+    raw_score=50+adjustment+sum(breakdown.values())
     band="Z-POW" if raw_score>=95 else "S-POW" if raw_score>=50 else "S-TEC"
     return {"score":raw_score,"category":band,"breakdown":breakdown,
-            "model":"Remaster X15 — projeção se vencer por LP",
+            "victory_bonus":adjustment,
+            "model":"Remaster X15 — soma por tabela extraída da ISO",
             "final":False}
+
+
+def project_lp_win_rank(counters: dict) -> dict:
+    """Mantém a previsão LP legado; não interpreta resultado não confirmado."""
+    result=project_spoils_with_adjustment(counters,2)
+    result["model"]="Remaster X15 — projeção se vencer por LP"
+    return result
 
 
 def read_rank_candidate(*, preferred_pid=None, kernel=None, pids=None) -> dict:
@@ -126,14 +159,17 @@ def read_rank_candidate(*, preferred_pid=None, kernel=None, pids=None) -> dict:
                 buffer,RECORD_BYTES,ctypes.byref(read))
             if not ok or read.value!=RECORD_BYTES:
                 return None
-            return decode_rank_record(buffer.raw)
+            counters=decode_rank_record(buffer.raw)
+            if counters is None:
+                return None
+            return counters,decode_rank_result_adjustment(buffer.raw)
         a=sample()
         b=sample()
         if a is None or b!=a:
             return {"ready":False,"status":"RANK não validado ou em transição",
                     "pid":pid,"counters":None}
         return {"ready":True,"status":"Contadores candidatos detectados",
-                "pid":pid,"counters":a}
+                "pid":pid,"counters":a[0],"result_adjustment":a[1]}
     finally:
         kernel.CloseHandle(handle)
 

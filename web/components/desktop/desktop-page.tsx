@@ -239,6 +239,8 @@ function SpoilsCalculator({sha,liveRank}:{sha:string|null;liveRank:RankState|nul
     liveRank.score!==null && liveRank.category!==null && liveRank.counters!==null
   const score=live?(liveRank?.score??null):baseline?.score??null
   const category=live?(liveRank?.category??null):baseline?.category??null
+  const currentRankSystem=live?liveRank?.rankSystem:baseline?.rankSystem
+  const detectedOutcome=live?liveRank?.victorySource:undefined
   const counters=live?(liveRank?.counters??SPOILS_DEFAULTS):SPOILS_DEFAULTS
   const breakdown=live?liveRank?.breakdown:baseline?.breakdown
   const pointsFor=(key:string)=>(breakdown as Record<string,number>|undefined)?.[key]
@@ -257,11 +259,24 @@ function SpoilsCalculator({sha,liveRank}:{sha:string|null;liveRank:RankState|nul
         </p>
       </div>
       <div className="min-w-36 rounded-lg border border-gold/30 bg-background/60 px-4 py-3 text-right">
-        <p className="text-xs text-muted">{live?"Projeção ao vivo (vitória por LP)":"Referência inicial, sem leitura do jogo"}</p>
+        <p className="text-xs text-muted">
+          {detectedOutcome==="ram_deckout"
+            ?"Marcador X15 na RAM: deck-out (-40)"
+            :detectedOutcome==="ram_lp"
+            ?"Marcador X15 na RAM: vitória por LP (+2)"
+            :live
+            ?"Projeção ao vivo se vencer por LP"
+            :"Referência inicial, sem leitura do jogo"}
+        </p>
         <p className="font-display text-3xl font-bold tabular-nums text-primary">
           {score??"—"} <span className="text-sm text-muted">pontos</span>
         </p>
         <p className="font-display text-lg font-semibold text-gold">{category??"RANK indisponível"}</p>
+        <p className="mt-1 text-xs text-muted">
+          {currentRankSystem==="x15"?"Remaster X15 · 3 classificações":
+            currentRankSystem==="classic"?"Sistema original · 10 classificações":
+            "ISO não identificada"}
+        </p>
       </div>
     </div>
     <p className={"mt-3 text-xs font-semibold "+(live?"text-success":"text-gold")} role="status">
@@ -295,8 +310,13 @@ function SpoilsCalculator({sha,liveRank}:{sha:string|null;liveRank:RankState|nul
       Os critérios já contribuem para a pontuação de abertura.
     </p>
     <p className="mt-2 text-xs text-gold">
-      Esta projeção supõe vitória por LP. O jogo pode terminar por deck-out ou Exodia;
-      o resultado final e a ISO aberta no emulador ainda precisam ser confirmados.
+      {detectedOutcome==="ram_deckout"
+        ?"O X15 indicou deck-out no byte de resultado. A pontuação foi calculada; a nota final do jogo ainda precisa ser conferida."
+        :detectedOutcome==="ram_lp"
+        ?"O X15 indicou vitória por LP no byte de resultado. A pontuação foi calculada; a nota final do jogo ainda precisa ser conferida."
+        :"Sem marcador final confirmado, esta projeção supõe vitória por LP. Deck-out e Exodia podem alterar o bônus."}
+      {" "}A classificação segue a ISO selecionada: dez RANKs no original/outros mods;
+      somente o Remaster X15 reconhecido usa Z-POW, S-POW e S-TEC.
     </p>
   </section>
 }
