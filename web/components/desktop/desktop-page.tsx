@@ -684,8 +684,8 @@ function Mods({mods,sha,onRefresh,configured}:{
                   Detector universal · candidatos por assinatura e conteúdo
                 </p>
                 <p className="mt-1">
-                  {diagnostics[mod.sha256].layoutCandidates.inspectedFiles} arquivos examinados,
-                  {" "}{diagnostics[mod.sha256].layoutCandidates.resourceProbes} sondagens de recursos.
+                  {diagnostics[mod.sha256].layoutCandidates?.inspectedFiles??0} arquivos examinados,
+                  {" "}{diagnostics[mod.sha256].layoutCandidates?.resourceProbes??0} sondagens de recursos.
                   São pistas, não tabelas comprovadas.
                 </p>
                 {(["executables","resources"] as const).map(kind=><div key={kind} className="mt-2">
