@@ -273,14 +273,14 @@ class UnknownISOTests(unittest.TestCase):
         sl=bytearray(SLUS_GLYPHS+93*4)
         # IDs conhecidos são meras amostras; um ponteiro válido não
         # transforma 722 possíveis strings em um catálogo aprovado.
-        struct.pack_into("<H",sl,SLUS_GLYPHS+1*4,ord("A"))
+        struct.pack_into("<H",sl,SLUS_GLYPHS+1*4,0x82A0)
         struct.pack_into("<H",sl,SLUS_PTR_BASE+1*2,9)
         sl[SLUS_TEXT_BASE+9:SLUS_TEXT_BASE+13]=bytes([1,1,255,0])
         result=inspect_known_name_layout(bytes(sl))
         self.assertEqual(result["state"],"amostras_nao_validadas")
         self.assertEqual(len(result["cardSamples"]),10)
         self.assertEqual(len(result["opponentSamples"]),7)
-        self.assertEqual(result["cardSamples"][0]["name"],"AA")
+        self.assertEqual(result["cardSamples"][0]["name"],"ああ")
         self.assertEqual(result["opponentPlausibleSamples"],0)
         self.assertIn("não identidades confirmadas",result["note"])
 
