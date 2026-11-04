@@ -726,6 +726,32 @@ function Mods({mods,sha,onRefresh,configured}:{
                     #{row.index} ponteiro {row.pointer??"?"}: {row.name||"(vazio)"} · {row.status}
                   </p>)}
               </div>}
+              {diagnostics[mod.sha256].opponentNameBoundaries?.state==="limites_nao_validados"&&
+                <div className="mt-3 rounded-lg border border-primary/30 p-2">
+                  <p className="font-semibold text-primary">Análise dos terminadores dos nomes — não validada</p>
+                  <p className="mt-1">
+                    Nomes examinados: {diagnostics[mod.sha256].opponentNameBoundaries?.examined??0}.
+                    {" "}Registros com 0xFF antes do próximo ponteiro:
+                    {" "}{diagnostics[mod.sha256].opponentNameBoundaries?.hasFFBeforeNext??0}.
+                    {" "}Sem 0xFF: {diagnostics[mod.sha256].opponentNameBoundaries?.noFFBeforeNext??0}.
+                  </p>
+                  <p className="mt-1">
+                    Byte mais frequente no fim dos registros:
+                    {" "}{diagnostics[mod.sha256].opponentNameBoundaries?.commonEndByte??"?"}
+                    {" "}({diagnostics[mod.sha256].opponentNameBoundaries?.commonEndByteCount??0} ocorrências).
+                  </p>
+                  {(diagnostics[mod.sha256].opponentNameBoundaries?.samples??[]).map((row,i)=>
+                    <p key={i} className="mt-1 break-all">
+                      #{row.id} {row.readablePrefix||"(sem texto legível)"}
+                      {" "}· delta {row.nextPointerDelta??"?"}
+                      {" "}· último byte {row.endByteHex??"?"}
+                      {" "}· 1º inválido {row.firstInvalidHex??"nenhum"}
+                      {" "}· final em hex {row.tailHex}
+                    </p>)}
+                  <p className="mt-2 text-gold">
+                    O aplicativo não remove sufixos nem libera esses nomes sem conferência.
+                  </p>
+                </div>}
               {(diagnostics[mod.sha256].opponentPointerProbe?.candidates?.length??0)>0&&
                 <div className="mt-3 rounded-lg border border-gold/30 p-2">
                   <p className="font-semibold text-gold">Possíveis tabelas de nomes de oponentes — não confirmadas</p>
