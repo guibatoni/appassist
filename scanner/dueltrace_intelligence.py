@@ -22,7 +22,7 @@ from effects_audit import audit_effect_sources
 from dueltrace_mod_diagnostic import diagnose_layout
 
 MODEL_LIST_URL = "http://127.0.0.1:11434/api/tags"
-REPORT_SCHEMA = 4
+REPORT_SCHEMA = 5
 MAX_FILE_RECORDS = 80
 
 
