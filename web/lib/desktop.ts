@@ -22,6 +22,16 @@ export type LocalCard = {
   slot?: number
 }
 
+export type LayoutFileCandidate = {
+  name: string
+  size: number | null
+  score: number
+  signals: string[]
+  dropArrayMatches: number
+  psxHeader: boolean
+  validated: false
+}
+
 export type ModScanDiagnostic = {
   romSha?: string
   state: string
@@ -30,6 +40,15 @@ export type ModScanDiagnostic = {
   nextSteps: string[]
   executableCandidates: string[]
   waCandidates: string[]
+  layoutCandidates?: {
+    schema: number | null
+    inspectedFiles: number
+    resourceProbes: number
+    executables: LayoutFileCandidate[]
+    resources: LayoutFileCandidate[]
+    note: string
+    verified: false
+  }
   waSelectionMethod?: string
   waSizeCandidates?: string[]
   suspectedWa?: string | null
