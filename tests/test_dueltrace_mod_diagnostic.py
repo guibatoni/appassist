@@ -275,6 +275,7 @@ class UnknownISOTests(unittest.TestCase):
         # transforma 722 possíveis strings em um catálogo aprovado.
         struct.pack_into("<H",sl,SLUS_GLYPHS+1*4,0x82A0)
         struct.pack_into("<H",sl,SLUS_PTR_BASE+1*2,9)
+        sl[SLUS_TEXT_BASE]=255  # ponteiros zero são nomes vazios, não continuação do bloco
         sl[SLUS_TEXT_BASE+9:SLUS_TEXT_BASE+13]=bytes([1,1,255,0])
         result=inspect_known_name_layout(bytes(sl))
         self.assertEqual(result["state"],"amostras_nao_validadas")
