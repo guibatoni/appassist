@@ -20,6 +20,16 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
     raw=report.get("arquivos_discos") or []
     files=[x for x in raw[:1200] if isinstance(x,dict)]
     names=[str(x.get("nome") or "").upper()[:150] for x in files]
+    # Índice resumido para identificar a estrutura de novas ISOs: o usuário
+    # precisa enxergar os nomes que o parser conseguiu ler. Sem bytes privados.
+    inventory=[{
+        "name":str(x.get("nome") or "")[:150],
+        "size":x.get("tamanho") if type(x.get("tamanho")) is int else None,
+        "lba":x.get("lba") if type(x.get("lba")) is int else None,
+    } for x in files[:80]]
+    boot_config=report.get("system_cnf") if isinstance(report.get("system_cnf"),dict) else {}
+    boot_target=str(boot_config.get("boot_target") or "")[:150]
+    boot_found=bool(boot_target and boot_target.upper() in names)
     boot=[x for x in names
           if _SUPPORTED_BOOT.fullmatch(x.rsplit("/",1)[-1])
           or x.endswith(".EXE")]
@@ -54,11 +64,16 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
         level="extração_parcial"
     else:
         level="estrutura_reconhecida"
+    if boot_target and not boot_found:
+        errors.append("SYSTEM.CNF aponta para "+boot_target+
+                      ", mas não há entrada com esse nome no índice.")
     if level!="estrutura_reconhecida" and not errors:
         errors.append("As validações do catálogo não reconheceram um layout completo.")
     steps=[]
     if not files:
         steps.append("Verificar setor 2048/2352, ISO9660 e índice dos arquivos do disco.")
+    if files and not boot:
+        steps.append("Examinar o inventário dos arquivos e a referência BOOT do SYSTEM.CNF, se existir.")
     if not boot or not wa:
         steps.append("Verificar nomes e posições reais de SLUS/SCUS/SLES e WA_MRG no disco.")
     if not flags.get("cards"):
@@ -82,6 +97,13 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
         "waSize":report.get("wa_total_bytes"),
         "sectorBytes":report.get("tipo_setor"),
         "indexedFiles":len(files),
+        "files":inventory,
+        "systemCnf":{
+            "found":boot_config.get("found") is True,
+            "bootTarget":boot_target or None,
+            "bootTargetIndexed":boot_found if boot_target else None,
+            "status":str(boot_config.get("status") or "não encontrado")[:150],
+        },
         "hashExe":str(report.get("hash_executavel") or "")[:64] or None,
         "hashWa":str(report.get("hash_wa") or "")[:64] or None,
         "cardsVerified":bool(flags.get("cards")),
