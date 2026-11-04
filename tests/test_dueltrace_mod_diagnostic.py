@@ -159,6 +159,10 @@ class UnknownISOTests(unittest.TestCase):
         self.assertEqual(len(result["files"]),9)
         self.assertEqual(result["files"][1]["name"],"DATA.PAK")
         self.assertEqual(result["files"][1]["size"],234567890)
+        self.assertEqual(result["possibleResourceFiles"][0]["name"],"DATA.PAK")
+        self.assertEqual(result["possibleResourceFiles"][0]["size"],234567890)
+        self.assertTrue(all(row["name"]!="CUSTOM_1.BIN"
+                            for row in result["possibleResourceFiles"]))
         self.assertEqual(result["systemCnf"]["bootTarget"],"CUSTOM_1.BIN")
         self.assertTrue(result["systemCnf"]["bootTargetIndexed"])
         self.assertFalse(result["automaticExtractionComplete"])
