@@ -9,7 +9,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 
 from auto_mods import ModCatalog, atomic_json
 from dueltrace_mod_diagnostic import diagnose_layout
-from scanner_multiiso import select_known_executable_layout, inspect_system_cnf, inspect_file_signatures, inspect_known_name_layout
+from scanner_multiiso import select_known_executable_layout, inspect_system_cnf, inspect_file_signatures, inspect_known_name_layout, select_wa_candidates, KNOWN_WA_SIZE_BYTES
 from dueltrace_web_bridge import DueltraceWebBridge
 from dueltrace_web_security import ProtectedDesktopApi
 from ia_local import minimal_evidence
@@ -302,6 +302,49 @@ class UnknownISOTests(unittest.TestCase):
         self.assertEqual(result["nameLayoutProbe"]["cardSamples"][0]["name"],"AA")
         self.assertEqual(result["nameLayoutProbe"]["opponentSamples"][0]["invalidGlyphs"],2)
         self.assertFalse(result["cardsVerified"])
+
+    def test_gog_renamed_wa_exact_size_is_candidate_only(self):
+        files={
+            "GOG_VNT.223":(15,1902032),
+            "GOSD/GOG_SD1.23":(300,38148608),
+            "GOSD/GO_SD2.23":(25000,35430400),
+            "GOSD/GOG_SD2.23":(42000,14675968),
+        }
+        candidates,method,by_size=select_wa_candidates(files)
+        self.assertEqual(method,"tamanho_identico_nao_validado")
+        self.assertEqual(candidates,["GOSD/GOG_SD1.23"])
+        self.assertEqual(by_size,["GOSD/GOG_SD1.23"])
+        self.assertEqual(KNOWN_WA_SIZE_BYTES,38148608)
+        self.report["arquivos_discos"]=[
+            {"nome":name,"lba":lba,"tamanho":size}
+            for name,(lba,size) in files.items()]
+        self.report["wa_candidatos_por_tamanho"]=by_size
+        self.report["wa_selecao_metodo"]=method
+        self.report["drops_source"]=candidates[0]
+        diag=diagnose_layout(self.report,self.profile)
+        self.assertEqual(diag["suspectedWa"],"GOSD/GOG_SD1.23")
+        self.assertEqual(diag["waSelectionMethod"],method)
+        self.assertFalse(diag["suspectedWaVerified"])
+        self.assertFalse(diag["automaticExtractionComplete"])
+        self.assertIn("GOSD/GOG_SD1.23",diag["waCandidates"])
+        self.assertTrue(any("apenas por tamanho" in x for x in diag["issues"]))
+
+    def test_multiple_equal_size_files_rejected_without_guessing(self):
+        names,method,by_size=select_wa_candidates({
+            "A.DAT":(1,38148608),"B.DAT":(2,38148608),
+        })
+        self.assertEqual(names,[])
+        self.assertEqual(method,"multiplos_candidatos")
+        self.assertEqual(len(by_size),2)
+
+    def test_classic_wa_name_has_precedence_over_size(self):
+        names,method,by_size=select_wa_candidates({
+            "DATA/WA_MRG.MRG":(1,37000000),
+            "RENAMED.23":(2,38148608),
+        })
+        self.assertEqual(names,["DATA/WA_MRG.MRG"])
+        self.assertEqual(method,"nome_convencional")
+        self.assertEqual(by_size,["RENAMED.23"])
 
     def test_scan_report_error_is_visible(self):
         info=diagnose_layout({
