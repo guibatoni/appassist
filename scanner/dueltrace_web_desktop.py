@@ -12,6 +12,7 @@ import secrets
 import re
 import sys
 import threading
+import time
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -238,6 +239,14 @@ def main():
                 webview.FileDialog.OPEN,allow_multiple=False,
                 file_types=file_types)
         bridge._file_picker=pick_file
+        def close_for_update():
+            # Resposta JS é entregue antes de destruir a janela; helper externo
+            # espera a saída do processo para substituir arquivos bloqueados.
+            def shutdown():
+                time.sleep(1.5)
+                window.destroy()
+            threading.Thread(target=shutdown,daemon=True).start()
+        bridge._request_shutdown=close_for_update
         webview.start(debug=False,private_mode=True)
     finally:
         server.shutdown()
