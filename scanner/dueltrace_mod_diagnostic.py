@@ -250,6 +250,9 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
             "noFFBeforeNext":boundaries.get("noFFBeforeNext",0),
             "commonEndByte":str(boundaries.get("commonEndByte") or "")[:6] or None,
             "commonEndByteCount":boundaries.get("commonEndByteCount",0),
+            "commonFirstInvalidByte":str(
+                boundaries.get("commonFirstInvalidByte") or "")[:6] or None,
+            "commonFirstInvalidCount":boundaries.get("commonFirstInvalidCount",0),
             "samples":boundary_samples,
             "validated":False,
         },
