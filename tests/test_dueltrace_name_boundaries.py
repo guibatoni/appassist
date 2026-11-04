@@ -47,6 +47,8 @@ class OpponentNameBoundaryTests(unittest.TestCase):
         self.assertEqual(result["examined"],39)
         self.assertEqual(result["hasFFBeforeNext"],0)
         self.assertEqual(result["noFFBeforeNext"],38)
+        self.assertEqual(result["commonFirstInvalidByte"],"0xFE")
+        self.assertEqual(result["commonFirstInvalidCount"],39)
         self.assertEqual(result["samples"][0]["readablePrefix"],"ABCABA")
         self.assertEqual(result["samples"][0]["firstInvalidHex"],"0xFE")
         self.assertEqual(result["samples"][0]["nextPointerDelta"],16)
