@@ -52,7 +52,6 @@ export function DropsPage({sha}:{sha:string|null}) {
   useEffect(()=>{
     setOpponent(0)
     setRankFilter("")
-    setObsRank("")
     setQuery("")
     setSort("id")
     setCardType("")
@@ -73,7 +72,6 @@ export function DropsPage({sha}:{sha:string|null}) {
         if(mounted){
           setResult(response)
           setError(null)
-          setObsRank(previous=>response.rankOptions.includes(previous)?previous:response.rankOptions[0]??"")
         }
       }catch(e){
         if(mounted){setResult(null);setError(e instanceof Error?e.message:"Erro ao consultar drops locais.")}
