@@ -4,7 +4,7 @@ import Image from "next/image"
 import {useEffect, useState} from "react"
 import {ChevronLeft, ChevronRight, Database, RefreshCcw, Search, ShieldCheck} from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi} from "@/lib/desktop"
-import type {DropsPage, DropRow, DuelEvidence, MipsTraceResult} from "@/lib/desktop"
+import type {DropsPage, DropRow, DuelEvidence, MipsTraceResult, RankCapture, RankComparison} from "@/lib/desktop"
 
 function DropArtwork({sha,id,name}:{sha:string|null;id:number;name:string}) {
   const [source,setSource]=useState<"frame"|"art"|"none">("frame")
@@ -66,6 +66,8 @@ export function DropsPage({sha}:{sha:string|null}) {
   const [obsVictory,setObsVictory]=useState("lp")
   const [obsBusy,setObsBusy]=useState(false)
   const [obsError,setObsError]=useState<string|null>(null)
+  const [pendingCapture,setPendingCapture]=useState<RankCapture|null>(null)
+  const [rankComparison,setRankComparison]=useState<RankComparison|null>(null)
   const pageSize=36
 
   // Nunca reutilizar filtros de um mod em outro perfil SHA.
@@ -87,6 +89,8 @@ export function DropsPage({sha}:{sha:string|null}) {
     setObsPoints("")
     setObsVictory("lp")
     setObsError(null)
+    setPendingCapture(null)
+    setRankComparison(null)
   },[sha])
 
   useEffect(()=>{
@@ -141,6 +145,15 @@ export function DropsPage({sha}:{sha:string|null}) {
     }).catch(()=>{if(active)setDuelEvidence(null)})
     return()=>{active=false}
   },[sha,revision])
+  useEffect(()=>{
+    let mounted=true
+    const api=desktopApi()
+    if(api){
+      void api.get_pending_rank_capture().then(x=>{if(mounted)setPendingCapture(x)}).catch(()=>{})
+      void api.get_rank_comparison().then(x=>{if(mounted)setRankComparison(x)}).catch(()=>{})
+    }
+    return()=>{mounted=false}
+  },[sha,revision])
   const exportRankReport=async()=>{
     const api=desktopApi()
     if(!api)return
@@ -165,10 +178,13 @@ export function DropsPage({sha}:{sha:string|null}) {
     setObsBusy(true)
     setObsError(null)
     try{
-      const report=await api.record_duel_result(obsOpponent,obsRank,id,points,obsVictory)
+      const report=await api.record_duel_result(obsOpponent,obsRank,id,points,obsVictory,
+        pendingCapture?.ready?pendingCapture.captureId:null)
       setDuelEvidence(report)
       setObsCard("")
       setObsPoints("")
+      setPendingCapture(await api.get_pending_rank_capture())
+      setRankComparison(await api.get_rank_comparison())
     }catch(e){
       setObsError(e instanceof Error?e.message:"Falha ao registrar duelo observado.")
     }finally{setObsBusy(false)}
@@ -259,6 +275,19 @@ export function DropsPage({sha}:{sha:string|null}) {
     <section className="panel rounded-xl p-4">
       <h2 className="font-display text-xl font-semibold text-gold">Conferir drops obtidos em duelo</h2>
       <p className="mt-1 text-sm text-muted">Após o duelo, registre o RANK e o ID da carta exibidos no jogo. O DUELTRACE compara com os três bancos do oponente da ISO ativa, sem copiar dados de outros mods.</p>
+      <div className="mt-3 rounded-lg border border-primary/30 bg-background/40 p-3 text-xs">
+        <p className="font-semibold text-primary">Previsão registrada durante o duelo</p>
+        <p className="mt-1 text-muted">
+          {pendingCapture?.ready
+            ? `${pendingCapture.score} pontos · ${pendingCapture.category} · aguardando resultado do jogo`
+            : "Sem previsão capturada. Na Central de Duelo, confirme os LP e clique em Capturar previsão de RANK antes de vencer."}
+        </p>
+        <p className="mt-1 text-muted">A comparação dos pontos exige vitória por LP e pontuação observada. Sem captura, o resultado será registrado apenas como observação.</p>
+        <button type="button" className="btn-ghost mt-2 text-xs" onClick={()=>{
+          const api=desktopApi()
+          if(api)void api.get_pending_rank_capture().then(setPendingCapture).catch(()=>{})
+        }}>Recarregar previsão</button>
+      </div>
       <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <label className="flex flex-col gap-1 text-xs text-muted">Oponente do duelo
           <select className="field px-3 py-2 text-sm" value={obsOpponent}
@@ -307,6 +336,21 @@ export function DropsPage({sha}:{sha:string|null}) {
         {" "}coerentes em {duelEvidence.scoreComparisons.compared} vitórias por LP.
         {" "}Coerência não comprova execução da rotina MIPS.
       </p>:null}
+      {rankComparison?.available&&
+        <div className="mt-3 rounded-lg border border-line/60 bg-background/40 p-3 text-xs">
+          <p className="font-semibold text-gold">RANK previsto × RANK observado</p>
+          <p className="mt-1 text-primary">
+            {rankComparison.matches??0} acerto(s) completos · {rankComparison.mismatches??0} divergência(s)
+            {" "}em {rankComparison.fully_comparable??0} duelos comparáveis.
+          </p>
+          <p className="mt-1 text-muted">Capturas sem pontuação observada: {rankComparison.rank_only_matches??0} letra(s) coincidente(s), {rankComparison.rank_only_mismatches??0} divergente(s). Sem previsão: {rankComparison.missing_prediction??0}. Outras vitórias: {rankComparison.not_lp_win??0}.</p>
+          {rankComparison.cases.slice(-5).reverse().map((item,i)=>
+            <p key={item.duel_id??String(i)} className="mt-1 text-muted">
+              {item.status}: previsto {item.projected_score??"—"} / {item.projected_rank??"—"} · observado {item.observed_points??"—"} / {item.observed_rank??"—"}
+              {item.score_delta!==null?` · diferença ${item.score_delta>0?"+":""}${item.score_delta}`:""}
+            </p>)}
+          <p className="mt-2 text-gold">Coincidência em relatos manuais não comprova execução MIPS ou identidade da ISO carregada no ePSXe.</p>
+        </div>}
       {duelEvidence?.assignmentCount!==undefined&&duelEvidence.assignmentCount>1&&
         <p className="mt-2 text-xs text-gold">
           RANKs ainda têm {duelEvidence.assignmentCount} correspondências possíveis entre os bancos WA.
