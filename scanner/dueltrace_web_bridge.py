@@ -347,6 +347,8 @@ class DueltraceWebBridge:
                 if self._rank_gap_started is None:
                     self._rank_gap_started=now
                 if now-self._rank_gap_started<=2.5:
+                    if self._rank_pending_capture is not None:
+                        self._rank_pending_capture["ram_gap"]=True
                     return None,sha,{
                         "state":"unavailable","ready":False,
                         "status":"Leitura RAM instável; conferência de LP mantida "
