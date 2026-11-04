@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic, CardMatchResult} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic, CardMatchResult, CardAIMatchReport} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -347,6 +347,9 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
   const [result,setResult]=useState<CardMatchResult|null>(null)
   const [error,setError]=useState<string|null>(null)
   const [busy,setBusy]=useState(false)
+  const [aiBusy,setAiBusy]=useState(false)
+  const [aiError,setAiError]=useState<string|null>(null)
+  const [aiReview,setAiReview]=useState<CardAIMatchReport|null>(null)
   useEffect(()=>{
     const valid=new Set(mods.map(m=>m.sha256))
     setFromSha(old=>valid.has(old)?old:activeSha&&valid.has(activeSha)?activeSha:mods[0]?.sha256??"")
@@ -357,6 +360,8 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
     if(!api||!fromSha||!toSha||fromSha===toSha)return
     setBusy(true)
     setError(null)
+    setAiReview(null)
+    setAiError(null)
     try{
       const data=await api.compare_mod_cards(fromSha,toSha,search,offset,30,confidence)
       setResult(data)
@@ -364,6 +369,14 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
       setResult(null)
       setError(e instanceof Error?e.message:"Não foi possível comparar os catálogos locais.")
     }finally{setBusy(false)}
+  }
+  const review=async()=>{
+    const api=desktopApi()
+    if(!api||!result)return
+    setAiBusy(true);setAiError(null);setAiReview(null)
+    try{setAiReview(await api.review_card_matches(result.sourceSha,result.targetSha))}
+    catch(e){setAiError(e instanceof Error?e.message:"Ollama não respondeu.")}
+    finally{setAiBusy(false)}
   }
   return <section className="panel mt-4 rounded-xl p-4" aria-label="Identificador Universal de Cartas">
     <div className="mb-3">
@@ -430,6 +443,30 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
             <p className="text-xs text-muted">{label}</p>
           </div>)}
         </div>
+        {result.summary.revisar>0&&<div className="mt-3 flex flex-wrap items-center gap-3">
+          <button type="button" className="btn-ghost disabled:opacity-40"
+            disabled={aiBusy||busy||!desktopApi()} onClick={()=>void review()}>
+            {aiBusy?"Ollama analisando…":"Revisar dúvidas com Ollama (opcional)"}
+          </button>
+          <span className="text-xs text-muted">
+            A IA revisa somente nomes e sinais já extraídos; não interpreta arquivos binários.
+          </span>
+        </div>}
+        {aiError&&<p className="mt-2 text-sm text-gold" role="alert">{aiError}</p>}
+        {aiReview&&<div className="mt-3 rounded-lg border border-gold/30 bg-background/50 p-3">
+          <p className="text-sm font-semibold text-gold">Revisão do Ollama · hipótese, não confirmação</p>
+          <p className="mt-1 text-xs text-muted">{aiReview.note}</p>
+          <div className="mt-2 space-y-2">
+            {aiReview.revisoes.map(item=><p key={item.sourceId+"-"+item.targetId}
+              className="text-xs text-white">
+              #{item.sourceId} → #{item.targetId}: {item.assessment.replaceAll("_"," ")}
+              {item.reason?" · "+item.reason:""}
+            </p>)}
+            {aiReview.revisoes.length===0&&<p className="text-xs text-muted">
+              Nenhum parecer específico. As candidatas permanecem sem validação.
+            </p>}
+          </div>
+        </div>}
         <p className="mt-2 text-xs text-muted">
           Artes locais comparadas: {result.summary.sourceArtCount} na origem e {result.summary.targetArtCount} no destino.
           Os nomes vêm dos perfis SLUS. Mesmo as candidatas fortes não foram verificadas dentro do jogo.
