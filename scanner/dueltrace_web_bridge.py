@@ -43,7 +43,10 @@ from dueltrace_update_checker import (
 from dueltrace_signed_install import (
     trusted_installer_ready, select_signed_installer, install_new_release
 )
-from dueltrace_preview_installer import fetch_latest_preview_package, install_preview_release
+from dueltrace_preview_installer import (
+    fetch_latest_preview_package, install_preview_release,
+    fetch_portable_stable_package, install_portable_stable_release
+)
 from dueltrace_preview_updates import installed_preview_build_id
 
 
@@ -142,6 +145,7 @@ class DueltraceWebBridge:
         # Evita a consulta extra ao endpoint Actions, frequentemente limitada.
         status=check_for_updates(preview_fetcher=lambda:None)
         status["automaticPreviewReady"]=False
+        status["automaticPortableReady"]=False
         try:
             candidate=fetch_latest_preview_package(
                 current_version=CURRENT_VERSION,
@@ -165,32 +169,37 @@ class DueltraceWebBridge:
             status["previewError"]=(
                 "Pré-lançamentos temporariamente indisponíveis. "
                 "Nenhum download foi iniciado.")
-        if status.get("status")=="preview_update_available" and status.get("automaticPreviewReady"):
-            status["automaticInstallReason"]=(
-                "Prévia pública verificável por SHA-256 disponível. "
-                "Instale com confirmação explícita; não há assinatura digital.")
-        elif status.get("status")!="update_available":
-            status["automaticInstallReason"]=(
-                "Nenhuma versão estável assinada mais recente foi encontrada. "
-                "Para Previews, consulte as pré-releases públicas do GitHub.")
-        elif not trusted_installer_ready():
-            status["automaticInstallReason"]=(
-                "Esta instalação não possui assinatura Authenticode "
-                "verificada. A atualização automática exige uma versão "
-                "estável assinada previamente instalada.")
-        else:
+        if status.get("status")=="update_available":
             try:
-                release=fetch_stable_release()
-                candidate=select_signed_installer(release,CURRENT_VERSION)
+                candidate=fetch_portable_stable_package(current_version=CURRENT_VERSION)
                 if candidate is not None:
-                    status["automaticInstallReady"]=True
+                    status["automaticPortableReady"]=True
                     status["automaticInstallReason"]=(
-                        "Instalador oficial com hash publicado; a assinatura "
-                        "será comparada antes de executar.")
+                        "Versão estável portátil disponível, com hash SHA-256 "
+                        "e identidade de build. Assinatura digital não obrigatória.")
             except (OSError,ValueError,TypeError):
                 status["automaticInstallReason"]=(
-                    "A release mais recente ainda não possui instalador "
-                    "com metadados de integridade verificáveis.")
+                    "Release estável sem ZIP portátil verificável. "
+                    "Consulte as notas do GitHub.")
+            # Mantém opção assinada para versões antigas, sem torná-la requisito.
+            if not status["automaticPortableReady"] and trusted_installer_ready():
+                try:
+                    candidate=select_signed_installer(
+                        fetch_stable_release(),CURRENT_VERSION)
+                    if candidate is not None:
+                        status["automaticInstallReady"]=True
+                        status["automaticInstallReason"]=(
+                            "Instalador assinado opcional disponível.")
+                except (OSError,ValueError,TypeError):
+                    pass
+        elif status.get("automaticPreviewReady"):
+            status["automaticInstallReason"]=(
+                "Prévia pública com SHA-256 disponível. Não exige assinatura.")
+        else:
+            status["automaticInstallReason"]=(
+                "Não há pacote novo verificável no GitHub Releases. "
+                "Nenhuma assinatura digital é exigida para atualizações "
+                "em ZIP oficial com SHA-256.")
         return status
 
     def install_signed_update(self):
@@ -200,6 +209,13 @@ class DueltraceWebBridge:
     def install_preview_update(self):
         """Baixa pré-release pública com SHA-256, instala após confirmação na UI."""
         result=install_preview_release(data_home=self.catalog.home)
+        if result.get("started") and callable(getattr(self,"_request_shutdown",None)):
+            self._request_shutdown()
+        return result
+
+    def install_portable_update(self):
+        """Atualiza ZIP estável oficial sem assinatura, exigindo SHA e commit."""
+        result=install_portable_stable_release(data_home=self.catalog.home)
         if result.get("started") and callable(getattr(self,"_request_shutdown",None)):
             self._request_shutdown()
         return result
