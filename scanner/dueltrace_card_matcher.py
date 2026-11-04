@@ -80,7 +80,11 @@ def _art_fingerprints(profile: dict, home: Path, cards: list[dict]) -> dict[int,
             with Image.open(real) as image:
                 if image.format != "PNG" or image.size != (102, 96):
                     continue
-                pixels = image.convert("RGB").tobytes()
+                rgb = image.convert("RGB")
+                # Artes uniformes/sem detalhe não identificam uma carta.
+                if rgb.getcolors(maxcolors=7) is not None:
+                    continue
+                pixels = rgb.tobytes()
             result[cid] = hashlib.sha256(pixels).hexdigest()
         except (OSError, ValueError, RuntimeError):
             continue
