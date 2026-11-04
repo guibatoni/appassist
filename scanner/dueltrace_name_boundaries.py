@@ -55,6 +55,7 @@ def inspect_opponent_name_boundaries(
 
     all_rows = []
     last_bytes = []
+    first_invalid_bytes = []
     has_ff = 0
     no_ff = 0
     for number in range(1, OPP_COUNT + 1):
@@ -102,6 +103,8 @@ def inspect_opponent_name_boundaries(
             else:
                 first_invalid = (i, raw_byte)
                 break
+        if first_invalid:
+            first_invalid_bytes.append(first_invalid[1])
         readable_prefix = unicodedata.normalize(
             "NFKC", "".join(decoded)).strip()[:70]
         all_rows.append({
@@ -120,6 +123,9 @@ def inspect_opponent_name_boundaries(
 
     common = Counter(last_bytes).most_common(1)
     common_byte, common_count = common[0] if common else (None, 0)
+    invalid_common = Counter(first_invalid_bytes).most_common(1)
+    invalid_byte, invalid_count = (
+        invalid_common[0] if invalid_common else (None, 0))
     return {
         "state": "limites_nao_validados",
         "examined": len(all_rows),
@@ -128,6 +134,9 @@ def inspect_opponent_name_boundaries(
         "commonEndByte": (
             f"0x{common_byte:02X}" if common_byte is not None else None),
         "commonEndByteCount": common_count,
+        "commonFirstInvalidByte": (
+            f"0x{invalid_byte:02X}" if invalid_byte is not None else None),
+        "commonFirstInvalidCount": invalid_count,
         "samples": [next(
             (row for row in all_rows if row["id"] == i), None)
             for i in SAMPLE_IDS
