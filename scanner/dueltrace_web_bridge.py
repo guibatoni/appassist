@@ -33,6 +33,7 @@ from dueltrace_rank_system import available_ranks,rank_system,rank_label_for_exi
 from dueltrace_mips_duel_trace import inspect_duel_mips_trace, MAX_TRACE_BYTES
 from dueltrace_rank_memory_trace import inspect_rank_memory_trace
 from dueltrace_rank_export import build_rank_evidence_report
+from dueltrace_rank_duel_verification import compare_rank_observations
 from dueltrace_library_sort import validate_sort,matches_type,sort_key
 from dueltrace_update_checker import (
     check_for_updates, open_official_releases, fetch_stable_release, CURRENT_VERSION
@@ -565,6 +566,17 @@ class DueltraceWebBridge:
             raw=load_json(self._observations_path(sha),{})
             observations=(raw.get("observations",[]) if isinstance(raw,dict) else [])
             return rank_drop_report(profile,observations)
+
+    def get_rank_comparison(self):
+        """Resumo local da divergência entre previsão capturada e duelo manual."""
+        with self._lock:
+            active,_entry,profile=self._active()
+            sha=active.get("sha256")
+            if not profile or not isinstance(sha,str):
+                return {"available":False,"status":"no_active_mod","cases":[]}
+            saved=load_json(self._observations_path(sha),{})
+            records=saved.get("observations",[]) if isinstance(saved,dict) else []
+            return {"available":True,**compare_rank_observations(sha,records)}
 
     def record_duel_result(self, opponent_id, observed_rank, card_id,
                            observed_points=None, victory_type="unknown",
