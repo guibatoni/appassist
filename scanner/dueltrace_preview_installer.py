@@ -27,6 +27,7 @@ from dueltrace_signed_install import TrustedRedirect, TRUSTED_HOSTS, UnsafeUpdat
 
 PREVIEW_LIST = REPO_API + "/releases?per_page=30"
 ASSET_NAME = "DUELTRACE-WebUI-Windows-Preview.zip"
+STABLE_ASSET_NAME = "DUELTRACE-WebUI-Windows.zip"
 TAG_PATTERN = re.compile(r"preview-v(\d{1,4}\.\d{1,4}\.\d{1,4})-r(\d{1,15})\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"sha256:([a-f0-9]{64})\Z")
@@ -98,6 +99,65 @@ def fetch_latest_preview_package(*, current_version: str = CURRENT_VERSION,
     if not eligible:
         return None
     return max(eligible,key=lambda x:(parse_version(x["version"]),x["run_id"]))
+
+
+def select_portable_stable_release(release: dict, current_version: str,
+                                   installed_channel: str = "preview") -> dict | None:
+    """ZIP estável com SHA-256 oficial: assinatura digital não é exigida."""
+    if (not isinstance(release,dict) or release.get("draft") is not False
+            or release.get("prerelease") is not False):
+        raise UnsafeUpdate("Release estável pública obrigatória.")
+    tag=release.get("tag_name")
+    installed=parse_version(current_version)
+    newer=parse_version(tag)
+    if installed is None or newer is None or installed_channel not in ("preview","stable"):
+        raise UnsafeUpdate("Versão estável inválida.")
+    if newer<installed or (newer==installed and installed_channel=="stable"):
+        return None
+    if release.get("html_url")!=f"{REPO_WEB}/releases/tag/{tag}":
+        raise UnsafeUpdate("Origem estável não autorizada.")
+    sha=release.get("target_commitish")
+    if type(sha) is not str or not SHA.fullmatch(sha):
+        raise UnsafeUpdate("Release sem commit SHA completo.")
+    assets=release.get("assets")
+    matches=([a for a in assets if isinstance(a,dict)
+              and a.get("name")==STABLE_ASSET_NAME]
+             if isinstance(assets,list) else [])
+    if len(matches)!=1:
+        return None
+    item=matches[0]
+    digest=item.get("digest")
+    digest_match=DIGEST.fullmatch(digest) if isinstance(digest,str) else None
+    url=f"{REPO_WEB}/releases/download/{tag}/{STABLE_ASSET_NAME}"
+    if (not digest_match or type(item.get("size")) is not int
+            or not 0<item["size"]<=MAX_ARCHIVE
+            or item.get("browser_download_url")!=url):
+        raise UnsafeUpdate("ZIP estável sem SHA-256 ou endereço oficial.")
+    return {"tag":tag,"version":".".join(map(str,newer)),
+            "run_id":None,"sha":sha,"url":url,
+            "sha256":digest_match.group(1),"size":item["size"],
+            "page":release["html_url"],"channel":"stable"}
+
+
+def fetch_portable_stable_package(*, current_version: str = CURRENT_VERSION,
+                                 installed_channel: str = "preview",
+                                 fetcher=None) -> dict | None:
+    from dueltrace_update_checker import fetch_stable_release
+    return select_portable_stable_release(
+        (fetcher or fetch_stable_release)(),current_version,installed_channel)
+
+
+def install_portable_stable_release(*, data_home: Path,
+                                    current_version: str = CURRENT_VERSION,
+                                    installed_channel: str = "preview",
+                                    fetcher=None, **kwargs) -> dict:
+    info=fetch_portable_stable_package(
+        current_version=current_version,installed_channel=installed_channel,
+        fetcher=fetcher)
+    if info is None:
+        return {"started":False,
+                "status":"Nenhuma versão estável portátil nova com SHA-256 disponível."}
+    return stage_preview_update(info=info,data_home=data_home,**kwargs)
 
 
 def download_preview_zip(info: dict, destination: Path, *, opener=None) -> Path:
@@ -178,7 +238,8 @@ def unpack_preview_zip(archive: Path, directory: Path, info: dict) -> Path:
         data=json.loads(manifest.read_text(encoding="utf-8-sig"))
         if (not isinstance(data,dict) or data.get("schema")!=1
                 or data.get("version")!=info["version"]
-                or data.get("run_id")!=info["run_id"]
+                or (data.get("run_id")!=info["run_id"] if info["run_id"] is not None
+                    else type(data.get("run_id")) is not int or not 0<data["run_id"]<10**15)
                 or data.get("head_sha")!=info["sha"]):
             raise UnsafeUpdate("Conteúdo do pacote não corresponde ao build publicado.")
         return exe
@@ -274,7 +335,7 @@ def stage_preview_update(*, info: dict, data_home: Path,
         else:
             launcher(script)
         return {"started":True,"status":(
-            f"Preview v{info['version']} verificada. O aplicativo será fechado, "
+            f"DUELTRACE v{info['version']} verificado. O aplicativo será fechado, "
             "substituído e reaberto. Uma cópia anterior será preservada."),
             "version":info["version"]}
     except BaseException:
