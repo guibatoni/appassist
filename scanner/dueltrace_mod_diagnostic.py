@@ -80,6 +80,19 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
     art_state=str(report.get("artes_obs") or "")[:180]
     if art_state and not profile.get("supported_features",{}).get("art"):
         errors.append("Artes WA: "+art_state)
+    name_probe=report.get("amostras_layout_nomes")
+    if not isinstance(name_probe,dict):
+        name_probe={}
+    def safe_name_samples(key, limit):
+        samples=name_probe.get(key)
+        if not isinstance(samples,list):return []
+        return [{
+            "index":row.get("index") if type(row.get("index")) is int else None,
+            "pointer":row.get("pointer") if type(row.get("pointer")) is int else None,
+            "name":str(row.get("name") or "")[:80],
+            "status":str(row.get("status") or "")[:40],
+            "invalidGlyphs":row.get("invalidGlyphs") if type(row.get("invalidGlyphs")) is int else None,
+        } for row in samples[:limit] if isinstance(row,dict)]
     flags=profile.get("supported_features") or {}
     if status.startswith("incerto") or status.startswith("erro"):
         level="estrutura_desconhecida"
@@ -140,6 +153,14 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
         "cardsVerified":bool(flags.get("cards")),
         "dropsVerified":bool(flags.get("drops")),
         "artVerified":bool(flags.get("art")),
+        "nameLayoutProbe":{
+            "state":str(name_probe.get("state") or "não investigado")[:60],
+            "cardSamples":safe_name_samples("cardSamples",10),
+            "opponentSamples":safe_name_samples("opponentSamples",7),
+            "cardPlausibleSamples":name_probe.get("cardPlausibleSamples",0),
+            "opponentPlausibleSamples":name_probe.get("opponentPlausibleSamples",0),
+            "note":"Amostras de offsets conhecidos, não nomes/IDs de cartas validados.",
+        },
         "automaticExtractionComplete":level=="estrutura_reconhecida",
         "aiRole":"Ollama pode interpretar os indícios, mas não extrai bytes nem comprova tabelas desconhecidas.",
     }
