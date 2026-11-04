@@ -12,6 +12,7 @@ Comparar os catálogos de duas ISOs/BIN locais de Yu-Gi-Oh! Forbidden Memories m
 - **Scanner já existente** extrai do SLUS os nomes, atributos, tipos, níveis e demais dados do catálogo, e do WA_MRG as artes 102×96 PNG em layouts suportados. Os perfis são separados por SHA-256 da ISO.
 - Novo `scanner/dueltrace_card_matcher.py`: compara **dois catálogos de cartas previamente extraídos e marcados como validados pelo parser**. Normaliza nomes, compara estatísticas e tipos, calcula SHA-256 dos **pixels RGB** das artes extraídas, e sinaliza possíveis equivalências entre IDs diferentes.
 - As artes devem ser PNGs 102×96 dentro do diretório de análises local autorizado, limitados a 500 kB. Arte uniforme/placeholder e hashes repetidos não são evidência de identidade. Não se envia nem copia o PNG.
+- **Artes alteradas na coloração** podem produzir uma candidata **somente para revisão** quando um dHash da luminância permanece próximo (diferença de até 4 bits), é estruturalmente único em ambos os catálogos e ATK/DEF coincidem. Isso não prova identidade; o algoritmo evita promover matches perceptuais automaticamente.
 - **ID numérico igual NÃO é evidência.** Duas cartas no mesmo ID podem ser diferentes em cada mod. Nome duplicado é sinal de ambiguidade. Correspondências fortes exigem nome único + ATK/DEF coincidentes ou arte idêntica e única.
 - As classes são `alta` (candidata forte), `revisar` (ambígua, dados divergentes ou nome similar) e `sem_correspondencia`. Nem mesmo `alta` significa identidade confirmada no jogo.
 - Validação 1:1 evita marcar duas cartas de origem como correspondências fortes do mesmo ID destino. Nunca transfere automaticamente cartas, imagens, fusões, drops ou efeitos.
@@ -28,7 +29,7 @@ Comparar os catálogos de duas ISOs/BIN locais de Yu-Gi-Oh! Forbidden Memories m
 ## Limitações honestas
 
 - Mudança de arte e de nome **simultaneamente** sem outra evidência pode deixar a carta sem correspondência. Não usar ID numericamente igual como fallback.
-- A métrica visual inicial é SHA-256 de pixels RGB idênticos. Artes recoloridas, redesenhadas, com zoom ou paleta diferente exigem algoritmo visual tolerante numa etapa posterior; hash diferente não prova que sejam cartas distintas.
+- O scanner combina hash SHA-256 RGB exato com **dHash de luminância para recolorações simples** (sempre revisão manual). Artes redesenhadas ou com zoom, recorte ou alterações profundas podem exigir reconhecimento visual mais avançado; hash diferente não prova que sejam cartas distintas.
 - Os perfis precisam estar importados e com o catálogo reconhecido pelo parser. ISO desconhecida/incompatível não pode ser anunciada como identificada.
 - Sem o Ollama instalado, o comparador determinístico continua funcionando e a revisão opcional mostra indisponibilidade.
 - O navegador normal não consegue chamar o backend; a tela funciona no aplicativo Windows local autenticado.
