@@ -220,6 +220,59 @@ def decode_names(sl):
         return [],[],f'Codificação diferente/ambígua: {n_good}/39 nomes, {card_good}/722 cartas plausíveis'
     return opponents,cards,f'{n_good}/39 nomes, {card_good}/722 cartas decodificados'
 
+def inspect_known_name_layout(sl):
+    """Amostras de offsets do FM original em mod não reconhecido.
+
+    NÃO aprova o catálogo, oponente ou glifo. Seu único propósito é mostrar
+    possíveis deslocamentos e caracteres ilegíveis para diagnóstico.
+    """
+    required=max(SLUS_GLYPHS+93*4,SLUS_PTR_BASE+(0x328+39)*2)
+    if len(sl)<required:
+        return {"state":"incompatível","reason":"Executável menor que a tabela de ponteiros/glifos conhecida",
+                "cardSamples":[],"opponentSamples":[]}
+    try:
+        glyphs=[struct.unpack_from("<H",sl,SLUS_GLYPHS+4*i)[0] for i in range(93)]
+    except struct.error:
+        return {"state":"incompatível","reason":"Tabela de glifos fora do arquivo",
+                "cardSamples":[],"opponentSamples":[]}
+    def sample(index):
+        address=SLUS_PTR_BASE+index*2
+        if address+2>len(sl):
+            return {"index":index,"pointer":None,"name":"","status":"ponteiro_fora_do_arquivo"}
+        ptr=struct.unpack_from("<H",sl,address)[0]
+        pos=SLUS_TEXT_BASE+ptr
+        if pos<0 or pos>=len(sl):
+            return {"index":index,"pointer":ptr,"name":"","status":"texto_fora_do_arquivo"}
+        raw=sl[pos+3:pos+100] if sl[pos:pos+2]==b"\xf8\x0a" else sl[pos:pos+100]
+        decoded=[]
+        invalid=0
+        for value in raw:
+            if value==255:break
+            if value==0:
+                decoded.append(" ")
+            elif value<len(glyphs) and glyphs[value]:
+                try:decoded.append(glyphs[value].to_bytes(2,"big").decode("shift_jis"))
+                except UnicodeError:invalid+=1
+            else:invalid+=1
+        name=unicodedata.normalize("NFKC","".join(decoded)).strip()[:80]
+        plausible=bool(name) and invalid==0 and len(name)<=64 and (
+            sum(x.isalnum() for x in name)>=2)
+        return {"index":index,"pointer":ptr,"name":name,
+                "status":"caracteres_plausiveis" if plausible else "invalido_ou_vazio",
+                "invalidGlyphs":invalid}
+    ids=(1,2,3,10,25,50,100,200,400,722)
+    opponent_ids=(1,2,3,10,20,30,39)
+    cards=[sample(i) for i in ids]
+    opponents=[sample(0x328+i) for i in opponent_ids]
+    return {
+        "state":"amostras_nao_validadas",
+        "cardSamples":cards,"opponentSamples":opponents,
+        "cardPlausibleSamples":sum(row["status"]=="caracteres_plausiveis" for row in cards),
+        "opponentPlausibleSamples":sum(row["status"]=="caracteres_plausiveis" for row in opponents),
+        "note":"Nomes e ponteiros são amostras de offsets conhecidos, não identidades confirmadas.",
+    }
+
+
 def select_known_executable_layout(disc, candidates, *, max_candidates=8):
     """Testa executáveis existentes; nunca adivinha/valida offsets novos.
 
@@ -423,6 +476,8 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['versao_conhecida']='Remaster X15 1.2.1' if info['sha256']==X15_SHA else 'desconhecida — não atribuir dados X15'
         if progress:progress("Decodificando cartas e adversários",0,1)
         info['nomes_status']=nomes_status
+        if not opponents or not cards:
+            info["amostras_layout_nomes"]=inspect_known_name_layout(sl)
         from fm_card_text import extract_descriptions
         descriptions,desc_state=extract_descriptions(sl,exe_name=selected_exe)
         info['descricoes_slus']=desc_state
