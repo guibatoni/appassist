@@ -5,8 +5,9 @@ import { ArrowUpRight, CheckCircle2, Download, RefreshCw, ShieldAlert, X } from 
 import { desktopApi, type UpdateCheck } from "@/lib/desktop"
 
 /**
- * Consulta automática após abertura; instalação explícita apenas para release
- * assinada de editor já confiável. Previews não assinadas nunca são instaladas.
+ * Consulta automática após abertura; instalação após consentimento para
+ * release estável assinada OU Preview oficial com SHA-256 e identidade do build.
+ * Não altera as proteções do Windows nem executa artefatos Actions diretamente.
  */
 export function UpdateChecker() {
   const [result, setResult] = useState<UpdateCheck | null>(null)
@@ -103,9 +104,22 @@ export function UpdateChecker() {
       const fresh=await api.check_updates()
       setResult(fresh)
       setAutomaticNotice(fresh.updateAvailable)
+      if(fresh.automaticPreviewReady) {
+        if (!window.confirm(
+          "Instalar a Preview experimental do DUELTRACE? Este pacote NÃO possui "+
+          "assinatura digital. O GitHub publicou um hash SHA-256 e uma identidade "+
+          "de build, que serão conferidos antes da instalação. "+
+          "O aplicativo será fechado, atualizado e reiniciado. "+
+          "Você autoriza esta atualização de testes?"
+        )) return
+        const preview=await api.install_preview_update()
+        setInstallFeedback(preview.status)
+        if(preview.started)setAutomaticNotice(false)
+        return
+      }
       if(!fresh.automaticInstallReady) {
         setInstallFeedback(fresh.automaticInstallReason ||
-          "Nenhuma atualização estável assinada disponível para instalação.")
+          "Nenhum pacote de atualização aprovado está disponível.")
         return
       }
       if (!window.confirm(
@@ -164,11 +178,12 @@ export function UpdateChecker() {
                   className="btn-gold mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50"
                   aria-label="Atualizar DUELTRACE automaticamente pelo GitHub">
                   <Download className="size-4"/>
-                  {installing?"Verificando versão e assinatura…":"Atualizar automaticamente pelo GitHub"}
+                  {installing?"Baixando e verificando atualização…":"Atualizar automaticamente pelo GitHub"}
                 </button>
                 <p className="mt-2 text-xs text-muted">
-                  Instalação em um clique apenas para releases estáveis assinadas e verificadas.
-                  Prévia de testes não assinada não é executada automaticamente.
+                  Versões estáveis exigem assinatura válida. Previews experimentais oficiais
+                  podem ser instaladas sem assinatura, após sua confirmação, com verificação
+                  de SHA-256, identidade do build e cópia de segurança.
                 </p>
                 {installFeedback&&<p className="mt-2 text-xs text-gold" role="status">
                   {installFeedback}
@@ -187,9 +202,9 @@ export function UpdateChecker() {
               <p className="text-muted">Nenhuma consulta realizada.</p>}
         </div>
         <p className="mt-3 border-t border-line/50 pt-2 text-xs text-muted">
-          Prévia experimental NÃO ASSINADA. Um antivírus sem detecções não garante
-          segurança. Não ignore bloqueios do Chrome/Windows. Builds de teste
-          ficam no GitHub Actions → Artifacts e podem exigir login.
+          Atualizações Preview não assinadas têm risco maior que versões comerciais.
+          Não desative o Defender nem ignore alertas do Windows. O botão usa
+          pré-releases públicas do GitHub; builds legados permanecem em Actions.
         </p>
       </section>}
   </div>

@@ -30,7 +30,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def _get_json(url: str) -> dict:
+def _get_json(url: str, expected_type: type = dict) -> dict | list:
     request = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github+json",
         "User-Agent": "DUELTRACE-PreviewChecker/0.7.5",
@@ -46,7 +46,7 @@ def _get_json(url: str) -> dict:
         if len(data) > MAX_BYTES:
             raise ValueError("Resposta muito grande.")
     decoded = json.loads(data.decode("utf-8"))
-    if not isinstance(decoded, dict):
+    if not isinstance(decoded, expected_type):
         raise ValueError("Resposta inválida do GitHub.")
     return decoded
 
