@@ -35,6 +35,7 @@ from dueltrace_rank_memory_trace import inspect_rank_memory_trace
 from dueltrace_rank_export import build_rank_evidence_report
 from dueltrace_rank_duel_verification import compare_rank_observations
 from dueltrace_rank_diagnostic import diagnose_rank_profile
+from dueltrace_spoils_manual import calculate_manual_spoils
 from dueltrace_library_sort import validate_sort,matches_type,sort_key
 from dueltrace_update_checker import (
     check_for_updates, open_official_releases, fetch_stable_release, CURRENT_VERSION
