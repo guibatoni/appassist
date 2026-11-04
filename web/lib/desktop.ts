@@ -50,6 +50,14 @@ export type ModScanDiagnostic = {
   cardsVerified: boolean
   dropsVerified: boolean
   artVerified: boolean
+  nameLayoutProbe?: {
+    state: string
+    cardSamples: Array<{index: number|null; pointer: number|null; name: string; status: string; invalidGlyphs: number|null}>
+    opponentSamples: Array<{index: number|null; pointer: number|null; name: string; status: string; invalidGlyphs: number|null}>
+    cardPlausibleSamples: number
+    opponentPlausibleSamples: number
+    note: string
+  }
   automaticExtractionComplete: boolean
   aiRole: string
   ai?: {
