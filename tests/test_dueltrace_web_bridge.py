@@ -365,10 +365,14 @@ class BridgeTests(unittest.TestCase):
             "status":"preview_ahead","currentVersion":"0.7.2","latestStable":"v0.6.6",
             "updateAvailable":False,"message":"Prévia mais nova",
             "channel":"preview","releasePage":"https://github.com/guibatoni/appassist/releases/latest"
-        }) as check:
+        }) as check, patch(
+            "dueltrace_web_bridge.fetch_latest_preview_package",return_value=None
+        ) as preview:
             result=self.bridge.check_updates()
         self.assertEqual(result["status"],"preview_ahead")
-        check.assert_called_once_with()
+        check.assert_called_once()
+        preview.assert_called_once()
+        self.assertTrue(callable(check.call_args.kwargs["preview_fetcher"]))
         with patch("dueltrace_web_bridge.open_official_releases",return_value=True) as opener:
             self.assertEqual(self.bridge.open_updates_page(),{"opened":True})
             opener.assert_called_once_with(None)
