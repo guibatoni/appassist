@@ -326,6 +326,7 @@ export type UpdateCheck = {
   previewVersion: string | null
   automaticInstallReady: boolean
   automaticPreviewReady?: boolean
+  automaticPortableReady?: boolean
   automaticInstallReason: string
   previewPage: string | null
   previewBranch: string | null
@@ -343,6 +344,7 @@ export interface DesktopAPI {
   open_updates_page(runId?: number): Promise<{opened: boolean}>
   install_signed_update(): Promise<{started: boolean; status: string; version?: string}>
   install_preview_update(): Promise<{started: boolean; status: string; version?: string}>
+  install_portable_update(): Promise<{started: boolean; status: string; version?: string}>
   get_state(): Promise<DesktopState>
   get_hand(): Promise<HandState>
   get_rank(): Promise<RankState>
@@ -371,6 +373,7 @@ interface ProtectedNativeAPI {
   open_updates_page(token: string, runId?: number): Promise<{opened: boolean}>
   install_signed_update(token: string): Promise<{started: boolean; status: string; version?: string}>
   install_preview_update(token: string): Promise<{started: boolean; status: string; version?: string}>
+  install_portable_update(token: string): Promise<{started: boolean; status: string; version?: string}>
   get_state(token: string): Promise<DesktopState>
   get_hand(token: string): Promise<HandState>
   get_rank(token: string): Promise<RankState>
@@ -413,6 +416,7 @@ export function desktopApi(): DesktopAPI | null {
     open_updates_page: (runId) => native.open_updates_page(token, runId),
     install_signed_update: () => native.install_signed_update(token),
     install_preview_update: () => native.install_preview_update(token),
+    install_portable_update: () => native.install_portable_update(token),
     get_state: () => native.get_state(token),
     get_hand: () => native.get_hand(token),
     get_rank: () => native.get_rank(token),
