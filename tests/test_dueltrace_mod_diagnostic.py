@@ -9,7 +9,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 
 from auto_mods import ModCatalog, atomic_json
 from dueltrace_mod_diagnostic import diagnose_layout
-from scanner_multiiso import select_known_executable_layout
+from scanner_multiiso import select_known_executable_layout, inspect_system_cnf
 from dueltrace_web_bridge import DueltraceWebBridge
 from dueltrace_web_security import ProtectedDesktopApi
 from ia_local import minimal_evidence
@@ -140,6 +140,55 @@ class UnknownISOTests(unittest.TestCase):
         self.assertEqual(opponents,[])
         self.assertEqual(cards,[])
         self.assertEqual(len(tried),2)
+
+    def test_nine_file_unknown_iso_lists_every_file_and_boot_clue(self):
+        files=[
+            {"nome":"SYSTEM.CNF","lba":22,"tamanho":70},
+            {"nome":"DATA.PAK","lba":50,"tamanho":234567890},
+            {"nome":"GAME.DAT","lba":70000,"tamanho":12000000},
+        ]+[
+            {"nome":f"CUSTOM_{i}.BIN","lba":i*100,"tamanho":i*1000}
+            for i in range(6)]
+        self.report["arquivos_discos"]=files
+        self.report["system_cnf"]={
+            "found":True,"boot_target":"CUSTOM_1.BIN",
+            "status":"BOOT identificado, apenas como indicação de arquivo",
+        }
+        result=diagnose_layout(self.report,self.profile)
+        self.assertEqual(result["indexedFiles"],9)
+        self.assertEqual(len(result["files"]),9)
+        self.assertEqual(result["files"][1]["name"],"DATA.PAK")
+        self.assertEqual(result["files"][1]["size"],234567890)
+        self.assertEqual(result["systemCnf"]["bootTarget"],"CUSTOM_1.BIN")
+        self.assertTrue(result["systemCnf"]["bootTargetIndexed"])
+        self.assertFalse(result["automaticExtractionComplete"])
+
+    def test_bounded_system_cnf_disc_boot_uses_unknown_name_as_clue(self):
+        class FakeDisc:
+            files={"SYSTEM.CNF":(12,55),"CUSTOM.EXE2":(13,1024)}
+            def get(self,name,limit_bytes=None):
+                self.last=(name,limit_bytes)
+                return b"BOOT = cdrom:\\CUSTOM.EXE2;1\r\nTCB=4"
+        disk=FakeDisc()
+        status=inspect_system_cnf(disk)
+        self.assertTrue(status["found"])
+        self.assertEqual(status["boot_target"],"CUSTOM.EXE2")
+        self.assertEqual(disk.last,("SYSTEM.CNF",16384))
+
+    def test_system_cnf_absence_is_not_invented(self):
+        class FakeDisc:
+            files={"DATA.PAK":(1,2048)}
+        result=inspect_system_cnf(FakeDisc())
+        self.assertFalse(result["found"])
+        self.assertIsNone(result["boot_target"])
+
+    def test_invalid_boot_parent_path_is_rejected(self):
+        class FakeDisc:
+            files={"SYSTEM.CNF":(1,55)}
+            def get(self,name,limit_bytes=None):
+                return b"BOOT = cdrom:\\..\\MALWARE.EXE;1\r\n"
+        info=inspect_system_cnf(FakeDisc())
+        self.assertIsNone(info["boot_target"])
 
     def test_scan_report_error_is_visible(self):
         info=diagnose_layout({
