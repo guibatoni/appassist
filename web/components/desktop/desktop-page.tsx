@@ -676,6 +676,20 @@ function Mods({mods,sha,onRefresh,configured}:{
                 <p className="mt-2 break-words">Executáveis candidatos: {diagnostics[mod.sha256].executableCandidates.join(", ")}</p>}
               {diagnostics[mod.sha256].waCandidates.length>0&&
                 <p className="mt-1 break-words">Arquivos WA candidatos: {diagnostics[mod.sha256].waCandidates.join(", ")}</p>}
+              {diagnostics[mod.sha256].nameLayoutProbe?.state==="amostras_nao_validadas"&&<div className="mt-3 border-t border-line/50 pt-2">
+                <p className="font-semibold text-gold">Amostras dos nomes SLUS (não verificadas)</p>
+                <p className="mt-1">Esses textos vêm dos offsets conhecidos e podem pertencer a outras regiões da ISO.</p>
+                <p className="mt-1 font-semibold">Cartas</p>
+                {diagnostics[mod.sha256].nameLayoutProbe.cardSamples.map((row,i)=>
+                  <p key={"card-"+i} className="mt-1 break-all">
+                    #{row.index} ponteiro {row.pointer??"?"}: {row.name||"(vazio)"} · {row.status}
+                  </p>)}
+                <p className="mt-2 font-semibold">Oponentes</p>
+                {diagnostics[mod.sha256].nameLayoutProbe.opponentSamples.map((row,i)=>
+                  <p key={"opp-"+i} className="mt-1 break-all">
+                    #{row.index} ponteiro {row.pointer??"?"}: {row.name||"(vazio)"} · {row.status}
+                  </p>)}
+              </div>}
               {diagnostics[mod.sha256].nextSteps.map((step,i)=><p key={"step-"+i} className="mt-1">{i+1}. {step}</p>)}
             </details>
             {diagnostics[mod.sha256].ai&&diagnostics[mod.sha256].ai!.state!=="nao_solicitada"&&
