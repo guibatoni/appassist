@@ -129,6 +129,24 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
                 "validated":False,
             })
         return rows
+    boundaries=report.get("opponent_name_boundaries")
+    if not isinstance(boundaries,dict):
+        boundaries={}
+    boundary_samples=[]
+    for row in boundaries.get("samples",[])[:7]:
+        if not isinstance(row,dict):continue
+        boundary_samples.append({
+            "id":row.get("id") if type(row.get("id")) is int else None,
+            "pointer":row.get("pointer") if type(row.get("pointer")) is int else None,
+            "nextPointerDelta":row.get("nextPointerDelta"),
+            "headerPresent":row.get("headerPresent") is True,
+            "hasFFBeforeNext":row.get("hasFFBeforeNext"),
+            "firstInvalidHex":str(row.get("firstInvalidHex") or "")[:6] or None,
+            "firstInvalidOffset":row.get("firstInvalidOffset"),
+            "endByteHex":str(row.get("endByteHex") or "")[:6] or None,
+            "tailHex":str(row.get("tailHex") or "")[:35],
+            "readablePrefix":str(row.get("readablePrefix") or "")[:70],
+        })
     pointer_report=report.get("opponent_pointer_candidates")
     if not isinstance(pointer_report,dict):
         pointer_report={}
@@ -225,6 +243,16 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
         "cardsVerified":bool(flags.get("cards")),
         "dropsVerified":bool(flags.get("drops")),
         "artVerified":bool(flags.get("art")),
+        "opponentNameBoundaries":{
+            "state":str(boundaries.get("state") or "não examinado")[:70],
+            "examined":boundaries.get("examined",0),
+            "hasFFBeforeNext":boundaries.get("hasFFBeforeNext",0),
+            "noFFBeforeNext":boundaries.get("noFFBeforeNext",0),
+            "commonEndByte":str(boundaries.get("commonEndByte") or "")[:6] or None,
+            "commonEndByteCount":boundaries.get("commonEndByteCount",0),
+            "samples":boundary_samples,
+            "validated":False,
+        },
         "opponentPointerProbe":{
             "state":str(pointer_report.get("state") or "não pesquisado")[:85],
             "candidates":pointer_candidates,
