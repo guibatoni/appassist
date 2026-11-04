@@ -1038,10 +1038,28 @@ class DueltraceWebBridge:
                     safe_dir=(self.catalog.home/"investigacoes").resolve()
                     if file.is_relative_to(safe_dir):
                         suggestion=load_json(file,{})
-                        diagnosis["ai"]["resumo"]=str(suggestion.get("resumo") or "")[:1200]
+                        raw_summary=str(suggestion.get("resumo") or "")[:1200]
+                        # O Ollama pode inventar que o jogo não contém cartas
+                        # quando, na verdade, só falhou o extrator. Nunca
+                        # mostrar uma conclusão factual do LLM para uma ISO
+                        # cujo layout sequer foi reconhecido.
+                        if diagnosis["state"]!="estrutura_reconhecida":
+                            diagnosis["ai"]["resumo"]=(
+                                "O scanner não conseguiu reconhecer as tabelas "
+                                "desta ISO. Isso NÃO comprova ausência de cartas, "
+                                "oponentes, fusões ou drops. O conteúdo do "
+                                "executável e dos recursos permanece desconhecido.")
+                            diagnosis["ai"]["summarySuppressed"]=bool(raw_summary)
+                            diagnosis["ai"]["note"]=(
+                                "Texto conclusivo de IA omitido por falta de "
+                                "evidência binária; as sugestões abaixo são "
+                                "hipóteses e não dados verificados.")
+                        else:
+                            diagnosis["ai"]["resumo"]=raw_summary
+                        raw_priorities=suggestion.get("prioridades",[])
                         diagnosis["ai"]["prioridades"]=[
-                            str(x)[:250] for x in suggestion.get("prioridades",[])[:6]
-                            if isinstance(x,str)]
+                            str(x)[:250] for x in raw_priorities[:6]
+                            if isinstance(x,str)] if isinstance(raw_priorities,list) else []
                         diagnosis["ai"]["alertas"]=[
                             str(x)[:200] for x in suggestion.get("alertas",[])[:6]
                             if isinstance(x,str)]
