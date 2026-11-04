@@ -8,6 +8,7 @@ import argparse, csv, hashlib, json, re, struct, sys, unicodedata
 from pathlib import Path
 from dueltrace_layout_discovery import discover_disc_layout, candidate_files_for_decoder
 from dueltrace_name_layout_probe import find_opponent_pointer_candidates
+from dueltrace_name_boundaries import inspect_opponent_name_boundaries
 
 OPP_COUNT=39
 CARD_COUNT=722
@@ -543,6 +544,9 @@ def process(path,output,with_art=False,digest=None,progress=None):
             # falha, sondar deslocamentos limitados na tabela de ponteiros.
             # Resultados são SOMENTE hipóteses de investigação.
             info["opponent_pointer_candidates"]=find_opponent_pointer_candidates(
+                sl,pointer_base=SLUS_PTR_BASE,text_base=SLUS_TEXT_BASE,
+                glyph_base=SLUS_GLYPHS)
+            info["opponent_name_boundaries"]=inspect_opponent_name_boundaries(
                 sl,pointer_base=SLUS_PTR_BASE,text_base=SLUS_TEXT_BASE,
                 glyph_base=SLUS_GLYPHS)
         from fm_card_text import extract_descriptions
