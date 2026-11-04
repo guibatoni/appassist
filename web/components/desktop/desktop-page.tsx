@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic, SpoilsCounters, SpoilsResult} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -52,272 +52,159 @@ function RankPanel({sha}:{sha:string|null}) {
   const [rank,setRank]=useState<RankState|null>(null)
   const [lp,setLp]=useState("")
   const [busy,setBusy]=useState(false)
-  const [captured,setCaptured]=useState<{score:number|null;category:string|null;status:string}|null>(null)
-  const [captureBusy,setCaptureBusy]=useState(false)
-  const [captureError,setCaptureError]=useState<string|null>(null)
   const [diagnostic,setDiagnostic]=useState<RankDiagnostic|null>(null)
   const [diagnosing,setDiagnosing]=useState(false)
-  const [diagnosticError,setDiagnosticError]=useState<string|null>(null)
+  const [reanalysing,setReanalysing]=useState(false)
+  const [feedback,setFeedback]=useState<string|null>(null)
+  const [captured,setCaptured]=useState<string|null>(null)
+
   useEffect(()=>{
-    let mounted=true,busyRead=false
+    let mounted=true,reading=false
     setRank(null)
-    setCaptured(null)
     setDiagnostic(null)
-    setDiagnosticError(null)
-    void desktopApi()?.get_pending_rank_capture().then(x=>{if(mounted&&x.ready)setCaptured(x)}).catch(()=>{})
-    const refresh=async()=>{
+    setFeedback(null)
+    setCaptured(null)
+    setLp("")
+    const read=async()=>{
       const api=desktopApi()
-      if(!api||busyRead)return
-      busyRead=true
-      try{const result=await api.get_rank();if(mounted)setRank(result)}
-      catch{if(mounted)setRank({ready:false,state:"unavailable",status:"Leitura de RANK indisponível",score:null,category:null,counters:null})}
-      finally{busyRead=false}
+      if(!api||reading)return
+      reading=true
+      try{
+        const value=await api.get_rank()
+        if(mounted)setRank(value)
+      }catch{
+        if(mounted)setRank({ready:false,state:"unavailable",
+          status:"Não foi possível comunicar com o leitor de RANK.",
+          score:null,category:null,counters:null})
+      }finally{reading=false}
     }
-    void refresh()
-    const id=window.setInterval(()=>void refresh(),2200)
-    return()=>{mounted=false;window.clearInterval(id)}
+    void read()
+    const interval=window.setInterval(()=>void read(),2200)
+    return()=>{mounted=false;window.clearInterval(interval)}
   },[sha])
-  const confirm=async()=>{
-    if(!/^\d{1,5}$/.test(lp))return
-    const value=Number(lp)
-    if(!Number.isInteger(value)||value<0||value>32766)return
+
+  const confirmLp=async()=>{
+    const numeric=Number(lp)
+    if(!/^\d{1,5}$/.test(lp)||!Number.isInteger(numeric)||numeric<0||numeric>32766)return
     const api=desktopApi()
     if(!api)return
     setBusy(true)
-    try{setRank(await api.confirm_rank_lp(value))}
-    catch{setRank({ready:false,state:"unavailable",status:"Não foi possível confirmar os LP",score:null,category:null,counters:null})}
+    setFeedback(null)
+    try{setRank(await api.confirm_rank_lp(numeric))}
+    catch(e){setFeedback(e instanceof Error?e.message:"Falha ao confirmar LP.")}
     finally{setBusy(false)}
   }
-  const diagnose=async()=>{
+  const investigate=async()=>{
     const api=desktopApi()
     if(!api)return
     setDiagnosing(true)
-    setDiagnosticError(null)
+    setFeedback(null)
     try{setDiagnostic(await api.get_rank_diagnostic())}
-    catch(e){
-      setDiagnosticError(e instanceof Error?e.message:"Não foi possível consultar o perfil da ISO.")
-    }finally{setDiagnosing(false)}
+    catch(e){setFeedback(e instanceof Error?e.message:"Diagnóstico indisponível.")}
+    finally{setDiagnosing(false)}
+  }
+  const reanalyse=async()=>{
+    const api=desktopApi()
+    if(!api||!sha)return
+    setReanalysing(true)
+    setFeedback(null)
+    try{
+      await api.scan_sources(sha)
+      const [state,details]=await Promise.all([api.get_rank(),api.get_rank_diagnostic()])
+      setRank(state)
+      setDiagnostic(details)
+      setFeedback(details.readyForLiveRead
+        ?"Perfil atualizado. Inicie um duelo e confirme os LP, se solicitado."
+        :"Perfil relido. O mapeamento RAM desta ISO ainda precisa ser validado.")
+    }catch(e){setFeedback(e instanceof Error?e.message:"Não foi possível reanalisar a ISO.")}
+    finally{setReanalysing(false)}
   }
   const capture=async()=>{
     const api=desktopApi()
     if(!api)return
-    setCaptureBusy(true)
-    setCaptureError(null)
-    try{
-      const result=await api.capture_rank_prediction()
-      setCaptured(result)
-    }catch(e){
-      setCaptured(null)
-      setCaptureError(e instanceof Error?e.message:"Não foi possível capturar a previsão.")
-    }finally{setCaptureBusy(false)}
+    setBusy(true)
+    setFeedback(null)
+    try{const result=await api.capture_rank_prediction();setCaptured(
+      result.ready?`${result.score??"—"} pontos · ${result.category??"—"}`:"Captura indisponível.")}
+    catch(e){setFeedback(e instanceof Error?e.message:"Falha na captura.")}
+    finally{setBusy(false)}
   }
-  return <>
-  <section className="panel rounded-xl p-4" aria-label="Contador de RANK">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h2 className="font-display text-xl font-semibold text-gold">Contador de RANK</h2>
-        <p className="mt-1 text-xs text-muted">Projeção de pontuação · somente leitura</p>
-      </div>
-      <div className="flex min-w-36 items-baseline justify-end gap-2 rounded-lg border border-gold/30 bg-gradient-to-r from-[#152c4a] to-background px-3 py-2">
-        <span className="font-display text-3xl font-bold tabular-nums text-primary">{rank?.ready?rank.score:"—"}</span>
-        <span className="text-xs text-muted">pontos</span>
-      </div>
-    </div>
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-      <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
-        {rank?.ready?rank.category:"RANK indisponível"}
+
+  const ready=rank?.ready===true
+  const needsLp=rank?.state==="needs_lp_confirmation"||rank?.state==="lp_mismatch"
+  const pending=rank?.state==="unsupported"
+  const status=ready?"Leitura ativa":needsLp?"Confirme seus LP":pending?"Leitura não calibrada":"Aguardando leitura"
+  const rankSystem=rank?.rankSystem==="x15"?"Remaster X15":
+    rank?.rankSystem==="classic"?"RANK original":"RANK por ISO"
+  const details=rank?.victorySource==="ram_deckout"?"Marcador X15: deck-out":
+    rank?.victorySource==="ram_lp"?"Marcador X15: vitória por LP":
+    "Projeção se vencer por LP"
+  return <section className="panel rounded-xl p-4" aria-label="RANK ao vivo">
+    <div className="flex items-center justify-between gap-2">
+      <h2 className="font-display text-lg font-semibold text-gold">RANK ao vivo</h2>
+      <span className={"text-xs font-medium "+(ready?"text-success":"text-muted")} role="status">
+        {ready?"●":"○"} {status}
       </span>
-      {rank?.ready&&<span className="text-xs text-gold">Estimativa · {rank.rankSystem==="x15"?"RANK X15":rank.rankSystem==="classic"?"RANK original":"RANK não identificado"} · não é resultado final</span>}
     </div>
-    <p className="mt-2 text-sm text-muted" role="status">{rank?.status??"Consultando leitura e modelo do mod…"}</p>
-    {(rank?.state==="needs_lp_confirmation"||rank?.state==="lp_mismatch")&&
-      <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-line/60 bg-panel-strong/60 p-3">
-        <label className="flex flex-col gap-1 text-xs text-foreground">
-          LP atuais mostrados no jogo
-          <input type="number" min={0} max={32766} inputMode="numeric"
-            value={lp} onChange={e=>setLp(e.target.value)}
-            className="field w-44 rounded-md px-3 py-2 text-sm" placeholder="Ex.: 8000"/>
-        </label>
-        <button type="button" className="btn-gold disabled:opacity-40" disabled={busy||!lp||!desktopApi()}
-          onClick={()=>void confirm()}>Confirmar LP</button>
-        <span className="text-xs text-muted">Candidato da RAM: {rank?.candidateLp??"—"} LP</span>
-      </div>}
-    {rank?.ready&&rank.counters&&
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted sm:grid-cols-4">
-        {[["Turnos",rank.counters.turns??"—"],["Fusões",rank.counters.fusions??"—"],
-          ["Magias",rank.counters.spells??"—"],["LP",rank.counters.remaining_lp??"—"]].map(([label,value])=>
-          <div key={label} className="rounded-md border border-line/50 bg-background/40 px-3 py-2">
-            <span className="block">{label}</span><strong className="font-display text-base text-white">{value??"—"}</strong>
-          </div>)}
-      </div>}
-    <div className="mt-3 rounded-lg border border-primary/30 bg-background/40 p-3">
-      <p className="text-xs font-semibold text-primary">Conferência com o resultado real</p>
-      <p className="mt-1 text-xs text-muted">
-        No final do duelo, a previsão de LP pode ser capturada para futura auditoria.
-        O painel de Spoils abaixo acompanha automaticamente a leitura RAM quando validada.
+    <div className="mt-4 rounded-lg border border-primary/20 bg-background/60 px-4 py-4 text-center">
+      <p className="text-xs text-muted">{ready?details:"Sem pontuação lida da RAM"}</p>
+      <p className="mt-1 font-display text-4xl font-bold tabular-nums text-primary">
+        {ready?rank.score:"—"} <span className="text-sm font-normal text-muted">pts</span>
       </p>
-      <button type="button" disabled={!rank?.ready||captureBusy||!desktopApi()}
-        className="btn-gold mt-2 disabled:opacity-40" onClick={()=>void capture()}>
-        {captureBusy?"Capturando…":"Capturar previsão de RANK"}
-      </button>
-      {captured&&<p className="mt-2 text-xs text-primary" role="status">
-        {captured.status} · {captured.score} pontos · {captured.category}
-      </p>}
-      {captureError&&<p className="mt-2 text-xs text-danger" role="alert">{captureError}</p>}
-      {!rank?.ready&&<div className="mt-3 border-t border-line/60 pt-3">
-        <p className="text-xs text-muted">
-          A captura precisa de uma previsão autorizada. Não é possível
-          habilitá-la apenas por nome do mod ou por uma tabela MIPS estática.
-        </p>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <button type="button" className="btn-ghost disabled:opacity-40"
-            disabled={diagnosing||!sha||!desktopApi()} onClick={()=>void diagnose()}>
-            {diagnosing?"Investigando…":"Diagnosticar RANK desta ISO"}
-          </button>
-        </div>
-        {diagnosticError&&<p className="mt-2 text-xs text-danger" role="alert">{diagnosticError}</p>}
-        {diagnostic&&<div className="mt-3 rounded-lg border border-gold/30 bg-background/50 p-3 text-xs" role="status">
-          <p className="font-semibold text-gold">Diagnóstico da ISO {diagnostic.isoShaPrefix??"não selecionada"}{diagnostic.isoShaPrefix?"…":""}</p>
-          <p className="mt-1 text-foreground">{diagnostic.reason}</p>
-          <div className="mt-2 grid grid-cols-2 gap-2 text-muted sm:grid-cols-3">
-            <span>Tabela WA: {diagnostic.rankTableDetected?"Detectada":"Não identificada"}</span>
-            <span>Estrutura WA: {diagnostic.rankStructureVerified?"Conferida":"Pendente"}</span>
-            <span>PCs candidatos: {diagnostic.mipsCandidates}</span>
-            <span>RAM validada: {diagnostic.ramBindingVerified?"Sim":"Não"}</span>
-            <span>Modelo X15 idêntico: {diagnostic.x15Exact||diagnostic.x15CompatibleBinary?"Sim":"Não"}</span>
-            <span>Projeção habilitada: {diagnostic.readyForLiveRead?"Modelo autorizado":"Não"}</span>
-          </div>
-          <p className="mt-2 text-primary">Próxima ação: {diagnostic.nextStep}</p>
-          <p className="mt-2 text-muted">{diagnostic.note}</p>
-        </div>}
+      <p className="mt-1 font-display text-xl font-bold text-gold">
+        {ready?rank.category:"RANK indisponível"}
+      </p>
+      <p className="mt-1 text-[11px] text-muted">
+        {rankSystem} · {ready?"Estimativa, não resultado oficial":"Sem projeção confiável"}
+      </p>
+    </div>
+    {ready&&rank.counters&&
+      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+        <span>Turnos <strong className="text-white">{rank.counters.turns??"—"}</strong></span>
+        <span>LP <strong className="text-white">{rank.counters.remaining_lp??"—"}</strong></span>
+        <span>Fusões <strong className="text-white">{rank.counters.fusions??"—"}</strong></span>
       </div>}
-    </div>
-    <p className="mt-3 text-xs text-muted">
-      Esta atualização mantém a fórmula de pontos já usada pelo DUELTRACE e altera apenas a letra
-      exibida segundo o sistema da ISO ativa (X15 ou original). A leitura ao vivo requer RAM calibrada
-      e LP confirmados; mods sem mapeamento validado continuam indisponíveis.
-    </p>
-  </section>
-  <SpoilsCalculator sha={sha} liveRank={rank}/>
-  </>
-}
-
-const SPOILS_FIELDS: Array<{key:keyof SpoilsCounters;label:string}> = [
-  {key:"turns",label:"Turnos"},
-  {key:"effective_attacks",label:"Monstros adversários destruídos em ataque"},
-  {key:"defense_wins",label:"Vitórias em defesa"},
-  {key:"face_down",label:"Cartas colocadas viradas para baixo"},
-  {key:"spells",label:"Magias utilizadas"},
-  {key:"traps",label:"Armadilhas ativadas"},
-  {key:"cards_used",label:"Cartas usadas ou sacadas"},
-  {key:"remaining_lp",label:"LP restantes"},
-  {key:"fusions",label:"Fusões iniciadas"},
-  {key:"equips",label:"Equipamentos utilizados"},
-]
-const SPOILS_DEFAULTS: SpoilsCounters = {
-  turns:0,effective_attacks:0,defense_wins:0,face_down:0,spells:0,
-  traps:0,cards_used:0,remaining_lp:8000,fusions:0,equips:0,
-}
-
-function SpoilsCalculator({sha,liveRank}:{sha:string|null;liveRank:RankState|null}) {
-  const [baseline,setBaseline]=useState<SpoilsResult|null>(null)
-  const [baselineError,setBaselineError]=useState<string|null>(null)
-  // Não duplicar a fórmula no JavaScript: calculadora Python existente fornece a referência.
-  useEffect(()=>{
-    let mounted=true
-    setBaseline(null)
-    setBaselineError(null)
-    const api=desktopApi()
-    if(!sha||!api)return()=>{mounted=false}
-    void api.calculate_spoils({...SPOILS_DEFAULTS},"lp")
-      .then(result=>{if(mounted)setBaseline(result)})
-      .catch(()=>{if(mounted)setBaselineError("Referência inicial indisponível.")})
-    return()=>{mounted=false}
-  },[sha])
-
-  const live=liveRank?.ready===true &&
-    liveRank.score!==null && liveRank.category!==null && liveRank.counters!==null
-  const score=live?(liveRank?.score??null):baseline?.score??null
-  const category=live?(liveRank?.category??null):baseline?.category??null
-  const currentRankSystem=live?liveRank?.rankSystem:baseline?.rankSystem
-  const detectedOutcome=live?liveRank?.victorySource:undefined
-  const counters=live?(liveRank?.counters??SPOILS_DEFAULTS):SPOILS_DEFAULTS
-  const breakdown=live?liveRank?.breakdown:baseline?.breakdown
-  const pointsFor=(key:string)=>(breakdown as Record<string,number>|undefined)?.[key]
-  const entries=live
-    ? Object.entries(counters).filter(([key])=>pointsFor(key)!==undefined)
-        .map(([key,value])=>({key,label:SPOILS_FIELDS.find(x=>x.key===key)?.label??key,value}))
-    : SPOILS_FIELDS.map(({key,label})=>({key,label,value:SPOILS_DEFAULTS[key]}))
-
-  return <section className="panel rounded-xl p-4" aria-label="Calculadora automática de Spoils">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h2 className="font-display text-xl font-semibold text-gold">Calculadora automática de Spoils</h2>
-        <p className="mt-1 text-sm text-muted">
-          Acompanha os contadores do ePSXe automaticamente quando existe leitura RAM validada
-          e os LP do duelo foram confirmados. Não é necessário digitar os dez critérios.
-        </p>
+    {needsLp&&<div className="mt-3 space-y-2">
+      <p className="text-xs text-muted">Informe os LP exibidos no jogo para conferir a leitura.</p>
+      <div className="flex gap-2">
+        <input aria-label="LP exibidos no jogo" type="number" min={0} max={32766}
+          placeholder={String(rank?.candidateLp??"8000")} value={lp}
+          onChange={e=>setLp(e.target.value)}
+          className="field w-full min-w-0 rounded-md px-2 py-2 text-sm"/>
+        <button type="button" className="btn-gold shrink-0 disabled:opacity-40"
+          disabled={!lp||busy} onClick={()=>void confirmLp()}>Confirmar</button>
       </div>
-      <div className="min-w-36 rounded-lg border border-gold/30 bg-background/60 px-4 py-3 text-right">
-        <p className="text-xs text-muted">
-          {detectedOutcome==="ram_deckout"
-            ?"Marcador X15 na RAM: deck-out (-40)"
-            :detectedOutcome==="ram_lp"
-            ?"Marcador X15 na RAM: vitória por LP (+2)"
-            :live
-            ?"Projeção ao vivo se vencer por LP"
-            :"Referência inicial, sem leitura do jogo"}
-        </p>
-        <p className="font-display text-3xl font-bold tabular-nums text-primary">
-          {score??"—"} <span className="text-sm text-muted">pontos</span>
-        </p>
-        <p className="font-display text-lg font-semibold text-gold">{category??"RANK indisponível"}</p>
-        <p className="mt-1 text-xs text-muted">
-          {currentRankSystem==="x15"?"Remaster X15 · 3 classificações":
-            currentRankSystem==="classic"?"Sistema original · 10 classificações":
-            "ISO não identificada"}
-        </p>
+    </div>}
+    {!ready&&!needsLp&&
+      <p className="mt-3 text-xs text-muted">
+        {pending?"A ISO selecionada ainda não possui leitura RAM validada.":
+          rank?.status??"Conectando ao ePSXe…"}
+      </p>}
+    <details className="mt-3 border-t border-line/60 pt-2 text-xs text-muted">
+      <summary className="cursor-pointer select-none py-1 text-primary">
+        Diagnóstico e ferramentas
+      </summary>
+      <p className="mt-2">{rank?.status??"Aguardando dados do emulador."}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" className="btn-ghost disabled:opacity-40"
+          disabled={!sha||diagnosing||reanalysing} onClick={()=>void investigate()}>
+          {diagnosing?"Analisando…":"Diagnosticar ISO"}
+        </button>
+        {rank?.diagnosticCode==="rank_table_missing"&&
+          <button type="button" className="btn-ghost disabled:opacity-40"
+            disabled={!sha||reanalysing||diagnosing} onClick={()=>void reanalyse()}>
+            {reanalysing?"Relendo ISO…":"Reanalisar perfil"}
+          </button>}
+        {ready&&<button type="button" className="btn-ghost disabled:opacity-40"
+          disabled={busy} onClick={()=>void capture()}>Capturar previsão</button>}
       </div>
-    </div>
-    <p className={"mt-3 text-xs font-semibold "+(live?"text-success":"text-gold")} role="status">
-      {live
-        ?"Leitura ativa: os pontos mudam automaticamente conforme os contadores do duelo."
-        :"Abertura hipotética: 101 pontos, considerando 8.000 LP, zero ações e vitória futura por LP. NÃO é uma leitura do ePSXe."}
-    </p>
-    {!live&&<p className="mt-1 text-xs text-muted">
-      {liveRank?.status??"Aguardando o ePSXe e o perfil da ISO."}
-      {" "}Use a confirmação de LP no Contador de RANK acima se solicitada.
-      Mods sem mapeamento verificado não terão pontuação ao vivo.
-    </p>}
-    {baselineError&&!live&&<p className="mt-2 text-xs text-danger" role="alert">{baselineError}</p>}
-    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-      {entries.map(item=><div key={item.key}
-        className="rounded-lg border border-line/60 bg-background/40 p-3">
-        <p className="min-h-7 text-xs text-muted">{item.label}</p>
-        <p className="mt-1 text-lg font-semibold tabular-nums text-white">
-          {item.value}
-          <span className="ml-2 text-xs font-normal text-primary">
-            {pointsFor(item.key)!==undefined
-              ? `${pointsFor(item.key)!>0?"+":""}${pointsFor(item.key)} pts`
-              :"—"}
-          </span>
-        </p>
-      </div>)}
-    </div>
-    <p className="mt-3 text-xs text-muted">
-      Base da fórmula: 50. Com 8.000 LP, dez critérios no estado inicial
-      e bônus hipotético de vitória por LP (+2), a projeção inicial é 101.
-      Os critérios já contribuem para a pontuação de abertura.
-    </p>
-    <p className="mt-2 text-xs text-gold">
-      {detectedOutcome==="ram_deckout"
-        ?"O X15 indicou deck-out no byte de resultado. A pontuação foi calculada; a nota final do jogo ainda precisa ser conferida."
-        :detectedOutcome==="ram_lp"
-        ?"O X15 indicou vitória por LP no byte de resultado. A pontuação foi calculada; a nota final do jogo ainda precisa ser conferida."
-        :"Sem marcador final confirmado, esta projeção supõe vitória por LP. Deck-out e Exodia podem alterar o bônus."}
-      {" "}A classificação segue a ISO selecionada: dez RANKs no original/outros mods;
-      somente o Remaster X15 reconhecido usa Z-POW, S-POW e S-TEC.
-    </p>
+      {diagnostic&&<p className="mt-2">
+        {diagnostic.reason} {diagnostic.nextStep}
+        {" "}RAM validada: {diagnostic.ramBindingVerified?"sim":"não"}.
+      </p>}
+      {captured&&<p className="mt-2 text-success">Capturado: {captured}</p>}
+      {feedback&&<p className="mt-2 text-gold" role="status">{feedback}</p>}
+    </details>
   </section>
 }
 
@@ -325,68 +212,105 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const cardsById=useMemo(()=>new Map(cards.map(c=>[c.id,c])),[cards])
   const [hand,setHand]=useState<HandState|null>(null)
   const [mode,setMode]=useState<"pairs"|"chains">("pairs")
+  const [showAll,setShowAll]=useState(false)
   useEffect(()=>{
-    let mounted=true,busy=false
+    let mounted=true,reading=false
+    setHand(null)
     const load=async()=>{
       const api=desktopApi()
-      if(!api||busy)return
-      busy=true
-      try{const x=await api.get_hand();if(mounted)setHand(x)}
+      if(!api||reading)return
+      reading=true
+      try{const value=await api.get_hand();if(mounted)setHand(value)}
       catch{if(mounted)setHand({ready:false,status:"Mão indisponível",hand:[],pairs:[],chains:[]})}
-      finally{busy=false}
+      finally{reading=false}
     }
     void load()
-    const timer=window.setInterval(()=>void load(),1500)
-    return()=>{mounted=false;window.clearInterval(timer)}
+    const interval=window.setInterval(()=>void load(),1500)
+    return()=>{mounted=false;window.clearInterval(interval)}
   },[sha])
-  return <>
-    <Heading title="Central de Duelo" subtitle="Sua mão, projeção de RANK e combinações do perfil ativo"/>
-    <RankPanel sha={sha}/>
-    <div className="panel rounded-xl p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-xl font-semibold text-primary">Sua mão · 5 slots</h2>
-        <p className={hand?.ready?"text-xs text-success":"text-xs text-gold"}>{hand?.status??"Aguardando ePSXe"}</p>
+  useEffect(()=>setShowAll(false),[mode,sha])
+  const combinations=mode==="pairs"?hand?.pairs??[]:hand?.chains??[]
+  const visibleCombinations=showAll?combinations:combinations.slice(0,6)
+  return <div className="space-y-4">
+    <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+      <div>
+        <h1 className="font-display text-2xl font-bold text-gold">Central de Duelo</h1>
+        <p className="text-xs text-muted">Mão atual, fusões sugeridas e RANK ao vivo</p>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
-        {Array.from({length:5},(_,slot)=>{
-          const card=hand?.ready?hand.hand[slot]??null:null
-          return <div key={slot} className="rounded-lg border border-line bg-gradient-to-b from-panel-strong to-background p-2.5">
-            <p className="mb-2 text-center text-xs text-gold">SLOT {slot+1}</p>
-            <CardThumbnail key={String(sha)+"-"+String(card?.id??"empty")} card={card} sha={sha}/>
-            <p className="mt-2 min-h-9 text-center text-xs font-semibold text-white">{card?.name??"Aguardando carta"}</p>
-            <MonsterStats card={card} className="text-center"/>
-          </div>
-        })}
-      </div>
+      <span className={hand?.ready?"text-xs font-medium text-success":"text-xs text-muted"}>
+        {hand?.ready?"● Mão conectada":"○ "+(hand?.status??"Aguardando ePSXe")}
+      </span>
     </div>
-    <div className="panel rounded-xl p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-xl text-gold">Fusões disponíveis</h2>
-        <div className="flex gap-2">
-          <button type="button" onClick={()=>setMode("pairs")} className={mode==="pairs"?"btn-gold":"btn-ghost"}>Duplas</button>
-          <button type="button" onClick={()=>setMode("chains")} className={mode==="chains"?"btn-gold":"btn-ghost"}>Cadeias (2–5)</button>
+    <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_290px]">
+      <section className="panel min-w-0 rounded-xl p-4" aria-label="Cartas na mão">
+        <div className="mb-3 flex items-baseline justify-between gap-2">
+          <h2 className="font-display text-lg font-semibold text-primary">Cartas na mão</h2>
+          <span className="text-xs text-muted">5 posições · leitura automática</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {Array.from({length:5},(_,slot)=>{
+            const card=hand?.ready?hand.hand[slot]??null:null
+            return <div key={slot}
+              className="min-w-0 rounded-lg border border-line/60 bg-background/50 px-2 py-3">
+              <p className="mb-2 text-center text-[11px] text-gold">{slot+1}</p>
+              <CardThumbnail card={card} sha={sha}/>
+              <p className="mt-2 min-h-8 break-words text-center text-xs font-semibold text-white">
+                {card?.name??"Aguardando"}
+              </p>
+              <MonsterStats card={card} className="text-center"/>
+            </div>
+          })}
+        </div>
+        {!hand?.ready&&<p className="mt-3 text-center text-xs text-muted">
+          Abra um duelo no ePSXe para exibir suas cartas reais.
+        </p>}
+      </section>
+      <RankPanel sha={sha}/>
+    </div>
+    <section className="panel rounded-xl p-4" aria-label="Dicas de fusões">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-display text-lg font-semibold text-gold">Dicas de fusões</h2>
+          <p className="text-xs text-muted">Combinações das cartas que estão na sua mão</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={()=>setMode("pairs")}
+            className={mode==="pairs"?"btn-gold":"btn-ghost"}>Duplas</button>
+          <button type="button" onClick={()=>setMode("chains")}
+            className={mode==="chains"?"btn-gold":"btn-ghost"}>Cadeias (2–5)</button>
         </div>
       </div>
-      {!hand?.ready?<Empty>Entre em duelo no ePSXe. Nenhuma mão fictícia é exibida.</Empty>:
-        mode==="pairs"?(hand.pairs.length?<div className="grid gap-2 lg:grid-cols-2">
-          {hand.pairs.map((x,i)=><div key={i} className="rounded-lg border border-line/70 bg-panel-strong/60 p-3">
-            <p className="text-xs text-primary">Slots {x.slot_a} + {x.slot_b}</p>
-            <p className="mt-1 font-semibold text-white">{x.result_name} #{x.result}</p>
-            <MonsterStats card={cardsById.get(x.result)??null} className="mt-1"/>
-            <p className="mt-1 text-xs text-gold">{sourceLabel(x.validation)}</p>
-          </div>)}</div>:<Empty>Não há fusões de duas cartas para a mão atual.</Empty>):
-        (hand.chains.length?<div className="grid gap-3 lg:grid-cols-2">
-          {hand.chains.map((x,i)=><div key={i} className="rounded-xl border border-gold/30 bg-gradient-to-r from-[#112746] to-panel p-3">
-            <p className="font-semibold text-gold">{x.result_name} #{x.result}</p>
-            <MonsterStats card={cardsById.get(x.result)??null} className="mt-1"/>
-            <p className="mt-1 text-xs text-primary">Ordem: {x.slot_order.join(" → ")}</p>
-            <ol className="mt-2 space-y-1 text-xs text-muted">{x.steps.map((s,j)=>
-              <li key={j}>{j+1}. #{s.material_a} + #{s.material_b} = #{s.result} ({sourceLabel(s.validation)})</li>)}</ol>
-          </div>)}</div>:<Empty>Nenhuma cadeia de 2 a 5 cartas foi identificada.</Empty>)}
-      {hand?.chainsComplete===false&&mode==="chains"&&<p className="mt-2 text-xs text-gold">Busca parcial; o limite de estados foi alcançado.</p>}
-      <p className="mt-3 text-xs text-muted">Resultados extraídos do mod. O jogo ainda precisa confirmar as combinações em duelo.</p>
-    </div>
-  </>
+      <div className="mt-3">
+        {!hand?.ready?<Empty>As sugestões aparecerão quando o ePSXe identificar sua mão.</Empty>:
+          visibleCombinations.length===0?<Empty>Nenhuma fusão identificada para estas cartas.</Empty>:
+          mode==="pairs"?<div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {hand.pairs.slice(0,showAll?undefined:6).map((item,i)=>
+              <div key={i} className="rounded-lg border border-line/60 bg-background/40 p-3">
+                <p className="text-xs text-primary">Posições {item.slot_a} + {item.slot_b}</p>
+                <p className="mt-1 font-semibold text-white">{item.result_name} #{item.result}</p>
+                <MonsterStats card={cardsById.get(item.result)??null} className="mt-1"/>
+                <p className="mt-1 text-xs text-muted">{sourceLabel(item.validation)}</p>
+              </div>)}
+          </div>:<div className="grid gap-2 md:grid-cols-2">
+            {hand.chains.slice(0,showAll?undefined:6).map((item,i)=>
+              <div key={i} className="rounded-lg border border-gold/20 bg-background/40 p-3">
+                <p className="font-semibold text-gold">{item.result_name} #{item.result}</p>
+                <MonsterStats card={cardsById.get(item.result)??null} className="mt-1"/>
+                <p className="mt-1 text-xs text-primary">Ordem: {item.slot_order.join(" → ")}</p>
+                <ol className="mt-2 space-y-1 text-xs text-muted">{item.steps.map((step,j)=>
+                  <li key={j}>{j+1}. #{step.material_a} + #{step.material_b} = #{step.result}</li>)}
+                </ol>
+              </div>)}
+          </div>}
+      </div>
+      {hand?.ready&&combinations.length>6&&<button type="button"
+        className="btn-ghost mt-3" onClick={()=>setShowAll(v=>!v)}>
+        {showAll?"Mostrar menos":`Ver todas as ${combinations.length} combinações`}
+      </button>}
+      {hand?.ready&&mode==="chains"&&hand.chainsComplete===false&&
+        <p className="mt-2 text-xs text-gold">Busca parcial: limite de combinações atingido.</p>}
+    </section>
+  </div>
 }
 
 function Mods({mods,sha,onRefresh,configured}:{
