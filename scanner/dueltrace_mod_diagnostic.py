@@ -1,0 +1,92 @@
+"""Diagnóstico de novos mods usando apenas metadados extraídos localmente.
+
+Não interpreta tabelas desconhecidas como válidas. Gera razões específicas
+para zeros de extração e pistas para análise opcional do Ollama.
+"""
+from __future__ import annotations
+
+import re
+
+_SUPPORTED_BOOT = re.compile(
+    r"^(?:SLUS|SCUS|SLES|SCES|SLPS|SCPS|SLPM|SLED|SCED|SLKA)[_0-9A-Z.\-]*$",
+    re.I,
+)
+
+
+def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
+    if not isinstance(report,dict):
+        report={}
+    profile=profile if isinstance(profile,dict) else {}
+    raw=report.get("arquivos_discos") or []
+    files=[x for x in raw[:1200] if isinstance(x,dict)]
+    names=[str(x.get("nome") or "").upper()[:150] for x in files]
+    boot=[x for x in names
+          if _SUPPORTED_BOOT.fullmatch(x.rsplit("/",1)[-1])
+          or x.endswith(".EXE")]
+    wa=[x for x in names
+        if "WA_MRG" in x.rsplit("/",1)[-1]
+        or x.rsplit("/",1)[-1].endswith(".MRG")]
+    errors=[]
+    if not files:
+        errors.append("Índice ISO9660 indisponível ou não reconhecido.")
+    else:
+        if not boot:
+            errors.append("Nenhum executável PS1 conhecido foi identificado no índice.")
+        if not any(x.endswith("WA_MRG.MRG") for x in wa):
+            errors.append("Nenhum WA_MRG.MRG com nome esperado foi localizado.")
+    status=str(report.get("status") or "não analisado")
+    problem=str(report.get("problema") or "")[:250]
+    if problem:
+        errors.append("Erro de leitura: "+problem)
+    card_state=str(report.get("nomes_status") or "")[:250]
+    if card_state and (not profile.get("supported_features",{}).get("cards")):
+        errors.append("Nomes/atributos SLUS: "+card_state)
+    drop_state=str(report.get("drops_status") or "")[:250]
+    if drop_state and not profile.get("supported_features",{}).get("drops"):
+        errors.append("Drops WA: "+drop_state)
+    art_state=str(report.get("artes_obs") or "")[:180]
+    if art_state and not profile.get("supported_features",{}).get("art"):
+        errors.append("Artes WA: "+art_state)
+    flags=profile.get("supported_features") or {}
+    if status.startswith("incerto") or status.startswith("erro"):
+        level="estrutura_desconhecida"
+    elif not flags.get("cards") or not flags.get("drops"):
+        level="extração_parcial"
+    else:
+        level="estrutura_reconhecida"
+    if level!="estrutura_reconhecida" and not errors:
+        errors.append("As validações do catálogo não reconheceram um layout completo.")
+    steps=[]
+    if not files:
+        steps.append("Verificar setor 2048/2352, ISO9660 e índice dos arquivos do disco.")
+    if not boot or not wa:
+        steps.append("Verificar nomes e posições reais de SLUS/SCUS/SLES e WA_MRG no disco.")
+    if not flags.get("cards"):
+        steps.append("Investigar offsets, ponteiros, tabela de glifos e atributos do executável sem reaproveitar offsets X15.")
+    if not flags.get("drops"):
+        steps.append("Investigar blocos WA e validar pesos/grupos por oponente antes de gerar drops.")
+    if not flags.get("art"):
+        steps.append("Verificar geometria, paleta e localização das artes no WA_MRG.")
+    if not steps:
+        steps.append("Conferir dados com o jogo real antes de promover resultados.")
+    return {
+        "state":level,
+        "status":status[:120],
+        "issues":errors[:8],
+        "nextSteps":steps[:6],
+        "executableCandidates":boot[:12],
+        "waCandidates":wa[:12],
+        "chosenExecutable":str(report.get("executavel") or "")[:150],
+        "chosenWa":str(report.get("drops_source") or "")[:150],
+        "exeSize":next((x.get("tamanho") for x in files if str(x.get("nome")).upper()==str(report.get("executavel","")).upper()),None),
+        "waSize":report.get("wa_total_bytes"),
+        "sectorBytes":report.get("tipo_setor"),
+        "indexedFiles":len(files),
+        "hashExe":str(report.get("hash_executavel") or "")[:64] or None,
+        "hashWa":str(report.get("hash_wa") or "")[:64] or None,
+        "cardsVerified":bool(flags.get("cards")),
+        "dropsVerified":bool(flags.get("drops")),
+        "artVerified":bool(flags.get("art")),
+        "automaticExtractionComplete":level=="estrutura_reconhecida",
+        "aiRole":"Ollama pode interpretar os indícios, mas não extrai bytes nem comprova tabelas desconhecidas.",
+    }
