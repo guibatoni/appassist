@@ -34,6 +34,7 @@ from dueltrace_mips_duel_trace import inspect_duel_mips_trace, MAX_TRACE_BYTES
 from dueltrace_rank_memory_trace import inspect_rank_memory_trace
 from dueltrace_rank_export import build_rank_evidence_report
 from dueltrace_rank_duel_verification import compare_rank_observations
+from dueltrace_rank_diagnostic import diagnose_rank_profile
 from dueltrace_library_sort import validate_sort,matches_type,sort_key
 from dueltrace_update_checker import (
     check_for_updates, open_official_releases, fetch_stable_release, CURRENT_VERSION
@@ -231,6 +232,12 @@ class DueltraceWebBridge:
                     "chains":chains["routes"],
                     "chainsComplete":chains["complete"]}
 
+    def get_rank_diagnostic(self):
+        """Explica o bloqueio sem ler o ePSXe nem ativar modelo provisório."""
+        with self._lock:
+            active,_entry,profile=self._active()
+            return diagnose_rank_profile(active.get("sha256"),profile)
+
     def _rank_sample(self):
         active,entry,profile=self._active()
         sha=active.get("sha256") if profile else None
@@ -238,9 +245,10 @@ class DueltraceWebBridge:
         if binding is None and not model_available(sha) and not x15_compatible_runtime(profile):
             self._rank_calibration=None
             self._rank_pending_capture=None
+            diagnosis=diagnose_rank_profile(sha,profile)
             return None,sha,{"state":"unsupported","ready":False,
-                "status":"Tabela e/ou rotina de RANK ainda não calibradas para esta ISO. "
-                         "A leitura MIPS estática não autoriza inferir endereços RAM.",
+                "status":diagnosis["reason"],
+                "diagnosticCode":diagnosis["code"],
                 "score":None,"category":None,"counters":None}
         preferred=(self._process.pid if self._process is not None and
                    self._process.poll() is None else None)

@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -55,10 +55,15 @@ function RankPanel({sha}:{sha:string|null}) {
   const [captured,setCaptured]=useState<{score:number|null;category:string|null;status:string}|null>(null)
   const [captureBusy,setCaptureBusy]=useState(false)
   const [captureError,setCaptureError]=useState<string|null>(null)
+  const [diagnostic,setDiagnostic]=useState<RankDiagnostic|null>(null)
+  const [diagnosing,setDiagnosing]=useState(false)
+  const [diagnosticError,setDiagnosticError]=useState<string|null>(null)
   useEffect(()=>{
     let mounted=true,busyRead=false
     setRank(null)
     setCaptured(null)
+    setDiagnostic(null)
+    setDiagnosticError(null)
     void desktopApi()?.get_pending_rank_capture().then(x=>{if(mounted&&x.ready)setCaptured(x)}).catch(()=>{})
     const refresh=async()=>{
       const api=desktopApi()
@@ -82,6 +87,16 @@ function RankPanel({sha}:{sha:string|null}) {
     try{setRank(await api.confirm_rank_lp(value))}
     catch{setRank({ready:false,state:"unavailable",status:"Não foi possível confirmar os LP",score:null,category:null,counters:null})}
     finally{setBusy(false)}
+  }
+  const diagnose=async()=>{
+    const api=desktopApi()
+    if(!api)return
+    setDiagnosing(true)
+    setDiagnosticError(null)
+    try{setDiagnostic(await api.get_rank_diagnostic())}
+    catch(e){
+      setDiagnosticError(e instanceof Error?e.message:"Não foi possível consultar o perfil da ISO.")
+    }finally{setDiagnosing(false)}
   }
   const capture=async()=>{
     const api=desktopApi()
@@ -148,6 +163,36 @@ function RankPanel({sha}:{sha:string|null}) {
         {captured.status} · {captured.score} pontos · {captured.category}
       </p>}
       {captureError&&<p className="mt-2 text-xs text-danger" role="alert">{captureError}</p>}
+      {!rank?.ready&&<div className="mt-3 border-t border-line/60 pt-3">
+        <p className="text-xs text-muted">
+          A captura precisa de uma previsão autorizada. Não é possível
+          habilitá-la apenas por nome do mod ou por uma tabela MIPS estática.
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button type="button" className="btn-ghost disabled:opacity-40"
+            disabled={diagnosing||!sha||!desktopApi()} onClick={()=>void diagnose()}>
+            {diagnosing?"Investigando…":"Diagnosticar RANK desta ISO"}
+          </button>
+          <a href="/drops/" className="btn-ghost">
+            Registrar RANK final em Drops
+          </a>
+        </div>
+        {diagnosticError&&<p className="mt-2 text-xs text-danger" role="alert">{diagnosticError}</p>}
+        {diagnostic&&<div className="mt-3 rounded-lg border border-gold/30 bg-background/50 p-3 text-xs" role="status">
+          <p className="font-semibold text-gold">Diagnóstico da ISO {diagnostic.isoShaPrefix??"não selecionada"}{diagnostic.isoShaPrefix?"…":""}</p>
+          <p className="mt-1 text-foreground">{diagnostic.reason}</p>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-muted sm:grid-cols-3">
+            <span>Tabela WA: {diagnostic.rankTableDetected?"Detectada":"Não identificada"}</span>
+            <span>Estrutura WA: {diagnostic.rankStructureVerified?"Conferida":"Pendente"}</span>
+            <span>PCs candidatos: {diagnostic.mipsCandidates}</span>
+            <span>RAM validada: {diagnostic.ramBindingVerified?"Sim":"Não"}</span>
+            <span>Modelo X15 idêntico: {diagnostic.x15Exact||diagnostic.x15CompatibleBinary?"Sim":"Não"}</span>
+            <span>Projeção habilitada: {diagnostic.readyForLiveRead?"Modelo autorizado":"Não"}</span>
+          </div>
+          <p className="mt-2 text-primary">Próxima ação: {diagnostic.nextStep}</p>
+          <p className="mt-2 text-muted">{diagnostic.note}</p>
+        </div>}
+      </div>}
     </div>
     <p className="mt-3 text-xs text-muted">
       Esta atualização mantém a fórmula de pontos já usada pelo DUELTRACE e altera apenas a letra

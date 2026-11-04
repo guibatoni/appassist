@@ -42,6 +42,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_hand()
 
+    def get_rank_diagnostic(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_rank_diagnostic()
+
     def get_rank(self, credential):
         self._authorize(credential)
         return self._bridge.get_rank()
