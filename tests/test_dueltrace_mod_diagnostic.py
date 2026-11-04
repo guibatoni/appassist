@@ -9,6 +9,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 
 from auto_mods import ModCatalog, atomic_json
 from dueltrace_mod_diagnostic import diagnose_layout
+from scanner_multiiso import select_known_executable_layout
 from dueltrace_web_bridge import DueltraceWebBridge
 from dueltrace_web_security import ProtectedDesktopApi
 from ia_local import minimal_evidence
@@ -103,6 +104,42 @@ class UnknownISOTests(unittest.TestCase):
             ai.assert_called_once()
         with self.assertRaises(ValueError):
             api.get_mod_scan_diagnostic("t"*64,"../other",True)
+
+    def test_alternative_executable_can_recover_known_card_layout(self):
+        class FakeDisc:
+            files={
+                "DATA/SLUS_014.11":(10,2000000),
+                "DATA/SCUS_123.45":(30,2100000),
+            }
+            def get(self,name):
+                return name.encode("ascii")
+        def decode(raw):
+            if b"SCUS" in raw:
+                return [{"id":1,"nome":"Jono"}],[{"id":1,"nome":"Flower Wolf"}],"39/39, 722/722"
+            return [],[],"Codificação diferente: 0/39 e 0/722"
+        candidates=["DATA/SLUS_014.11","DATA/SCUS_123.45"]
+        with patch("scanner_multiiso.decode_names",side_effect=decode):
+            chosen,data,opponents,cards,status,tried=(
+                select_known_executable_layout(FakeDisc(),candidates))
+        self.assertEqual(chosen,"DATA/SCUS_123.45")
+        self.assertEqual(cards[0]["nome"],"Flower Wolf")
+        self.assertEqual(len(tried),2)
+        self.assertFalse(tried[0]["recognized"])
+        self.assertTrue(tried[1]["recognized"])
+
+    def test_alternative_unknown_executable_cannot_be_approved(self):
+        class FakeDisc:
+            files={"A":(1,2000000),"B":(2,2100000)}
+            def get(self,name):
+                return name.encode("ascii")
+        with patch("scanner_multiiso.decode_names",
+                   return_value=([],[],"Offsets incompatíveis")):
+            chosen,data,opponents,cards,status,tried=(
+                select_known_executable_layout(FakeDisc(),["A","B"]))
+        self.assertEqual(chosen,"A")
+        self.assertEqual(opponents,[])
+        self.assertEqual(cards,[])
+        self.assertEqual(len(tried),2)
 
     def test_scan_report_error_is_visible(self):
         info=diagnose_layout({
