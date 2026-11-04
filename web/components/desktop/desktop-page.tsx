@@ -637,6 +637,13 @@ function Mods({mods,sha,onRefresh,configured}:{
               {" "}Setores: {diagnostics[mod.sha256].sectorBytes??"não identificados"} bytes.</p>
             <p className="mt-1">Executável: {diagnostics[mod.sha256].chosenExecutable||"não reconhecido"}.
               {" "}WA: {diagnostics[mod.sha256].chosenWa||"não reconhecido"}.</p>
+            {diagnostics[mod.sha256].waSelectionMethod==="tamanho_identico_nao_validado"&&
+              <p className="mt-2 text-gold">
+                Arquivo de recursos renomeado identificado como candidato:
+                {" "}{diagnostics[mod.sha256].suspectedWa}.
+                A seleção foi feita somente pelo tamanho; estrutura, drops e artes
+                ainda precisam de validação.
+              </p>}
             <p className="mt-1">SYSTEM.CNF: {diagnostics[mod.sha256].systemCnf?.status??"não analisado"}
               {diagnostics[mod.sha256].systemCnf?.bootTarget
                 ? " · BOOT: "+diagnostics[mod.sha256].systemCnf.bootTarget:""}
