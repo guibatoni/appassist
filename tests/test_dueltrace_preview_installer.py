@@ -153,6 +153,28 @@ class PreviewInstallerTests(unittest.TestCase):
                     current_executable=exe,downloader=lambda *a:None,
                     unpacker=lambda *a:None,launcher=lambda *a:None)
 
+    def test_known_backup_can_rotate_for_multiple_updates(self):
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)
+            app=base/"DUELTRACE-WebUI"; app.mkdir()
+            exe=app/"DUELTRACE-WebUI.exe"; exe.write_bytes(b"MZ")
+            home=base/"data"; home.mkdir()
+            backup=base/".DUELTRACE-WebUI-backup"; backup.mkdir()
+            (backup/"DUELTRACE-WebUI.exe").write_bytes(b"MZold")
+            (backup/"_internal").mkdir()
+            info=updater.select_preview_release(release(),"0.8.4")
+            scripts=[]
+            def prepare(_archive,stage,_info):
+                stage.mkdir()
+                (stage/"DUELTRACE-WebUI.exe").write_bytes(b"MZ")
+            result=updater.stage_preview_update(
+                info=info,data_home=home,current_executable=exe,
+                downloader=lambda info,where: where.write_bytes(b"zip"),
+                unpacker=prepare,launcher=scripts.append)
+            self.assertTrue(result["started"])
+            self.assertIn("Remove-Item -LiteralPath $backup",scripts[0])
+            self.assertTrue(backup.exists()) # backup not destroyed by current process
+
     def test_install_prepares_and_launcher_receives_wait_then_swap(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td)
