@@ -18,6 +18,7 @@ from time import monotonic
 from auto_mods import ModCatalog, load_json, atomic_json
 from mod_autopilot import ModAutopilot, profile_summary
 from dueltrace_intelligence import MultiModIntelligence
+from dueltrace_mod_diagnostic import diagnose_layout
 from dueltrace_card_matcher import compare_profiles
 from dueltrace_card_match_ai import review_card_candidates
 from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
@@ -993,6 +994,77 @@ class DueltraceWebBridge:
         self._rank_pending_capture=None
         return self.get_state()
 
+    def get_mod_scan_diagnostic(self, sha, with_ollama=False):
+        """Diagnóstico legível de uma ISO sem transmitir arquivos completos.
+
+        Ollama só analisa metadados quando solicitado. Nenhum candidato vira
+        tabela verificada ou altera o mod automaticamente.
+        """
+        if (type(sha) is not str or not re.fullmatch(r"[a-f0-9]{64}",sha)
+                or type(with_ollama) is not bool):
+            raise ValueError("Identificador/solicitação de diagnóstico inválido.")
+        with self._lock:
+            entry=next((x for x in self.catalog.list()
+                        if x.get("sha256")==sha),None)
+            if not entry:
+                raise ValueError("ISO não encontrada na Biblioteca de Mods.")
+            profile=self.catalog.profile_for(entry)
+            if not isinstance(profile,dict):
+                raise ValueError("Perfil local indisponível.")
+            scan_dir=profile.get("scan_result_dir")
+            root=(self.catalog.home/"analises").resolve()
+            if not isinstance(scan_dir,str) or not scan_dir:
+                raise ValueError("Nenhuma análise local encontrada.")
+            folder=Path(scan_dir).resolve()
+            if not folder.is_relative_to(root):
+                raise ValueError("Caminho de análise fora da pasta autorizada.")
+            meta=load_json(folder/"relatorio.json",{})
+            diagnosis=diagnose_layout(meta,profile)
+            diagnosis["romSha"]=sha
+            diagnosis["ai"]={"state":"nao_solicitada","note":"Use o diagnóstico Ollama se desejar hipóteses."}
+            if with_ollama:
+                source=Path(entry.get("source_path") or "").resolve(strict=True)
+                if not source.is_file():
+                    raise ValueError("ISO original não disponível para análise.")
+                result=MultiModIntelligence(self.catalog).inspect(
+                    source,use_ollama=True)
+                diagnosis["ai"]={
+                    "state":result.get("ai","nao_iniciada"),
+                    "message":str(result.get("ai_message") or "")[:220],
+                }
+                ai_report=result.get("ai_report_path")
+                if isinstance(ai_report,str):
+                    file=Path(ai_report).resolve()
+                    safe_dir=(self.catalog.home/"investigacoes").resolve()
+                    if file.is_relative_to(safe_dir):
+                        suggestion=load_json(file,{})
+                        raw_summary=str(suggestion.get("resumo") or "")[:1200]
+                        # O Ollama pode inventar que o jogo não contém cartas
+                        # quando, na verdade, só falhou o extrator. Nunca
+                        # mostrar uma conclusão factual do LLM para uma ISO
+                        # cujo layout sequer foi reconhecido.
+                        if diagnosis["state"]!="estrutura_reconhecida":
+                            diagnosis["ai"]["resumo"]=(
+                                "O scanner não conseguiu reconhecer as tabelas "
+                                "desta ISO. Isso NÃO comprova ausência de cartas, "
+                                "oponentes, fusões ou drops. O conteúdo do "
+                                "executável e dos recursos permanece desconhecido.")
+                            diagnosis["ai"]["summarySuppressed"]=bool(raw_summary)
+                            diagnosis["ai"]["note"]=(
+                                "Texto conclusivo de IA omitido por falta de "
+                                "evidência binária; as sugestões abaixo são "
+                                "hipóteses e não dados verificados.")
+                        else:
+                            diagnosis["ai"]["resumo"]=raw_summary
+                        raw_priorities=suggestion.get("prioridades",[])
+                        diagnosis["ai"]["prioridades"]=[
+                            str(x)[:250] for x in raw_priorities[:6]
+                            if isinstance(x,str)] if isinstance(raw_priorities,list) else []
+                        diagnosis["ai"]["alertas"]=[
+                            str(x)[:200] for x in suggestion.get("alertas",[])[:6]
+                            if isinstance(x,str)]
+            return diagnosis
+
     def scan_sources(self, sha):
         """Releia a ISO local e seus WA_MRG/SLUS; não envie dados à nuvem."""
         if type(sha) is not str or len(sha)!=64 or any(
@@ -1022,10 +1094,15 @@ class DueltraceWebBridge:
             self._rank_legacy_trial=None
             self._rank_gap_started=None
             self._rank_lp_session=None
-            analysis=MultiModIntelligence(self.catalog).inspect(source,use_ollama=False)
+            # Se Ollama estiver instalado, consultar automaticamente
+            # hipóteses locais a partir da análise; offline não impede scanner.
+            analysis=MultiModIntelligence(self.catalog).inspect(source,use_ollama=True)
             profile=self.catalog.profile_for(updated)
             graphic=(profile or {}).get("graphic_assets",{})
             provenance=(profile or {}).get("descriptions_provenance",{})
+            meta=load_json(Path(profile.get("scan_result_dir") or "")/
+                           "relatorio.json",{}) if profile else {}
+            diagnostic=diagnose_layout(meta,profile)
             return {
                 "sha256":sha,
                 "artCount":graphic.get("art_count",0),
@@ -1039,7 +1116,13 @@ class DueltraceWebBridge:
                 "descriptionCount":provenance.get("descriptions_attached",0),
                 "effectTexts":provenance.get("effect_descriptions_attached",0),
                 "investigation":analysis.get("state","sem_relatorio"),
-                "status":"Análise local de WA_MRG.MRG e SLUS_014.11 concluída.",
+                "diagnostic":diagnostic,
+                "aiState":analysis.get("ai","desativada"),
+                "aiMessage":str(analysis.get("ai_message") or "")[:220],
+                "status":("Dados reconhecidos por validações estruturais."
+                          if diagnostic["automaticExtractionComplete"] else
+                          "Layout não reconhecido integralmente; consulte o diagnóstico, "
+                          "não interprete os zeros como ausência de conteúdo."),
             }
 
     def import_iso(self):

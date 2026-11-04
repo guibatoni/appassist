@@ -125,6 +125,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.activate_mod(sha,acknowledge)
 
+    def get_mod_scan_diagnostic(self, credential, sha, with_ollama=False):
+        self._authorize(credential)
+        return self._bridge.get_mod_scan_diagnostic(sha,with_ollama)
+
     def scan_sources(self, credential, sha):
         self._authorize(credential)
         return self._bridge.scan_sources(sha)

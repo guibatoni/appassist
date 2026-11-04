@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic, CardMatchResult, CardAIMatchReport} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic, CardMatchResult, CardAIMatchReport, ModScanDiagnostic} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -524,6 +524,18 @@ function Mods({mods,sha,onRefresh,configured}:{
 }) {
   const [busy,setBusy]=useState(false)
   const [message,setMessage]=useState<string|null>(null)
+  const [diagnostics,setDiagnostics]=useState<Record<string,ModScanDiagnostic>>({})
+  const [diagnosing,setDiagnosing]=useState<string|null>(null)
+  const investigate=async(mod:LocalMod,ollama=false)=>{
+    const api=desktopApi()
+    if(!api)return
+    setDiagnosing(mod.sha256);setMessage(null)
+    try{
+      const result=await api.get_mod_scan_diagnostic(mod.sha256,ollama)
+      setDiagnostics(old=>({...old,[mod.sha256]:result}))
+    }catch(e){setMessage(e instanceof Error?e.message:"Diagnóstico não disponível.")}
+    finally{setDiagnosing(null)}
+  }
   const rescan=async(mod:LocalMod)=>{
     const api=desktopApi()
     if(!api)return
@@ -531,11 +543,17 @@ function Mods({mods,sha,onRefresh,configured}:{
     try{
       const result=await api.scan_sources(mod.sha256)
       await onRefresh()
-      setMessage("ISO analisada: "+result.opponentCount+" oponentes, "+result.dropEntries+" drops, "+result.artCount+" artes, "+
-        result.frameStyles+" molduras originais, "+result.framedCards+" cartas com moldura, "+
-        result.descriptionCount+" descrições e "+
-        result.effectTexts+" textos indicativos de efeitos. "+
-        "A execução dos efeitos no jogo não foi confirmada.")
+      if(result.diagnostic){
+        setDiagnostics(old=>({...old,[mod.sha256]:result.diagnostic!}))
+      }
+      setMessage(
+        result.diagnostic&&!result.diagnostic.automaticExtractionComplete
+          ?"Estrutura não identificada: "+(result.diagnostic.issues[0]??"O scanner não validou as tabelas.")+
+            " · Ollama: "+(result.aiState??"não disponível")+
+            ". Consulte o diagnóstico deste mod."
+          :"Extração concluída: "+result.opponentCount+" oponentes, "+
+            result.dropEntries+" drops e "+result.artCount+" artes. "+
+            "Ollama: "+(result.aiState??"não iniciada")+".")
     }catch(e){
       setMessage(e instanceof Error?e.message:"Falha na análise local dos arquivos")
     }finally{setBusy(false)}
@@ -598,6 +616,98 @@ function Mods({mods,sha,onRefresh,configured}:{
             onClick={()=>void rescan(mod)}>
             <RefreshCcw className="size-4"/> Ler WA_MRG + SLUS novamente
           </button>
+          {mod.cards===0&&<p className="mt-2 text-xs text-gold">
+            Estrutura não reconhecida. Zero cartas extraídas não significa que a ISO não contenha cartas.
+          </p>}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" className="btn-ghost flex-1 disabled:opacity-40"
+              disabled={busy||diagnosing!==null||!desktopApi()}
+              onClick={()=>void investigate(mod,false)}>
+              {diagnosing===mod.sha256?"Analisando…":"Diagnosticar estrutura"}
+            </button>
+            <button type="button" className="btn-ghost flex-1 disabled:opacity-40"
+              disabled={busy||diagnosing!==null||!desktopApi()}
+              onClick={()=>void investigate(mod,true)}>
+              {diagnosing===mod.sha256?"Consultando…":"Investigar com Ollama"}
+            </button>
+          </div>
+          {diagnostics[mod.sha256]&&<div className="mt-3 rounded-lg border border-primary/30 bg-background/60 p-3 text-xs text-muted">
+            <p className="font-semibold text-primary">Diagnóstico do layout: {diagnostics[mod.sha256].state.replaceAll("_"," ")}</p>
+            <p className="mt-1">Arquivos indexados: {diagnostics[mod.sha256].indexedFiles}.
+              {" "}Setores: {diagnostics[mod.sha256].sectorBytes??"não identificados"} bytes.</p>
+            <p className="mt-1">Executável: {diagnostics[mod.sha256].chosenExecutable||"não reconhecido"}.
+              {" "}WA: {diagnostics[mod.sha256].chosenWa||"não reconhecido"}.</p>
+            {diagnostics[mod.sha256].waSelectionMethod==="tamanho_identico_nao_validado"&&
+              <p className="mt-2 text-gold">
+                Arquivo de recursos renomeado identificado como candidato:
+                {" "}{diagnostics[mod.sha256].suspectedWa}.
+                A seleção foi feita somente pelo tamanho; estrutura, drops e artes
+                ainda precisam de validação.
+              </p>}
+            <p className="mt-1">SYSTEM.CNF: {diagnostics[mod.sha256].systemCnf?.status??"não analisado"}
+              {diagnostics[mod.sha256].systemCnf?.bootTarget
+                ? " · BOOT: "+diagnostics[mod.sha256].systemCnf.bootTarget:""}
+            </p>
+            {diagnostics[mod.sha256].systemCnf?.bootTarget&&<p className="mt-1 font-semibold text-gold">
+              Alvo BOOT no índice ISO9660: {diagnostics[mod.sha256].systemCnf.bootTargetIndexed===true
+                ?"sim · arquivo localizado"
+                :diagnostics[mod.sha256].systemCnf.bootTargetIndexed===false
+                ?"não · arquivo ausente do índice":"não confirmado"}
+              {diagnostics[mod.sha256].systemCnf.bootFileSignature
+                ?" · assinatura: "+diagnostics[mod.sha256].systemCnf.bootFileSignature:""}
+            </p>}
+            {diagnostics[mod.sha256].issues.map((issue,i)=>
+              <p className="mt-1 text-gold" key={"issue-"+i}>{issue}</p>)}
+            <details className="mt-2">
+              <summary className="cursor-pointer text-primary">Evidências e próximas investigações</summary>
+              {diagnostics[mod.sha256].files?.length>0&&<div className="mt-2">
+                <p className="font-semibold text-primary">Arquivos encontrados no disco:</p>
+                <div className="mt-1 max-h-56 overflow-y-auto rounded border border-line/50 p-2">
+                  {diagnostics[mod.sha256].files.map((file,i)=>
+                    <p key={i} className="break-all py-0.5">
+                      {file.name} · {file.size===null?"tamanho não identificado":file.size.toLocaleString("pt-BR")+" bytes"}
+                      {file.signature&&file.signature!=="não examinada"?" · "+file.signature:""}
+                    </p>)}
+                </div>
+              </div>}
+              {diagnostics[mod.sha256].possibleResourceFiles?.length>0&&<div className="mt-2">
+                <p className="font-semibold text-primary">
+                  Arquivos grandes para investigar (não identificados como WA):
+                </p>
+                {diagnostics[mod.sha256].possibleResourceFiles.map((file,i)=>
+                  <p key={i} className="mt-1 break-all">
+                    {file.name} · {file.size.toLocaleString("pt-BR")} bytes
+                  </p>)}
+              </div>}
+              {diagnostics[mod.sha256].executableCandidates.length>0&&
+                <p className="mt-2 break-words">Executáveis candidatos: {diagnostics[mod.sha256].executableCandidates.join(", ")}</p>}
+              {diagnostics[mod.sha256].waCandidates.length>0&&
+                <p className="mt-1 break-words">Arquivos WA candidatos: {diagnostics[mod.sha256].waCandidates.join(", ")}</p>}
+              {diagnostics[mod.sha256].nameLayoutProbe?.state==="amostras_nao_validadas"&&<div className="mt-3 border-t border-line/50 pt-2">
+                <p className="font-semibold text-gold">Amostras dos nomes SLUS (não verificadas)</p>
+                <p className="mt-1">Esses textos vêm dos offsets conhecidos e podem pertencer a outras regiões da ISO.</p>
+                <p className="mt-1 font-semibold">Cartas</p>
+                {diagnostics[mod.sha256].nameLayoutProbe.cardSamples.map((row,i)=>
+                  <p key={"card-"+i} className="mt-1 break-all">
+                    #{row.index} ponteiro {row.pointer??"?"}: {row.name||"(vazio)"} · {row.status}
+                  </p>)}
+                <p className="mt-2 font-semibold">Oponentes</p>
+                {diagnostics[mod.sha256].nameLayoutProbe.opponentSamples.map((row,i)=>
+                  <p key={"opp-"+i} className="mt-1 break-all">
+                    #{row.index} ponteiro {row.pointer??"?"}: {row.name||"(vazio)"} · {row.status}
+                  </p>)}
+              </div>}
+              {diagnostics[mod.sha256].nextSteps.map((step,i)=><p key={"step-"+i} className="mt-1">{i+1}. {step}</p>)}
+            </details>
+            {diagnostics[mod.sha256].ai&&diagnostics[mod.sha256].ai!.state!=="nao_solicitada"&&
+              <div className="mt-2 border-t border-line/60 pt-2">
+                <p className="font-semibold text-primary">Ollama: {diagnostics[mod.sha256].ai!.state.replaceAll("_"," ")}</p>
+                {diagnostics[mod.sha256].ai!.message&&<p className="mt-1">{diagnostics[mod.sha256].ai!.message}</p>}
+                {diagnostics[mod.sha256].ai!.note&&<p className="mt-1 text-gold">{diagnostics[mod.sha256].ai!.note}</p>}
+                {diagnostics[mod.sha256].ai!.resumo&&<p className="mt-1">{diagnostics[mod.sha256].ai!.resumo}</p>}
+                {diagnostics[mod.sha256].ai!.prioridades?.map((step,i)=><p key={"ai-"+i} className="mt-1">{i+1}. {step}</p>)}
+              </div>}
+          </div>}
         </div>)}
       </div>
       {!mods.length&&<Empty>Nenhum mod cadastrado. Importe uma ISO/BIN na versão Windows. Os arquivos não são enviados ao Vercel.</Empty>}

@@ -123,6 +123,68 @@ class Disc:
         return self.read(lba,size)
     def close(self):self.f.close()
 
+def inspect_file_signatures(disc, *, max_files=48):
+    """Inventário de assinaturas dos arquivos ISO9660 sem extração de conteúdo.
+
+    Lê até 32 bytes por arquivo. Não assume que um arquivo sem extensão
+    SLUS/WA seja vazio ou que seu formato tenha sido reconhecido.
+    """
+    probes=[]
+    for name,(lba,size) in sorted(disc.files.items())[:max_files]:
+        if type(size) is not int or size<=0:
+            probes.append({"nome":name,"assinatura":"vazio_ou_invalido",
+                           "prefix_sha256":None})
+            continue
+        try:
+            raw=disc.get(name,limit_bytes=32)
+        except (OSError,ValueError,KeyError):
+            probes.append({"nome":name,"assinatura":"erro_leitura",
+                           "prefix_sha256":None})
+            continue
+        if raw.startswith(b"PS-X EXE"):
+            signature="psx_executavel"
+        elif raw.startswith(b"RIFF"):
+            signature="riff"
+        elif raw.startswith(b"TIM2"):
+            signature="tim2"
+        else:
+            signature="desconhecida"
+        probes.append({"nome":name,"assinatura":signature,
+                       "prefix_sha256":hashlib.sha256(raw).hexdigest()[:16]})
+    return probes
+
+
+def inspect_system_cnf(disc):
+    """Consulta apenas a indicação BOOT, sem executar nem extrair binários.
+
+    Alguns mods usam nomes de executáveis diferentes das famílias SLUS/SCUS.
+    O SYSTEM.CNF geralmente contém a referência explícita do executável.
+    """
+    candidates=sorted(name for name in disc.files
+                      if name.rsplit("/",1)[-1]=="SYSTEM.CNF")
+    if not candidates:
+        return {"found":False,"boot_target":None,"status":"SYSTEM.CNF não localizado"}
+    name=candidates[0]
+    size=disc.files[name][1]
+    if type(size) is not int or not 0<size<=16384:
+        return {"found":True,"boot_target":None,
+                "status":"SYSTEM.CNF com tamanho incomum; não foi lido"}
+    raw=disc.get(name,limit_bytes=16384)
+    text=raw.decode("latin-1",errors="replace")
+    match=re.search(
+        r"(?im)^\s*BOOT(?:2)?\s*=\s*(?:cdrom\d?:)?[/\\]*([A-Za-z0-9_.\\/-]+)(?:;\d+)?",
+        text)
+    if not match:
+        return {"found":True,"boot_target":None,
+                "status":"SYSTEM.CNF encontrado, mas BOOT não foi reconhecido"}
+    target=match.group(1).replace("\\","/").strip("/").upper()
+    if not target or ".." in target.split("/"):
+        return {"found":True,"boot_target":None,
+                "status":"Referência BOOT inválida"}
+    return {"found":True,"boot_target":target,
+            "status":"BOOT identificado, apenas como indicação de arquivo"}
+
+
 def decode_names(sl):
     if len(sl)<0x1C9800+93*4: return [],[], 'Executável menor que o layout conhecido'
     try: glyphs=[struct.unpack_from('<H',sl,SLUS_GLYPHS+4*i)[0] for i in range(93)]
@@ -157,6 +219,119 @@ def decode_names(sl):
     if n_good<30 or card_good<600:
         return [],[],f'Codificação diferente/ambígua: {n_good}/39 nomes, {card_good}/722 cartas plausíveis'
     return opponents,cards,f'{n_good}/39 nomes, {card_good}/722 cartas decodificados'
+
+def inspect_known_name_layout(sl):
+    """Amostras de offsets do FM original em mod não reconhecido.
+
+    NÃO aprova o catálogo, oponente ou glifo. Seu único propósito é mostrar
+    possíveis deslocamentos e caracteres ilegíveis para diagnóstico.
+    """
+    required=max(SLUS_GLYPHS+93*4,SLUS_PTR_BASE+(0x328+39)*2)
+    if len(sl)<required:
+        return {"state":"incompatível","reason":"Executável menor que a tabela de ponteiros/glifos conhecida",
+                "cardSamples":[],"opponentSamples":[]}
+    try:
+        glyphs=[struct.unpack_from("<H",sl,SLUS_GLYPHS+4*i)[0] for i in range(93)]
+    except struct.error:
+        return {"state":"incompatível","reason":"Tabela de glifos fora do arquivo",
+                "cardSamples":[],"opponentSamples":[]}
+    def sample(index):
+        address=SLUS_PTR_BASE+index*2
+        if address+2>len(sl):
+            return {"index":index,"pointer":None,"name":"","status":"ponteiro_fora_do_arquivo"}
+        ptr=struct.unpack_from("<H",sl,address)[0]
+        pos=SLUS_TEXT_BASE+ptr
+        if pos<0 or pos>=len(sl):
+            return {"index":index,"pointer":ptr,"name":"","status":"texto_fora_do_arquivo"}
+        raw=sl[pos+3:pos+100] if sl[pos:pos+2]==b"\xf8\x0a" else sl[pos:pos+100]
+        decoded=[]
+        invalid=0
+        for value in raw:
+            if value==255:break
+            if value==0:
+                decoded.append(" ")
+            elif value<len(glyphs) and glyphs[value]:
+                try:decoded.append(glyphs[value].to_bytes(2,"big").decode("shift_jis"))
+                except UnicodeError:invalid+=1
+            else:invalid+=1
+        name=unicodedata.normalize("NFKC","".join(decoded)).strip()[:80]
+        plausible=bool(name) and invalid==0 and len(name)<=64 and (
+            sum(x.isalnum() for x in name)>=2)
+        return {"index":index,"pointer":ptr,"name":name,
+                "status":"caracteres_plausiveis" if plausible else "invalido_ou_vazio",
+                "invalidGlyphs":invalid}
+    ids=(1,2,3,10,25,50,100,200,400,722)
+    opponent_ids=(1,2,3,10,20,30,39)
+    cards=[sample(i) for i in ids]
+    opponents=[sample(0x328+i) for i in opponent_ids]
+    return {
+        "state":"amostras_nao_validadas",
+        "cardSamples":cards,"opponentSamples":opponents,
+        "cardPlausibleSamples":sum(row["status"]=="caracteres_plausiveis" for row in cards),
+        "opponentPlausibleSamples":sum(row["status"]=="caracteres_plausiveis" for row in opponents),
+        "note":"Nomes e ponteiros são amostras de offsets conhecidos, não identidades confirmadas.",
+    }
+
+
+def select_known_executable_layout(disc, candidates, *, max_candidates=8):
+    """Testa executáveis existentes; nunca adivinha/valida offsets novos.
+
+    Sempre começa pela prioridade tradicional. Só muda de executável se
+    `decode_names` reconhecer o catálogo completo pelo mesmo critério usado
+    antes. Lê no máximo oito arquivos de até 8 MiB para reduzir custo.
+    """
+    if not candidates:
+        raise ValueError("Nenhum executável candidato.")
+    tried=[]
+    chosen=candidates[0]
+    sl=disc.get(chosen)
+    opponents,cards,status=decode_names(sl)
+    tried.append({"name":chosen,"status":status,"recognized":bool(opponents and cards)})
+    if opponents and cards:
+        return chosen,sl,opponents,cards,status,tried
+    for alternative in candidates[1:max_candidates]:
+        size=disc.files.get(alternative,(None,0))[1]
+        if type(size) is not int or not 0<size<=8*1024*1024:
+            tried.append({"name":alternative,"status":"tamanho fora do limite de análise",
+                          "recognized":False})
+            continue
+        contender=disc.get(alternative)
+        opp2,cards2,status2=decode_names(contender)
+        tried.append({"name":alternative,"status":status2,
+                      "recognized":bool(opp2 and cards2)})
+        if opp2 and cards2:
+            return alternative,contender,opp2,cards2,status2,tried
+    return chosen,sl,opponents,cards,status,tried
+
+
+# Tamanho da tabela de recursos observado em ISOs com WA_MRG.MRG.
+# Coincidência de tamanho é indício para SONDAGEM, jamais validação de formato.
+KNOWN_WA_SIZE_BYTES=38_148_608
+
+
+def select_wa_candidates(files):
+    """Seleciona apenas um recurso candidato; sem promover arquivo por tamanho.
+
+    Formato retorno: (nomes selecionados, método, candidatas por tamanho).
+    No layout clássico, o nome WA_MRG tem precedência. Em mods com
+    contêiner renomeado, aceita UMA correspondência exata de tamanho apenas
+    para executar as validações existentes. Ambiguidade aborta a tentativa.
+    """
+    named=sorted(
+        (n for n in files if n.endswith("WA_MRG.MRG")),
+        key=lambda x:(not x.startswith("DATA/"),x))
+    possibilities=sorted(
+        n for n,value in files.items()
+        if isinstance(value,tuple) and len(value)==2
+        and type(value[1]) is int and value[1]==KNOWN_WA_SIZE_BYTES
+        and not n.endswith("WA_MRG.MRG"))
+    if named:
+        return named,"nome_convencional",possibilities
+    if len(possibilities)==1:
+        return possibilities,"tamanho_identico_nao_validado",possibilities
+    return [],("multiplos_candidatos" if len(possibilities)>1
+               else "nenhum_candidato"),possibilities
+
 
 def decode_drops(wa,rank_names=None):
     # A interpretação dos três grupos de drops varia por mod. Somente X15
@@ -254,9 +429,12 @@ def process(path,output,with_art=False,digest=None,progress=None):
         if progress:progress("Lendo índice ISO9660",0,1)
         disc=Disc(path);info['tipo_setor']=disc.sector
         info['arquivos_discos']=[{'nome':n,'lba':lba,'tamanho':sz} for n,(lba,sz) in sorted(disc.files.items())]
+        info['system_cnf']=inspect_system_cnf(disc)
+        info['assinaturas_arquivos']=inspect_file_signatures(disc)
         # SLUS_014.11 pode estar na raiz ou dentro da pasta DATA.
         sl_names=[n for n in disc.files if re.fullmatch(
-            r'SL[UP][A-Z0-9_.]+',n.rsplit('/',1)[-1])]
+            r'(?:SLUS|SCUS|SLES|SCES|SLPS|SCPS|SLPM|SLED|SCED|SLKA)[A-Z0-9_.-]+',
+            n.rsplit('/',1)[-1])]
         # Mods podem ter múltiplos executáveis: priorizar o SLUS solicitado
         # em DATA, sem perder compatibilidade com ISOs de executável na raiz.
         sl_names=sorted(sl_names,key=lambda x:(
@@ -264,10 +442,38 @@ def process(path,output,with_art=False,digest=None,progress=None):
             x.rsplit('/',1)[-1]!='SLUS_014.11',len(x),x))
         if not sl_names:
             sl_names=sorted(n for n in disc.files if n.endswith('.EXE'))
-        wa_names=sorted((n for n in disc.files if n.endswith('WA_MRG.MRG')),
-                        key=lambda x:(not x.startswith('DATA/'),x))
+        boot_candidate=info["system_cnf"].get("boot_target")
+        info['boot_alvo_indexado']=boot_candidate in disc.files if boot_candidate else None
+        if (boot_candidate in disc.files
+                and boot_candidate not in sl_names):
+            # Apenas tentar um arquivo indicado explicitamente pelo sistema
+            # de boot; a extração ainda depende do parser de nomes/atributos.
+            sl_names=[boot_candidate]+sl_names
+        wa_names,wa_source,size_matches=select_wa_candidates(disc.files)
+        info['wa_selecao_metodo']=wa_source
+        info['wa_candidatos_por_tamanho']=size_matches[:12]
+        # Nome alterado é SÓ hipótese: os decoders ainda devem validar
+        # dados/offsets antes de habilitar cartas, artes e drops.
+        info['wa_nome_alternativo_nao_validado']=(
+            wa_source=="tamanho_identico_nao_validado")
+        # Registrar candidatos alternativos para análise, mas não assumir
+        # automaticamente que outro .MRG contém as tabelas de Forbidden Memories.
+        info['executaveis_candidatos']=sl_names[:20]
+        info['wa_candidatos']=list(dict.fromkeys(
+            [n for n in sorted(disc.files)
+             if 'WA_MRG' in n or n.endswith('.MRG')]+size_matches))[:20]
         if not sl_names or not wa_names:
-            raise ValueError(f'Layout FM PS1 incompleto; executáveis={sl_names}, WA={wa_names}')
+            hint=('BOOT aponta para arquivo ausente do índice ISO9660.'
+                  if boot_candidate and boot_candidate not in disc.files else
+                  'BOOT identificado mas formato de recursos desconhecido.'
+                  if boot_candidate else
+                  'Nenhuma indicação BOOT utilizável.')
+            raise ValueError(
+                'Layout do mod ainda não reconhecido: '
+                f'executáveis candidatos={sl_names[:6]}, '
+                f'arquivos WA candidatos={info["wa_candidatos"][:6]}. '
+                +hint+' Os arquivos podem ter nomes ou contêineres diferentes. '
+                f'Indícios por tamanho: {size_matches[:4]} ({wa_source}).')
         # O catálogo e as imagens exigem o WA até os pacotes de duelo.
         # A extração profunda lê o WA completo, não apenas seu prefixo.
         wa_required=max(
@@ -275,8 +481,11 @@ def process(path,output,with_art=False,digest=None,progress=None):
             ((CARD_COUNT-1)*WA_CARD_SECTORS+WA_CARD_SECTOR_START)*2048+0x2840,
             7475*2048+0x16D0+39*3*2048+200,
         )
-        if progress:progress("Lendo executável do jogo",0,1)
-        sl=disc.get(sl_names[0])
+        if progress:progress("Lendo executáveis candidatos do jogo",0,1)
+        selected_exe,sl,opponents,cards,nomes_status,exe_checks=(
+            select_known_executable_layout(disc,sl_names))
+        info['testes_executaveis']=exe_checks
+        info['executavel_selecionado_por_catalogo']=selected_exe!=sl_names[0]
         if progress:progress("Lendo WA_MRG completo para localizar RANK",0,1)
         wa_size=disc.files[wa_names[0]][1]
         if wa_size>96*1024*1024:
@@ -287,7 +496,7 @@ def process(path,output,with_art=False,digest=None,progress=None):
         # um scan sem artes ignorava os últimos 216 bytes do bloco conhecido
         # e nunca conseguiria identificar tabelas realocadas.
         wa=disc.get(wa_names[0])
-        info['executavel']=sl_names[0]
+        info['executavel']=selected_exe
         info['hash_executavel']=hashlib.sha256(sl).hexdigest()
         from fm_rank_mips_evidence import inspect_mips_rank_routines
         info['rank_mips_evidence']=inspect_mips_rank_routines(sl)
@@ -297,15 +506,21 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['hash_wa_prefix']=wa_sha
         info['hash_wa']=wa_sha if len(wa)==wa_size else None
         info['wa_lido_integralmente']=len(wa)==wa_size
+        if info['wa_nome_alternativo_nao_validado']:
+            info['wa_identificacao_obs']=(
+                "Contêiner sem nome WA_MRG selecionado SOMENTE por tamanho. "
+                "O conteúdo não está validado; o leitor deve confirmar tabelas "
+                "antes de atribuir qualquer recurso a esta ISO.")
         from fm_rank_tables import extract_rank_table
         info['rank_analysis']=extract_rank_table(
             wa,slus=sl,rom_sha256=info['sha256'],known_rom_sha256=X15_SHA)
         info['versao_conhecida']='Remaster X15 1.2.1' if info['sha256']==X15_SHA else 'desconhecida — não atribuir dados X15'
         if progress:progress("Decodificando cartas e adversários",0,1)
-        opponents,cards,nomes_status=decode_names(sl)
         info['nomes_status']=nomes_status
+        if not opponents or not cards:
+            info["amostras_layout_nomes"]=inspect_known_name_layout(sl)
         from fm_card_text import extract_descriptions
-        descriptions,desc_state=extract_descriptions(sl,exe_name=sl_names[0])
+        descriptions,desc_state=extract_descriptions(sl,exe_name=selected_exe)
         info['descricoes_slus']=desc_state
         if cards and desc_state.get('valid'):
             for card in cards:
@@ -341,7 +556,9 @@ def process(path,output,with_art=False,digest=None,progress=None):
                 info['cartas_com_moldura']=pack['composed_count']
                 info['artes_status']=pack['status']
                 info['artes_obs']=' | '.join(pack.get('warnings',[])[:4]) or pack['status']
-                info['artes_origem']='WA_MRG.MRG: arte 102x96, miniatura 40x32 e moldura 52x60 do duelo'
+                info['artes_origem']=(
+                    wa_names[0]+": artes 102x96, miniatura 40x32 e moldura 52x60 "
+                    "(layout sujeito a validação específica da ISO)")
                 info['artes_layout_confirmado_na_versao']=info['sha256']==X15_SHA
             else:
                 info['artes_extraidas']=0

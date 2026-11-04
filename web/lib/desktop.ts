@@ -22,6 +22,59 @@ export type LocalCard = {
   slot?: number
 }
 
+export type ModScanDiagnostic = {
+  romSha?: string
+  state: string
+  status: string
+  issues: string[]
+  nextSteps: string[]
+  executableCandidates: string[]
+  waCandidates: string[]
+  waSelectionMethod?: string
+  waSizeCandidates?: string[]
+  suspectedWa?: string | null
+  suspectedWaVerified?: boolean
+  chosenExecutable: string
+  chosenWa: string
+  exeSize: number | null
+  waSize: number | null
+  sectorBytes: number | null
+  indexedFiles: number
+  files: Array<{name: string; size: number | null; lba: number | null; signature?: string}>
+  possibleResourceFiles?: Array<{name: string; size: number}>
+  systemCnf: {
+    found: boolean
+    bootTarget: string | null
+    bootTargetIndexed: boolean | null
+    bootFileSignature?: string | null
+    status: string
+  }
+  hashExe: string | null
+  hashWa: string | null
+  cardsVerified: boolean
+  dropsVerified: boolean
+  artVerified: boolean
+  nameLayoutProbe?: {
+    state: string
+    cardSamples: Array<{index: number|null; pointer: number|null; name: string; status: string; invalidGlyphs: number|null}>
+    opponentSamples: Array<{index: number|null; pointer: number|null; name: string; status: string; invalidGlyphs: number|null}>
+    cardPlausibleSamples: number
+    opponentPlausibleSamples: number
+    note: string
+  }
+  automaticExtractionComplete: boolean
+  aiRole: string
+  ai?: {
+    state: string
+    message?: string
+    resumo?: string
+    summarySuppressed?: boolean
+    note?: string
+    prioridades?: string[]
+    alertas?: string[]
+  }
+}
+
 export type DeepScanResult = {
   sha256: string
   artCount: number
@@ -33,6 +86,9 @@ export type DeepScanResult = {
   descriptionCount: number
   effectTexts: number
   investigation: string
+  diagnostic?: ModScanDiagnostic
+  aiState?: string
+  aiMessage?: string
   status: string
 }
 
@@ -421,6 +477,7 @@ export interface DesktopAPI {
   record_duel_result(opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string, captureId?: string | null): Promise<DuelEvidence>
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(sha: string): Promise<DeepScanResult>
+  get_mod_scan_diagnostic(sha: string, withOllama?: boolean): Promise<ModScanDiagnostic>
   import_iso(): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(): Promise<{started: boolean; status: string}>
@@ -452,6 +509,7 @@ interface ProtectedNativeAPI {
   record_duel_result(token: string, opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string, captureId?: string | null): Promise<DuelEvidence>
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(token: string, sha: string): Promise<DeepScanResult>
+  get_mod_scan_diagnostic(token: string, sha: string, withOllama?: boolean): Promise<ModScanDiagnostic>
   import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(token: string): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(token: string): Promise<{started: boolean; status: string}>
@@ -499,6 +557,7 @@ export function desktopApi(): DesktopAPI | null {
       native.record_duel_result(token, opponentId, observedRank, cardId, observedPoints, victoryType, captureId),
     activate_mod: (sha, acknowledge) => native.activate_mod(token, sha, acknowledge),
     scan_sources: (sha) => native.scan_sources(token, sha),
+    get_mod_scan_diagnostic: (sha,withOllama) => native.get_mod_scan_diagnostic(token,sha,withOllama),
     import_iso: () => native.import_iso(token),
     configure_epsxe: () => native.configure_epsxe(token),
     start_game: () => native.start_game(token),
