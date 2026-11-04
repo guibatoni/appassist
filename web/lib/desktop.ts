@@ -225,10 +225,31 @@ export type DropsPage = {
   rankPoints: RankPoints | Record<string,never>
 }
 
+export type RankDiagnostic = {
+  readyForLiveRead: boolean
+  code: string
+  reason: string
+  nextStep: string
+  isoShaPrefix: string | null
+  rankSystem: "classic" | "x15" | null
+  rankTableDetected: boolean
+  rankStructureVerified: boolean
+  mipsCandidates: number
+  ramBindingPresent: boolean
+  ramBindingVerified: boolean
+  x15Exact: boolean
+  x15CompatibleBinary: boolean
+  mipsRuntimeConfirmed: boolean
+  score: null
+  projectedRank: null
+  note: string
+}
+
 export type RankState = {
   ready: boolean
   state: "unsupported" | "unavailable" | "needs_lp_confirmation" | "lp_mismatch" | "provisional"
   status: string
+  diagnosticCode?: string
   candidateLp?: number
   score: number | null
   category: string | null
@@ -298,6 +319,7 @@ export interface DesktopAPI {
   get_state(): Promise<DesktopState>
   get_hand(): Promise<HandState>
   get_rank(): Promise<RankState>
+  get_rank_diagnostic(): Promise<RankDiagnostic>
   confirm_rank_lp(lifePoints: number): Promise<RankState>
   capture_rank_prediction(): Promise<RankCapture>
   get_pending_rank_capture(): Promise<RankCapture>
@@ -323,6 +345,7 @@ interface ProtectedNativeAPI {
   get_state(token: string): Promise<DesktopState>
   get_hand(token: string): Promise<HandState>
   get_rank(token: string): Promise<RankState>
+  get_rank_diagnostic(token: string): Promise<RankDiagnostic>
   confirm_rank_lp(token: string, lifePoints: number): Promise<RankState>
   capture_rank_prediction(token: string): Promise<RankCapture>
   get_pending_rank_capture(token: string): Promise<RankCapture>
@@ -362,6 +385,7 @@ export function desktopApi(): DesktopAPI | null {
     get_state: () => native.get_state(token),
     get_hand: () => native.get_hand(token),
     get_rank: () => native.get_rank(token),
+    get_rank_diagnostic: () => native.get_rank_diagnostic(token),
     confirm_rank_lp: (lifePoints) => native.confirm_rank_lp(token, lifePoints),
     capture_rank_prediction: () => native.capture_rank_prediction(token),
     get_pending_rank_capture: () => native.get_pending_rank_capture(token),
