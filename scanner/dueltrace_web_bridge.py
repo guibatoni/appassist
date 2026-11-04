@@ -449,26 +449,27 @@ class DueltraceWebBridge:
                 visible_counters["remaining_lp"]=counters[binding["life_points_criterion"]]
             compatible=(binding is None and not model_available(sha) and
                         x15_compatible_runtime(profile))
-            status=("Leitura experimental do registro antigo: LP conferidos e "
-                    "duas alterações de contadores observadas. Os pontos são "
-                    "provisórios e a ISO do ePSXe não foi confirmada."
-                    if experimental else (
-                "Marcador de vitória por LP (+2) identificado em duas leituras "
-                "estáveis do X15; pontuação calculada, não lida diretamente do jogo."
-                if observed_adjustment==2 else
-                "Marcador de deck-out (-40) identificado em duas leituras "
-                "estáveis do X15; pontuação calculada, não lida diretamente do jogo."
-                ) if observed_adjustment is not None else
-                "Projeção usando SLUS e tabela RANK idênticos ao X15; "
-                "LP confirmado nesta sessão, resultado final ainda não verificado."
-                if compatible else
-                "Projeção se vencer por LP; resultado e mapeamento RAM "
-                "não verificados no jogo."))
+            if experimental:
+                status=("Leitura experimental do registro antigo: LP conferidos e "
+                        "duas alterações de contadores observadas. A pontuação "
+                        "é provisória e a ISO no ePSXe não foi confirmada.")
+            elif observed_adjustment==2:
+                status=("Marcador de vitória por LP (+2) detectado em duas "
+                        "leituras estáveis do X15; não é o score oficial do jogo.")
+            elif observed_adjustment==-40:
+                status=("Marcador de deck-out (-40) detectado em duas "
+                        "leituras estáveis do X15; não é o score oficial do jogo.")
+            elif compatible:
+                status=("SLUS e tabela RANK idênticos ao X15; LP confirmado, "
+                        "mas resultado final do jogo ainda não verificado.")
+            else:
+                status=("Projeção se vencer por LP; resultado e mapeamento RAM "
+                        "ainda exigem comparação no jogo.")
             if not experimental:
                 self._rank_last_snapshot={
-                "rom_sha256":sha,"pid":pid,"monotonic_at":monotonic(),
-                "score":result["score"],"category":display_category,
-                "counters":visible_counters.copy(),
+                    "rom_sha256":sha,"pid":pid,"monotonic_at":monotonic(),
+                    "score":result["score"],"category":display_category,
+                    "counters":visible_counters.copy(),
                 }
             else:
                 # Projeção experimental NUNCA pode ser usada como evidência
