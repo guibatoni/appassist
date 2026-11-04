@@ -52,7 +52,8 @@ def decode_rank_record(raw: bytes) -> dict | None:
         return None
     lp=int.from_bytes(raw[20:22],"little",signed=True)
     cards_used=int.from_bytes(raw[24:25],"little",signed=True)
-    if not 0<=lp<=32766 or not 0<=cards_used<=80:
+    # Mesmos filtros de plausibilidade do Assistente X15 v10.5.
+    if not 0<=lp<=32766 or not 0<=cards_used<=40:
         return None
     fields={
         "turns":raw[1],
@@ -66,8 +67,14 @@ def decode_rank_record(raw: bytes) -> dict | None:
         "remaining_lp":lp,
         "cards_used":cards_used,
     }
-    # Mod desconhecido e bytes incoerentes não devem virar pontuação.
-    if fields["turns"]>100:
+    # Apenas leituras coerentes com uma estrutura de duelo real.
+    # Esses limites filtram RAM não inicializada, mas NÃO validam endereço.
+    if fields["turns"]>80 or any(fields[name]>60 for name in (
+            "effective_attacks","defense_wins","face_down","spells",
+            "traps","fusions","equips")):
+        return None
+    if lp==0 and not any(fields[name] for name in (
+            "turns","fusions","effective_attacks","face_down","cards_used")):
         return None
     return fields
 
