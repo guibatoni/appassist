@@ -176,6 +176,44 @@ class CapturedRankTests(unittest.TestCase):
         self.bridge.record_duel_result(1,"Z-POW",1,101,"lp",captured["captureId"])
         self.assertEqual(self.bridge.get_rank_comparison()["matches"],1)
 
+    def test_non_x15_compatible_binary_uses_original_ranks_not_x15_and_ignores_marker(self):
+        """Classificação é por SHA da ISO; mesmo motor de score não autoriza Z."""
+        from fm_rank_tables import (KNOWN_X15_SLUS_SHA256,
+                                    KNOWN_X15_TABLE_SHA256,LEGACY_OFFSET,STRIDE)
+        from dueltrace_rank_profile_live import x15_compatible_runtime
+        sha="b"*64
+        profile=fake_profile(sha)
+        profile["exe_sha256"]=KNOWN_X15_SLUS_SHA256
+        profile["rank_points"].update({
+            "available":True,"structure_verified":True,
+            "table_sha256":KNOWN_X15_TABLE_SHA256,
+            "first_offset":LEGACY_OFFSET,"repeat_stride":STRIDE,
+        })
+        self.assertTrue(x15_compatible_runtime(profile))
+        other_path=self.home/"profiles"/sha[:16]/"profile.json"
+        atomic_json(other_path,profile)
+        entries=self.catalog.list()
+        entry={
+            "sha256":sha,"source_path":str(self.home/"compatible.iso"),
+            "file_name":"Remaster X15 nome parecido mas SHA diferente",
+            "profile_path":str(other_path),
+            "level":"conhecido_validado","approved":True,
+            "features":supported_for_runtime(profile),
+        }
+        atomic_json(self.catalog.registry_file,{"schema":1,"entries":entries+[entry]})
+        self.bridge.activate_mod(sha)
+        self.reader.return_value["result_adjustment"]=-40
+        self.bridge.confirm_rank_lp(8000)
+        initial=self.bridge.get_rank()
+        self.assertEqual(initial["score"],101)  # não aplicou byte X15 em outro mod
+        self.assertEqual(initial["category"],"S-POW")
+        self.assertEqual(initial["rankSystem"],"classic")
+        self.assertEqual(initial["victorySource"],"projected_lp")
+        self.counters["spells"]=7
+        later=self.bridge.get_rank()
+        self.assertEqual(later["score"],87)
+        self.assertEqual(later["category"],"A-POW")
+
     def test_unsupported_mod_cannot_capture(self):
         other="a"*64
         profile=fake_profile(other)
