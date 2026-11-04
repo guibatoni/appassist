@@ -53,9 +53,14 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     opponent_ok = len(opponents) == 39 and opp_ids == list(range(1, 40)) and all(
         r.get("nome", "").strip() for r in opponents
     )
-    weights_ok = (len(checks) == 117 and all(
+    # O formato das matrizes pode ser estruturalmente coerente mesmo quando
+    # as cartas e os oponentes da ISO ainda não foram identificados.
+    # Não expor esses IDs como drops confiáveis para o cliente: IDs e nomes
+    # podem ter sido remapeados e os grupos de RANK podem ter outra ordem.
+    weights_structural_ok = (len(checks) == 117 and all(
         integer(r.get("peso_total")) == 2048 for r in checks
     ) and len(drops) > 0)
+    weights_ok = weights_structural_ok and card_ok and opponent_ok
 
     # Códigos de tipo extraídos do executável; não inferimos por nome.
     # Textos de efeito são opcionais e externos quando o mod os fornece.
@@ -119,7 +124,10 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     status = {
         "cartas": "verificado" if card_ok else "pendente",
         "oponentes": "verificado" if opponent_ok else "pendente",
-        "tabelas_drops": "verificado" if weights_ok else "pendente",
+        "tabelas_drops": (
+            "verificado_estruturalmente" if weights_ok else
+            "matrizes_candidatas_sem_identidade" if weights_structural_ok else
+            "pendente"),
         "nomes_dos_ranks": "verificado" if known_x15 else "padrao_original_presumido",
         "regras_de_pontuacao": "verificado_x15" if known_x15 else "não_extraídas",
         "fusoes": "não_extraídas",
@@ -160,7 +168,17 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
                              "opponent_names_source": result.get("executavel"),
                              "table_count": len(checks) if weights_ok else 0,
                              "weight_total": 2048 if weights_ok else None,
-                             "rank_label_verified": bool(known_x15 and weights_ok)},
+                             "rank_label_verified": bool(known_x15 and weights_ok),
+                             "candidate_table_count": len(checks) if weights_structural_ok else 0,
+                             "candidate_entry_count": len(drops) if weights_structural_ok else 0,
+                             "candidate_weight_total": 2048 if weights_structural_ok else None,
+                             "candidate_status": (
+                                 "nao_verificados_sem_cartas_e_oponentes"
+                                 if weights_structural_ok and not weights_ok else
+                                 "associados_catalogo" if weights_ok else
+                                 "estrutura_nao_reconhecida"),
+                             "labels_unknown": not known_x15,
+                             "in_game_verified":False},
         "drop_group_labels": groups if weights_ok else [],
         "art_root": str((extracted / "artes_722").resolve()) if status["artes"] == "extraídas" else None,
         "cards": catalog,
@@ -194,13 +212,19 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "fusion_recipes": [],
         "notes": [
             "IDs do mesmo jogo podem ter nomes diferentes em outros mods.",
-            "Drops foram validados apenas como grupos brutos quando o rank não é conhecido.",
+            "As tabelas de drops podem ter pesos coerentes, mas não identificam cartas ou oponentes por si só.",
+            "Grupos de RANK e resultados reais precisam ser confirmados na ISO ativa.",
             "Fusões não são herdadas de outros mods nem presumidas iguais.",
             "Imagem original nunca é alterada; as artes permanecem em pasta local.",
         ],
     }
     for warning in effect_warnings:
         payload["notes"].append(warning)
+    if weights_structural_ok and not weights_ok:
+        payload["notes"].append(
+            f"{len(checks)} matrizes e {len(drops)} entradas de drops candidatas "
+            "foram decodificadas; catálogo de cartas/oponentes não verificado. "
+            "Dados provisórios não disponíveis para uso em Drops ou RANK.")
     if effects_info["count"]:
         payload["notes"].append("Textos de efeitos extraídos de fonte declarada no ISO ou manifesto vinculado ao SHA; sua execução no jogo NÃO foi confirmada.")
     if not all([card_ok, opponent_ok, weights_ok]):
