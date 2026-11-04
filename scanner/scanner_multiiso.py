@@ -6,6 +6,7 @@ Não baixa nem distribui imagens de jogos. Para formatos desconhecidos, não inv
 from __future__ import annotations
 import argparse, csv, hashlib, json, re, struct, sys, unicodedata
 from pathlib import Path
+from dueltrace_layout_discovery import discover_disc_layout, candidate_files_for_decoder
 
 OPP_COUNT=39
 CARD_COUNT=722
@@ -431,6 +432,10 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['arquivos_discos']=[{'nome':n,'lba':lba,'tamanho':sz} for n,(lba,sz) in sorted(disc.files.items())]
         info['system_cnf']=inspect_system_cnf(disc)
         info['assinaturas_arquivos']=inspect_file_signatures(disc)
+        # Independente de nomes e tamanho exato: verifica cabeçalho PS-X e
+        # sondas estruturais limitadas nos contêineres grandes.
+        info['layout_discovery']=discover_disc_layout(
+            disc,boot_target=info['system_cnf'].get('boot_target'))
         # SLUS_014.11 pode estar na raiz ou dentro da pasta DATA.
         sl_names=[n for n in disc.files if re.fullmatch(
             r'(?:SLUS|SCUS|SLES|SCES|SLPS|SCPS|SLPM|SLED|SCED|SLKA)[A-Z0-9_.-]+',
@@ -449,19 +454,32 @@ def process(path,output,with_art=False,digest=None,progress=None):
             # Apenas tentar um arquivo indicado explicitamente pelo sistema
             # de boot; a extração ainda depende do parser de nomes/atributos.
             sl_names=[boot_candidate]+sl_names
+        for name in candidate_files_for_decoder(
+                info['layout_discovery'],role="executavel"):
+            if name not in sl_names:
+                sl_names.append(name)
         wa_names,wa_source,size_matches=select_wa_candidates(disc.files)
+        if not wa_names:
+            structural=candidate_files_for_decoder(
+                info['layout_discovery'],role="recursos")
+            if structural:
+                wa_names=structural
+                wa_source="matrizes_2048_candidatas"
         info['wa_selecao_metodo']=wa_source
         info['wa_candidatos_por_tamanho']=size_matches[:12]
         # Nome alterado é SÓ hipótese: os decoders ainda devem validar
         # dados/offsets antes de habilitar cartas, artes e drops.
-        info['wa_nome_alternativo_nao_validado']=(
-            wa_source=="tamanho_identico_nao_validado")
+        info['wa_nome_alternativo_nao_validado']=wa_source in (
+            "tamanho_identico_nao_validado","matrizes_2048_candidatas")
         # Registrar candidatos alternativos para análise, mas não assumir
         # automaticamente que outro .MRG contém as tabelas de Forbidden Memories.
         info['executaveis_candidatos']=sl_names[:20]
         info['wa_candidatos']=list(dict.fromkeys(
             [n for n in sorted(disc.files)
-             if 'WA_MRG' in n or n.endswith('.MRG')]+size_matches))[:20]
+             if 'WA_MRG' in n or n.endswith('.MRG')]
+            +size_matches
+            +[row["name"] for row in info["layout_discovery"]["resources"]
+              if row.get("dropArrayMatches",0)>=1]))[:20]
         if not sl_names or not wa_names:
             hint=('BOOT aponta para arquivo ausente do índice ISO9660.'
                   if boot_candidate and boot_candidate not in disc.files else
@@ -508,9 +526,10 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['wa_lido_integralmente']=len(wa)==wa_size
         if info['wa_nome_alternativo_nao_validado']:
             info['wa_identificacao_obs']=(
-                "Contêiner sem nome WA_MRG selecionado SOMENTE por tamanho. "
-                "O conteúdo não está validado; o leitor deve confirmar tabelas "
-                "antes de atribuir qualquer recurso a esta ISO.")
+                "Contêiner sem nome WA_MRG selecionado por tamanho ou "
+                "por matrizes candidatas no offset antigo. Isso NÃO valida "
+                "drops, artes, cartas ou fusões; a extração continua sob "
+                "as verificações estruturais completas.")
         from fm_rank_tables import extract_rank_table
         info['rank_analysis']=extract_rank_table(
             wa,slus=sl,rom_sha256=info['sha256'],known_rom_sha256=X15_SHA)
