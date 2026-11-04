@@ -158,6 +158,37 @@ def decode_names(sl):
         return [],[],f'Codificação diferente/ambígua: {n_good}/39 nomes, {card_good}/722 cartas plausíveis'
     return opponents,cards,f'{n_good}/39 nomes, {card_good}/722 cartas decodificados'
 
+def select_known_executable_layout(disc, candidates, *, max_candidates=8):
+    """Testa executáveis existentes; nunca adivinha/valida offsets novos.
+
+    Sempre começa pela prioridade tradicional. Só muda de executável se
+    `decode_names` reconhecer o catálogo completo pelo mesmo critério usado
+    antes. Lê no máximo oito arquivos de até 8 MiB para reduzir custo.
+    """
+    if not candidates:
+        raise ValueError("Nenhum executável candidato.")
+    tried=[]
+    chosen=candidates[0]
+    sl=disc.get(chosen)
+    opponents,cards,status=decode_names(sl)
+    tried.append({"name":chosen,"status":status,"recognized":bool(opponents and cards)})
+    if opponents and cards:
+        return chosen,sl,opponents,cards,status,tried
+    for alternative in candidates[1:max_candidates]:
+        size=disc.files.get(alternative,(None,0))[1]
+        if type(size) is not int or not 0<size<=8*1024*1024:
+            tried.append({"name":alternative,"status":"tamanho fora do limite de análise",
+                          "recognized":False})
+            continue
+        contender=disc.get(alternative)
+        opp2,cards2,status2=decode_names(contender)
+        tried.append({"name":alternative,"status":status2,
+                      "recognized":bool(opp2 and cards2)})
+        if opp2 and cards2:
+            return alternative,contender,opp2,cards2,status2,tried
+    return chosen,sl,opponents,cards,status,tried
+
+
 def decode_drops(wa,rank_names=None):
     # A interpretação dos três grupos de drops varia por mod. Somente X15
     # tem os nomes Z-POW/S-POW/S-TEC confirmados nesta base.
@@ -285,8 +316,11 @@ def process(path,output,with_art=False,digest=None,progress=None):
             ((CARD_COUNT-1)*WA_CARD_SECTORS+WA_CARD_SECTOR_START)*2048+0x2840,
             7475*2048+0x16D0+39*3*2048+200,
         )
-        if progress:progress("Lendo executável do jogo",0,1)
-        sl=disc.get(sl_names[0])
+        if progress:progress("Lendo executáveis candidatos do jogo",0,1)
+        selected_exe,sl,opponents,cards,nomes_status,exe_checks=(
+            select_known_executable_layout(disc,sl_names))
+        info['testes_executaveis']=exe_checks
+        info['executavel_selecionado_por_catalogo']=selected_exe!=sl_names[0]
         if progress:progress("Lendo WA_MRG completo para localizar RANK",0,1)
         wa_size=disc.files[wa_names[0]][1]
         if wa_size>96*1024*1024:
@@ -297,7 +331,7 @@ def process(path,output,with_art=False,digest=None,progress=None):
         # um scan sem artes ignorava os últimos 216 bytes do bloco conhecido
         # e nunca conseguiria identificar tabelas realocadas.
         wa=disc.get(wa_names[0])
-        info['executavel']=sl_names[0]
+        info['executavel']=selected_exe
         info['hash_executavel']=hashlib.sha256(sl).hexdigest()
         from fm_rank_mips_evidence import inspect_mips_rank_routines
         info['rank_mips_evidence']=inspect_mips_rank_routines(sl)
@@ -312,10 +346,9 @@ def process(path,output,with_art=False,digest=None,progress=None):
             wa,slus=sl,rom_sha256=info['sha256'],known_rom_sha256=X15_SHA)
         info['versao_conhecida']='Remaster X15 1.2.1' if info['sha256']==X15_SHA else 'desconhecida — não atribuir dados X15'
         if progress:progress("Decodificando cartas e adversários",0,1)
-        opponents,cards,nomes_status=decode_names(sl)
         info['nomes_status']=nomes_status
         from fm_card_text import extract_descriptions
-        descriptions,desc_state=extract_descriptions(sl,exe_name=sl_names[0])
+        descriptions,desc_state=extract_descriptions(sl,exe_name=selected_exe)
         info['descricoes_slus']=desc_state
         if cards and desc_state.get('valid'):
             for card in cards:
