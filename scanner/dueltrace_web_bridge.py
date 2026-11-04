@@ -310,6 +310,16 @@ class DueltraceWebBridge:
                 "score":None,"category":None,"counters":None}
         return sample,sha,None
 
+    def calculate_spoils(self, counters, victory):
+        """Calculadora de spoils por entrada manual, sem leituras RAM nem bindings."""
+        with self._lock:
+            active,_entry,_profile=self._active()
+            sha=active.get("sha256")
+            # Só apresenta classificação por ISO realmente selecionada.
+            if type(sha) is not str or not re.fullmatch(r"[0-9a-f]{64}",sha):
+                raise ValueError("Selecione uma ISO antes de calcular o RANK.")
+            return calculate_manual_spoils(counters,victory,sha)
+
     def get_rank(self):
         """Sem pontuação até o usuário validar os LP do duelo atual."""
         with self._lock:
