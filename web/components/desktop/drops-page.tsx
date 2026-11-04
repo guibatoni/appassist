@@ -35,6 +35,21 @@ function DropCard({row,sha}:{row:DropRow;sha:string|null}) {
   </article>
 }
 
+const RANK_COMPARISON_LABELS: Record<string,string> = {
+  match: "Pontos e RANK iguais",
+  score_mismatch: "Pontos diferentes",
+  rank_mismatch: "RANK diferente",
+  score_and_rank_mismatch: "Pontos e RANK diferentes",
+  rank_only_match: "RANK igual (sem pontos)",
+  rank_only_mismatch: "RANK diferente (sem pontos)",
+  not_lp_win: "Vitória não comparável por LP",
+  missing_prediction: "Sem previsão capturada",
+  invalid_snapshot: "Captura inválida",
+  observed_result_conflict: "Resultado observado contraditório",
+  invalid_observation: "Observação inválida",
+  duplicate_duel: "Duelo duplicado",
+}
+
 const POINT_LABELS: Record<string,string> = {
   turns:"Turnos", effective_attacks:"Ataques efetivos", defense_wins:"Vitórias em defesa",
   face_down:"Cartas viradas", spells:"Magias", traps:"Armadilhas",
@@ -346,7 +361,7 @@ export function DropsPage({sha}:{sha:string|null}) {
           <p className="mt-1 text-muted">Capturas sem pontuação observada: {rankComparison.rank_only_matches??0} letra(s) coincidente(s), {rankComparison.rank_only_mismatches??0} divergente(s). Sem previsão: {rankComparison.missing_prediction??0}. Outras vitórias: {rankComparison.not_lp_win??0}.</p>
           {rankComparison.cases.slice(-5).reverse().map((item,i)=>
             <p key={item.duel_id??String(i)} className="mt-1 text-muted">
-              {item.status}: previsto {item.projected_score??"—"} / {item.projected_rank??"—"} · observado {item.observed_points??"—"} / {item.observed_rank??"—"}
+              {RANK_COMPARISON_LABELS[item.status]??"Revisão necessária"}: previsto {item.projected_score??"—"} / {item.projected_rank??"—"} · observado {item.observed_points??"—"} / {item.observed_rank??"—"}
               {item.score_delta!==null?` · diferença ${item.score_delta>0?"+":""}${item.score_delta}`:""}
             </p>)}
           <p className="mt-2 text-gold">Coincidência em relatos manuais não comprova execução MIPS ou identidade da ISO carregada no ePSXe.</p>
