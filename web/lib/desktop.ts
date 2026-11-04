@@ -49,6 +49,21 @@ export type CardMatchRow = {
   score: number | null
 }
 
+export type CardAIMatchReport = {
+  status: string
+  model?: string
+  analysed: number
+  revisoes: Array<{
+    sourceId: number
+    targetId: number
+    assessment: "manter_candidata" | "revisar" | "descartar"
+    reason: string
+  }>
+  verifiedInGame: false
+  updatedProfiles?: false
+  note: string
+}
+
 export type CardMatchResult = {
   sourceSha: string
   targetSha: string
@@ -387,6 +402,7 @@ export interface DesktopAPI {
   install_preview_update(): Promise<{started: boolean; status: string; version?: string}>
   install_portable_update(): Promise<{started: boolean; status: string; version?: string}>
   compare_mod_cards(sourceSha: string, targetSha: string, query?: string, offset?: number, limit?: number, confidence?: string): Promise<CardMatchResult>
+  review_card_matches(sourceSha: string, targetSha: string): Promise<CardAIMatchReport>
   get_state(): Promise<DesktopState>
   get_hand(): Promise<HandState>
   get_rank(): Promise<RankState>
@@ -417,6 +433,7 @@ interface ProtectedNativeAPI {
   install_preview_update(token: string): Promise<{started: boolean; status: string; version?: string}>
   install_portable_update(token: string): Promise<{started: boolean; status: string; version?: string}>
   compare_mod_cards(token: string, sourceSha: string, targetSha: string, query?: string, offset?: number, limit?: number, confidence?: string): Promise<CardMatchResult>
+  review_card_matches(token: string, sourceSha: string, targetSha: string): Promise<CardAIMatchReport>
   get_state(token: string): Promise<DesktopState>
   get_hand(token: string): Promise<HandState>
   get_rank(token: string): Promise<RankState>
@@ -460,6 +477,7 @@ export function desktopApi(): DesktopAPI | null {
     install_signed_update: () => native.install_signed_update(token),
     install_preview_update: () => native.install_preview_update(token),
     install_portable_update: () => native.install_portable_update(token),
+    review_card_matches: (sourceSha,targetSha) => native.review_card_matches(token,sourceSha,targetSha),
     compare_mod_cards: (sourceSha,targetSha,query,offset,limit,confidence) =>
       native.compare_mod_cards(token,sourceSha,targetSha,query,offset,limit,confidence),
     get_state: () => native.get_state(token),
