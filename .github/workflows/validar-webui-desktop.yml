@@ -24,6 +24,7 @@ on:
       - feature/dueltrace-v083-updater-rank-capture
       - feature/dueltrace-v084-rank-diagnostic
       - feature/dueltrace-v085-preview-auto-update
+      - 'feature/dueltrace-v*'
     paths:
       - 'web/**'
       - 'scanner/dueltrace_web_*.py'
