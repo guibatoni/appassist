@@ -19,9 +19,10 @@ from ia_local import DEFAULT_MODEL, analyse_with_local_ai, save_suggestion, mini
 from investigador_iso import investigate
 from fusion_autopromote import import_structural_fusions
 from effects_audit import audit_effect_sources
+from dueltrace_mod_diagnostic import diagnose_layout
 
 MODEL_LIST_URL = "http://127.0.0.1:11434/api/tags"
-REPORT_SCHEMA = 3
+REPORT_SCHEMA = 4
 MAX_FILE_RECORDS = 80
 
 
@@ -196,6 +197,12 @@ class MultiModIntelligence:
         report["profile_digest"] = local_report_fingerprint(entry,profile)
         report["hash_rom"] = sha
         report["inventory"] = inventory_from_profile(profile)
+        # Não prometer que o LLM extrai dados binários. Relatar claramente
+        # o motivo do parser rejeitar nomes, drops, artes e executáveis.
+        scan_dir=profile.get("scan_result_dir")
+        scan_info=(load_json(Path(scan_dir)/"relatorio.json",{})
+                   if isinstance(scan_dir,str) and scan_dir else {})
+        report["scan_diagnostic"]=diagnose_layout(scan_info,profile)
         report["analysis_notice"] = (
             "Ollama não valida fusões. Somente sete bancos idênticos e "
             "sem conflitos permitem importar receitas com status estrutural; "
