@@ -19,6 +19,7 @@ from auto_mods import ModCatalog, load_json, atomic_json
 from mod_autopilot import ModAutopilot, profile_summary
 from dueltrace_intelligence import MultiModIntelligence
 from dueltrace_card_matcher import compare_profiles
+from dueltrace_card_match_ai import review_card_candidates
 from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
                                  suggest_hand_pairs)
 from dueltrace_fusion_planner import plan_fusion_chains
@@ -724,6 +725,20 @@ class DueltraceWebBridge:
                 "status":data["status"],
                 "verifiedInGame":False,
             }
+
+    def review_card_matches(self, source_sha, target_sha):
+        """Ollama revisa apenas candidatas existentes, não recebe ISO nem PNG.
+
+        Nunca aceita novos IDs produzidos pelo LLM e não promove resultados
+        a correspondências verificadas ou alterações de perfil.
+        """
+        self.compare_mod_cards(source_sha,target_sha,limit=1)
+        with self._lock:
+            data=self._cross_mod_cards_cache
+            if not isinstance(data,dict):
+                raise ValueError("Execute primeiro a comparação dos perfis.")
+            evidence={**data,"rows":[dict(row) for row in data["rows"]]}
+        return review_card_candidates(evidence)
 
     def get_drops(self, opponent_id=0, group="", query="", offset=0, limit=36,
                   sort="id", card_type="", rank=""):
