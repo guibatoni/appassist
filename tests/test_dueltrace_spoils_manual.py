@@ -58,6 +58,68 @@ class SpoilsManualTests(unittest.TestCase):
         changed=calculate_manual_spoils(row,"lp",X15_SHA)["score"]
         self.assertEqual(expected-changed,2)
 
+    def test_real_epsxe_b_pow_duel_screenshot_2026_11_04(self):
+        """Dados das três telas Results of Duel: RANK B-POW real.
+
+        Batoni: 5 turnos, 13 cartas usadas, 9500 LP, 1 ataque efetivo,
+        0 vitórias defesa, 3 face-down, 0 magias, 0 traps,
+        3 fusões, 0 equips. A tela mostra B-POW (não score numérico).
+        A projeção anterior do DUELTRACE foi 76, classificação B-POW.
+        """
+        counters={
+            "turns":5,"effective_attacks":1,"defense_wins":0,
+            "face_down":3,"spells":0,"traps":0,
+            "cards_used":13,"remaining_lp":9500,"fusions":3,"equips":0,
+        }
+        calculated=calculate_manual_spoils(counters,"lp",CLASSIC)
+        self.assertEqual(calculated["breakdown"],{
+            "turns":8, "effective_attacks":4, "defense_wins":0,
+            "face_down":-2, "spells":2, "traps":2,
+            "cards_used":0, "remaining_lp":6, "fusions":0, "equips":4,
+        })
+        self.assertEqual(sum(calculated["breakdown"].values()),24)
+        self.assertEqual(calculated["score"],76)  # 50 base + 2 LP + 24
+        self.assertEqual(calculated["category"],"B-POW")
+        self.assertEqual(calculated["rankSystem"],"classic")
+        self.assertFalse(calculated["verifiedInEmulator"])
+        x15=calculate_manual_spoils(counters,"lp",X15_SHA)
+        self.assertEqual(x15["score"],76)
+        self.assertEqual(x15["category"],"S-POW")
+
+    def test_real_epsxe_b_tec_duel_screenshot_2026_11_04(self):
+        """Novo duelo real: game mostra TEC B Rank, DUELTRACE mostra 29 B-TEC.
+
+        Results of Duel: 25 turnos, 40 cartas usadas, 10800 LP,
+        2 ataques efetivos, 0 vitórias defesa, 13 face-down, 14 fusões,
+        1 equip, 1 change-field, 3 pure magic, 2 traps.
+        Change-field não é um dos dez critérios pontuados separadamente.
+        A tela do jogo confirma B-TEC; não fornece o score numérico.
+        """
+        counters={
+            "turns":25, "effective_attacks":2, "defense_wins":0,
+            "face_down":13, "spells":3, "traps":2,
+            "cards_used":40, "remaining_lp":10800,
+            "fusions":14, "equips":1,
+        }
+        predicted=calculate_manual_spoils(counters,"lp",CLASSIC)
+        self.assertEqual(predicted["breakdown"],{
+            "turns":0, "effective_attacks":2, "defense_wins":0,
+            "face_down":-4, "spells":-4, "traps":-8,
+            "cards_used":-7, "remaining_lp":6,
+            "fusions":-8, "equips":0,
+        })
+        self.assertEqual(sum(predicted["breakdown"].values()),-23)
+        self.assertEqual(predicted["basePoints"],50)
+        self.assertEqual(predicted["victoryBonus"],2)
+        self.assertEqual(predicted["score"],29)
+        self.assertEqual(predicted["category"],"B-TEC")
+        self.assertEqual(predicted["rankSystem"],"classic")
+        self.assertFalse(predicted["verifiedInEmulator"])
+        # Mesmo score numérico, classificação X15 é específica da ISO X15.
+        x15=calculate_manual_spoils(counters,"lp",X15_SHA)
+        self.assertEqual(x15["score"],29)
+        self.assertEqual(x15["category"],"S-TEC")
+
     def test_rejects_invalid_or_missing_metrics_and_bonuses(self):
         for change in ({"turns":-1},{"turns":True},{"cards_used":256},
                        {"remaining_lp":32767},{"remaining_lp":1.5}):

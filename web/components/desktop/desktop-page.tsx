@@ -50,7 +50,7 @@ function Empty({children}:{children:React.ReactNode}) {
 
 function RankPanel({sha}:{sha:string|null}) {
   const [rank,setRank]=useState<RankState|null>(null)
-  const [lp,setLp]=useState("")
+  const [lp,setLp]=useState<string|null>(null)
   const [busy,setBusy]=useState(false)
   const [diagnostic,setDiagnostic]=useState<RankDiagnostic|null>(null)
   const [diagnosing,setDiagnosing]=useState(false)
@@ -64,7 +64,7 @@ function RankPanel({sha}:{sha:string|null}) {
     setDiagnostic(null)
     setFeedback(null)
     setCaptured(null)
-    setLp("")
+    setLp(null)
     const read=async()=>{
       const api=desktopApi()
       if(!api||reading)return
@@ -83,14 +83,22 @@ function RankPanel({sha}:{sha:string|null}) {
     return()=>{mounted=false;window.clearInterval(interval)}
   },[sha])
 
+  // O LP lido da RAM já é o valor inicial do campo. Na v0.9.0 ele
+  // era só placeholder e o botão ficava desativado, mesmo com 10000.
+  // O usuário continua comparando o valor com o HUD antes de confirmar.
+  const effectiveLp=lp??(typeof rank?.candidateLp==="number"?String(rank.candidateLp):"")
   const confirmLp=async()=>{
-    const numeric=Number(lp)
-    if(!/^\d{1,5}$/.test(lp)||!Number.isInteger(numeric)||numeric<0||numeric>32766)return
+    const numeric=Number(effectiveLp)
+    if(!/^\d{1,5}$/.test(effectiveLp)||!Number.isInteger(numeric)||numeric<0||numeric>32766)return
     const api=desktopApi()
     if(!api)return
     setBusy(true)
     setFeedback(null)
-    try{setRank(await api.confirm_rank_lp(numeric))}
+    try{
+      const confirmed=await api.confirm_rank_lp(numeric)
+      setRank(confirmed)
+      if(confirmed.state==="lp_mismatch")setLp(null)
+    }
     catch(e){setFeedback(e instanceof Error?e.message:"Falha ao confirmar LP.")}
     finally{setBusy(false)}
   }
@@ -156,7 +164,7 @@ function RankPanel({sha}:{sha:string|null}) {
         {ready?rank.score:"—"} <span className="text-sm font-normal text-muted">pts</span>
       </p>
       <p className="mt-1 font-display text-xl font-bold text-gold">
-        {ready?rank.category:"RANK indisponível"}
+        {ready?rank.category:needsLp?"Confirme os LP":observing?"Validando contadores":"RANK indisponível"}
       </p>
       <p className="mt-1 text-[11px] text-muted">
         {rankSystem} · {ready?(experimental?"RAM antiga em teste; não validada":"Estimativa, não resultado oficial"):"Sem projeção confiável"}
@@ -169,14 +177,17 @@ function RankPanel({sha}:{sha:string|null}) {
         <span>Fusões <strong className="text-white">{rank.counters.fusions??"—"}</strong></span>
       </div>}
     {needsLp&&<div className="mt-3 space-y-2">
-      <p className="text-xs text-muted">Informe os LP exibidos no jogo para conferir a leitura.</p>
+      <p className="text-xs text-muted">
+        Confira se o valor detectado corresponde aos LP exibidos no ePSXe.
+        Se estiver correto, clique em Confirmar. As próximas ações serão lidas automaticamente.
+      </p>
       <div className="flex gap-2">
         <input aria-label="LP exibidos no jogo" type="number" min={0} max={32766}
-          placeholder={String(rank?.candidateLp??"8000")} value={lp}
+          placeholder="LP do jogo" value={effectiveLp}
           onChange={e=>setLp(e.target.value)}
           className="field w-full min-w-0 rounded-md px-2 py-2 text-sm"/>
         <button type="button" className="btn-gold shrink-0 disabled:opacity-40"
-          disabled={!lp||busy} onClick={()=>void confirmLp()}>Confirmar</button>
+          disabled={!/^\d{1,5}$/.test(effectiveLp)||busy} onClick={()=>void confirmLp()}>Confirmar LP</button>
       </div>
     </div>}
     {observing&&

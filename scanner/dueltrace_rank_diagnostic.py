@@ -59,8 +59,8 @@ def diagnose_rank_profile(sha: str | None, profile: dict | None) -> dict:
         code,reason,action = (
             "rank_table_missing",
             "A tabela de pontos RANK não foi reconhecida no perfil desta ISO.",
-            "Em Mods, use 'Ler WA_MRG + SLUS novamente'. Se continuar ausente, "
-            "essa versão ainda exige investigação da ISO."
+            "Teste o leitor legado na Central de Duelo: confira os LP e "
+            "observe se os contadores mudam. A leitura é experimental."
         )
     elif binding_present:
         code,reason,action = (
@@ -74,16 +74,16 @@ def diagnose_rank_profile(sha: str | None, profile: dict | None) -> dict:
             "mips_candidates_only",
             "A tabela e candidatos MIPS foram localizados, porém não existe "
             "mapeamento RAM validado por duelos reais.",
-            "Registre RANKs finais na aba Drops e investigue traces MIPS do "
-            "mesmo mod antes de habilitar previsões."
+            "Compare o RANK calculado com o resultado mostrado no ePSXe. "
+            "O modo experimental não valida um binding por si só."
         )
     else:
         code,reason,action = (
             "ram_binding_missing",
             "A tabela RANK foi encontrada, mas não há mapeamento da RAM "
             "e rotina de execução comprovados para este mod.",
-            "Registre o resultado final na aba Drops e reúna evidências "
-            "independentes do duelo e da execução MIPS."
+            "Teste a leitura legada em um duelo e compare com a tela final. "
+            "É necessário validar a memória para liberar um binding."
         )
     return {
         "readyForLiveRead":bool(ready),

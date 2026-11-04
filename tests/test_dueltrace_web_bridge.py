@@ -282,10 +282,87 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(bad["category"],"A-POW")
         self.assertNotEqual(bad["category"],"Z-POW")
         counters["turns"]=0
+        counters["spells"]=0
         restarted=self.bridge.get_rank()
-        self.assertEqual(restarted["state"],"needs_lp_confirmation")
-        self.assertIsNone(self.bridge._rank_legacy_trial)
+        self.assertEqual(restarted["state"],"needs_ram_validation")
+        self.assertEqual(restarted["validationProgress"],0)
+        self.assertIsNotNone(self.bridge._rank_legacy_trial)
         reader.assert_called()
+
+    def test_experimental_rank_survives_single_same_pid_frame_dropout(self):
+        counters={"turns":0,"effective_attacks":0,"defense_wins":0,
+                  "face_down":0,"spells":0,"traps":0,"cards_used":0,
+                  "remaining_lp":10000,"fusions":0,"equips":0}
+        reader=Mock(return_value={
+            "ready":True,"status":"Registro do duelo","pid":1234,
+            "counters":counters})
+        self.bridge._rank_reader=reader
+        self.assertEqual(self.bridge.get_rank()["candidateLp"],10000)
+        armed=self.bridge.confirm_rank_lp(10000)
+        self.assertEqual(armed["validationProgress"],0)
+        counters["spells"]=1
+        self.assertEqual(self.bridge.get_rank()["validationProgress"],1)
+        reader.return_value={"ready":False,"status":"Um frame de RAM instável",
+                             "pid":1234,"counters":None}
+        failed=self.bridge.get_rank()
+        self.assertEqual(failed["state"],"unavailable")
+        self.assertIsNone(failed["score"])
+        self.assertEqual(failed["sourceMode"],"experimental")
+        self.assertIsNotNone(self.bridge._rank_legacy_trial)
+        reader.return_value={"ready":True,"pid":1234,"counters":counters}
+        counters["turns"]=1
+        resumed=self.bridge.get_rank()
+        self.assertTrue(resumed["ready"])
+        self.assertEqual(resumed["category"],"S-POW")
+        self.assertEqual(resumed["rankSystem"],"classic")
+        self.assertEqual(resumed["sourceMode"],"experimental")
+
+    def test_experimental_next_duel_reuses_only_same_pid_sha_and_confirmed_lp(self):
+        counters={"turns":3,"effective_attacks":0,"defense_wins":0,
+                  "face_down":0,"spells":0,"traps":0,"cards_used":3,
+                  "remaining_lp":10000,"fusions":0,"equips":0}
+        reader=Mock(return_value={
+            "ready":True,"pid":1234,"counters":counters})
+        self.bridge._rank_reader=reader
+        self.bridge.confirm_rank_lp(10000)
+        self.assertEqual(self.bridge.get_rank()["state"],"needs_ram_validation")
+        self.assertEqual(self.bridge._rank_lp_session["lp"],10000)
+        # Na partida seguinte o registro de ações reinicia. O leitor reaproveita
+        # a conferência do valor inicial só nesta mesma sessão e mesmo PID.
+        counters["turns"]=0
+        counters["cards_used"]=0
+        followup=self.bridge.get_rank()
+        self.assertEqual(followup["state"],"needs_ram_validation")
+        self.assertEqual(followup["validationProgress"],0)
+        self.assertIsNotNone(self.bridge._rank_lp_session)
+        counters["spells"]=1
+        self.assertEqual(self.bridge.get_rank()["validationProgress"],1)
+        counters["turns"]=1
+        ready=self.bridge.get_rank()
+        self.assertTrue(ready["ready"])
+        self.assertEqual(ready["rankSystem"],"classic")
+        self.assertEqual(ready["sourceMode"],"experimental")
+        self.assertNotEqual(ready["category"],"Z-POW")
+
+    def test_changed_starting_lp_or_process_never_auto_confirms(self):
+        counters={"turns":3,"effective_attacks":0,"defense_wins":0,
+                  "face_down":0,"spells":0,"traps":0,"cards_used":3,
+                  "remaining_lp":10000,"fusions":0,"equips":0}
+        reader=Mock(return_value={
+            "ready":True,"pid":1234,"counters":counters})
+        self.bridge._rank_reader=reader
+        self.bridge.confirm_rank_lp(10000)
+        counters["turns"]=0
+        counters["cards_used"]=0
+        counters["remaining_lp"]=8000
+        next_duel=self.bridge.get_rank()
+        self.assertEqual(next_duel["state"],"needs_lp_confirmation")
+        self.assertEqual(next_duel["candidateLp"],8000)
+        self.assertIsNone(self.bridge._rank_lp_session)
+        self.bridge.confirm_rank_lp(8000)
+        reader.return_value["pid"]=7777
+        self.assertEqual(self.bridge.get_rank()["state"],"needs_lp_confirmation")
+        self.assertIsNone(self.bridge._rank_lp_session)
 
     def test_any_mod_can_project_only_after_own_verified_ram_binding(self):
         sha=self.sha  # Não é X15
