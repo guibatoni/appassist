@@ -64,6 +64,7 @@ class DueltraceWebBridge:
         self._rank_calibration = None
         self._rank_legacy_trial = None
         self._rank_gap_started = None
+        self._rank_lp_session = None
         self._rank_last_turns = None
         self._rank_last_snapshot = None
         self._rank_pending_capture = None
@@ -358,6 +359,7 @@ class DueltraceWebBridge:
                         "score":None,"category":None,"counters":None}
             self._rank_gap_started=None
             self._rank_calibration=None
+            self._rank_lp_session=None
             self._rank_legacy_trial=None
             self._rank_last_turns=None
             # Captura explícita sobrevive à tela de resultado/transição,
@@ -406,13 +408,30 @@ class DueltraceWebBridge:
             if (self._rank_last_turns is not None and
                     (self._rank_last_turns[0]!=(sha,pid) or
                      turns < self._rank_last_turns[1])):
-                if (self._rank_last_turns[0]==(sha,pid)
-                        and self._rank_pending_capture is not None):
+                same_process=self._rank_last_turns[0]==(sha,pid)
+                new_duel=same_process and turns<self._rank_last_turns[1]
+                if (same_process and self._rank_pending_capture is not None):
                     self._rank_pending_capture["returned_to_menu"]=True
+                # Após uma conferência manual válida dos LP, outras partidas
+                # da MESMA sessão ePSXe podem reusar o valor inicial se o
+                # contador de turnos reiniciou e os LP voltaram exatamente
+                # ao valor conferido. Nunca liberar outra ISO ou PID.
+                remembered=self._rank_lp_session
+                resume=(experimental and new_duel
+                        and isinstance(remembered,dict)
+                        and remembered.get("sha")==sha
+                        and remembered.get("pid")==pid
+                        and remembered.get("lp")==counters["remaining_lp"]
+                        and monotonic()-remembered.get("at",0)<7200)
                 self._rank_calibration=None  # novo duelo ou contador reiniciado
                 self._rank_gap_started=None
                 self._rank_legacy_trial=None
                 self._rank_last_snapshot=None
+                if resume:
+                    self._rank_calibration={"sha":sha,"pid":pid,"at":monotonic()}
+                    self._rank_legacy_trial=start_legacy_trial(sha,pid,counters)
+                else:
+                    self._rank_lp_session=None
             self._rank_last_turns=((sha,pid),turns)
             calibrated=(self._rank_calibration is not None and
                 self._rank_calibration["sha"]==sha and
@@ -435,6 +454,7 @@ class DueltraceWebBridge:
                 if verdict=="invalid":
                     self._rank_calibration=None
                     self._rank_legacy_trial=None
+                    self._rank_lp_session=None
                     self._rank_last_snapshot=None
                     return {"ready":False,"state":"needs_lp_confirmation",
                             "sourceMode":"experimental","rankSystem":rank_system(sha),
@@ -573,6 +593,7 @@ class DueltraceWebBridge:
             if sample["counters"][lp_key]!=life_points:
                 self._rank_calibration=None
                 self._rank_legacy_trial=None
+                self._rank_lp_session=None
                 self._rank_last_snapshot=None
                 self._rank_pending_capture=None
                 return {"ready":False,"state":"lp_mismatch",
@@ -580,6 +601,9 @@ class DueltraceWebBridge:
                     "candidateLp":sample["counters"][lp_key],
                     "score":None,"category":None,"counters":None}
             self._rank_calibration={"sha":sha,"pid":sample["pid"],"at":monotonic()}
+            self._rank_lp_session=(
+                {"sha":sha,"pid":sample["pid"],"lp":life_points,"at":monotonic()}
+                if sample.get("experimental") is True else None)
             self._rank_gap_started=None
             self._rank_legacy_trial=(
                 start_legacy_trial(sha,sample["pid"],sample["counters"])
@@ -884,6 +908,7 @@ class DueltraceWebBridge:
         self._rank_calibration=None
         self._rank_legacy_trial=None
         self._rank_gap_started=None
+        self._rank_lp_session=None
         self._rank_last_turns=None
         self._rank_last_snapshot=None
         self._rank_pending_capture=None
@@ -915,6 +940,7 @@ class DueltraceWebBridge:
             self._rank_calibration=None
             self._rank_legacy_trial=None
             self._rank_gap_started=None
+            self._rank_lp_session=None
             analysis=MultiModIntelligence(self.catalog).inspect(source,use_ollama=False)
             profile=self.catalog.profile_for(updated)
             graphic=(profile or {}).get("graphic_assets",{})
