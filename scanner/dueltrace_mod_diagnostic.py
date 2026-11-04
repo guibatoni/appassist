@@ -30,6 +30,15 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
     boot_config=report.get("system_cnf") if isinstance(report.get("system_cnf"),dict) else {}
     boot_target=str(boot_config.get("boot_target") or "")[:150]
     boot_found=bool(boot_target and boot_target.upper() in names)
+    signatures=(report.get("assinaturas_arquivos") or [])
+    signatures_by_name={
+        str(x.get("nome") or "").upper():x
+        for x in signatures[:80] if isinstance(x,dict)}
+    boot_signature=signatures_by_name.get(boot_target.upper(),{}).get("assinatura")
+    inventory=[{**row,
+        "signature":str(signatures_by_name.get(row["name"].upper(),{}).get(
+            "assinatura") or "não examinada")[:40]}
+        for row in inventory]
     boot=[x for x in names
           if _SUPPORTED_BOOT.fullmatch(x.rsplit("/",1)[-1])
           or x.endswith(".EXE")]
@@ -40,8 +49,14 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
     if not files:
         errors.append("Índice ISO9660 indisponível ou não reconhecido.")
     else:
-        if not boot:
+        if not boot and not boot_target:
             errors.append("Nenhum executável PS1 conhecido foi identificado no índice.")
+        elif not boot and boot_target and boot_found:
+            errors.append("Executável indicado pelo BOOT ("+boot_target+
+                          ") está indexado, mas seu layout não foi validado.")
+        elif not boot and boot_target:
+            errors.append("BOOT indica "+boot_target+
+                          ", porém não há executável conhecido no índice.")
         if not any(x.endswith("WA_MRG.MRG") for x in wa):
             errors.append("Nenhum WA_MRG.MRG com nome esperado foi localizado.")
     status=str(report.get("status") or "não analisado")
@@ -66,14 +81,19 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
         level="estrutura_reconhecida"
     if boot_target and not boot_found:
         errors.append("SYSTEM.CNF aponta para "+boot_target+
-                      ", mas não há entrada com esse nome no índice.")
+                      ", mas não há entrada com esse nome no índice ISO9660.")
     if level!="estrutura_reconhecida" and not errors:
         errors.append("As validações do catálogo não reconheceram um layout completo.")
     steps=[]
     if not files:
         steps.append("Verificar setor 2048/2352, ISO9660 e índice dos arquivos do disco.")
     if files and not boot:
-        steps.append("Examinar o inventário dos arquivos e a referência BOOT do SYSTEM.CNF, se existir.")
+        steps.append("Conferir o alvo BOOT no inventário e inspecionar assinaturas dos nove arquivos indexados.")
+    if boot_target and not boot_found:
+        steps.append("Verificar se "+boot_target+
+                     " está em outra trilha, nome de arquivo ou entrada do diretório não indexada.")
+    elif boot_found:
+        steps.append("Conferir a assinatura do arquivo de boot e localizar tabelas por evidências, não por nome.")
     if not boot or not wa:
         steps.append("Verificar nomes e posições reais de SLUS/SCUS/SLES e WA_MRG no disco.")
     if not flags.get("cards"):
@@ -89,7 +109,8 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
         "status":status[:120],
         "issues":errors[:8],
         "nextSteps":steps[:6],
-        "executableCandidates":boot[:12],
+        "executableCandidates":list(dict.fromkeys(
+            ([boot_target] if boot_found and boot_target else [])+boot))[:12],
         "waCandidates":wa[:12],
         "chosenExecutable":str(report.get("executavel") or "")[:150],
         "chosenWa":str(report.get("drops_source") or "")[:150],
@@ -102,6 +123,7 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
             "found":boot_config.get("found") is True,
             "bootTarget":boot_target or None,
             "bootTargetIndexed":boot_found if boot_target else None,
+            "bootFileSignature":str(boot_signature)[:40] if boot_signature else None,
             "status":str(boot_config.get("status") or "não encontrado")[:150],
         },
         "hashExe":str(report.get("hash_executavel") or "")[:64] or None,
