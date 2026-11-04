@@ -36,11 +36,12 @@ export type ModScanDiagnostic = {
   waSize: number | null
   sectorBytes: number | null
   indexedFiles: number
-  files: Array<{name: string; size: number | null; lba: number | null}>
+  files: Array<{name: string; size: number | null; lba: number | null; signature?: string}>
   systemCnf: {
     found: boolean
     bootTarget: string | null
     bootTargetIndexed: boolean | null
+    bootFileSignature?: string | null
     status: string
   }
   hashExe: string | null
@@ -54,6 +55,8 @@ export type ModScanDiagnostic = {
     state: string
     message?: string
     resumo?: string
+    summarySuppressed?: boolean
+    note?: string
     prioridades?: string[]
     alertas?: string[]
   }
