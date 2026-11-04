@@ -68,6 +68,8 @@ class DueltraceWebBridge:
         self._lock = threading.RLock()
         self._fusion_cache_key = None
         self._fusion_cache = {}
+        self._hand_suggestions_key = None
+        self._hand_suggestions = None
         self.settings_path = self.catalog.home / "dueltrace_desktop_settings.json"
 
     def _active(self):
@@ -257,6 +259,8 @@ class DueltraceWebBridge:
             allowed=bool((profile or {}).get("supported_features",{}).get("fusions"))
             self._fusion_cache=build_fusion_index(recipes if allowed else [])
             self._fusion_cache_key=key
+            self._hand_suggestions_key=None
+            self._hand_suggestions=None
         return self._fusion_cache
 
     def get_hand(self):
@@ -282,12 +286,16 @@ class DueltraceWebBridge:
                 "effect":None,"effectSource":None})}
                 for i,cid in enumerate(ids)]
             index=self._fusion_index(active["sha256"],profile)
-            pairs=suggest_hand_pairs(ids,index,cards,limit=24)
-            chains=plan_fusion_chains(ids,index,cards,min_cards=2,max_cards=5,limit=16)
+            hand_key=(self._fusion_cache_key,tuple(ids))
+            if hand_key!=self._hand_suggestions_key or self._hand_suggestions is None:
+                pairs=suggest_hand_pairs(ids,index,cards,limit=24)
+                chains=plan_fusion_chains(ids,index,cards,min_cards=2,max_cards=5,limit=16)
+                self._hand_suggestions={"pairs":pairs,
+                                        "chains":chains["routes"],
+                                        "chainsComplete":chains["complete"]}
+                self._hand_suggestions_key=hand_key
             return {"ready":True,"status":sample.get("status","Mão identificada"),
-                    "hand":enriched,"pairs":pairs,
-                    "chains":chains["routes"],
-                    "chainsComplete":chains["complete"]}
+                    "hand":enriched,**self._hand_suggestions}
 
     def get_rank_diagnostic(self):
         """Explica o bloqueio sem ler o ePSXe nem ativar modelo provisório."""
@@ -306,6 +314,7 @@ class DueltraceWebBridge:
             return None,sha,{"state":"unsupported","ready":False,
                 "status":diagnosis["reason"],
                 "diagnosticCode":diagnosis["code"],
+                "rankSystem":diagnosis["rankSystem"],
                 "score":None,"category":None,"counters":None}
         preferred=(self._process.pid if self._process is not None and
                    self._process.poll() is None else None)
@@ -781,6 +790,8 @@ class DueltraceWebBridge:
             raise ValueError("Confirmação inválida")
         self.catalog.activate(sha,acknowledge_uncertainty=acknowledge)
         self._fusion_cache_key=None
+        self._hand_suggestions_key=None
+        self._hand_suggestions=None
         self._rank_calibration=None
         self._rank_last_turns=None
         self._rank_last_snapshot=None
@@ -808,6 +819,8 @@ class DueltraceWebBridge:
             if updated["sha256"]!=sha:
                 raise RuntimeError("A imagem da ISO mudou desde o último cadastro")
             self._fusion_cache_key=None
+            self._hand_suggestions_key=None
+            self._hand_suggestions=None
             self._rank_calibration=None
             analysis=MultiModIntelligence(self.catalog).inspect(source,use_ollama=False)
             profile=self.catalog.profile_for(updated)
