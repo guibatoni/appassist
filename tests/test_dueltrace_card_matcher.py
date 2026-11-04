@@ -107,6 +107,25 @@ class CardMatcherTests(unittest.TestCase):
         self.assertEqual(row["confidence"],"revisar")
         self.assertEqual(row["targetId"],17)
 
+    def test_recolored_art_with_same_stats_is_only_review_candidate(self):
+        from PIL import Image
+        self.source["cards"]=[card(2,"Queen of Autumn Leaves",1800,1500)]
+        self.target["cards"]=[card(41,"Forest Sister",1800,1500)]
+        # Mesmo padrão de desenho, recolorizado (+12 RGB), sem pixels iguais.
+        for folder,cid,shift in ((self.sdir,2,0),(self.tdir,41,12)):
+            img=Image.new("RGB",(102,96))
+            for y in range(96):
+                for x in range(102):
+                    img.putpixel((x,y),(
+                        30+x//2+shift,40+y//2+shift,
+                        35+(x+y)//3+shift))
+            img.save(folder/"artes_722"/f"{cid:03d}.png")
+        row=compare_profiles(self.source,self.target,self.home)["rows"][0]
+        self.assertEqual(row["targetId"],41)
+        self.assertEqual(row["confidence"],"revisar")
+        self.assertIn("arte_visual_semelhante",row["signals"])
+        self.assertNotIn("arte_rgb_identica",row["signals"])
+
     def test_duplicate_art_not_proof(self):
         self.source["cards"]=[card(3,"Arboreal Queen",500,200)]
         self.target["cards"]=[card(9,"Mystic Shadow",800,100),
