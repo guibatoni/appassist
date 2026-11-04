@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic, SpoilsCounters, SpoilsResult} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -152,8 +152,8 @@ function RankPanel({sha}:{sha:string|null}) {
     <div className="mt-3 rounded-lg border border-primary/30 bg-background/40 p-3">
       <p className="text-xs font-semibold text-primary">Conferência com o resultado real</p>
       <p className="mt-1 text-xs text-muted">
-        No final do duelo e antes da tela de recompensa, capture a previsão de vitória por LP.
-        Depois abra Drops e registre o resultado mostrado pelo jogo.
+        No final do duelo, a previsão de LP pode ser capturada para futura auditoria.
+        O cálculo manual de Spoils fica logo abaixo, independente da leitura RAM.
       </p>
       <button type="button" disabled={!rank?.ready||captureBusy||!desktopApi()}
         className="btn-gold mt-2 disabled:opacity-40" onClick={()=>void capture()}>
@@ -202,6 +202,114 @@ function RankPanel({sha}:{sha:string|null}) {
   </section>
 }
 
+const SPOILS_FIELDS: Array<{key:keyof SpoilsCounters;label:string}> = [
+  {key:"turns",label:"Turnos"},
+  {key:"effective_attacks",label:"Monstros adversários destruídos em ataque"},
+  {key:"defense_wins",label:"Vitórias em defesa"},
+  {key:"face_down",label:"Cartas colocadas viradas para baixo"},
+  {key:"spells",label:"Magias utilizadas"},
+  {key:"traps",label:"Armadilhas ativadas"},
+  {key:"cards_used",label:"Cartas usadas ou sacadas"},
+  {key:"remaining_lp",label:"LP restantes"},
+  {key:"fusions",label:"Fusões iniciadas"},
+  {key:"equips",label:"Equipamentos utilizados"},
+]
+const SPOILS_DEFAULTS: SpoilsCounters = {
+  turns:0,effective_attacks:0,defense_wins:0,face_down:0,spells:0,
+  traps:0,cards_used:0,remaining_lp:8000,fusions:0,equips:0,
+}
+
+function SpoilsCalculator({sha}:{sha:string|null}) {
+  const [counters,setCounters]=useState<SpoilsCounters>({...SPOILS_DEFAULTS})
+  const [victory,setVictory]=useState<"lp"|"deckout"|"exodia">("lp")
+  const [result,setResult]=useState<SpoilsResult|null>(null)
+  const [error,setError]=useState<string|null>(null)
+  const [busy,setBusy]=useState(false)
+  useEffect(()=>{
+    setCounters({...SPOILS_DEFAULTS})
+    setResult(null)
+    setError(null)
+  },[sha])
+  const calculate=async()=>{
+    const api=desktopApi()
+    if(!api||!sha)return
+    setBusy(true)
+    setError(null)
+    try{setResult(await api.calculate_spoils(counters,victory))}
+    catch(e){setResult(null);setError(e instanceof Error?e.message:"Falha ao calcular Spoils.")}
+    finally{setBusy(false)}
+  }
+  return <section className="panel rounded-xl p-4" aria-label="Calculadora manual de Spoils">
+    <h2 className="font-display text-xl font-semibold text-gold">Calculadora de Spoils</h2>
+    <p className="mt-1 text-sm text-muted">Modelo manual recuperado da calculadora anterior:
+      50 pontos iniciais, 10 critérios e bônus por condição de vitória.
+      Funciona sem ler a RAM; a fórmula de outros mods ainda precisa de comparação com o jogo.
+    </p>
+    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      {SPOILS_FIELDS.map(item=><label key={item.key} className="flex flex-col gap-1 text-xs text-muted">
+        {item.label}
+        <input type="number" min={0} max={item.key==="remaining_lp"?32766:255}
+          inputMode="numeric" className="field w-full rounded-md px-3 py-2 text-sm"
+          value={counters[item.key]}
+          onChange={e=>{
+            const n=Number(e.target.value)
+            setCounters(old=>({...old,[item.key]:Number.isFinite(n)?n:0}))
+            setResult(null)
+          }}/>
+      </label>)}
+    </div>
+    <div className="mt-3 flex flex-wrap items-end gap-3">
+      <label className="flex flex-col gap-1 text-xs text-muted">
+        Resultado do duelo
+        <select className="field rounded-md px-3 py-2 text-sm" value={victory}
+          onChange={e=>{setVictory(e.target.value as typeof victory);setResult(null)}}>
+          <option value="lp">Vitória por LP (+2)</option>
+          <option value="deckout">Vitória por deck-out (−40)</option>
+          <option value="exodia">Vitória por Exodia (+40)</option>
+        </select>
+      </label>
+      <button type="button" className="btn-gold disabled:opacity-40"
+        disabled={!sha||busy||!desktopApi()} onClick={()=>void calculate()}>
+        {busy?"Calculando…":"Calcular Spoils"}
+      </button>
+      <button type="button" className="btn-ghost" onClick={()=>{
+        setCounters({...SPOILS_DEFAULTS});setResult(null);setError(null);setVictory("lp")
+      }}>Limpar</button>
+    </div>
+    {error&&<p className="mt-3 text-sm text-danger" role="alert">{error}</p>}
+    {result&&<div className="mt-4 rounded-lg border border-primary/40 bg-background/60 p-3" role="status">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs text-muted">Pontuação estimada</p>
+          <p className="font-display text-3xl font-bold tabular-nums text-primary">
+            {result.score} <span className="text-base text-muted">pontos</span>
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-muted">RANK para ISO selecionada</p>
+          <p className="font-display text-2xl font-bold text-gold">{result.category}</p>
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-muted">Base: {result.basePoints} ·
+        Resultado: {result.victoryBonus>0?"+":""}{result.victoryBonus} ·
+        Critérios: {Object.values(result.breakdown).reduce((a,b)=>a+b,0)>0?"+":""}
+        {Object.values(result.breakdown).reduce((a,b)=>a+b,0)}
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+        {SPOILS_FIELDS.map(item=><span key={item.key} className="text-muted">
+          {item.label}: <strong className="text-primary">{result.breakdown[item.key]>0?"+":""}{result.breakdown[item.key]}</strong>
+        </span>)}
+      </div>
+      <p className="mt-3 text-xs text-gold">{result.note}</p>
+    </div>}
+    <p className="mt-3 text-xs text-muted">
+      Ataques efetivos são destruições de monstros adversários em posição de ataque,
+      não ataques diretos. Uma divergência de 1 ponto já foi observada na validação histórica
+      e permanece em investigação.
+    </p>
+  </section>
+}
+
 function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const cardsById=useMemo(()=>new Map(cards.map(c=>[c.id,c])),[cards])
   const [hand,setHand]=useState<HandState|null>(null)
@@ -223,6 +331,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   return <>
     <Heading title="Central de Duelo" subtitle="Sua mão, projeção de RANK e combinações do perfil ativo"/>
     <RankPanel sha={sha}/>
+        <SpoilsCalculator sha={sha}/>
     <div className="panel rounded-xl p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-xl font-semibold text-primary">Sua mão · 5 slots</h2>
