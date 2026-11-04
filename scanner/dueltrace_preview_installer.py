@@ -79,7 +79,7 @@ def select_preview_release(release: dict, current_version: str,
 def fetch_latest_preview_package(*, current_version: str = CURRENT_VERSION,
                                  installed_run_id: int | None = None,
                                  fetcher=None) -> dict | None:
-    data=(fetcher or (lambda:_get_json(PREVIEW_LIST)))()
+    data=(fetcher or (lambda:_get_json(PREVIEW_LIST,list)))()
     if not isinstance(data,list):
         raise UnsafeUpdate("Lista de pré-releases do GitHub inválida.")
     eligible=[]
