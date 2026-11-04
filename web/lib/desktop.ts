@@ -240,6 +240,7 @@ export type RankDiagnostic = {
   x15Exact: boolean
   x15CompatibleBinary: boolean
   mipsRuntimeConfirmed: boolean
+  legacyProbeAvailable?: boolean
   score: null
   projectedRank: null
   note: string
@@ -272,9 +273,12 @@ export type SpoilsResult = {
 
 export type RankState = {
   ready: boolean
-  state: "unsupported" | "unavailable" | "needs_lp_confirmation" | "lp_mismatch" | "provisional"
+  state: "unsupported" | "unavailable" | "needs_lp_confirmation" | "needs_ram_validation" | "lp_mismatch" | "provisional"
   status: string
   diagnosticCode?: string
+  sourceMode?: "verified" | "experimental"
+  validationProgress?: number
+  validationRequired?: number
   candidateLp?: number
   score: number | null
   category: string | null
