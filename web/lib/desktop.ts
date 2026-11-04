@@ -30,6 +30,10 @@ export type ModScanDiagnostic = {
   nextSteps: string[]
   executableCandidates: string[]
   waCandidates: string[]
+  waSelectionMethod?: string
+  waSizeCandidates?: string[]
+  suspectedWa?: string | null
+  suspectedWaVerified?: boolean
   chosenExecutable: string
   chosenWa: string
   exeSize: number | null
