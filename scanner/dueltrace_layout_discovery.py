@@ -57,7 +57,7 @@ def _known_drop_probe(disc, name: str) -> dict:
         try:
             data = _read_bytes(disc, name, at, WEIGHT_BYTES)
             values = struct.unpack("<722H", data)
-        except (OSError, ValueError, struct.error):
+        except (AttributeError, OSError, ValueError, struct.error):
             return {"matchingTables": len(matches), "encodings": matches,
                     "testedTables": i, "state": "falha_leitura"}
         if max(values) <= 2048 and sum(values) == 2048:
