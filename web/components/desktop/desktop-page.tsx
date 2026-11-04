@@ -237,12 +237,13 @@ function SpoilsCalculator({sha,liveRank}:{sha:string|null;liveRank:RankState|nul
 
   const live=liveRank?.ready===true &&
     liveRank.score!==null && liveRank.category!==null && liveRank.counters!==null
-  const score=live?liveRank.score:baseline?.score??null
-  const category=live?liveRank.category:baseline?.category??null
-  const counters=live?liveRank.counters:SPOILS_DEFAULTS
-  const breakdown=live?liveRank.breakdown:baseline?.breakdown
+  const score=live?(liveRank?.score??null):baseline?.score??null
+  const category=live?(liveRank?.category??null):baseline?.category??null
+  const counters=live?(liveRank?.counters??SPOILS_DEFAULTS):SPOILS_DEFAULTS
+  const breakdown=live?liveRank?.breakdown:baseline?.breakdown
+  const pointsFor=(key:string)=>(breakdown as Record<string,number>|undefined)?.[key]
   const entries=live
-    ? Object.entries(counters??{}).filter(([key])=>breakdown?.[key]!==undefined)
+    ? Object.entries(counters).filter(([key])=>pointsFor(key)!==undefined)
         .map(([key,value])=>({key,label:SPOILS_FIELDS.find(x=>x.key===key)?.label??key,value}))
     : SPOILS_FIELDS.map(({key,label})=>({key,label,value:SPOILS_DEFAULTS[key]}))
 
@@ -281,8 +282,8 @@ function SpoilsCalculator({sha,liveRank}:{sha:string|null;liveRank:RankState|nul
         <p className="mt-1 text-lg font-semibold tabular-nums text-white">
           {item.value}
           <span className="ml-2 text-xs font-normal text-primary">
-            {breakdown?.[item.key]!==undefined
-              ? `${breakdown[item.key]>0?"+":""}${breakdown[item.key]} pts`
+            {pointsFor(item.key)!==undefined
+              ? `${pointsFor(item.key)!>0?"+":""}${pointsFor(item.key)} pts`
               :"—"}
           </span>
         </p>
