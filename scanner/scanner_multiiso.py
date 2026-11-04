@@ -8,7 +8,7 @@ import argparse, csv, hashlib, json, re, struct, sys, unicodedata
 from pathlib import Path
 from dueltrace_layout_discovery import discover_disc_layout, candidate_files_for_decoder
 from dueltrace_name_layout_probe import find_opponent_pointer_candidates
-from dueltrace_name_boundaries import inspect_opponent_name_boundaries
+from dueltrace_name_boundaries import inspect_opponent_name_boundaries, read_name_table
 
 OPP_COUNT=39
 CARD_COUNT=722
@@ -25,6 +25,7 @@ WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
+SCAN_PARSER_REVISION=7  # limites de nomes, descoberta e validação de catálogos/drops
 
 
 def sha256(path:Path, progress=None):
@@ -190,22 +191,16 @@ def inspect_system_cnf(disc):
 
 def decode_names(sl):
     if len(sl)<0x1C9800+93*4: return [],[], 'Executável menor que o layout conhecido'
-    try: glyphs=[struct.unpack_from('<H',sl,SLUS_GLYPHS+4*i)[0] for i in range(93)]
-    except struct.error:return [],[],'Fonte de glifos não encontrada'
+    try:
+        records=read_name_table(sl,pointer_base=SLUS_PTR_BASE,
+            text_base=SLUS_TEXT_BASE,glyph_base=SLUS_GLYPHS,
+            indices=tuple(range(1,723))+tuple(range(0x329,0x350)))
+    except (ValueError,struct.error):return [],[],'Fonte de glifos/ponteiros não encontrada'
     def txt(index):
-        ptr=struct.unpack_from('<H',sl,SLUS_PTR_BASE+index*2)[0]
-        pos=SLUS_TEXT_BASE+ptr
-        if pos<0 or pos>=len(sl):return None
-        raw=sl[pos+3:pos+150] if sl[pos:pos+2]==b'\xf8\x0a' else sl[pos:pos+150]
-        s=[]
-        for c in raw:
-            if c==255:break
-            if c==0:s.append(' ');continue
-            if c<len(glyphs) and glyphs[c]:
-                try:s.append(glyphs[c].to_bytes(2,'big').decode('shift_jis'))
-                except UnicodeError:s.append('?')
-            else:s.append('�')
-        return unicodedata.normalize('NFKC',''.join(s)).strip()
+        record=records[index]
+        # Um FF além do próximo registro não termina este nome. Não adivinhar
+        # terminadores alternativos nem retirar um glifo legível (como "v").
+        return record['readablePrefix'] if record['recordStatus']=='ff_encontrado' else None
     opponents=[];cards=[]
     for i in range(1,40):opponents.append({'id':i,'nome':txt(0x328+i) or ''})
     for i in range(1,723):
@@ -229,13 +224,15 @@ def inspect_known_name_layout(sl):
     NÃO aprova o catálogo, oponente ou glifo. Seu único propósito é mostrar
     possíveis deslocamentos e caracteres ilegíveis para diagnóstico.
     """
-    required=max(SLUS_GLYPHS+93*4,SLUS_PTR_BASE+(0x328+39)*2)
+    required=max(SLUS_GLYPHS+93*4,SLUS_PTR_BASE+(0x328+40)*2)
     if len(sl)<required:
         return {"state":"incompatível","reason":"Executável menor que a tabela de ponteiros/glifos conhecida",
                 "cardSamples":[],"opponentSamples":[]}
     try:
-        glyphs=[struct.unpack_from("<H",sl,SLUS_GLYPHS+4*i)[0] for i in range(93)]
-    except struct.error:
+        records=read_name_table(sl,pointer_base=SLUS_PTR_BASE,
+            text_base=SLUS_TEXT_BASE,glyph_base=SLUS_GLYPHS,
+            indices=tuple(range(1,723))+tuple(range(0x329,0x350)),max_bytes=100)
+    except (ValueError,struct.error):
         return {"state":"incompatível","reason":"Tabela de glifos fora do arquivo",
                 "cardSamples":[],"opponentSamples":[]}
     def sample(index):
@@ -243,26 +240,15 @@ def inspect_known_name_layout(sl):
         if address+2>len(sl):
             return {"index":index,"pointer":None,"name":"","status":"ponteiro_fora_do_arquivo"}
         ptr=struct.unpack_from("<H",sl,address)[0]
-        pos=SLUS_TEXT_BASE+ptr
-        if pos<0 or pos>=len(sl):
-            return {"index":index,"pointer":ptr,"name":"","status":"texto_fora_do_arquivo"}
-        raw=sl[pos+3:pos+100] if sl[pos:pos+2]==b"\xf8\x0a" else sl[pos:pos+100]
-        decoded=[]
-        invalid=0
-        for value in raw:
-            if value==255:break
-            if value==0:
-                decoded.append(" ")
-            elif value<len(glyphs) and glyphs[value]:
-                try:decoded.append(glyphs[value].to_bytes(2,"big").decode("shift_jis"))
-                except UnicodeError:invalid+=1
-            else:invalid+=1
-        name=unicodedata.normalize("NFKC","".join(decoded)).strip()[:80]
-        plausible=bool(name) and invalid==0 and len(name)<=64 and (
+        record=records[index]
+        name=record['readablePrefix'][:80]
+        invalid=int(record['firstInvalidHex'] is not None)
+        plausible=record['recordStatus']=='ff_encontrado' and bool(name) and len(name)<=64 and (
             sum(x.isalnum() for x in name)>=2)
         return {"index":index,"pointer":ptr,"name":name,
                 "status":"caracteres_plausiveis" if plausible else "invalido_ou_vazio",
-                "invalidGlyphs":invalid}
+                "invalidGlyphs":invalid,"recordStatus":record['recordStatus'],
+                "terminatorOffset":record['terminatorOffset']}
     ids=(1,2,3,10,25,50,100,200,400,722)
     opponent_ids=(1,2,3,10,20,30,39)
     cards=[sample(i) for i in ids]
@@ -416,6 +402,7 @@ def write_csv(path,rows):
 def process(path,output,with_art=False,digest=None,progress=None):
     info={'arquivo':path.name,'tamanho':path.stat().st_size,
           'sha256':digest or sha256(path,progress=progress),'status':'não validado',
+          'scan_parser_revision':SCAN_PARSER_REVISION,
           'art_requested':bool(with_art),
           'art_parser_revision':ART_PARSER_REVISION if with_art else None}
     key=re.sub(r'[^a-zA-Z0-9_-]+','_',path.stem)[:42]+'_'+info['sha256'][:10]

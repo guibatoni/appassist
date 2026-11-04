@@ -80,6 +80,24 @@ class PreviewInstallerTests(unittest.TestCase):
             current_version="0.8.3",fetcher=lambda:[older,newer])
         self.assertEqual(selected["version"],"0.8.5")
 
+    def test_double_digit_minor_release_uses_semver_and_embedded_identity(self):
+        older=release(tag="preview-v0.9.9-r999999999999")
+        newer=release(tag=f"preview-v0.10.0-r{RUN}")
+        selected=updater.fetch_latest_preview_package(
+            current_version="0.9.7", fetcher=lambda:[older,newer])
+        self.assertEqual(selected["version"], "0.10.0")
+        self.assertEqual(selected["run_id"], RUN)
+        self.assertIsNone(updater.select_preview_release(older, "0.10.0", 1))
+        with tempfile.TemporaryDirectory() as td:
+            folder=Path(td)
+            source=make_zip(folder, version="0.10.0")
+            self.assertTrue(updater.unpack_preview_zip(
+                source, folder/"fresh", selected).is_file())
+            source=make_zip(folder, version="0.9.9")
+            with self.assertRaises(updater.UnsafeUpdate):
+                updater.unpack_preview_zip(source, folder/"mismatched", selected)
+            self.assertFalse((folder/"mismatched").exists())
+
     def test_releases_api_is_list_and_invalid_release_is_skipped(self):
         result=updater.fetch_latest_preview_package(
             current_version="0.8.4",fetcher=lambda:[

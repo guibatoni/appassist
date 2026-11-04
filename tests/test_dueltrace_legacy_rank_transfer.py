@@ -126,6 +126,10 @@ class LegacyX15TransferTests(unittest.TestCase):
         self.assertEqual(rank_label_for_existing_score(X15_SHA,50),"S-POW")
         self.assertEqual(rank_label_for_existing_score(X15_SHA,49),"S-TEC")
 
+    def test_historical_observed_original_scores_are_not_reclassified_as_x15(self):
+        self.assertEqual(rank_label_for_existing_score("a"*64,76),"B-POW")
+        self.assertEqual(rank_label_for_existing_score("a"*64,29),"B-TEC")
+
     def test_names_cannot_unlock_x15_categories_or_drop_pools(self):
         for fake in ("Remaster X15","X15.iso","fm13","original","b"*64,None):
             with self.subTest(sha=fake):

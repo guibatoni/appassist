@@ -107,6 +107,8 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
             "name":str(row.get("name") or "")[:80],
             "status":str(row.get("status") or "")[:40],
             "invalidGlyphs":row.get("invalidGlyphs") if type(row.get("invalidGlyphs")) is int else None,
+            "recordStatus":str(row.get("recordStatus") or "")[:40],
+            "terminatorOffset":row.get("terminatorOffset") if type(row.get("terminatorOffset")) is int else None,
         } for row in samples[:limit] if isinstance(row,dict)]
     discovery=report.get("layout_discovery")
     if not isinstance(discovery,dict):discovery={}
@@ -132,6 +134,8 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
     boundaries=report.get("opponent_name_boundaries")
     if not isinstance(boundaries,dict):
         boundaries={}
+    def name_count(value):
+        return min(39,max(0,value)) if type(value) is int else 0
     boundary_samples=[]
     for row in boundaries.get("samples",[])[:7]:
         if not isinstance(row,dict):continue
@@ -140,7 +144,17 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
             "pointer":row.get("pointer") if type(row.get("pointer")) is int else None,
             "nextPointerDelta":row.get("nextPointerDelta"),
             "headerPresent":row.get("headerPresent") is True,
+            "headerHex":str(row.get("headerHex") or "")[:8] or None,
             "hasFFBeforeNext":row.get("hasFFBeforeNext"),
+            "physicalBoundaryDelta":row.get("physicalBoundaryDelta") if type(row.get("physicalBoundaryDelta")) is int else None,
+            "boundaryKnown":row.get("boundaryKnown") is True,
+            "boundaryReached":row.get("boundaryReached") is True,
+            "ambiguousBoundary":row.get("ambiguousBoundary") is True,
+            "sharedPointer":row.get("sharedPointer") is True,
+            "recordStatus":str(row.get("recordStatus") or "")[:40],
+            "terminatorOffset":row.get("terminatorOffset") if type(row.get("terminatorOffset")) is int else None,
+            "lastGlyphHex":str(row.get("lastGlyphHex") or "")[:6] or None,
+            "lastGlyph":str(row.get("lastGlyph") or "")[:4] or None,
             "firstInvalidHex":str(row.get("firstInvalidHex") or "")[:6] or None,
             "firstInvalidOffset":row.get("firstInvalidOffset"),
             "endByteHex":str(row.get("endByteHex") or "")[:6] or None,
@@ -246,6 +260,11 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
         "opponentNameBoundaries":{
             "state":str(boundaries.get("state") or "não examinado")[:70],
             "examined":boundaries.get("examined",0),
+            "boundedRecords":name_count(boundaries.get("boundedRecords")),
+            "terminatedRecords":name_count(boundaries.get("terminatedRecords")),
+            "pointerAudit":{key:name_count(boundaries.get("pointerAudit",{}).get(key,0)
+                if isinstance(boundaries.get("pointerAudit"),dict) else 0)
+                for key in ("outOfFile","sharedRecords","nonIncreasingPairs")},
             "hasFFBeforeNext":boundaries.get("hasFFBeforeNext",0),
             "noFFBeforeNext":boundaries.get("noFFBeforeNext",0),
             "commonEndByte":str(boundaries.get("commonEndByte") or "")[:6] or None,

@@ -26,6 +26,16 @@ class RankDiagnosticTests(unittest.TestCase):
         self.assertEqual(result["code"],"rank_table_missing")
         self.assertFalse(result["readyForLiveRead"])
         self.assertFalse(result["ramBindingVerified"])
+        self.assertFalse(result["legacyProbeAvailable"])
+
+    def test_binding_and_known_x15_require_matching_active_profile(self):
+        for sha,mod in (("b"*64,verified_mod_profile()),
+                        (X15_SHA,{"rom_sha256":SHA})):
+            result=diagnose_rank_profile(sha,mod)
+            self.assertEqual(result["code"],"profile_sha_mismatch")
+            self.assertFalse(result["readyForLiveRead"])
+            self.assertFalse(result["ramBindingVerified"])
+            self.assertFalse(result["x15Exact"])
 
     def test_static_mips_candidates_are_not_runtime_evidence(self):
         mod={"rom_sha256":SHA,

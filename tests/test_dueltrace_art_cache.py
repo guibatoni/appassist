@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 
-from auto_mods import ART_PARSER_REVISION, ModCatalog, atomic_json
+from auto_mods import ART_PARSER_REVISION, SCAN_PARSER_REVISION, ModCatalog, atomic_json
 
 
 class ArtAttemptCacheTests(unittest.TestCase):
@@ -43,6 +43,7 @@ class ArtAttemptCacheTests(unittest.TestCase):
                 "size":rom.stat().st_size,
                 "mtime_ns":rom.stat().st_mtime_ns,
                 "effects_manifest_signature":[0,0],
+                "scan_parser_revision":SCAN_PARSER_REVISION,
                 "level":"desconhecido",
             }
             catalog=ModCatalog(home)
@@ -80,6 +81,7 @@ class ArtAttemptCacheTests(unittest.TestCase):
                 "size":rom.stat().st_size,
                 "mtime_ns":rom.stat().st_mtime_ns,
                 "effects_manifest_signature":[0,0],
+                "scan_parser_revision":SCAN_PARSER_REVISION,
             }
             catalog=ModCatalog(home)
             atomic_json(catalog.registry_file,{"schema":1,"entries":[old]})
@@ -107,7 +109,8 @@ class ArtAttemptCacheTests(unittest.TestCase):
                 "source_path":str(rom.resolve()),"file_name":rom.name,
                 "sha256":sha,"profile_path":str(profile_path.resolve()),
                 "size":rom.stat().st_size,"mtime_ns":rom.stat().st_mtime_ns,
-                "effects_manifest_signature":[0,0]}
+                "effects_manifest_signature":[0,0],
+                "scan_parser_revision":SCAN_PARSER_REVISION}
             catalog=ModCatalog(home)
             atomic_json(catalog.registry_file,{"schema":1,"entries":[entry]})
             with patch("auto_mods.import_rom",return_value=(profile,profile_path)) as run:
@@ -142,6 +145,7 @@ class ArtAttemptCacheTests(unittest.TestCase):
                 "sha256":digest,"profile_path":str(profile_path.resolve()),
                 "size":rom.stat().st_size,"mtime_ns":rom.stat().st_mtime_ns,
                 "effects_manifest_signature":[0,0],
+                "scan_parser_revision":SCAN_PARSER_REVISION-1,
             }
             atomic_json(catalog.registry_file,{"schema":1,"entries":[old]})
             incoming={
@@ -154,7 +158,7 @@ class ArtAttemptCacheTests(unittest.TestCase):
                 atomic_json(profile_path,incoming)
                 return incoming,profile_path
             with patch("auto_mods.import_rom",side_effect=fake_import):
-                refreshed=catalog.analyse(rom,with_art=True,force=True)
+                refreshed=catalog.analyse(rom,with_art=True)
             saved=catalog.profile_for(refreshed)
             self.assertEqual(saved["fusion_recipes"],[manual,structural])
             self.assertEqual(saved["fusion_review"]["structurally_validated"],1)

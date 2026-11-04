@@ -354,6 +354,48 @@ class UnknownISOTests(unittest.TestCase):
         self.assertTrue(any("CD-ROM" in x for x in info["issues"]))
         self.assertTrue(any("ISO9660" in x for x in info["nextSteps"]))
 
+    def test_name_evidence_exposes_glyph_and_boundary_without_promoting_or_dumping_records(self):
+        self.report['opponent_name_boundaries']={
+            'state':'limites_nao_validados','examined':39,'boundedRecords':38,
+            'terminatedRecords':0,'pointerAudit':{
+                'outOfFile':0,'sharedRecords':2,'nonIncreasingPairs':1},
+            'records':[{'private':'not a public dump'}]*39,
+            'samples':[{'id':i,'pointer':100+i*16,'headerPresent':True,
+                'headerHex':'F8 0A 04','physicalBoundaryDelta':16,
+                'boundaryKnown':True,'boundaryReached':True,
+                'recordStatus':'glifo_invalido','readablePrefix':'ABCv',
+                'lastGlyph':'v','lastGlyphHex':'0x04','firstInvalidHex':'0xFE',
+                'validated':True,'rawBytes':'must not be copied'} for i in range(1,40)],
+            'validated':True,
+        }
+        info=diagnose_layout(self.report,self.profile)
+        evidence=info['opponentNameBoundaries']
+        self.assertFalse(evidence['validated'])
+        self.assertFalse(info['cardsVerified'])
+        self.assertFalse(info['dropsVerified'])
+        self.assertEqual(evidence['terminatedRecords'],0)
+        self.assertEqual(evidence['boundedRecords'],38)
+        self.assertEqual(evidence['pointerAudit']['sharedRecords'],2)
+        self.assertEqual(len(evidence['samples']),7)
+        self.assertEqual(evidence['samples'][0]['lastGlyph'],'v')
+        self.assertEqual(evidence['samples'][0]['lastGlyphHex'],'0x04')
+        self.assertEqual(evidence['samples'][0]['readablePrefix'],'ABCv')
+        self.assertTrue(evidence['samples'][0]['boundaryReached'])
+        self.assertNotIn('records',evidence)
+        self.assertNotIn('rawBytes',str(evidence))
+        self.assertNotIn('private',str(evidence))
+
+    def test_name_counters_are_bounded_metadata(self):
+        self.report['opponent_name_boundaries']={
+            'boundedRecords':'39','terminatedRecords':999,
+            'pointerAudit':{'outOfFile':-3,'sharedRecords':True,'nonIncreasingPairs':{'bad':1}},
+        }
+        evidence=diagnose_layout(self.report,self.profile)['opponentNameBoundaries']
+        self.assertEqual(evidence['boundedRecords'],0)
+        self.assertEqual(evidence['terminatedRecords'],39)
+        self.assertEqual(evidence['pointerAudit'],{
+            'outOfFile':0,'sharedRecords':0,'nonIncreasingPairs':0})
+
 
 if __name__=="__main__":
     unittest.main()

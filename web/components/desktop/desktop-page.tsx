@@ -740,6 +740,15 @@ function Mods({mods,sha,onRefresh,configured}:{
                     {" "}{diagnostics[mod.sha256].opponentNameBoundaries?.commonFirstInvalidByte??"não observado"}
                     {" "}({diagnostics[mod.sha256].opponentNameBoundaries?.commonFirstInvalidCount??0} registros).
                   </p>
+                  {diagnostics[mod.sha256].opponentNameBoundaries?.pointerAudit&&<p className="mt-1">
+                    Ponteiros fora do arquivo: {diagnostics[mod.sha256].opponentNameBoundaries?.pointerAudit?.outOfFile??0}.
+                    {" "}Registros compartilhando ponteiro: {diagnostics[mod.sha256].opponentNameBoundaries?.pointerAudit?.sharedRecords??0}.
+                    {" "}Pares fora de ordem: {diagnostics[mod.sha256].opponentNameBoundaries?.pointerAudit?.nonIncreasingPairs??0}.
+                  </p>}
+                  {diagnostics[mod.sha256].opponentNameBoundaries?.terminatedRecords!==undefined&&<p className="mt-1">
+                    Registros com 0xFF reconhecido: {diagnostics[mod.sha256].opponentNameBoundaries?.terminatedRecords}.
+                    {" "}Segmentos integralmente examinados: {diagnostics[mod.sha256].opponentNameBoundaries?.boundedRecords??0}.
+                  </p>}
                   <p className="mt-1">
                     Byte mais frequente no fim dos registros:
                     {" "}{diagnostics[mod.sha256].opponentNameBoundaries?.commonEndByte??"?"}
@@ -751,6 +760,10 @@ function Mods({mods,sha,onRefresh,configured}:{
                       {" "}· delta {row.nextPointerDelta??"?"}
                       {" "}· último byte {row.endByteHex??"?"}
                       {" "}· 1º inválido {row.firstInvalidHex??"nenhum"}
+                      {row.recordStatus&&<> · {row.recordStatus.replaceAll("_"," ")}</>}
+                      {row.ambiguousBoundary&&<> · limite ambíguo, identidade pendente</>}
+                      {row.lastGlyph&&<> · último glifo: “{row.lastGlyph}” ({row.lastGlyphHex??"?"})</>}
+                      {row.headerHex&&<> · cabeçalho {row.headerHex}</>}
                       {" "}· final em hex {row.tailHex}
                     </p>)}
                   <p className="mt-2 text-gold">

@@ -43,6 +43,55 @@ class PreviewUpdaterTests(unittest.TestCase):
         self.assertIsNone(previews.version_for_branch("feature/evil-v076"))
         self.assertIsNone(previews.version_for_branch("feature/dueltrace-v076-../../bad"))
 
+    def test_explicit_semver_branches_and_legacy_versions_are_canonical(self):
+        for branch, expected in (
+            ("feature/dueltrace-v096-legacy", "0.9.6"),
+            ("feature/dueltrace-v0.10.0-universal-layout", "0.10.0"),
+            ("fix/dueltrace-v0.10.12-cards", "0.10.12"),
+            ("security/dueltrace-v12.34.56-updater", "12.34.56"),
+            ("feature/dueltrace-v9999.9999.9999-boundary", "9999.9999.9999"),
+        ):
+            with self.subTest(branch=branch):
+                self.assertEqual(previews.version_for_branch(branch), expected)
+
+    def test_ambiguous_or_injected_semver_branches_are_rejected(self):
+        for branch in (
+            None, 100, "feature/dueltrace-v0100-ambiguous",
+            "feature/dueltrace-v00.10.0-leading-zero",
+            "feature/dueltrace-v0.010.0-leading-zero",
+            "feature/dueltrace-v0.10.00-leading-zero",
+            "feature/dueltrace-v0.10-incomplete",
+            "feature/dueltrace-v0.10.0.1-extra-component",
+            "feature/dueltrace-v10000.0.0-too-large",
+            "feature/dueltrace-v0.10.0-", "feature/dueltrace-v0.10.0",
+            "feature/dueltrace-v0.10.0+build-next",
+            "feature/dueltrace-v０.10.0-unicode",
+            "other/dueltrace-v0.10.0-untrusted",
+            "feature/dueltrace-v0.10.0-../../escape",
+            "feature/dueltrace-v0.10.0-$(command)",
+            "feature/dueltrace-v0.10.0-safe;command",
+            "feature/dueltrace-v0.10.0-safe%2fescape",
+            "feature/dueltrace-v0.10.0-safe\n",
+            " feature/dueltrace-v0.10.0-safe",
+        ):
+            with self.subTest(branch=branch):
+                self.assertIsNone(previews.version_for_branch(branch))
+
+    def test_double_digit_minor_is_an_update_and_never_a_downgrade(self):
+        for local, branch, status, available in (
+            ("0.9.9", "feature/dueltrace-v0.10.0-universal-layout",
+             "preview_update_available", True),
+            ("0.10.0", "feature/dueltrace-v099-legacy",
+             "preview_older", False),
+        ):
+            with self.subTest(local=local, branch=branch):
+                result=check_for_updates(fetcher=lambda:stable(),
+                    preview_fetcher=lambda:preview(900, branch=branch),
+                    current_version=local, installed_run_id=9999)
+                self.assertEqual(result["status"], status)
+                self.assertEqual(result["updateAvailable"], available)
+                self.assertFalse(result["automaticInstallReady"])
+
     def test_newer_preview_build_detected_by_build_id(self):
         x=check_for_updates(fetcher=lambda:stable(),preview_fetcher=lambda:preview(120),
                             current_version="0.7.5",installed_run_id=100)
@@ -81,8 +130,10 @@ class PreviewUpdaterTests(unittest.TestCase):
         self.assertFalse(x["updateAvailable"])
 
     def test_stable_newer_remains_priority(self):
-        x=check_for_updates(fetcher=lambda:stable("v0.9.7"),
-            preview_fetcher=lambda:preview(120),installed_run_id=100)
+        x=check_for_updates(fetcher=lambda:stable("v0.9.8"),
+            preview_fetcher=lambda:preview(120,
+                branch="feature/dueltrace-v0.10.0-universal-layout"),
+            current_version="0.9.7",installed_run_id=100)
         self.assertEqual(x["status"],"update_available")
         self.assertTrue(x["updateAvailable"])
 
@@ -124,6 +175,40 @@ class PreviewUpdaterTests(unittest.TestCase):
         self.assertEqual(picked["run_id"],100)
         self.assertEqual(picked["version"],"0.7.6")
         self.assertEqual(len(calls),2)
+
+    def test_semver_ordering_crosses_minor_boundary_and_ties_by_build(self):
+        for candidates, expected_id, expected_version in (
+            ([run(900, "feature/dueltrace-v099-legacy"),
+              run(100, "feature/dueltrace-v0.10.0-universal-layout")], 100, "0.10.0"),
+            ([run(900, "feature/dueltrace-v0.10.0-universal-layout"),
+              run(100, "feature/dueltrace-v100-next")], 100, "1.0.0"),
+            ([run(100, "feature/dueltrace-v096-legacy"),
+              run(200, "fix/dueltrace-v0.9.6-rebuilt")], 200, "0.9.6"),
+        ):
+            with self.subTest(expected_version=expected_version):
+                def fake_json(url):
+                    if url == previews.RUNS_API:
+                        return {"workflow_runs": candidates}
+                    self.assertEqual(url,
+                        f"{previews.REPO_API}/actions/runs/{expected_id}/artifacts?per_page=100")
+                    return {"artifacts":[{"name":previews.ARTIFACT_NAME,"expired":False}]}
+                with patch.object(previews,"_get_json",side_effect=fake_json):
+                    picked=previews.fetch_latest_preview()
+                self.assertEqual(picked["run_id"], expected_id)
+                self.assertEqual(picked["version"], expected_version)
+
+    def test_semver_does_not_relax_official_workflow_checks(self):
+        branch="feature/dueltrace-v0.10.0-universal-layout"
+        self.assertTrue(previews._accepted_run(run(202, branch)))
+        for tampered in (
+            run(202, branch, event="pull_request"),
+            run(202, branch, repo="other/fork"),
+            {**run(202, branch), "name":"Untrusted workflow"},
+            {**run(202, branch), "head_sha":"not-a-commit"},
+            {**run(202, branch), "html_url":"https://evil.example/run/202"},
+        ):
+            with self.subTest(run=tampered):
+                self.assertFalse(previews._accepted_run(tampered))
 
     def test_expired_or_failed_runs_are_not_available(self):
         def fake_json(url):

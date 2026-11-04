@@ -1,60 +1,57 @@
-# DUELTRACE — MultiMod Companion · Alpha Windows v0.6.0
+# DUELTRACE — MultiMod Companion
 
-DUELTRACE é um assistente independente para **Yu-Gi-Oh! Forbidden Memories (PS1)** e mods. Projeto de fãs, não afiliado aos detentores do jogo. Não contém nem distribui ISOs, saves ou recursos protegidos do jogo.
+Assistente local para **Yu-Gi-Oh! Forbidden Memories (PS1)** e mods, em desenvolvimento para Windows. Projeto de fãs, não afiliado aos detentores do jogo. Não inclui nem distribui ISOs, saves ou recursos protegidos do jogo.
 
-## Versão Alpha 0.6.0 — experiência de usuário simplificada
+O aplicativo combina um motor Python com uma interface Next.js/React exportada estaticamente e exibida em uma janela pywebview/WebView2. A Alpha Tkinter permanece disponível como alternativa legada.
 
-A interface pública apresenta quatro seções: **Início**, **Biblioteca de Mods**, **Biblioteca de Cartas** e **Fusões**. O modo desenvolvedor com as ferramentas legadas permanece disponível com `DUELTRACE_DEV_MODE=1` (instalação Python) ou `--developer`.
+## Recursos e limites
 
-Existe um pacote **DUELTRACE-Windows-Alpha.zip** com `DUELTRACE.exe` compilado sem console CMD. O patch `patch.zip` continua disponível para o launcher antigo.
-A análise local aproveita os parsers, opcionalmente extrai imagens quando reconhecidas, cria um relatório de evidências e consulta **Ollama local** quando disponível, sempre como hipótese — sem aprovação automática.
+- Biblioteca de Mods com importação local, SHA-256, cache e perfis separados por ISO.
+- Biblioteca de Cartas, fusões e drops para estruturas que os parsers conseguem verificar.
+- Início com mão, sugestões de fusão e RANK, condicionados à identidade da ISO e às evidências do leitor.
+- Descoberta limitada de executáveis PS1 e contêineres renomeados, com diagnóstico para formatos desconhecidos.
+- Comparação de cartas entre mods como candidaturas, sem copiar dados de jogo automaticamente.
+- Ollama local opcional para investigação de evidências, sem aprovar informações automaticamente.
+- Atualizações estáveis e Preview com controles de origem e integridade. A Preview pode não possuir assinatura de editor; consulte os avisos do pacote.
 
-Veja [escopo e instalação da Alpha](docs/DUELTRACE_ALPHA_V060.md) e [documentação da plataforma 0.5.0](docs/DUELTRACE_PLATAFORMA_V050.md).
-
-## Histórico da plataforma 0.5.0
-
-O novo launcher DUELTRACE Desktop já possui:
-- Design system escuro/ciano/dourado, navegação lateral com transições e botões com hover animado.
-- Ícone original em formatos SVG, PNG e ICO, gerado a partir de geometria própria.
-- Biblioteca de Mods com seleção de ISO/BIN, escaneamento de pasta em segundo plano e reutilização do cache local.
-- Biblioteca de Cartas com busca e cinco categorias de cartões (Monstros, Mágicas, Rituais, Armadilhas, Equipamentos).
-- Leitura opcional de **textos declarados de efeito** presentes em metadados estruturados na ISO ou manifesto local vinculados ao SHA-256.
-- Seções iniciais de Fusões, Overlay, Diagnóstico e Configurações.
-- Ferramentas técnicas antigas preservadas no botão **Abrir ferramentas avançadas**.
-
-**Não existe garantia de reconhecimento universal de mods.** O leitor funciona com estruturas que consegue verificar; arquivos incompatíveis ficam sob análise. Textos de efeitos não provam que o mecanismo de jogo os executa. Não inventamos fusões, drops, atributos ou chances.
-
-## Como iniciar
-
-**Windows sem terminal:** extraia `DUELTRACE-Windows-Alpha.zip` e abra `DUELTRACE/DUELTRACE.exe`. Para a instalação antiga, atualize pelo launcher e abra `ABRIR_BIBLIOTECA_MODS.bat` na pasta `app/`. O ponto de entrada Python `tools/abrir_biblioteca.py` continua disponível.
-
-1. Escolha uma ISO/BIN local ou uma pasta com imagens.
-2. Aguarde o scanner local e veja os resultados e eventuais alertas.
-3. Selecione o perfil e, se estiver parcialmente identificado, revise/autorize somente os recursos conhecidos.
-4. Ative o perfil para o overlay. Isso não inicia automaticamente o emulador.
-
-A análise de uma pasta já escolhida pode ser reativada ao abrir o aplicativo. A opção é configurável.
-
-## Documentação
-
-- [Plataforma, design system e novos recursos](docs/DUELTRACE_PLATAFORMA_V050.md)
-- [Investigação de RAM — fase anterior](docs/DOIS_CANDIDATOS_V0412.md)
-- [Publicação de patch](docs/PUBLICAR_RELEASE.md)
-
-## Segurança e privacidade
-
-O scanner lê ISOs fornecidas localmente em modo somente leitura. Ele não copia, altera nem distribui ROMs, memory cards ou saves. Não envia conteúdo da ISO à Internet. A integração opcional com Ollama trabalha apenas com relatórios compactos; suas sugestões não aprovam dados automaticamente.
-
-A identificação física das cartas na mesa ainda não foi validada; fusões envolvendo a mesa continuam desativadas. A seleção do perfil **não comprova** qual ISO está aberta no ePSXe.
+**Não há garantia de suporte universal.** Tamanho de arquivo, texto legível, pesos coerentes ou uma hipótese de IA não comprovam compatibilidade. O comportamento em jogo precisa ser validado por ISO e por layout RAM.
 
 ## Desenvolvimento
 
-Requer Python 3.10+; a interface usa Tkinter da biblioteca padrão.
+Python 3.10+ (CI: 3.12), com Tkinter para os módulos legados e Pillow para os testes gráficos. A interface usa o lockfile de `web/`; o CI utiliza Node.js 22.
 
 ```bash
-python -m compileall -q scanner tests
+python -m compileall -q scanner tests tools
 python -m unittest discover -s tests -v
-python scanner/abrir_biblioteca.py
+cd web
+npm ci
+npm run build
+cd ..
+python tools/security/verify_web_css.py
 ```
+
+O build exporta as páginas para `web/out`. No Windows, instale as dependências descritas em [web/README.md](web/README.md) e execute:
+
+```powershell
+python scanner/dueltrace_web_desktop.py
+```
+
+`npm run dev`, dentro de `web/`, abre uma prévia no navegador sem acesso privilegiado às ISOs, perfis ou RAM. O desktop nativo WebView2 e o ePSXe exigem validação no Windows. A interface legada pode ser iniciada com `python scanner/abrir_biblioteca.py` (modo avançado: `--developer`).
+
+## Investigação e continuidade
+
+O [plano mestre](docs/DUELTRACE_MASTER_PLAN.md) descreve arquitetura, estado dos recursos e critérios para uma versão estável. O caso **GOG MOD 2.2** depende de evidências reais: os 39 nomes de oponentes, 722 cartas e 4.543 drops históricos não constituem um catálogo confirmado. O scanner preserva os candidatos e diagnósticos locais.
+
+- [Interface e integração desktop](web/README.md)
+- [Investigação de terminadores GOG](docs/DUELTRACE_V096_GOG_NAME_TERMINATORS.md)
+- [Preservação dos drops provisórios](docs/DUELTRACE_V095_GOG_PROVISIONAL_DROPS.md)
+- [Segurança](SECURITY.md)
+- [Publicação e recursos legados](docs/PUBLICAR_RELEASE.md)
+
+## Privacidade e confiança
+
+O scanner lê os arquivos fornecidos pelo usuário sem alterá-los. Não envia ISOs ou memory cards à Internet. Perfis, nomes, fusões, drops e endereços RAM pertencem à ISO correspondente; não são transferíveis por igualdade de ID. Texto de efeito não comprova sua execução no jogo. Dados ausentes permanecem desconhecidos.
+
+Ollama trabalha com relatórios limitados e é opcional. Os recursos locais essenciais não dependem dele. Atualizações consultam o GitHub mediante a ação correspondente; a interface não necessita de um backend público no Vercel.
 
 Repositório: https://github.com/guibatoni/appassist

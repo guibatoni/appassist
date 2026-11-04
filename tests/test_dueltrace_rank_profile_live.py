@@ -103,6 +103,12 @@ class GenericRankTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 project_rank_for_mod(p,counters)
 
+    def test_unavailable_ruleset_cannot_authorize_ram_binding(self):
+        for available in (False,None,1,"true"):
+            p=profile()
+            p["rank_points"]["available"]=available
+            self.assertIsNone(validate_live_rank_binding(p))
+
 
 if __name__ == "__main__":
     unittest.main()

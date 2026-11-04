@@ -1,6 +1,6 @@
 """Consulta builds Preview do workflow OFICIAL, sem lista fixa de branches.
 
-Mudanças de branch (v076, v077...) são detectadas sem alterar o aplicativo.
+Branches com versão compacta (v096) ou explícita (v0.10.0) são reconhecidas.
 O conteúdo do GitHub Actions é experimental e nunca é auto-instalado.
 Nenhuma ISO, RAM ou informação local é enviada ao GitHub.
 """
@@ -20,8 +20,13 @@ ARTIFACT_NAME = "DUELTRACE-Windows-Preview-Unsigned-Security-Scanned"
 BUILD_INFO_FILE = "dueltrace-build.json"
 MAX_BYTES = 768 * 1024
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
+# Os componentes explícitos seguem o limite de quatro dígitos do checker e
+# instalador; zeros à esquerda e formas compactas maiores seriam ambíguos.
+_VERSION_COMPONENT = r"(?:0|[1-9][0-9]{0,3})"
 _VERSION_BRANCH = re.compile(
-    r"(?:feature|fix|security)/dueltrace-v([0-9])([0-9])([0-9])-[a-z0-9][a-z0-9-]*\Z"
+    r"(?:feature|fix|security)/dueltrace-v"
+    rf"(?:(?P<compact>[0-9]{{3}})|(?P<semver>{_VERSION_COMPONENT}\."
+    rf"{_VERSION_COMPONENT}\.{_VERSION_COMPONENT}))-[a-z0-9][a-z0-9-]*\Z"
 )
 
 
@@ -52,12 +57,15 @@ def _get_json(url: str, expected_type: type = dict) -> dict | list:
 
 
 def version_for_branch(branch: str | None) -> str | None:
+    """Extrai uma versão canônica sem interpretar o restante como código/URL."""
     if not isinstance(branch,str):
         return None
     match=_VERSION_BRANCH.fullmatch(branch)
     if match is None:
         return None
-    return ".".join(str(int(c)) for c in match.groups())
+    if match.group("semver") is not None:
+        return match.group("semver")
+    return ".".join(match.group("compact"))
 
 
 def _accepted_run(item: dict, branch: str | None = None) -> bool:

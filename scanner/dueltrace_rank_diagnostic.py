@@ -24,10 +24,12 @@ def diagnose_rank_profile(sha: str | None, profile: dict | None) -> dict:
     candidate_count = min(1000,len(candidates)) if isinstance(candidates,list) else 0
     binding_present = (isinstance(profile,dict)
                        and isinstance(profile.get("rank_runtime_binding"),dict))
-    binding_valid = validate_live_rank_binding(profile) is not None
-    x15_exact = bool(valid_sha and model_available(sha))
-    binary_match = bool(valid_sha and x15_compatible_runtime(profile))
-    ready = x15_exact or binding_valid or binary_match
+    profile_matches = bool(valid_sha and isinstance(profile,dict)
+                           and profile.get("rom_sha256") == sha)
+    binding_valid = bool(profile_matches and validate_live_rank_binding(profile) is not None)
+    x15_exact = bool(profile_matches and model_available(sha))
+    binary_match = bool(profile_matches and x15_compatible_runtime(profile))
+    ready = x15_exact or binding_valid
     table_detected = info.get("available") is True
     structure_verified = info.get("structure_verified") is True
 
@@ -36,6 +38,12 @@ def diagnose_rank_profile(sha: str | None, profile: dict | None) -> dict:
             "no_active_iso",
             "Nenhuma ISO ativa com perfil local foi identificada.",
             "Abra Biblioteca de Mods, importe e selecione uma ISO."
+        )
+    elif not profile_matches:
+        code,reason,action = (
+            "profile_sha_mismatch",
+            "O perfil não corresponde ao SHA-256 da ISO selecionada.",
+            "Reimporte a ISO e selecione o perfil correspondente antes de ler a RAM."
         )
     elif x15_exact:
         code,reason,action = (
@@ -51,16 +59,17 @@ def diagnose_rank_profile(sha: str | None, profile: dict | None) -> dict:
         )
     elif binary_match:
         code,reason,action = (
-            "exact_x15_runtime",
-            "SLUS e tabela de pontuação são idênticos ao modelo X15 conhecido.",
-            "Abra um duelo e confirme os LP; compare o RANK com a tela final."
+            "runtime_binding_required",
+            "SLUS e tabela são idênticos ao X15, mas a ISO não possui vínculo RAM validado.",
+            "Valide o mapeamento específico desta ISO em duelos independentes; "
+            "a igualdade de arquivos não autoriza um endereço RAM presumido."
         )
     elif not table_detected:
         code,reason,action = (
             "rank_table_missing",
             "A tabela de pontos RANK não foi reconhecida no perfil desta ISO.",
-            "Teste o leitor legado na Central de Duelo: confira os LP e "
-            "observe se os contadores mudam. A leitura é experimental."
+            "Extraia as regras e valide o mapeamento RAM específico desta ISO. "
+            "Use a calculadora manual enquanto a leitura automática estiver bloqueada."
         )
     elif binding_present:
         code,reason,action = (
@@ -74,16 +83,16 @@ def diagnose_rank_profile(sha: str | None, profile: dict | None) -> dict:
             "mips_candidates_only",
             "A tabela e candidatos MIPS foram localizados, porém não existe "
             "mapeamento RAM validado por duelos reais.",
-            "Compare o RANK calculado com o resultado mostrado no ePSXe. "
-            "O modo experimental não valida um binding por si só."
+            "Valide a rotina e os contadores em duelos independentes. "
+            "Candidatos estáticos não autorizam leitura automática da RAM."
         )
     else:
         code,reason,action = (
             "ram_binding_missing",
             "A tabela RANK foi encontrada, mas não há mapeamento da RAM "
             "e rotina de execução comprovados para este mod.",
-            "Teste a leitura legada em um duelo e compare com a tela final. "
-            "É necessário validar a memória para liberar um binding."
+            "Valide o mapeamento específico da ISO em duelos independentes. "
+            "Não reutilize endereços de outros mods."
         )
     return {
         "readyForLiveRead":bool(ready),
@@ -100,15 +109,9 @@ def diagnose_rank_profile(sha: str | None, profile: dict | None) -> dict:
         "x15Exact":x15_exact,
         "x15CompatibleBinary":binary_match,
         "mipsRuntimeConfirmed":False,
-        "legacyProbeAvailable":bool(valid_sha and isinstance(profile,dict)
-                                      and not ready),
+        "legacyProbeAvailable":False,
         "score":None,
         "projectedRank":None,
-        "note":(
-            "O leitor do Assistente antigo pode testar o registro RAM como "
-            "EXPERIMENTO após confirmar LP e duas ações de duelo; isso não "
-            "valida uma ISO desconhecida nem cria um binding permanente."
-            if valid_sha and isinstance(profile,dict) and not ready else
-            "Diagnóstico estático e local, sem leitura RAM ou desbloqueio de projeções."),
+        "note":"Diagnóstico estático e local, sem leitura RAM ou desbloqueio de projeções.",
 
     }

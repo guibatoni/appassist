@@ -8,11 +8,13 @@ import struct
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scanner"))
 
 from dueltrace_layout_discovery import (
-    FIRST_TABLE, RANK_STRIDE, KNOWN_WA_SIZE,
+    FIRST_TABLE, RANK_STRIDE, KNOWN_WA_SIZE, RESOURCE_ADAPTERS,
+    DropLayoutAdapter, inspect_psx_executable_header,
     discover_disc_layout, candidate_files_for_decoder,
 )
 
@@ -56,6 +58,14 @@ def weights():
     return struct.pack("<722H",2048,*([0]*721))
 
 
+def executable_header(*, entry=0x80010000, load=0x80010000, length=0x100000):
+    header=bytearray(32)
+    header[:8]=b"PS-X EXE"
+    # The GP word at 0x14 is independent of both load and payload length.
+    struct.pack_into("<IIII",header,0x10,entry,0x80098760,load,length)
+    return bytes(header)
+
+
 class UniversalLayoutDiscoveryTests(unittest.TestCase):
     def setUp(self):
         self.exe="GOG_VNT.223"
@@ -68,7 +78,7 @@ class UniversalLayoutDiscoveryTests(unittest.TestCase):
                 self.container:(1000,24_000_000),
                 self.video:(50_000,35_430_400),
             },
-            signatures={self.exe:b"PS-X EXE" + bytes(24)},
+            signatures={self.exe:executable_header()},
             tables={self.container:{
                 FIRST_TABLE+RANK_STRIDE:weights(),
                 FIRST_TABLE+2*RANK_STRIDE:weights(),
@@ -82,6 +92,7 @@ class UniversalLayoutDiscoveryTests(unittest.TestCase):
         self.assertEqual(report["resourceProbes"],2)
         self.assertEqual(report["executables"][0]["name"],self.exe)
         self.assertTrue(report["executables"][0]["psxHeader"])
+        self.assertTrue(report["executables"][0]["executableHeader"]["headerCoherent"])
         self.assertEqual(candidate_files_for_decoder(report,role="executavel"),
                          [self.exe])
         resources=report["resources"]
@@ -95,6 +106,7 @@ class UniversalLayoutDiscoveryTests(unittest.TestCase):
         self.assertFalse(resources[0]["validated"])
         self.assertTrue(all(n<=4096 for _,n in self.disc.read_calls))
         self.assertTrue(all(n==32 for _,n in self.disc.get_calls))
+        self.assertEqual(resources[0]["layoutProbes"][0]["adapter"],"fm_wa_722_v1")
 
     def test_one_table_or_size_alone_never_validates_resource(self):
         self.disc.tables[self.container]={
@@ -141,6 +153,112 @@ class UniversalLayoutDiscoveryTests(unittest.TestCase):
         self.assertEqual(data["inspectedFiles"],2)
         self.assertLessEqual(data["resourceProbes"],1)
         self.assertLessEqual(len(self.disc.read_calls),2+6)
+
+    def test_psx_signature_alone_is_diagnostic_and_not_a_decoder_candidate(self):
+        self.disc.signatures[self.exe]=b"PS-X EXE"+bytes(24)
+        report=discover_disc_layout(self.disc,boot_target=self.exe)
+        self.assertTrue(report["executables"][0]["psxHeader"])
+        self.assertFalse(report["executables"][0]["executableHeader"]["headerCoherent"])
+        self.assertEqual(candidate_files_for_decoder(report,role="executavel"),[])
+
+    def test_psx_headers_keep_all_coherent_candidates_without_choosing_one(self):
+        other="RENAMED.BIN"
+        self.disc.files[other]=(80_000,0x120000)
+        self.disc.signatures[other]=executable_header()
+        report=discover_disc_layout(self.disc,boot_target=self.exe)
+        self.assertCountEqual(candidate_files_for_decoder(report,role="executavel"),
+                              [self.exe,other])
+        self.assertFalse(report["validated"])
+
+    def test_truncated_reads_never_count_as_matching_matrices(self):
+        self.disc.read=lambda lba,length: bytes(length-1)
+        report=discover_disc_layout(self.disc)
+        self.assertEqual(candidate_files_for_decoder(report,role="recursos"),[])
+        self.assertTrue(all(r["probeState"]=="falha_leitura" for r in report["resources"]))
+
+    def test_two_matches_followed_by_read_failure_remain_diagnostic(self):
+        read=self.disc.read
+        failed_lba=self.disc.files[self.container][0]+(FIRST_TABLE+3*RANK_STRIDE)//2048
+        def fail_last(lba,length):
+            if lba==failed_lba:
+                raise OSError("synthetic truncated sector")
+            return read(lba,length)
+        self.disc.read=fail_last
+        report=discover_disc_layout(self.disc)
+        row=next(r for r in report["resources"] if r["name"]==self.container)
+        self.assertEqual(row["dropArrayMatches"],2)
+        self.assertEqual(row["probeState"],"falha_leitura")
+        self.assertEqual(candidate_files_for_decoder(report,role="recursos"),[])
+
+    def test_invalid_iso_index_lba_is_skipped_without_read(self):
+        self.disc.files={"BROKEN.DAT":(-1,KNOWN_WA_SIZE)}
+        report=discover_disc_layout(self.disc)
+        self.assertEqual(report["resources"],[])
+        self.assertEqual(self.disc.get_calls,[])
+        self.assertEqual(self.disc.read_calls,[])
+
+    def test_multiple_adapter_matches_in_one_container_remain_ambiguous(self):
+        duplicate=DropLayoutAdapter("synthetic_other",RESOURCE_ADAPTERS[0].table_offsets)
+        with patch("dueltrace_layout_discovery.RESOURCE_ADAPTERS",
+                   RESOURCE_ADAPTERS+(duplicate,)):
+            report=discover_disc_layout(self.disc)
+        row=next(r for r in report["resources"] if r["name"]==self.container)
+        self.assertEqual(len(row["layoutProbes"]),2)
+        self.assertEqual(candidate_files_for_decoder(report,role="recursos"),[])
+
+    def test_adapter_budget_is_global_even_with_several_registered_layouts(self):
+        duplicate=DropLayoutAdapter("synthetic_other",RESOURCE_ADAPTERS[0].table_offsets)
+        with patch("dueltrace_layout_discovery.RESOURCE_ADAPTERS",
+                   RESOURCE_ADAPTERS+(duplicate,)):
+            report=discover_disc_layout(self.disc,max_resource_probes=1)
+        self.assertEqual(report["resourceProbes"],1)
+        self.assertTrue(report["probeLimitReached"])
+        self.assertEqual(len(self.disc.read_calls),3)
+
+    def test_adapter_rejects_duplicate_and_negative_offsets_without_read(self):
+        for offsets in ((0,0,0),(-1,20,40)):
+            result=DropLayoutAdapter("synthetic_invalid",offsets).probe(self.disc,self.container)
+            self.assertEqual(result["state"],"adaptador_invalido")
+            self.assertEqual(result["matchingTables"],0)
+        self.assertEqual(self.disc.read_calls,[])
+
+
+class PsxExecutableHeaderTests(unittest.TestCase):
+    def test_correct_pc_gp_load_and_size_offsets(self):
+        result=inspect_psx_executable_header(executable_header(entry=0x80010008),0x120000)
+        self.assertTrue(result["headerCoherent"])
+        self.assertEqual(result["loadAddress"],0x80010000)
+        self.assertEqual(result["payloadSize"],0x100000)
+        self.assertEqual(result["entryFileOffset"],0x808)
+        self.assertFalse(result["validated"])
+
+    def test_uncached_and_physical_ram_aliases_are_supported(self):
+        for load,entry in ((0xA0010000,0xA0010004),(0x10000,0x10004),
+                           (0x80010000,0xA0010004)):
+            result=inspect_psx_executable_header(executable_header(load=load,entry=entry),0x120000)
+            self.assertTrue(result["headerCoherent"])
+            self.assertEqual(result["entryFileOffset"],0x804)
+
+    def test_rejects_truncation_zero_and_oversized_payloads(self):
+        cases=((b"PS-X EXE",0x120000),
+               (executable_header(),0x100),
+               (executable_header(),0x100000),
+               (executable_header(length=0),0x120000),
+               (executable_header(length=0x100003),0x120000),
+               (executable_header(length=0x300000),0x400000))
+        for header,size in cases:
+            with self.subTest(size=size,header=header):
+                self.assertFalse(inspect_psx_executable_header(header,size)["headerCoherent"])
+
+    def test_rejects_entry_outside_payload_unaligned_and_ram_overflow(self):
+        cases=(dict(entry=0x80110000),dict(entry=0x80010002),
+               dict(load=0x80010002),dict(load=0x80180000,entry=0x80180000),
+               dict(load=0xBFC00000,entry=0xBFC00000),
+               dict(load=0xC0010000,entry=0xC0010000))
+        for kwargs in cases:
+            with self.subTest(kwargs=kwargs):
+                self.assertFalse(inspect_psx_executable_header(
+                    executable_header(**kwargs),0x120000)["headerCoherent"])
 
 
 if __name__=="__main__":

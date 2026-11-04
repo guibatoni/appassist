@@ -91,6 +91,11 @@ class BridgeTests(unittest.TestCase):
     def test_drops_from_active_iso_are_paged_and_authenticated(self):
         groups=["TABELA_1_RANK_DESCONHECIDO","TABELA_2_RANK_DESCONHECIDO",
                 "TABELA_3_RANK_DESCONHECIDO"]
+        known_card_ids={card["id"] for card in self.profile["cards"]}
+        self.profile["cards"].extend(
+            {"id":cid,"name":f"Carta sintética {cid}","atk":1000,"def":800}
+            for cid in range(1,723) if cid not in known_card_ids)
+        self.profile["cards"].sort(key=lambda card:card["id"])
         self.profile["supported_features"]["drops"]=True
         self.profile["verified"]["tabelas_drops"]="verificado"
         self.profile["verified"]["oponentes"]="verificado"
@@ -168,19 +173,20 @@ class BridgeTests(unittest.TestCase):
             self.bridge.get_hand()
             self.assertEqual(planner.call_count,2)
 
-    def test_unmapped_rank_probes_but_does_not_pretend_101_is_live(self):
-        """Restaurar sondagem não autoriza pontuação antes da calibração."""
-        rank_reader=Mock(return_value={
-            "ready":False,"status":"Sem registro plausível","pid":None,"counters":None})
-        self.bridge._rank_reader=rank_reader
+    def test_unmapped_rank_never_reads_presumed_legacy_address(self):
+        reader=Mock(return_value={"ready":True,"pid":1234,
+                                  "counters":{"remaining_lp":8000}})
+        self.bridge._rank_reader=reader
+        self.bridge._rank_mod_reader=Mock()
         state=self.bridge.get_rank()
         self.assertFalse(state["ready"])
-        self.assertEqual(state["state"],"unavailable")
+        self.assertEqual(state["state"],"unsupported")
         self.assertEqual(state["rankSystem"],"classic")
-        self.assertEqual(state["sourceMode"],"experimental")
         self.assertIsNone(state["score"])
         self.assertIsNone(state["category"])
-        rank_reader.assert_called_once_with(preferred_pid=None)
+        self.assertIsNone(state["counters"])
+        reader.assert_not_called()
+        self.bridge._rank_mod_reader.assert_not_called()
 
     def test_hand_error_does_not_keep_previous_cards(self):
         self.bridge.get_hand()
@@ -238,131 +244,60 @@ class BridgeTests(unittest.TestCase):
             self.bridge.activate_mod(self.sha,False)
         self.assertEqual(self.bridge.activate_mod(self.sha,True)["activeSha"],self.sha)
 
-    def test_unknown_iso_uses_read_only_legacy_probe_but_requires_lp_confirmation(self):
-        counters={"turns":0,"effective_attacks":0,"defense_wins":0,
-                  "face_down":0,"spells":0,"traps":0,"cards_used":0,
-                  "remaining_lp":8000,"fusions":0,"equips":0}
-        reader=Mock(return_value={
-            "ready":True,"status":"Memória antiga plausível","pid":1234,
-            "result_adjustment":-40,"counters":counters})
+    def test_unknown_iso_lp_confirmation_cannot_authorize_memory_reads(self):
+        reader=Mock()
         self.bridge._rank_reader=reader
-        initial=self.bridge.get_rank()
-        self.assertFalse(initial["ready"])
-        self.assertEqual(initial["state"],"needs_lp_confirmation")
-        self.assertEqual(initial["candidateLp"],8000)
-        self.assertEqual(initial["sourceMode"],"experimental")
-        self.assertIsNone(initial["score"])
-        self.assertEqual(self.bridge.confirm_rank_lp(9000)["state"],"lp_mismatch")
-        observed=self.bridge.confirm_rank_lp(8000)
-        self.assertEqual(observed["state"],"needs_ram_validation")
-        self.assertFalse(observed["ready"])
-        self.assertEqual(observed["validationProgress"],0)
-        for _ in range(4):
-            self.assertEqual(self.bridge.get_rank()["validationProgress"],0)
-        counters["spells"]=1
-        one=self.bridge.get_rank()
-        self.assertEqual(one["state"],"needs_ram_validation")
-        self.assertEqual(one["validationProgress"],1)
-        counters["turns"]=1
-        two=self.bridge.get_rank()
-        self.assertTrue(two["ready"])
-        self.assertEqual(two["score"],95)
-        self.assertEqual(two["category"],"S-POW")
-        self.assertEqual(two["rankSystem"],"classic")
-        self.assertEqual(two["sourceMode"],"experimental")
-        self.assertEqual(two["victorySource"],"projected_lp")
-        self.assertFalse(two["final"])
-        self.assertIsNone(self.bridge._rank_last_snapshot)
+        self.bridge._rank_mod_reader=Mock()
+        for lp in (8000,10000):
+            with self.subTest(lp=lp):
+                result=self.bridge.confirm_rank_lp(lp)
+                self.assertEqual(result["state"],"unsupported")
+                self.assertFalse(result["ready"])
+                self.assertIsNone(result["score"])
+        reader.assert_not_called()
+        self.bridge._rank_mod_reader.assert_not_called()
+        self.assertIsNone(self.bridge._rank_calibration)
         with self.assertRaises(ValueError):
             self.bridge.capture_rank_prediction()
-        counters["spells"]=7
-        bad=self.bridge.get_rank()
-        self.assertTrue(bad["ready"])  # incremento 6 em uma leitura é plausível
-        self.assertEqual(bad["score"],87)
-        self.assertEqual(bad["category"],"A-POW")
-        self.assertNotEqual(bad["category"],"Z-POW")
-        counters["turns"]=0
-        counters["spells"]=0
-        restarted=self.bridge.get_rank()
-        self.assertEqual(restarted["state"],"needs_ram_validation")
-        self.assertEqual(restarted["validationProgress"],0)
-        self.assertIsNotNone(self.bridge._rank_legacy_trial)
-        reader.assert_called()
+        reader.assert_not_called()
 
-    def test_experimental_rank_survives_single_same_pid_frame_dropout(self):
-        counters={"turns":0,"effective_attacks":0,"defense_wins":0,
-                  "face_down":0,"spells":0,"traps":0,"cards_used":0,
-                  "remaining_lp":10000,"fusions":0,"equips":0}
-        reader=Mock(return_value={
-            "ready":True,"status":"Registro do duelo","pid":1234,
-            "counters":counters})
-        self.bridge._rank_reader=reader
-        self.assertEqual(self.bridge.get_rank()["candidateLp"],10000)
-        armed=self.bridge.confirm_rank_lp(10000)
-        self.assertEqual(armed["validationProgress"],0)
-        counters["spells"]=1
-        self.assertEqual(self.bridge.get_rank()["validationProgress"],1)
-        reader.return_value={"ready":False,"status":"Um frame de RAM instável",
-                             "pid":1234,"counters":None}
-        failed=self.bridge.get_rank()
-        self.assertEqual(failed["state"],"unavailable")
-        self.assertIsNone(failed["score"])
-        self.assertEqual(failed["sourceMode"],"experimental")
-        self.assertIsNotNone(self.bridge._rank_legacy_trial)
-        reader.return_value={"ready":True,"pid":1234,"counters":counters}
-        counters["turns"]=1
-        resumed=self.bridge.get_rank()
-        self.assertTrue(resumed["ready"])
-        self.assertEqual(resumed["category"],"S-POW")
-        self.assertEqual(resumed["rankSystem"],"classic")
-        self.assertEqual(resumed["sourceMode"],"experimental")
+    def test_unmapped_iso_clears_previous_duel_and_capture(self):
+        self.bridge._rank_reader=Mock()
+        self.bridge._rank_mod_reader=Mock()
+        for name in ("_rank_calibration","_rank_legacy_trial","_rank_lp_session",
+                     "_rank_last_turns","_rank_last_snapshot","_rank_pending_capture"):
+            setattr(self.bridge,name,{"sha":self.sha,"pid":1234})
+        self.bridge._rank_gap_started=1
+        self.assertEqual(self.bridge.get_rank()["state"],"unsupported")
+        for name in ("_rank_calibration","_rank_legacy_trial","_rank_gap_started",
+                     "_rank_lp_session","_rank_last_turns","_rank_last_snapshot",
+                     "_rank_pending_capture"):
+            self.assertIsNone(getattr(self.bridge,name),name)
+        self.bridge._rank_reader.assert_not_called()
+        self.bridge._rank_mod_reader.assert_not_called()
 
-    def test_experimental_next_duel_reuses_only_same_pid_sha_and_confirmed_lp(self):
-        counters={"turns":3,"effective_attacks":0,"defense_wins":0,
-                  "face_down":0,"spells":0,"traps":0,"cards_used":3,
-                  "remaining_lp":10000,"fusions":0,"equips":0}
-        reader=Mock(return_value={
-            "ready":True,"pid":1234,"counters":counters})
-        self.bridge._rank_reader=reader
-        self.bridge.confirm_rank_lp(10000)
-        self.assertEqual(self.bridge.get_rank()["state"],"needs_ram_validation")
-        self.assertEqual(self.bridge._rank_lp_session["lp"],10000)
-        # Na partida seguinte o registro de ações reinicia. O leitor reaproveita
-        # a conferência do valor inicial só nesta mesma sessão e mesmo PID.
-        counters["turns"]=0
-        counters["cards_used"]=0
-        followup=self.bridge.get_rank()
-        self.assertEqual(followup["state"],"needs_ram_validation")
-        self.assertEqual(followup["validationProgress"],0)
-        self.assertIsNotNone(self.bridge._rank_lp_session)
-        counters["spells"]=1
-        self.assertEqual(self.bridge.get_rank()["validationProgress"],1)
-        counters["turns"]=1
-        ready=self.bridge.get_rank()
-        self.assertTrue(ready["ready"])
-        self.assertEqual(ready["rankSystem"],"classic")
-        self.assertEqual(ready["sourceMode"],"experimental")
-        self.assertNotEqual(ready["category"],"Z-POW")
+    def test_unverified_binding_never_falls_back_to_known_address(self):
+        from test_dueltrace_rank_profile_live import profile as valid_profile
+        self.profile=valid_profile()
+        self.profile["rank_runtime_binding"]["verified_duels"]=1
+        atomic_json(self.profile_path,self.profile)
+        self.bridge._rank_reader=Mock()
+        self.bridge._rank_mod_reader=Mock()
+        self.assertEqual(self.bridge.get_rank()["state"],"unsupported")
+        self.bridge._rank_reader.assert_not_called()
+        self.bridge._rank_mod_reader.assert_not_called()
 
-    def test_changed_starting_lp_or_process_never_auto_confirms(self):
-        counters={"turns":3,"effective_attacks":0,"defense_wins":0,
-                  "face_down":0,"spells":0,"traps":0,"cards_used":3,
-                  "remaining_lp":10000,"fusions":0,"equips":0}
-        reader=Mock(return_value={
-            "ready":True,"pid":1234,"counters":counters})
-        self.bridge._rank_reader=reader
-        self.bridge.confirm_rank_lp(10000)
-        counters["turns"]=0
-        counters["cards_used"]=0
-        counters["remaining_lp"]=8000
-        next_duel=self.bridge.get_rank()
-        self.assertEqual(next_duel["state"],"needs_lp_confirmation")
-        self.assertEqual(next_duel["candidateLp"],8000)
-        self.assertIsNone(self.bridge._rank_lp_session)
-        self.bridge.confirm_rank_lp(8000)
-        reader.return_value["pid"]=7777
-        self.assertEqual(self.bridge.get_rank()["state"],"needs_lp_confirmation")
-        self.assertIsNone(self.bridge._rank_lp_session)
+    def test_matching_binding_for_another_iso_does_not_authorize_active_sha(self):
+        from test_dueltrace_rank_profile_live import profile as valid_profile
+        foreign=valid_profile()
+        foreign["rom_sha256"]="e"*64
+        foreign["rank_runtime_binding"]["rom_sha256"]="e"*64
+        self.bridge._active=Mock(return_value=({"sha256":self.sha},self.entry,foreign))
+        self.bridge._rank_reader=Mock()
+        self.bridge._rank_mod_reader=Mock()
+        self.assertEqual(self.bridge.get_rank()["state"],"unsupported")
+        self.bridge._rank_reader.assert_not_called()
+        self.bridge._rank_mod_reader.assert_not_called()
 
     def test_any_mod_can_project_only_after_own_verified_ram_binding(self):
         sha=self.sha  # Não é X15
@@ -415,7 +350,7 @@ class BridgeTests(unittest.TestCase):
         counters["criterion_01"]=0
         self.assertEqual(self.bridge.get_rank()["state"],"needs_lp_confirmation")
 
-    def test_identical_executable_and_rank_table_enable_other_mod_after_lp_check(self):
+    def test_identical_executable_and_rank_table_are_not_a_ram_binding(self):
         from fm_rank_tables import (
             KNOWN_X15_SLUS_SHA256,KNOWN_X15_TABLE_SHA256,LEGACY_OFFSET,STRIDE
         )
@@ -426,19 +361,16 @@ class BridgeTests(unittest.TestCase):
             "first_offset":LEGACY_OFFSET,"repeat_stride":STRIDE,
         }
         atomic_json(self.profile_path,self.profile)
-        counters={"turns":1,"effective_attacks":0,"defense_wins":0,
-                  "face_down":0,"spells":0,"traps":0,
-                  "fusions":0,"equips":0,"remaining_lp":8000,"cards_used":0}
-        self.bridge._rank_reader=Mock(return_value={
-            "ready":True,"status":"Amostras estáveis","pid":1234,"counters":counters})
-        start=self.bridge.get_rank()
-        self.assertEqual(start["state"],"needs_lp_confirmation")
-        result=self.bridge.confirm_rank_lp(8000)
-        self.assertTrue(result["ready"])
-        self.assertEqual(result["score"],101)
-        self.assertEqual(result["category"],"S-POW")
-        self.assertEqual(result["rankSystem"],"classic")
-        self.assertIn("idênticos ao X15",result["status"])
+        self.bridge._rank_reader=Mock()
+        self.bridge._rank_mod_reader=Mock()
+        self.assertEqual(self.bridge.get_rank()["state"],"unsupported")
+        self.assertEqual(self.bridge.confirm_rank_lp(8000)["state"],"unsupported")
+        self.bridge._rank_reader.assert_not_called()
+        self.bridge._rank_mod_reader.assert_not_called()
+        diagnostic=self.bridge.get_rank_diagnostic()
+        self.assertTrue(diagnostic["x15CompatibleBinary"])
+        self.assertFalse(diagnostic["readyForLiveRead"])
+        self.assertEqual(diagnostic["code"],"runtime_binding_required")
 
     def test_rank_requires_lp_confirmation_and_resets_on_new_duel(self):
         sha=X15_SHA

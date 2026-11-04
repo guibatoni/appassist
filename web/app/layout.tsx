@@ -1,10 +1,22 @@
 import type { Metadata, Viewport } from "next"
-import { Geist, Exo_2 } from "next/font/google"
+import localFont from "next/font/local"
 import "./globals.css"
 import { AppShell } from "@/components/shell/app-shell"
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
-const exo = Exo_2({ variable: "--font-exo", subsets: ["latin"], weight: ["500", "600", "700", "800"] })
+const geistSans = localFont({
+  src: "./fonts/Geist-Variable.ttf",
+  variable: "--font-geist-sans",
+  weight: "100 900",
+  style: "normal",
+  display: "swap",
+})
+const exo = localFont({
+  src: "./fonts/Exo2-Variable.ttf",
+  variable: "--font-exo",
+  weight: "100 900",
+  style: "normal",
+  display: "swap",
+})
 
 export const metadata: Metadata = {
   title: "DUELTRACE — MultiMod Companion",

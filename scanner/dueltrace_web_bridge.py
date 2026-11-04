@@ -321,24 +321,40 @@ class DueltraceWebBridge:
             active,_entry,profile=self._active()
             return diagnose_rank_profile(active.get("sha256"),profile)
 
+    def _reset_rank_read_state(self):
+        """Não reaproveitar calibração/captura quando a autorização mudou."""
+        self._rank_calibration=None
+        self._rank_legacy_trial=None
+        self._rank_gap_started=None
+        self._rank_lp_session=None
+        self._rank_last_turns=None
+        self._rank_last_snapshot=None
+        self._rank_pending_capture=None
+
     def _rank_sample(self):
         active,entry,profile=self._active()
         sha=active.get("sha256") if profile else None
         binding=validate_live_rank_binding(profile)
         if (not isinstance(profile,dict) or type(sha) is not str
                 or not re.fullmatch(r"[0-9a-f]{64}",sha)):
-            self._rank_calibration=None
-            self._rank_legacy_trial=None
-            self._rank_pending_capture=None
+            self._reset_rank_read_state()
             return None,sha,{"state":"unsupported","ready":False,
                 "status":"Selecione uma ISO com perfil antes de tentar ler o RANK.",
                 "rankSystem":rank_system(sha),
                 "score":None,"category":None,"counters":None}
-        # Restaura o leitor do Assistente antigo, mesmo quando a tabela WA
-        # dessa ISO não foi reconhecida. Este caminho é EXPERIMENTAL e não
-        # registra binding validado, nem transporta o marcador de vitória X15.
-        experimental=(binding is None and not model_available(sha)
-                      and not x15_compatible_runtime(profile))
+        # Conferir LP ou observar alterações plausíveis não prova a identidade
+        # do registro RAM. O endereço legado nunca é presumido para outro mod,
+        # nem quando apenas o executável e a tabela estática coincidem.
+        if (profile.get("rom_sha256") != sha or
+                (binding is None and not model_available(sha))):
+            self._reset_rank_read_state()
+            return None,sha,{"state":"unsupported","ready":False,
+                "status":"RANK ao vivo bloqueado: esta ISO não possui um "
+                         "mapeamento RAM validado para seus hashes. "
+                         "A calculadora manual continua disponível.",
+                "sourceMode":"unsupported","rankSystem":rank_system(sha),
+                "score":None,"category":None,"counters":None}
+        experimental=False
         preferred=(self._process.pid if self._process is not None and
                    self._process.poll() is None else None)
         try:

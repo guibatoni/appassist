@@ -79,12 +79,17 @@ def inspect_mips_rank_routines(exe: bytes, *, max_candidates: int = 6) -> dict:
     digest = hashlib.sha256(exe).hexdigest()
     if exe[:8] != b"PS-X EXE" or len(exe) < HEADER_BYTES+64:
         return _unavailable("not_psx_executable", sha256=digest)
-    entry, load, length = struct.unpack_from("<III", exe, 0x10)
+    # PS-X EXE: PC=0x10, GP=0x14, load address=0x18, text size=0x1C.
+    # GP não é o endereço de carga; tratar os campos como três inteiros
+    # consecutivos rejeitava executáveis reais e aceitava fixtures incorretas.
+    entry = struct.unpack_from("<I", exe, 0x10)[0]
+    load, length = struct.unpack_from("<II", exe, 0x18)
     if not (0x80000000 <= load < 0x80200000 and length
-            and length % 4 == 0 and length <= 2 * 1024 * 1024
+            and load % 4 == 0 and length % 4 == 0
+            and load + length <= 0x80200000
             and HEADER_BYTES + length <= len(exe)):
         return _unavailable("invalid_exe_mapping", sha256=digest)
-    if not (load <= entry < load + length):
+    if not (load <= entry < load + length and entry % 4 == 0):
         return _unavailable("invalid_entry_point", sha256=digest)
     code = exe[HEADER_BYTES:HEADER_BYTES + length]
     words = tuple(w[0] for w in struct.iter_unpack("<I", code))

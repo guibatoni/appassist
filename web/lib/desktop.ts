@@ -82,6 +82,9 @@ export type ModScanDiagnostic = {
     commonEndByteCount: number
     commonFirstInvalidByte: string | null
     commonFirstInvalidCount: number
+    boundedRecords?: number
+    terminatedRecords?: number
+    pointerAudit?: { outOfFile: number; sharedRecords: number; nonIncreasingPairs: number }
     validated: false
     samples: Array<{
       id: number | null
@@ -94,6 +97,16 @@ export type ModScanDiagnostic = {
       endByteHex: string | null
       tailHex: string
       readablePrefix: string
+      headerHex?: string | null
+      physicalBoundaryDelta?: number | null
+      boundaryKnown?: boolean
+      boundaryReached?: boolean
+      sharedPointer?: boolean
+      ambiguousBoundary?: boolean
+      recordStatus?: string
+      terminatorOffset?: number | null
+      lastGlyphHex?: string | null
+      lastGlyph?: string | null
     }>
   }
   opponentPointerProbe?: {

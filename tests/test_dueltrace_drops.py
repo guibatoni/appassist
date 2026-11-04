@@ -21,13 +21,13 @@ def fake_profile(sha="a"*64, groups=None):
                           "source_offset":0xE9B000+(oid-1)*0x1800+(index+1)*0x5B4})
     return {
         "rom_sha256":sha,
-        "verified":{"tabelas_drops":"verificado","oponentes":"verificado",
+        "verified":{"tabelas_drops":"verificado","oponentes":"verificado","cartas":"verificado",
                     "nomes_dos_ranks":"verificado" if sha==X15_SHA else "não_identificado"},
-        "supported_features":{"drops":True},
+        "supported_features":{"drops":True,"cards":True},
         "drop_group_labels":groups,
         "opponents":[{"id":i,"name":f"Oponente {i}"} for i in range(1,40)],
-        "cards":[{"id":i,"name":f"Carta {i}","atk":i*100,"def":i*50}
-                 for i in range(1,4)],
+        "cards":[{"id":i,"name":f"Carta {i}","atk":(i%51)*100,"def":(i%51)*50}
+                 for i in range(1,723)],
         "drops":drops,
         "rank_points":{"available":False,"rules":{}},
     }
@@ -72,6 +72,41 @@ class DropCatalogTests(unittest.TestCase):
         self.assertFalse(get_drop_catalog(p)["available"])
         p=fake_profile()
         p["drops"].pop()
+        self.assertFalse(get_drop_catalog(p)["available"])
+
+    def test_card_references_and_iso_provenance_cannot_be_silently_replaced(self):
+        p=fake_profile()
+        p["cards"].pop()
+        p["drops"][0]["card_id"]=722  # In the format range but absent from this catalogue.
+        self.assertFalse(get_drop_catalog(p)["available"])
+        p=fake_profile()
+        p["cards"].append(dict(p["cards"][0]))
+        self.assertFalse(get_drop_catalog(p)["available"])
+        p=fake_profile()
+        p["drops_provenance"]={"rom_sha256":"b"*64}
+        self.assertFalse(get_drop_catalog(p)["available"])
+        p["drops_provenance"]["rom_sha256"]=p["rom_sha256"]
+        self.assertTrue(get_drop_catalog(p)["available"])
+
+    def test_complete_verified_catalogue_is_required_even_for_unreferenced_cards(self):
+        p=fake_profile()
+        self.assertTrue(get_drop_catalog(p)["available"])  # Legacy complete profile, no new provenance field.
+        p["cards"].pop()  # Card 722 has no drop row, but the catalogue is incomplete.
+        self.assertFalse(get_drop_catalog(p)["available"])
+        p=fake_profile()
+        p["cards"]=p["cards"][:1]
+        for row in p["drops"]:
+            row["card_id"]=1
+        self.assertFalse(get_drop_catalog(p)["available"])
+        for verification in (None,"pendente",False):
+            p=fake_profile()
+            if verification is None:
+                del p["verified"]["cartas"]
+            else:
+                p["verified"]["cartas"]=verification
+            self.assertFalse(get_drop_catalog(p)["available"])
+        p=fake_profile()
+        p["supported_features"]["cards"]=False
         self.assertFalse(get_drop_catalog(p)["available"])
 
     def test_malicious_or_bad_filter_rejected(self):

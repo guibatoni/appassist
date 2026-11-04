@@ -6,6 +6,7 @@ ou manipuladas e pagina os resultados sem enviá-los para a rede.
 from __future__ import annotations
 
 from collections import defaultdict
+import re
 from scanner_multiiso import X15_SHA
 from dueltrace_rank_system import (
     available_ranks, drop_pool_labels, pool_ranks,
@@ -56,7 +57,9 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
     if (not isinstance(profile, dict)
             or profile.get("verified", {}).get("tabelas_drops") != "verificado"
             or profile.get("verified", {}).get("oponentes") != "verificado"
-            or not profile.get("supported_features", {}).get("drops")):
+            or profile.get("verified", {}).get("cartas") != "verificado"
+            or not profile.get("supported_features", {}).get("drops")
+            or not profile.get("supported_features", {}).get("cards")):
         return empty
     raw_opponents = profile.get("opponents")
     raw_groups = profile.get("drop_group_labels")
@@ -66,6 +69,7 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
             or not isinstance(raw_groups, list)
             or not isinstance(drops, list)
             or not isinstance(cards, list)
+            or len(cards) != MAX_CARDS
             or len(raw_opponents) != EXPECTED_OPPONENTS
             or len(raw_groups) != 3
             or len(drops) > MAX_DROP_ROWS):
@@ -75,6 +79,15 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
     if len(set(raw_groups)) != 3:
         return empty
     iso_sha=profile.get("rom_sha256")
+    if not isinstance(iso_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", iso_sha):
+        return empty
+    provenance = profile.get("drops_provenance", {})
+    if not isinstance(provenance, dict):
+        return empty
+    bound_sha = provenance.get("rom_sha256")
+    if bound_sha is not None and (not isinstance(bound_sha, str)
+                                  or bound_sha.casefold() != iso_sha.casefold()):
+        return empty
     ranks=available_ranks(iso_sha)
     labels=drop_pool_labels(iso_sha)
     grouped_ranks=pool_ranks(iso_sha)
@@ -99,11 +112,15 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         opponents[oid] = name
     if set(opponents) != set(range(1, EXPECTED_OPPONENTS+1)):
         return empty
-    cards_by_id = {
-        c["id"]: c for c in cards
-        if isinstance(c, dict) and type(c.get("id")) is int
-        and 1 <= c["id"] <= MAX_CARDS and isinstance(c.get("name"), str)
-    }
+    cards_by_id = {}
+    for card in cards:
+        if (not isinstance(card, dict) or type(card.get("id")) is not int
+                or not 1 <= card["id"] <= MAX_CARDS or card["id"] in cards_by_id
+                or not isinstance(card.get("name"), str) or not card["name"].strip()):
+            return empty
+        cards_by_id[card["id"]] = card
+    if set(cards_by_id) != set(range(1, MAX_CARDS + 1)):
+        return empty
     if group and group not in raw_groups:
         raise ValueError("Grupo de drop não pertence ao mod ativo.")
     card_types=sorted({card_type_value(card) for card in cards_by_id.values()
@@ -120,7 +137,7 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         raw_rank = record.get("group")
         weight = _integer(record.get("weight"))
         if (oid not in opponents or type(raw_rank) is not str or raw_rank not in raw_groups
-                or cid is None or not 1 <= cid <= MAX_CARDS
+                or cid is None or cid not in cards_by_id
                 or weight is None or not 1 <= weight <= WEIGHT_TOTAL):
             return empty
         key = (oid, raw_rank, cid)

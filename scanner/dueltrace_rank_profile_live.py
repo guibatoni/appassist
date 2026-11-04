@@ -15,10 +15,10 @@ MAX_STEPS = 12
 
 
 def x15_compatible_runtime(profile: dict | None) -> bool:
-    """Compartilha o motor X15 apenas se SLUS e toda tabela RANK forem idênticos.
+    """Indício estático: SLUS e toda tabela RANK são idênticos ao X15.
 
-    Diferente de comparar título, nome da ISO ou skin. Ainda requer confirmar
-    os LP observados na sessão para autorizar projeção em tempo real.
+    Não autoriza endereços RAM de outro mod nem substitui um binding por SHA
+    validado em duelos independentes.
     """
     from fm_rank_tables import (
         KNOWN_X15_SLUS_SHA256, KNOWN_X15_TABLE_SHA256, LEGACY_OFFSET, STRIDE
@@ -45,6 +45,8 @@ def validate_live_rank_binding(profile: dict | None) -> dict | None:
     ruleset=profile.get("rank_points")
     binding=profile.get("rank_runtime_binding")
     if not isinstance(ruleset,dict) or not isinstance(binding,dict):
+        return None
+    if ruleset.get("available") is not True:
         return None
     rom=profile.get("rom_sha256")
     exe=profile.get("exe_sha256")

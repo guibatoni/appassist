@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Callable
 
 from importador_perfis import import_rom
-from scanner_multiiso import X15_SHA, ART_PARSER_REVISION
+from scanner_multiiso import X15_SHA, ART_PARSER_REVISION, SCAN_PARSER_REVISION
 from card_catalog import effect_sidecar_path
 
 EXTENSIONS = frozenset({".iso", ".bin"})
@@ -48,6 +48,14 @@ def load_json(path: Path, fallback):
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError, UnicodeDecodeError):
         return fallback
+
+
+def _effects_signature(path: Path) -> tuple[int, int]:
+    try:
+        stat=effect_sidecar_path(path).stat()
+        return stat.st_size,stat.st_mtime_ns
+    except OSError:
+        return 0,0
 
 
 def report_level(profile: dict) -> str:
@@ -114,6 +122,33 @@ class ModCatalog:
             return None
         return profile
 
+    def _cache_matches(self, entry, file_stat, effects_signature,
+                       profile, with_art=False) -> bool:
+        if (not entry or profile is None
+                or entry.get("scan_parser_revision") != SCAN_PARSER_REVISION
+                or entry.get("size") != file_stat.st_size
+                or entry.get("mtime_ns") != file_stat.st_mtime_ns
+                or tuple(entry.get("effects_manifest_signature",())) != effects_signature):
+            return False
+        if not with_art:
+            return True
+        scan_dir=profile.get("scan_result_dir")
+        meta=load_json(Path(scan_dir)/"relatorio.json",{}) if scan_dir else {}
+        return (meta.get("art_requested") is True
+                and meta.get("art_parser_revision") == ART_PARSER_REVISION)
+
+    def cached_analysis_is_current(self, path, *, entry=None, file_stat=None) -> bool:
+        """Consulta barata para o monitor; nunca calcula hash nem lê a mídia."""
+        path=Path(path)
+        entry=entry if entry is not None else self.lookup(path)
+        try:
+            file_stat=file_stat if file_stat is not None else path.stat()
+            return self._cache_matches(
+                entry,file_stat,_effects_signature(path),
+                self.profile_for(entry) if entry else None)
+        except OSError:
+            return False
+
     def analyse(self, path: Path, with_art: bool = False, progress=None,
                 *, force: bool = False) -> dict:
         path = Path(path).resolve(strict=True)
@@ -122,28 +157,14 @@ class ModCatalog:
         before = path.stat()
         if before.st_size < 100_000:
             raise ValueError("Arquivo pequeno demais para uma imagem de jogo")
-        effect_file = effect_sidecar_path(path)
-        try:
-            sidecar_stat = effect_file.stat()
-            effect_signature = (sidecar_stat.st_size, sidecar_stat.st_mtime_ns)
-        except OSError:
-            effect_signature = (0, 0)
+        effect_signature = _effects_signature(path)
         old = self.lookup(path)
         previous_profile=self.profile_for(old) if old else None
-        if (not force and old and old.get("size") == before.st_size
-                and old.get("mtime_ns") == before.st_mtime_ns
-                and tuple(old.get("effects_manifest_signature", ())) == effect_signature):
-            profile=self.profile_for(old) or {}
-            if not with_art:
-                return dict(old)
-            scan_dir=profile.get("scan_result_dir")
-            meta=load_json(Path(scan_dir) / "relatorio.json", {}) if scan_dir else {}
-            # Revisão 3 deve atualizar inclusive perfis com arte 102x96 já
-            # extraída: faltavam miniaturas, molduras e texto SLUS.
-            # Repetir uma análise com a mesma revisão não gera trabalho extra.
-            if (meta.get("art_requested") is True
-                    and meta.get("art_parser_revision") == ART_PARSER_REVISION):
-                return dict(old)
+        # A revisão geral invalida também importações sem arte. A revisão
+        # gráfica continua independente, inclusive para tentativas negativas.
+        if not force and self._cache_matches(
+                old,before,effect_signature,previous_profile,with_art):
+            return dict(old)
 
         profile, profile_path = import_rom(path, self.home, art=with_art, progress=progress)
         # Reanalisar imagens não pode apagar receitas já vinculadas ao MESMO
@@ -198,6 +219,7 @@ class ModCatalog:
             "size": after.st_size,
             "mtime_ns": after.st_mtime_ns,
             "effects_manifest_signature": list(effect_signature),
+            "scan_parser_revision": SCAN_PARSER_REVISION,
             "sha256": profile["rom_sha256"],
             "profile_path": str(profile_path.resolve()),
             "level": report_level(profile),
@@ -501,7 +523,8 @@ class DirectoryMonitor:
                         and now - seen[2] >= self.quiet_seconds
                         and resolved not in self._pending):
                     cached = self.catalog.lookup(path)
-                    if cached and cached["size"] == stat.st_size and cached["mtime_ns"] == stat.st_mtime_ns:
+                    if self.catalog.cached_analysis_is_current(
+                            path,entry=cached,file_stat=stat):
                         self._processed.add(signature)
                         continue
                     self._pending.add(resolved)

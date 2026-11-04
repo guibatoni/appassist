@@ -213,11 +213,9 @@ class CapturedRankTests(unittest.TestCase):
         self.bridge.record_duel_result(1,"Z-POW",1,101,"lp",captured["captureId"])
         self.assertEqual(self.bridge.get_rank_comparison()["matches"],1)
 
-    def test_non_x15_compatible_binary_uses_original_ranks_not_x15_and_ignores_marker(self):
-        """Classificação é por SHA da ISO; mesmo motor de score não autoriza Z."""
+    def test_non_x15_binary_match_cannot_read_or_capture_without_own_binding(self):
         from fm_rank_tables import (KNOWN_X15_SLUS_SHA256,
                                     KNOWN_X15_TABLE_SHA256,LEGACY_OFFSET,STRIDE)
-        from dueltrace_rank_profile_live import x15_compatible_runtime
         sha="b"*64
         profile=fake_profile(sha)
         profile["exe_sha256"]=KNOWN_X15_SLUS_SHA256
@@ -226,10 +224,8 @@ class CapturedRankTests(unittest.TestCase):
             "table_sha256":KNOWN_X15_TABLE_SHA256,
             "first_offset":LEGACY_OFFSET,"repeat_stride":STRIDE,
         })
-        self.assertTrue(x15_compatible_runtime(profile))
         other_path=self.home/"profiles"/sha[:16]/"profile.json"
         atomic_json(other_path,profile)
-        entries=self.catalog.list()
         entry={
             "sha256":sha,"source_path":str(self.home/"compatible.iso"),
             "file_name":"Remaster X15 nome parecido mas SHA diferente",
@@ -237,19 +233,16 @@ class CapturedRankTests(unittest.TestCase):
             "level":"conhecido_validado","approved":True,
             "features":supported_for_runtime(profile),
         }
-        atomic_json(self.catalog.registry_file,{"schema":1,"entries":entries+[entry]})
+        atomic_json(self.catalog.registry_file,{"schema":1,"entries":self.catalog.list()+[entry]})
         self.bridge.activate_mod(sha)
         self.reader.return_value["result_adjustment"]=-40
-        self.bridge.confirm_rank_lp(8000)
-        initial=self.bridge.get_rank()
-        self.assertEqual(initial["score"],101)  # não aplicou byte X15 em outro mod
-        self.assertEqual(initial["category"],"S-POW")
-        self.assertEqual(initial["rankSystem"],"classic")
-        self.assertEqual(initial["victorySource"],"projected_lp")
-        self.counters["spells"]=7
-        later=self.bridge.get_rank()
-        self.assertEqual(later["score"],87)
-        self.assertEqual(later["category"],"A-POW")
+        self.assertEqual(self.bridge.confirm_rank_lp(8000)["state"],"unsupported")
+        state=self.bridge.get_rank()
+        self.assertIsNone(state["score"])
+        self.assertEqual(state["rankSystem"],"classic")
+        with self.assertRaises(ValueError):
+            self.bridge.capture_rank_prediction()
+        self.reader.assert_not_called()
 
     def test_unsupported_mod_cannot_capture(self):
         other="a"*64
@@ -266,12 +259,12 @@ class CapturedRankTests(unittest.TestCase):
         atomic_json(self.catalog.registry_file,{"schema":1,"entries":entries+[entry]})
         self.bridge.activate_mod(other)
         candidate=self.bridge.get_rank()
-        self.assertEqual(candidate["state"],"needs_lp_confirmation")
+        self.assertEqual(candidate["state"],"unsupported")
         self.assertEqual(candidate["rankSystem"],"classic")
-        self.assertEqual(candidate["sourceMode"],"experimental")
+        self.assertEqual(candidate["sourceMode"],"unsupported")
         with self.assertRaises(ValueError):
             self.bridge.capture_rank_prediction()
-        self.reader.assert_called()
+        self.reader.assert_not_called()
 
     def test_capability_guards_capture_and_comparison(self):
         api=ProtectedDesktopApi(self.bridge,"t"*64)
