@@ -23,12 +23,15 @@ on:
       - feature/dueltrace-v082-rank-duel-audit
       - feature/dueltrace-v083-updater-rank-capture
       - feature/dueltrace-v084-rank-diagnostic
+      - feature/dueltrace-v085-preview-auto-update
     paths:
       - 'web/**'
       - 'scanner/dueltrace_web_*.py'
       - 'scanner/dueltrace_rank_live.py'
       - 'scanner/dueltrace_update_checker.py'
       - 'scanner/dueltrace_signed_install.py'
+      - 'scanner/dueltrace_preview_installer.py'
+      - 'tests/test_dueltrace_preview_installer.py'
       - 'tests/test_dueltrace_signed_install.py'
       - 'scanner/fm_deep_assets.py'
       - 'scanner/dueltrace_drops.py'
@@ -83,6 +86,8 @@ on:
       - 'scanner/dueltrace_rank_live.py'
       - 'scanner/dueltrace_update_checker.py'
       - 'scanner/dueltrace_signed_install.py'
+      - 'scanner/dueltrace_preview_installer.py'
+      - 'tests/test_dueltrace_preview_installer.py'
       - 'tests/test_dueltrace_signed_install.py'
       - 'scanner/fm_deep_assets.py'
       - 'scanner/dueltrace_drops.py'
@@ -191,7 +196,7 @@ jobs:
         env:
           DUELTRACE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          $identity = @{ schema = 1; run_id = [long]$env:GITHUB_RUN_ID; head_sha = $env:DUELTRACE_HEAD_SHA; version = "0.8.4" } | ConvertTo-Json -Compress
+          $identity = @{ schema = 1; run_id = [long]$env:GITHUB_RUN_ID; head_sha = $env:DUELTRACE_HEAD_SHA; version = "0.8.5" } | ConvertTo-Json -Compress
           [System.IO.File]::WriteAllText((Join-Path (Get-Location) "scanner/dueltrace-build.json"), $identity, [System.Text.UTF8Encoding]::new($false))
       - name: Empacotar UI v0 com motor Python
         shell: pwsh
@@ -231,3 +236,38 @@ jobs:
             dist/security/
           if-no-files-found: error
           retention-days: 14
+
+  publish-preview-release:
+    name: Publicar Preview verificável no GitHub Releases
+    needs: build-web-and-windows
+    if: github.event_name == 'push' && github.repository == 'guibatoni/appassist' && startsWith(github.ref, 'refs/heads/feature/dueltrace-v')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: DUELTRACE-Windows-Preview-Unsigned-Security-Scanned
+          path: preview
+      - name: Publicar pacote após CI, auditoria e Defender
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [[ "$GITHUB_REF_NAME" =~ ^feature/dueltrace-v([0-9])([0-9])([0-9])-[a-z0-9-]+$ ]]; then
+            version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+          else
+            echo "Branch não corresponde a uma versão Preview"
+            exit 1
+          fi
+          file="preview/DUELTRACE-WebUI-Windows-Preview.zip"
+          test -f "$file"
+          test "$(stat -c%s "$file")" -gt 1000000
+          sha256sum "$file"
+          tag="preview-v${version}-r${GITHUB_RUN_ID}"
+          gh release create "$tag" "$file" \
+            --title "DUELTRACE Preview v${version} · build #${GITHUB_RUN_ID}" \
+            --notes "Prévia experimental Windows sem assinatura digital. Build ${GITHUB_SHA}, Actions #${GITHUB_RUN_ID}. Artefato aprovado pela CI, auditoria SHA-256 e Microsoft Defender. Não contém ISOs, saves ou ROMs. Para atualizações dentro do app, compare o hash publicado e aceite conscientemente o pacote de testes." \
+            --target "$GITHUB_SHA" --prerelease --latest=false
