@@ -208,7 +208,14 @@ try {{
   Wait-Process -Id $pidOld -Timeout 90 -ErrorAction SilentlyContinue
   if (Get-Process -Id $pidOld -ErrorAction SilentlyContinue) {{ exit 20 }}
   if (!(Test-Path -LiteralPath (Join-Path $stage 'DUELTRACE-WebUI.exe'))) {{ exit 21 }}
-  if (Test-Path -LiteralPath $backup) {{ exit 22 }}
+  if (Test-Path -LiteralPath $backup) {{
+    if (!(Test-Path -LiteralPath (Join-Path $backup 'DUELTRACE-WebUI.exe')) -or
+        !(Test-Path -LiteralPath (Join-Path $backup '_internal'))) {{ exit 22 }}
+    $allowed=@('DUELTRACE-WebUI.exe','_internal','LEIA-ME-SEGURANCA.txt')
+    $unknown=@(Get-ChildItem -LiteralPath $backup -Force | Where-Object {{ $allowed -notcontains $_.Name }})
+    if ($unknown.Count -gt 0) {{ exit 26 }}
+    Remove-Item -LiteralPath $backup -Recurse -Force
+  }
   Rename-Item -LiteralPath $old -NewName '{backup.name.replace("'","''")}'
   try {{
     Rename-Item -LiteralPath $stage -NewName '{original_name}'
@@ -240,8 +247,15 @@ def stage_preview_update(*, info: dict, data_home: Path,
     if not original.is_dir() or original.is_symlink():
         raise UnsafeUpdate("Pasta de instalação inválida.")
     backup=original.parent/("."+original.name+"-backup")
-    if backup.exists() or backup.is_symlink():
-        raise UnsafeUpdate("Há uma cópia de segurança anterior. Remova-a manualmente após conferir a versão instalada.")
+    if backup.is_symlink() or (backup.exists() and (
+            not backup.is_dir() or
+            not (backup/"DUELTRACE-WebUI.exe").is_file() or
+            not (backup/"_internal").is_dir() or
+            any(p.name not in ("DUELTRACE-WebUI.exe","_internal",
+                               "LEIA-ME-SEGURANCA.txt")
+                for p in backup.iterdir()))):
+        raise UnsafeUpdate("Backup anterior contém dados inesperados. "
+                           "Revise manualmente antes de atualizar.")
     stage=original.parent/("."+original.name+"-staged-"+uuid4().hex[:12])
     archive=home/"preview_updates"/("preview-"+uuid4().hex+".zip")
     archive.parent.mkdir(parents=True,exist_ok=True)
