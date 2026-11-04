@@ -103,10 +103,12 @@ def _score(a: dict, b: dict, *, name_unique: bool, art_same: bool) -> tuple[int,
     evidence = []
     score = 0
     an, bn = _name(a.get("name")), _name(b.get("name"))
-    if name_unique and an == bn:
+    if an == bn:
         evidence.append("nome_exato")
-        score += 65
-    elif an != bn and min(len(an), len(bn)) >= 6:
+        score += 65 if name_unique else 30
+        if not name_unique:
+            evidence.append("nome_repetido")
+    elif min(len(an), len(bn)) >= 6:
         similarity = SequenceMatcher(None, an, bn, autojunk=False).ratio()
         if similarity >= .90:
             evidence.append("nome_parecido")
@@ -210,6 +212,7 @@ def compare_profiles(source: dict, target: dict, home: Path) -> dict:
                 not ambiguous and (
                     "arte_rgb_identica" in evidence
                     or ("nome_exato" in evidence
+                        and "nome_repetido" not in evidence
                         and "atk_def_iguais" in evidence)
                 )
             )
