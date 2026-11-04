@@ -641,6 +641,14 @@ function Mods({mods,sha,onRefresh,configured}:{
               {diagnostics[mod.sha256].systemCnf?.bootTarget
                 ? " · BOOT: "+diagnostics[mod.sha256].systemCnf.bootTarget:""}
             </p>
+            {diagnostics[mod.sha256].systemCnf?.bootTarget&&<p className="mt-1 font-semibold text-gold">
+              Alvo BOOT no índice ISO9660: {diagnostics[mod.sha256].systemCnf.bootTargetIndexed===true
+                ?"sim · arquivo localizado"
+                :diagnostics[mod.sha256].systemCnf.bootTargetIndexed===false
+                ?"não · arquivo ausente do índice":"não confirmado"}
+              {diagnostics[mod.sha256].systemCnf.bootFileSignature
+                ?" · assinatura: "+diagnostics[mod.sha256].systemCnf.bootFileSignature:""}
+            </p>}
             {diagnostics[mod.sha256].issues.map((issue,i)=>
               <p className="mt-1 text-gold" key={"issue-"+i}>{issue}</p>)}
             <details className="mt-2">
@@ -651,6 +659,7 @@ function Mods({mods,sha,onRefresh,configured}:{
                   {diagnostics[mod.sha256].files.map((file,i)=>
                     <p key={i} className="break-all py-0.5">
                       {file.name} · {file.size===null?"tamanho não identificado":file.size.toLocaleString("pt-BR")+" bytes"}
+                      {file.signature&&file.signature!=="não examinada"?" · "+file.signature:""}
                     </p>)}
                 </div>
               </div>}
@@ -664,6 +673,7 @@ function Mods({mods,sha,onRefresh,configured}:{
               <div className="mt-2 border-t border-line/60 pt-2">
                 <p className="font-semibold text-primary">Ollama: {diagnostics[mod.sha256].ai!.state.replaceAll("_"," ")}</p>
                 {diagnostics[mod.sha256].ai!.message&&<p className="mt-1">{diagnostics[mod.sha256].ai!.message}</p>}
+                {diagnostics[mod.sha256].ai!.note&&<p className="mt-1 text-gold">{diagnostics[mod.sha256].ai!.note}</p>}
                 {diagnostics[mod.sha256].ai!.resumo&&<p className="mt-1">{diagnostics[mod.sha256].ai!.resumo}</p>}
                 {diagnostics[mod.sha256].ai!.prioridades?.map((step,i)=><p key={"ai-"+i} className="mt-1">{i+1}. {step}</p>)}
               </div>}
