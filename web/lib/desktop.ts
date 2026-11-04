@@ -36,6 +36,13 @@ export type ModScanDiagnostic = {
   waSize: number | null
   sectorBytes: number | null
   indexedFiles: number
+  files: Array<{name: string; size: number | null; lba: number | null}>
+  systemCnf: {
+    found: boolean
+    bootTarget: string | null
+    bootTargetIndexed: boolean | null
+    status: string
+  }
   hashExe: string | null
   hashWa: string | null
   cardsVerified: boolean
