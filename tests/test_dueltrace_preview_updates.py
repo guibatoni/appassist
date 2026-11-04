@@ -81,7 +81,7 @@ class PreviewUpdaterTests(unittest.TestCase):
         self.assertFalse(x["updateAvailable"])
 
     def test_stable_newer_remains_priority(self):
-        x=check_for_updates(fetcher=lambda:stable("v0.9.6"),
+        x=check_for_updates(fetcher=lambda:stable("v0.9.7"),
             preview_fetcher=lambda:preview(120),installed_run_id=100)
         self.assertEqual(x["status"],"update_available")
         self.assertTrue(x["updateAvailable"])

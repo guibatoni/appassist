@@ -73,6 +73,29 @@ export type ModScanDiagnostic = {
   cardsVerified: boolean
   dropsVerified: boolean
   artVerified: boolean
+  opponentNameBoundaries?: {
+    state: string
+    examined: number
+    hasFFBeforeNext: number
+    noFFBeforeNext: number
+    commonEndByte: string | null
+    commonEndByteCount: number
+    commonFirstInvalidByte: string | null
+    commonFirstInvalidCount: number
+    validated: false
+    samples: Array<{
+      id: number | null
+      pointer: number | null
+      nextPointerDelta: number | null
+      headerPresent: boolean
+      hasFFBeforeNext: boolean | null
+      firstInvalidHex: string | null
+      firstInvalidOffset: number | null
+      endByteHex: string | null
+      tailHex: string
+      readablePrefix: string
+    }>
+  }
   opponentPointerProbe?: {
     state: string
     verified: false
