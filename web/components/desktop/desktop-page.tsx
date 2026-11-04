@@ -660,24 +660,48 @@ function Mods({mods,sha,onRefresh,configured}:{
               <p className="mt-1 text-gold" key={"issue-"+i}>{issue}</p>)}
             <details className="mt-2">
               <summary className="cursor-pointer text-primary">Evidências e próximas investigações</summary>
-              {diagnostics[mod.sha256].files?.length>0&&<div className="mt-2">
+              {(diagnostics[mod.sha256].files?.length??0)>0&&<div className="mt-2">
                 <p className="font-semibold text-primary">Arquivos encontrados no disco:</p>
                 <div className="mt-1 max-h-56 overflow-y-auto rounded border border-line/50 p-2">
-                  {diagnostics[mod.sha256].files.map((file,i)=>
+                  {(diagnostics[mod.sha256].files??[]).map((file,i)=>
                     <p key={i} className="break-all py-0.5">
                       {file.name} · {file.size===null?"tamanho não identificado":file.size.toLocaleString("pt-BR")+" bytes"}
                       {file.signature&&file.signature!=="não examinada"?" · "+file.signature:""}
                     </p>)}
                 </div>
               </div>}
-              {diagnostics[mod.sha256].possibleResourceFiles?.length>0&&<div className="mt-2">
+              {(diagnostics[mod.sha256].possibleResourceFiles?.length??0)>0&&<div className="mt-2">
                 <p className="font-semibold text-primary">
                   Arquivos grandes para investigar (não identificados como WA):
                 </p>
-                {diagnostics[mod.sha256].possibleResourceFiles.map((file,i)=>
+                {(diagnostics[mod.sha256].possibleResourceFiles??[]).map((file,i)=>
                   <p key={i} className="mt-1 break-all">
                     {file.name} · {file.size.toLocaleString("pt-BR")} bytes
                   </p>)}
+              </div>}
+              {diagnostics[mod.sha256].layoutCandidates&&<div className="mt-3 rounded-md border border-primary/30 p-3">
+                <p className="font-semibold text-primary">
+                  Detector universal · candidatos por assinatura e conteúdo
+                </p>
+                <p className="mt-1">
+                  {diagnostics[mod.sha256].layoutCandidates?.inspectedFiles??0} arquivos examinados,
+                  {" "}{diagnostics[mod.sha256].layoutCandidates?.resourceProbes??0} sondagens de recursos.
+                  São pistas, não tabelas comprovadas.
+                </p>
+                {(["executables","resources"] as const).map(kind=><div key={kind} className="mt-2">
+                  <p className="font-semibold">{kind==="executables"?"Executáveis":"Contêineres de recursos"}</p>
+                  {(diagnostics[mod.sha256].layoutCandidates?.[kind]??[]).map((candidate,i)=>
+                    <div key={kind+"-"+i} className="mt-1 border-b border-line/40 py-1">
+                      <p className="break-all text-white">{candidate.name}</p>
+                      <p className="text-muted">
+                        {candidate.size?.toLocaleString("pt-BR")??"?"} bytes
+                        {candidate.dropArrayMatches>0?" · matrizes candidatas: "+candidate.dropArrayMatches:""}
+                        {" · "}{candidate.signals.join(" / ").replaceAll("_"," ")}
+                      </p>
+                    </div>)}
+                  {(diagnostics[mod.sha256].layoutCandidates?.[kind]??[]).length===0&&
+                    <p className="text-muted">Nenhum candidato identificado neste grupo.</p>}
+                </div>)}
               </div>}
               {diagnostics[mod.sha256].executableCandidates.length>0&&
                 <p className="mt-2 break-words">Executáveis candidatos: {diagnostics[mod.sha256].executableCandidates.join(", ")}</p>}
@@ -687,12 +711,12 @@ function Mods({mods,sha,onRefresh,configured}:{
                 <p className="font-semibold text-gold">Amostras dos nomes SLUS (não verificadas)</p>
                 <p className="mt-1">Esses textos vêm dos offsets conhecidos e podem pertencer a outras regiões da ISO.</p>
                 <p className="mt-1 font-semibold">Cartas</p>
-                {diagnostics[mod.sha256].nameLayoutProbe.cardSamples.map((row,i)=>
+                {(diagnostics[mod.sha256].nameLayoutProbe?.cardSamples??[]).map((row,i)=>
                   <p key={"card-"+i} className="mt-1 break-all">
                     #{row.index} ponteiro {row.pointer??"?"}: {row.name||"(vazio)"} · {row.status}
                   </p>)}
                 <p className="mt-2 font-semibold">Oponentes</p>
-                {diagnostics[mod.sha256].nameLayoutProbe.opponentSamples.map((row,i)=>
+                {(diagnostics[mod.sha256].nameLayoutProbe?.opponentSamples??[]).map((row,i)=>
                   <p key={"opp-"+i} className="mt-1 break-all">
                     #{row.index} ponteiro {row.pointer??"?"}: {row.name||"(vazio)"} · {row.status}
                   </p>)}

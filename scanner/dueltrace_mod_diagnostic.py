@@ -73,7 +73,9 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
             errors.append("BOOT indica "+boot_target+
                           ", porém não há executável conhecido no índice.")
         if not any(x.endswith("WA_MRG.MRG") for x in wa):
-            if wa_selection=="tamanho_identico_nao_validado":
+            if wa_selection in (
+                    "tamanho_identico_nao_validado",
+                    "matrizes_2048_candidatas"):
                 errors.append(
                     "WA_MRG.MRG não encontrado pelo nome; arquivo "
                     +suspected_wa+" selecionado apenas por tamanho para "
@@ -106,6 +108,27 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
             "status":str(row.get("status") or "")[:40],
             "invalidGlyphs":row.get("invalidGlyphs") if type(row.get("invalidGlyphs")) is int else None,
         } for row in samples[:limit] if isinstance(row,dict)]
+    discovery=report.get("layout_discovery")
+    if not isinstance(discovery,dict):discovery={}
+    def safe_candidates(role,limit=12):
+        raw=discovery.get(role,[])
+        if not isinstance(raw,list):return []
+        rows=[]
+        for item in raw[:limit]:
+            if not isinstance(item,dict):continue
+            rows.append({
+                "name":str(item.get("name") or "")[:150],
+                "size":item.get("size") if type(item.get("size")) is int else None,
+                "signals":[str(v)[:55] for v in item.get("signals",[])[:5]
+                           if isinstance(v,str)],
+                "score":item.get("score") if type(item.get("score")) is int else 0,
+                "dropArrayMatches":(
+                    item.get("dropArrayMatches")
+                    if type(item.get("dropArrayMatches")) is int else 0),
+                "psxHeader":item.get("psxHeader") is True,
+                "validated":False,
+            })
+        return rows
     flags=profile.get("supported_features") or {}
     if status.startswith("incerto") or status.startswith("erro"):
         level="estrutura_desconhecida"
@@ -128,6 +151,9 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
                      " está em outra trilha, nome de arquivo ou entrada do diretório não indexada.")
     elif boot_found:
         steps.append("Conferir a assinatura do arquivo de boot e localizar tabelas por evidências, não por nome.")
+    if discovery.get("executables") or discovery.get("resources"):
+        steps.append("Conferir as evidências dos candidatos por assinatura "
+                     "e estrutura; uma sondagem isolada não valida o catálogo.")
     if wa_size_matches:
         steps.append("Comparar assinatura, tabelas e artes dos contêineres "
                      "com mesmo tamanho do WA conhecido; não aprovar por tamanho.")
@@ -150,10 +176,20 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
             ([boot_target] if boot_found and boot_target else [])+boot))[:12],
         "waCandidates":list(dict.fromkeys(wa+wa_size_matches))[:12],
         "waSelectionMethod":wa_selection,
+        "layoutCandidates":{
+            "schema":discovery.get("schema"),
+            "inspectedFiles":discovery.get("inspectedFiles",0),
+            "resourceProbes":discovery.get("resourceProbes",0),
+            "executables":safe_candidates("executables"),
+            "resources":safe_candidates("resources"),
+            "note":"Candidatos por evidência, NÃO arquivos ou tabelas validados.",
+            "verified":False,
+        },
         "waSizeCandidates":wa_size_matches,
         "suspectedWa":suspected_wa or None,
         "suspectedWaVerified":(
-            bool(flags.get("drops")) if wa_selection=="tamanho_identico_nao_validado"
+            bool(flags.get("drops")) if wa_selection in (
+                "tamanho_identico_nao_validado","matrizes_2048_candidatas")
             else False),
         "chosenExecutable":str(report.get("executavel") or "")[:150],
         "chosenWa":str(report.get("drops_source") or "")[:150],
