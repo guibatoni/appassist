@@ -54,6 +54,18 @@ def minimal_evidence(report: dict) -> dict:
         "effect_samples": (report.get("inventory") or {}).get("effect_samples",[])[:8],
         "opponent_samples": (report.get("inventory") or {}).get("opponent_samples",[])[:12],
         "drop_samples": (report.get("inventory") or {}).get("drop_samples",[])[:12],
+        "scan_diagnostic":{
+            "state": (report.get("scan_diagnostic") or {}).get("state"),
+            "issues": (report.get("scan_diagnostic") or {}).get("issues",[])[:8],
+            "nextSteps": (report.get("scan_diagnostic") or {}).get("nextSteps",[])[:6],
+            "executableCandidates":(report.get("scan_diagnostic") or {}).get("executableCandidates",[])[:12],
+            "waCandidates":(report.get("scan_diagnostic") or {}).get("waCandidates",[])[:12],
+            "chosenExecutable":(report.get("scan_diagnostic") or {}).get("chosenExecutable"),
+            "chosenWa":(report.get("scan_diagnostic") or {}).get("chosenWa"),
+            "exeSize":(report.get("scan_diagnostic") or {}).get("exeSize"),
+            "waSize":(report.get("scan_diagnostic") or {}).get("waSize"),
+            "sectorBytes":(report.get("scan_diagnostic") or {}).get("sectorBytes"),
+        },
         "uncertainties":report.get("uncertainties",[])[:15],
         "evidence":report.get("evidence",[])[:20],
         "fusion_hypotheses":[{
