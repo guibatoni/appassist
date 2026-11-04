@@ -12,6 +12,7 @@ O Assistente usa o núcleo extraído do Remaster X15 1.2.1:
 - Dez critérios, com limiares exclusivos; os dez conjuntos de limiares/pontos são numericamente idênticos aos `RULES` existentes no DUELTRACE.
 - Vitória por LP **+2**, por deck-out **−40**, Exodia **+40** (Exodia NÃO possui marcador RAM validado para reconhecimento automático).
 - Decodificação de registro de duelo de **32 bytes**: os contadores de ações são `u8`; LP em `+20` é `s16le`; cartas usadas em `+24` são `s8`; ajuste do resultado em `+0` é `s8`.
+- Filtros de plausibilidade migrados: cartas usadas entre 0 e 40; turnos entre 0 e 80; ações individuais até 60; rejeição de registro zerado e incoerente com LP zero. Esses filtros reduzem falsos positivos mas não confirmam endereço RAM.
 - Valores de resultado usados pelo Assistente: byte `0x02` = `+2` LP; byte `0xD8` = `−40` deck-out; `0x00` não comprova vitória. Não inferir Exodia por bytes não mapeados.
 - Exemplo hipotético de abertura: `50 + 49 + 2 = 101`. A pontuação calculada é distinta de uma pontuação oficial lida na RAM; nunca apresentar equivalência sem comprovação independente.
 - O executável X15 contém comparações de faixa **50** e **95** para os três nomes próprios: `Z-POW` >=95, `S-POW` 50–94, `S-TEC` abaixo de 50.
