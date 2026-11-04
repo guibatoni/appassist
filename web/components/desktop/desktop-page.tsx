@@ -679,6 +679,30 @@ function Mods({mods,sha,onRefresh,configured}:{
                     {file.name} · {file.size.toLocaleString("pt-BR")} bytes
                   </p>)}
               </div>}
+              {diagnostics[mod.sha256].layoutCandidates&&<div className="mt-3 rounded-md border border-primary/30 p-3">
+                <p className="font-semibold text-primary">
+                  Detector universal · candidatos por assinatura e conteúdo
+                </p>
+                <p className="mt-1">
+                  {diagnostics[mod.sha256].layoutCandidates.inspectedFiles} arquivos examinados,
+                  {" "}{diagnostics[mod.sha256].layoutCandidates.resourceProbes} sondagens de recursos.
+                  São pistas, não tabelas comprovadas.
+                </p>
+                {(["executables","resources"] as const).map(kind=><div key={kind} className="mt-2">
+                  <p className="font-semibold">{kind==="executables"?"Executáveis":"Contêineres de recursos"}</p>
+                  {(diagnostics[mod.sha256].layoutCandidates?.[kind]??[]).map((candidate,i)=>
+                    <div key={kind+"-"+i} className="mt-1 border-b border-line/40 py-1">
+                      <p className="break-all text-white">{candidate.name}</p>
+                      <p className="text-muted">
+                        {candidate.size?.toLocaleString("pt-BR")??"?"} bytes
+                        {candidate.dropArrayMatches>0?" · matrizes candidatas: "+candidate.dropArrayMatches:""}
+                        {" · "}{candidate.signals.join(" / ").replaceAll("_"," ")}
+                      </p>
+                    </div>)}
+                  {(diagnostics[mod.sha256].layoutCandidates?.[kind]??[]).length===0&&
+                    <p className="text-muted">Nenhum candidato identificado neste grupo.</p>}
+                </div>)}
+              </div>}
               {diagnostics[mod.sha256].executableCandidates.length>0&&
                 <p className="mt-2 break-words">Executáveis candidatos: {diagnostics[mod.sha256].executableCandidates.join(", ")}</p>}
               {diagnostics[mod.sha256].waCandidates.length>0&&
