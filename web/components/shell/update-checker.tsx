@@ -117,6 +117,18 @@ export function UpdateChecker() {
         if(preview.started)setAutomaticNotice(false)
         return
       }
+      if(fresh.automaticPortableReady) {
+        if(!window.confirm(
+          "Instalar a versão estável oficial do DUELTRACE sem assinatura digital? "+
+          "O ZIP publicado no GitHub será validado por SHA-256 e identidade "+
+          "de build antes de substituir o aplicativo. "+
+          "A versão anterior será preservada para recuperação."
+        ))return
+        const portable=await api.install_portable_update()
+        setInstallFeedback(portable.status)
+        if(portable.started)setAutomaticNotice(false)
+        return
+      }
       if(!fresh.automaticInstallReady) {
         setInstallFeedback(fresh.automaticInstallReason ||
           "Nenhum pacote de atualização aprovado está disponível.")
@@ -181,9 +193,9 @@ export function UpdateChecker() {
                   {installing?"Baixando e verificando atualização…":"Atualizar automaticamente pelo GitHub"}
                 </button>
                 <p className="mt-2 text-xs text-muted">
-                  Versões estáveis exigem assinatura válida. Previews experimentais oficiais
-                  podem ser instaladas sem assinatura, após sua confirmação, com verificação
-                  de SHA-256, identidade do build e cópia de segurança.
+                  ZIPs oficiais estáveis ou Preview podem ser instalados sem assinatura digital,
+                  após confirmação, verificação SHA-256 e identidade do build.
+                  Instalação assinada continua opcional quando disponível.
                 </p>
                 {installFeedback&&<p className="mt-2 text-xs text-gold" role="status">
                   {installFeedback}
