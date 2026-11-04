@@ -258,8 +258,8 @@ class DueltraceWebBridge:
             binding=validate_live_rank_binding(profile)
             turns=counters[binding["turns_criterion"]] if binding else counters["turns"]
             if (self._rank_last_turns is not None and
-                    self._rank_last_turns[0]==(sha,pid) and
-                    turns < self._rank_last_turns[1]):
+                    (self._rank_last_turns[0]!=(sha,pid) or
+                     turns < self._rank_last_turns[1])):
                 self._rank_calibration=None  # novo duelo ou contador reiniciado
                 self._rank_last_snapshot=None
                 self._rank_pending_capture=None
