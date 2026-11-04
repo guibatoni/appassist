@@ -36,6 +36,41 @@ export type DeepScanResult = {
   status: string
 }
 
+export type CardMatchRow = {
+  sourceId: number
+  sourceName: string
+  targetId: number | null
+  targetName: string | null
+  confidence: "alta" | "revisar" | "sem_correspondencia"
+  signals: string[]
+  sameId: boolean | null
+  ambiguous: boolean
+  candidateCount: number
+  score: number | null
+}
+
+export type CardMatchResult = {
+  sourceSha: string
+  targetSha: string
+  sourceName: string
+  targetName: string
+  sourceCards: number
+  targetCards: number
+  summary: {
+    alta: number
+    revisar: number
+    sem_correspondencia: number
+    reordered: number
+    sourceArtCount: number
+    targetArtCount: number
+  }
+  rows: CardMatchRow[]
+  total: number
+  offset: number
+  status: string
+  verifiedInGame: boolean
+}
+
 export type LocalMod = {
   sha256: string
   name: string
@@ -351,6 +386,7 @@ export interface DesktopAPI {
   install_signed_update(): Promise<{started: boolean; status: string; version?: string}>
   install_preview_update(): Promise<{started: boolean; status: string; version?: string}>
   install_portable_update(): Promise<{started: boolean; status: string; version?: string}>
+  compare_mod_cards(sourceSha: string, targetSha: string, query?: string, offset?: number, limit?: number, confidence?: string): Promise<CardMatchResult>
   get_state(): Promise<DesktopState>
   get_hand(): Promise<HandState>
   get_rank(): Promise<RankState>
@@ -380,6 +416,7 @@ interface ProtectedNativeAPI {
   install_signed_update(token: string): Promise<{started: boolean; status: string; version?: string}>
   install_preview_update(token: string): Promise<{started: boolean; status: string; version?: string}>
   install_portable_update(token: string): Promise<{started: boolean; status: string; version?: string}>
+  compare_mod_cards(token: string, sourceSha: string, targetSha: string, query?: string, offset?: number, limit?: number, confidence?: string): Promise<CardMatchResult>
   get_state(token: string): Promise<DesktopState>
   get_hand(token: string): Promise<HandState>
   get_rank(token: string): Promise<RankState>
@@ -423,6 +460,8 @@ export function desktopApi(): DesktopAPI | null {
     install_signed_update: () => native.install_signed_update(token),
     install_preview_update: () => native.install_preview_update(token),
     install_portable_update: () => native.install_portable_update(token),
+    compare_mod_cards: (sourceSha,targetSha,query,offset,limit,confidence) =>
+      native.compare_mod_cards(token,sourceSha,targetSha,query,offset,limit,confidence),
     get_state: () => native.get_state(token),
     get_hand: () => native.get_hand(token),
     get_rank: () => native.get_rank(token),
