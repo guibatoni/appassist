@@ -123,6 +123,37 @@ class Disc:
         return self.read(lba,size)
     def close(self):self.f.close()
 
+def inspect_system_cnf(disc):
+    """Consulta apenas a indicação BOOT, sem executar nem extrair binários.
+
+    Alguns mods usam nomes de executáveis diferentes das famílias SLUS/SCUS.
+    O SYSTEM.CNF geralmente contém a referência explícita do executável.
+    """
+    candidates=sorted(name for name in disc.files
+                      if name.rsplit("/",1)[-1]=="SYSTEM.CNF")
+    if not candidates:
+        return {"found":False,"boot_target":None,"status":"SYSTEM.CNF não localizado"}
+    name=candidates[0]
+    size=disc.files[name][1]
+    if type(size) is not int or not 0<size<=16384:
+        return {"found":True,"boot_target":None,
+                "status":"SYSTEM.CNF com tamanho incomum; não foi lido"}
+    raw=disc.get(name,limit_bytes=16384)
+    text=raw.decode("latin-1",errors="replace")
+    match=re.search(
+        r"(?im)^\s*BOOT(?:2)?\s*=\s*(?:cdrom\d?:)?[/\\]*([A-Za-z0-9_.\\/-]+)(?:;\d+)?",
+        text)
+    if not match:
+        return {"found":True,"boot_target":None,
+                "status":"SYSTEM.CNF encontrado, mas BOOT não foi reconhecido"}
+    target=match.group(1).replace("\\","/").strip("/").upper()
+    if not target or ".." in target.split("/"):
+        return {"found":True,"boot_target":None,
+                "status":"Referência BOOT inválida"}
+    return {"found":True,"boot_target":target,
+            "status":"BOOT identificado, apenas como indicação de arquivo"}
+
+
 def decode_names(sl):
     if len(sl)<0x1C9800+93*4: return [],[], 'Executável menor que o layout conhecido'
     try: glyphs=[struct.unpack_from('<H',sl,SLUS_GLYPHS+4*i)[0] for i in range(93)]
@@ -285,6 +316,7 @@ def process(path,output,with_art=False,digest=None,progress=None):
         if progress:progress("Lendo índice ISO9660",0,1)
         disc=Disc(path);info['tipo_setor']=disc.sector
         info['arquivos_discos']=[{'nome':n,'lba':lba,'tamanho':sz} for n,(lba,sz) in sorted(disc.files.items())]
+        info['system_cnf']=inspect_system_cnf(disc)
         # SLUS_014.11 pode estar na raiz ou dentro da pasta DATA.
         sl_names=[n for n in disc.files if re.fullmatch(
             r'(?:SLUS|SCUS|SLES|SCES|SLPS|SCPS|SLPM|SLED|SCED|SLKA)[A-Z0-9_.-]+',
@@ -296,6 +328,12 @@ def process(path,output,with_art=False,digest=None,progress=None):
             x.rsplit('/',1)[-1]!='SLUS_014.11',len(x),x))
         if not sl_names:
             sl_names=sorted(n for n in disc.files if n.endswith('.EXE'))
+        boot_candidate=info["system_cnf"].get("boot_target")
+        if (boot_candidate in disc.files
+                and boot_candidate not in sl_names):
+            # Apenas tentar um arquivo indicado explicitamente pelo sistema
+            # de boot; a extração ainda depende do parser de nomes/atributos.
+            sl_names=[boot_candidate]+sl_names
         wa_names=sorted((n for n in disc.files if n.endswith('WA_MRG.MRG')),
                         key=lambda x:(not x.startswith('DATA/'),x))
         # Registrar candidatos alternativos para análise, mas não assumir
