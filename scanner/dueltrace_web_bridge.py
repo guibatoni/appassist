@@ -63,6 +63,7 @@ class DueltraceWebBridge:
         self._rank_mod_reader = rank_mod_reader or read_rank_from_verified_binding
         self._rank_calibration = None
         self._rank_legacy_trial = None
+        self._rank_gap_started = None
         self._rank_last_turns = None
         self._rank_last_snapshot = None
         self._rank_pending_capture = None
@@ -332,6 +333,28 @@ class DueltraceWebBridge:
         except (OSError,RuntimeError,ValueError) as exc:
             sample={"ready":False,"status":str(exc)[:150],"pid":None,"counters":None}
         if not sample.get("ready"):
+            # Um frame ilegível não deve apagar a conferência dos LP e obrigar
+            # a clicar Confirmar a cada oscilação. Preservar APENAS por até
+            # 2,5 s e APENAS quando o leitor identificou o mesmo PID.
+            # Nenhum score antigo é mostrado enquanto a RAM está indisponível.
+            calibration=self._rank_calibration
+            same_process=(isinstance(calibration,dict)
+                          and calibration.get("sha")==sha
+                          and type(sample.get("pid")) is int
+                          and sample["pid"]==calibration.get("pid"))
+            if same_process:
+                now=monotonic()
+                if self._rank_gap_started is None:
+                    self._rank_gap_started=now
+                if now-self._rank_gap_started<=2.5:
+                    return None,sha,{
+                        "state":"unavailable","ready":False,
+                        "status":"Leitura RAM instável; conferência de LP mantida "
+                                 "temporariamente para o mesmo processo.",
+                        "sourceMode":"experimental" if experimental else "verified",
+                        "rankSystem":rank_system(sha),
+                        "score":None,"category":None,"counters":None}
+            self._rank_gap_started=None
             self._rank_calibration=None
             self._rank_legacy_trial=None
             self._rank_last_turns=None
@@ -344,6 +367,7 @@ class DueltraceWebBridge:
                 "sourceMode":"experimental" if experimental else "verified",
                 "rankSystem":rank_system(sha),
                 "score":None,"category":None,"counters":None}
+        self._rank_gap_started=None
         sample["experimental"]=experimental
         return sample,sha,None
 
@@ -384,6 +408,7 @@ class DueltraceWebBridge:
                         and self._rank_pending_capture is not None):
                     self._rank_pending_capture["returned_to_menu"]=True
                 self._rank_calibration=None  # novo duelo ou contador reiniciado
+                self._rank_gap_started=None
                 self._rank_legacy_trial=None
                 self._rank_last_snapshot=None
             self._rank_last_turns=((sha,pid),turns)
@@ -553,6 +578,7 @@ class DueltraceWebBridge:
                     "candidateLp":sample["counters"][lp_key],
                     "score":None,"category":None,"counters":None}
             self._rank_calibration={"sha":sha,"pid":sample["pid"],"at":monotonic()}
+            self._rank_gap_started=None
             self._rank_legacy_trial=(
                 start_legacy_trial(sha,sample["pid"],sample["counters"])
                 if sample.get("experimental") is True else None)
@@ -855,6 +881,7 @@ class DueltraceWebBridge:
         self._hand_suggestions=None
         self._rank_calibration=None
         self._rank_legacy_trial=None
+        self._rank_gap_started=None
         self._rank_last_turns=None
         self._rank_last_snapshot=None
         self._rank_pending_capture=None
@@ -885,6 +912,7 @@ class DueltraceWebBridge:
             self._hand_suggestions=None
             self._rank_calibration=None
             self._rank_legacy_trial=None
+            self._rank_gap_started=None
             analysis=MultiModIntelligence(self.catalog).inspect(source,use_ollama=False)
             profile=self.catalog.profile_for(updated)
             graphic=(profile or {}).get("graphic_assets",{})
