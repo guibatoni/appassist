@@ -33,6 +33,14 @@ No Windows, o usuário importou **GOG MOD 2.2 – Drop 15 (NDC).iso** e recebeu 
 - Não mudar motor de RANK v0.9.1 validado em duelos (76 B-POW e 29 B-TEC), dez classes clássicas fora do SHA exato Remaster X15, três classes apenas no X15.
 - Preservar mão, fusões, drops, comparador de cartas v0.9.2, atualização autenticada por origem/SHA-256, backups e isolamento por SHA.
 
+## Atualização do diagnóstico após identificar somente 9 arquivos (4/11/2026)
+
+Uma captura real do GOG MOD 2.2 confirmou 9 entradas indexadas em setores de 2352 bytes, mas **nenhum nome de SLUS/SCUS/SLES e nenhum WA_MRG.MRG compatível**; Ollama local também não respondeu. Não se pode concluir que os dados do jogo não existam, que o arquivo seja inválido ou que o modelo consiga extrair bytes sem uma etapa de decodificação.
+
+Para tornar essa evidência acionável, o diagnóstico passa a apresentar os nomes, tamanhos e LBAs dos arquivos ISO9660 indexados (até 80 itens na interface). O scanner consulta `SYSTEM.CNF` em leitura limitada para verificar uma referência `BOOT` não padrão e, se apontar para um arquivo de disco real, usa-o como candidato à validação do mesmo parser estrutural. Uma referência BOOT não valida automaticamente o layout. Caminhos inseguros ou inexistentes não são seguidos.
+
+A próxima evidência essencial é a lista desses nove arquivos no painel **Evidências e próximas investigações**, ou o `relatorio.json` local. Sem identificar qual arquivo contém o executável/recursos, não é possível mapear nomes, artes ou drops do GOG MOD.
+
 ## Próximos passos
 
 1. Reanalisar GOG MOD 2.2 no Windows e abrir **Diagnosticar estrutura**. Conferir nomes presentes, setor, tamanho do SLUS/WA, `nomes_status`, `drops_status`, mensagens de erro. Caso Ollama local esteja disponível, clique **Investigar com Ollama** para hipóteses.
