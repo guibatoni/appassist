@@ -164,7 +164,7 @@ function RankPanel({sha}:{sha:string|null}) {
         {ready?rank.score:"—"} <span className="text-sm font-normal text-muted">pts</span>
       </p>
       <p className="mt-1 font-display text-xl font-bold text-gold">
-        {ready?rank.category:"RANK indisponível"}
+        {ready?rank.category:needsLp?"Confirme os LP":observing?"Validando contadores":"RANK indisponível"}
       </p>
       <p className="mt-1 text-[11px] text-muted">
         {rankSystem} · {ready?(experimental?"RAM antiga em teste; não validada":"Estimativa, não resultado oficial"):"Sem projeção confiável"}
