@@ -149,6 +149,38 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(result["chains"][0]["result"],8)
         self.reader.assert_called_once_with(preferred_pid=None)
 
+    def test_dashboard_fusions_are_cached_until_hand_changes(self):
+        """Painel atualiza a mão em 1,5 s sem recalcular cadeias idênticas."""
+        from dueltrace_web_bridge import plan_fusion_chains as real_planner
+        with patch("dueltrace_web_bridge.plan_fusion_chains",wraps=real_planner) as planner:
+            first=self.bridge.get_hand()
+            second=self.bridge.get_hand()
+            self.assertEqual(first["hand"],second["hand"])
+            self.assertEqual(first["pairs"],second["pairs"])
+            self.assertEqual(first["chains"],second["chains"])
+            self.assertEqual(planner.call_count,1)
+            self.reader.return_value={
+                "ready":True,"status":"Nova mão","hand_ids":[1,2,3,4,7]}
+            changed=self.bridge.get_hand()
+            self.assertTrue(changed["ready"])
+            self.assertEqual(changed["hand"][4]["id"],7)
+            self.assertEqual(planner.call_count,2)
+            self.bridge.get_hand()
+            self.assertEqual(planner.call_count,2)
+
+    def test_unmapped_rank_does_not_pretend_101_is_live(self):
+        """Nenhum fallback de referência inicial vira leitura automática."""
+        rank_reader=Mock()
+        self.bridge._rank_reader=rank_reader
+        state=self.bridge.get_rank()
+        self.assertFalse(state["ready"])
+        self.assertEqual(state["state"],"unsupported")
+        self.assertEqual(state["diagnosticCode"],"rank_table_missing")
+        self.assertEqual(state["rankSystem"],"classic")
+        self.assertIsNone(state["score"])
+        self.assertIsNone(state["category"])
+        rank_reader.assert_not_called()
+
     def test_hand_error_does_not_keep_previous_cards(self):
         self.bridge.get_hand()
         self.reader.return_value={"ready":False,"status":"Sem ePSXe",
