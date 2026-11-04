@@ -245,6 +245,31 @@ export type RankDiagnostic = {
   note: string
 }
 
+export type SpoilsCounters = {
+  turns: number
+  effective_attacks: number
+  defense_wins: number
+  face_down: number
+  spells: number
+  traps: number
+  cards_used: number
+  remaining_lp: number
+  fusions: number
+  equips: number
+}
+export type SpoilsResult = {
+  score: number
+  category: string
+  rankSystem: "classic" | "x15"
+  basePoints: number
+  victoryBonus: number
+  victory: "lp" | "deckout" | "exodia"
+  breakdown: Record<keyof SpoilsCounters,number>
+  source: string
+  verifiedInEmulator: false
+  note: string
+}
+
 export type RankState = {
   ready: boolean
   state: "unsupported" | "unavailable" | "needs_lp_confirmation" | "lp_mismatch" | "provisional"
@@ -321,6 +346,7 @@ export interface DesktopAPI {
   get_state(): Promise<DesktopState>
   get_hand(): Promise<HandState>
   get_rank(): Promise<RankState>
+  calculate_spoils(counters: SpoilsCounters, victory: "lp"|"deckout"|"exodia"): Promise<SpoilsResult>
   get_rank_diagnostic(): Promise<RankDiagnostic>
   confirm_rank_lp(lifePoints: number): Promise<RankState>
   capture_rank_prediction(): Promise<RankCapture>
@@ -348,6 +374,7 @@ interface ProtectedNativeAPI {
   get_state(token: string): Promise<DesktopState>
   get_hand(token: string): Promise<HandState>
   get_rank(token: string): Promise<RankState>
+  calculate_spoils(token: string, counters: SpoilsCounters, victory: "lp"|"deckout"|"exodia"): Promise<SpoilsResult>
   get_rank_diagnostic(token: string): Promise<RankDiagnostic>
   confirm_rank_lp(token: string, lifePoints: number): Promise<RankState>
   capture_rank_prediction(token: string): Promise<RankCapture>
@@ -389,6 +416,7 @@ export function desktopApi(): DesktopAPI | null {
     get_state: () => native.get_state(token),
     get_hand: () => native.get_hand(token),
     get_rank: () => native.get_rank(token),
+    calculate_spoils: (counters,victory) => native.calculate_spoils(token,counters,victory),
     get_rank_diagnostic: () => native.get_rank_diagnostic(token),
     confirm_rank_lp: (lifePoints) => native.confirm_rank_lp(token, lifePoints),
     capture_rank_prediction: () => native.capture_rank_prediction(token),
