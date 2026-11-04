@@ -589,12 +589,17 @@ function Mods({mods,sha,onRefresh,configured}:{
             <p className="mt-1 text-xs text-muted">{mod.sha256.slice(0,18)}…</p>
           </div><span className={sha===mod.sha256?"text-xs text-success":"text-xs text-gold"}>{sha===mod.sha256?"Ativo":mod.requiresReview?"Revisão necessária":"Conhecido"}</span></div>
           <div className="my-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-3 xl:grid-cols-3">
-            {([["Cartas",mod.cards],["Oponentes",mod.opponents??0],["Drops",mod.dropEntries??0],
+            {([["Cartas",mod.cards],["Oponentes",mod.opponents??0],["Drops confirmados",mod.dropEntries??0],
               ["Fusões",mod.fusions],["Textos de efeito",mod.effects],["Descrições",mod.descriptions??0],
-              ["Tabelas WA",mod.dropTables??0],["Molduras WA",mod.frameStyles??0],
+              ["Tabelas WA confirmadas",mod.dropTables??0],["Molduras WA",mod.frameStyles??0],
               ["Cartas emolduradas",mod.framedCards??0]] as const).map(([label,n])=>
               <div key={label} className="rounded-lg border border-line/50 bg-background/70 p-2"><p className="font-display text-xl text-primary">{n}</p><p className="text-xs text-muted">{label}</p></div>)}
           </div>
+          {(mod.dropCandidateTables??0)>0&&<p className="mb-3 rounded-lg border border-gold/40 bg-background/50 px-3 py-2 text-xs text-gold">
+            Drops provisórios: {mod.dropCandidateEntries??0} entradas em
+            {" "}{mod.dropCandidateTables} tabelas com pesos estruturalmente coerentes.
+            IDs de cartas e oponentes ainda não verificados; estes dados não são usados em Drops ou RANK.
+          </p>}
           <p className="mb-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted">
             <span className="font-semibold text-primary">RANK automático: </span>
             {mod.rankBinaryVerified
