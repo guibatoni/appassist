@@ -660,7 +660,7 @@ function Mods({mods,sha,onRefresh,configured}:{
               <p className="mt-1 text-gold" key={"issue-"+i}>{issue}</p>)}
             <details className="mt-2">
               <summary className="cursor-pointer text-primary">Evidências e próximas investigações</summary>
-              {diagnostics[mod.sha256].files?.length>0&&<div className="mt-2">
+              {(diagnostics[mod.sha256].files?.length??0)>0&&<div className="mt-2">
                 <p className="font-semibold text-primary">Arquivos encontrados no disco:</p>
                 <div className="mt-1 max-h-56 overflow-y-auto rounded border border-line/50 p-2">
                   {(diagnostics[mod.sha256].files??[]).map((file,i)=>
@@ -670,7 +670,7 @@ function Mods({mods,sha,onRefresh,configured}:{
                     </p>)}
                 </div>
               </div>}
-              {diagnostics[mod.sha256].possibleResourceFiles?.length>0&&<div className="mt-2">
+              {(diagnostics[mod.sha256].possibleResourceFiles?.length??0)>0&&<div className="mt-2">
                 <p className="font-semibold text-primary">
                   Arquivos grandes para investigar (não identificados como WA):
                 </p>
