@@ -80,6 +80,8 @@ export type ModScanDiagnostic = {
     noFFBeforeNext: number
     commonEndByte: string | null
     commonEndByteCount: number
+    commonFirstInvalidByte: string | null
+    commonFirstInvalidCount: number
     validated: false
     samples: Array<{
       id: number | null
