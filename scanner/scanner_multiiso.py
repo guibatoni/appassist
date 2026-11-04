@@ -304,6 +304,35 @@ def select_known_executable_layout(disc, candidates, *, max_candidates=8):
     return chosen,sl,opponents,cards,status,tried
 
 
+# Tamanho da tabela de recursos observado em ISOs com WA_MRG.MRG.
+# Coincidência de tamanho é indício para SONDAGEM, jamais validação de formato.
+KNOWN_WA_SIZE_BYTES=38_148_608
+
+
+def select_wa_candidates(files):
+    """Seleciona apenas um recurso candidato; sem promover arquivo por tamanho.
+
+    Formato retorno: (nomes selecionados, método, candidatas por tamanho).
+    No layout clássico, o nome WA_MRG tem precedência. Em mods com
+    contêiner renomeado, aceita UMA correspondência exata de tamanho apenas
+    para executar as validações existentes. Ambiguidade aborta a tentativa.
+    """
+    named=sorted(
+        (n for n in files if n.endswith("WA_MRG.MRG")),
+        key=lambda x:(not x.startswith("DATA/"),x))
+    possibilities=sorted(
+        n for n,value in files.items()
+        if isinstance(value,tuple) and len(value)==2
+        and type(value[1]) is int and value[1]==KNOWN_WA_SIZE_BYTES
+        and not n.endswith("WA_MRG.MRG"))
+    if named:
+        return named,"nome_convencional",possibilities
+    if len(possibilities)==1:
+        return possibilities,"tamanho_identico_nao_validado",possibilities
+    return [],("multiplos_candidatos" if len(possibilities)>1
+               else "nenhum_candidato"),possibilities
+
+
 def decode_drops(wa,rank_names=None):
     # A interpretação dos três grupos de drops varia por mod. Somente X15
     # tem os nomes Z-POW/S-POW/S-TEC confirmados nesta base.
@@ -420,13 +449,19 @@ def process(path,output,with_art=False,digest=None,progress=None):
             # Apenas tentar um arquivo indicado explicitamente pelo sistema
             # de boot; a extração ainda depende do parser de nomes/atributos.
             sl_names=[boot_candidate]+sl_names
-        wa_names=sorted((n for n in disc.files if n.endswith('WA_MRG.MRG')),
-                        key=lambda x:(not x.startswith('DATA/'),x))
+        wa_names,wa_source,size_matches=select_wa_candidates(disc.files)
+        info['wa_selecao_metodo']=wa_source
+        info['wa_candidatos_por_tamanho']=size_matches[:12]
+        # Nome alterado é SÓ hipótese: os decoders ainda devem validar
+        # dados/offsets antes de habilitar cartas, artes e drops.
+        info['wa_nome_alternativo_nao_validado']=(
+            wa_source=="tamanho_identico_nao_validado")
         # Registrar candidatos alternativos para análise, mas não assumir
         # automaticamente que outro .MRG contém as tabelas de Forbidden Memories.
         info['executaveis_candidatos']=sl_names[:20]
-        info['wa_candidatos']=[n for n in sorted(disc.files)
-                               if 'WA_MRG' in n or n.endswith('.MRG')][:20]
+        info['wa_candidatos']=list(dict.fromkeys(
+            [n for n in sorted(disc.files)
+             if 'WA_MRG' in n or n.endswith('.MRG')]+size_matches))[:20]
         if not sl_names or not wa_names:
             hint=('BOOT aponta para arquivo ausente do índice ISO9660.'
                   if boot_candidate and boot_candidate not in disc.files else
@@ -437,7 +472,8 @@ def process(path,output,with_art=False,digest=None,progress=None):
                 'Layout do mod ainda não reconhecido: '
                 f'executáveis candidatos={sl_names[:6]}, '
                 f'arquivos WA candidatos={info["wa_candidatos"][:6]}. '
-                +hint+' Os arquivos podem ter nomes ou contêineres diferentes.')
+                +hint+' Os arquivos podem ter nomes ou contêineres diferentes. '
+                f'Indícios por tamanho: {size_matches[:4]} ({wa_source}).')
         # O catálogo e as imagens exigem o WA até os pacotes de duelo.
         # A extração profunda lê o WA completo, não apenas seu prefixo.
         wa_required=max(
@@ -470,6 +506,11 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['hash_wa_prefix']=wa_sha
         info['hash_wa']=wa_sha if len(wa)==wa_size else None
         info['wa_lido_integralmente']=len(wa)==wa_size
+        if info['wa_nome_alternativo_nao_validado']:
+            info['wa_identificacao_obs']=(
+                "Contêiner sem nome WA_MRG selecionado SOMENTE por tamanho. "
+                "O conteúdo não está validado; o leitor deve confirmar tabelas "
+                "antes de atribuir qualquer recurso a esta ISO.")
         from fm_rank_tables import extract_rank_table
         info['rank_analysis']=extract_rank_table(
             wa,slus=sl,rom_sha256=info['sha256'],known_rom_sha256=X15_SHA)
@@ -515,7 +556,9 @@ def process(path,output,with_art=False,digest=None,progress=None):
                 info['cartas_com_moldura']=pack['composed_count']
                 info['artes_status']=pack['status']
                 info['artes_obs']=' | '.join(pack.get('warnings',[])[:4]) or pack['status']
-                info['artes_origem']='WA_MRG.MRG: arte 102x96, miniatura 40x32 e moldura 52x60 do duelo'
+                info['artes_origem']=(
+                    wa_names[0]+": artes 102x96, miniatura 40x32 e moldura 52x60 "
+                    "(layout sujeito a validação específica da ISO)")
                 info['artes_layout_confirmado_na_versao']=info['sha256']==X15_SHA
             else:
                 info['artes_extraidas']=0
