@@ -42,6 +42,8 @@ from dueltrace_update_checker import (
 from dueltrace_signed_install import (
     trusted_installer_ready, select_signed_installer, install_new_release
 )
+from dueltrace_preview_installer import fetch_latest_preview_package, install_preview_release
+from dueltrace_preview_updates import installed_preview_build_id
 
 
 class DueltraceWebBridge:
@@ -135,7 +137,33 @@ class DueltraceWebBridge:
 
     def check_updates(self):
         """Detecta Preview e release estável; instalador somente com confiança."""
-        status=check_for_updates()
+        # Pacotes Preview públicos ficam em Releases (não em artifacts de Actions).
+        # Evita a consulta extra ao endpoint Actions, frequentemente limitada.
+        status=check_for_updates(preview_fetcher=lambda:None)
+        status["automaticPreviewReady"]=False
+        try:
+            candidate=fetch_latest_preview_package(
+                current_version=CURRENT_VERSION,
+                installed_run_id=installed_preview_build_id())
+            if candidate is not None:
+                status.update({
+                    "latestPreview":f"v{candidate['version']} Preview",
+                    "previewVersion":candidate["version"],
+                    "previewRunId":candidate["run_id"],
+                    "previewBuildSha":candidate["sha"][:10],
+                    "previewPage":candidate["page"],
+                    "automaticPreviewReady":True,
+                    "updateAvailable":True,
+                    "status":"preview_update_available",
+                    "previewError":None,
+                    "message":(
+                        f"Preview v{candidate['version']} verificada no GitHub "
+                        "Releases. Pode ser instalada diretamente após confirmação."),
+                })
+        except (OSError,ValueError,TypeError):
+            status["previewError"]=(
+                "Pré-lançamentos temporariamente indisponíveis. "
+                "Nenhum download foi iniciado.")
         if status.get("status")!="update_available":
             status["automaticInstallReason"]=(
                 "Não há release estável mais recente. As builds Preview "
@@ -163,6 +191,13 @@ class DueltraceWebBridge:
     def install_signed_update(self):
         """Somente após autorização explícita do usuário na WebUI."""
         return install_new_release(data_home=self.catalog.home)
+
+    def install_preview_update(self):
+        """Baixa pré-release pública com SHA-256, instala após confirmação na UI."""
+        result=install_preview_release(data_home=self.catalog.home)
+        if result.get("started") and callable(getattr(self,"_request_shutdown",None)):
+            self._request_shutdown()
+        return result
 
     def open_updates_page(self, run_id=None):
         """Abre no navegador padrão releases ou o build Preview oficial."""
