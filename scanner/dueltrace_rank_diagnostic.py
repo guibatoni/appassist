@@ -100,7 +100,15 @@ def diagnose_rank_profile(sha: str | None, profile: dict | None) -> dict:
         "x15Exact":x15_exact,
         "x15CompatibleBinary":binary_match,
         "mipsRuntimeConfirmed":False,
+        "legacyProbeAvailable":bool(valid_sha and isinstance(profile,dict)
+                                      and not ready),
         "score":None,
         "projectedRank":None,
-        "note":"Diagnóstico estático e local, sem leitura RAM ou desbloqueio de projeções.",
+        "note":(
+            "O leitor do Assistente antigo pode testar o registro RAM como "
+            "EXPERIMENTO após confirmar LP e duas ações de duelo; isso não "
+            "valida uma ISO desconhecida nem cria um binding permanente."
+            if valid_sha and isinstance(profile,dict) and not ready else
+            "Diagnóstico estático e local, sem leitura RAM ou desbloqueio de projeções."),
+
     }
