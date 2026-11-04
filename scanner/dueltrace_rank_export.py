@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import json
 
+from dueltrace_rank_duel_verification import compare_rank_observations
+
 MAX_DUELS=500
 MAX_TRACES=50
 
@@ -91,6 +93,7 @@ def build_rank_evidence_report(profile: dict, observations: list,
             "rank_routine_confirmed":False,
         },
         "duels":safe_duels,
+        "rank_comparison":compare_rank_observations(sha, observations),
         "traces":safe_traces,
         "disclaimer":(
             "Relatório offline. Duelo observado manualmente e log de depurador "
