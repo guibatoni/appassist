@@ -22,7 +22,8 @@ from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
                                  suggest_hand_pairs)
 from dueltrace_fusion_planner import plan_fusion_chains
 from dueltrace_rank_live import (model_available, read_rank_candidate,
-                                 read_rank_from_verified_binding, project_lp_win_rank)
+                                 read_rank_from_verified_binding, project_lp_win_rank,
+                                 project_spoils_with_adjustment)
 from dueltrace_rank_profile_live import (
     validate_live_rank_binding, project_rank_for_mod, x15_compatible_runtime
 )
@@ -374,9 +375,21 @@ class DueltraceWebBridge:
                     "status":"Confirme os LP exibidos pelo jogo neste duelo para habilitar a projeção.",
                     "candidateLp":counters[binding["life_points_criterion"]] if binding else counters["remaining_lp"],"score":None,
                     "category":None,"counters":None}
+            # O Assistente X15 v10.5 usa o primeiro byte assinado da
+            # estrutura do duelista como ajuste de resultado. Somente a ISO
+            # X15 exata pode ativar esta inferência; não transportar os
+            # endereços ou marcadores para FM13/original por semelhança.
+            marker=(sample.get("result_adjustment")
+                    if binding is None and model_available(sha) else None)
+            observed_adjustment=marker if marker in (2,-40) else None
             result=(project_rank_for_mod(profile,counters)
-                    if binding else project_lp_win_rank(counters))
-            # Sem modificar soma, tabelas de pontos, contadores ou bônus.
+                    if binding else
+                    project_spoils_with_adjustment(counters,observed_adjustment)
+                    if observed_adjustment is not None else
+                    project_lp_win_rank(counters))
+            # A classificação é SEMPRE decidida pelo SHA da ISO selecionada.
+            # Mesmo que os pontos e as tabelas numéricas sejam iguais, Z-POW
+            # não é exibido para Original, FM13 nem outros mods.
             display_category=rank_label_for_existing_score(sha,result["score"])
             visible_counters=dict(counters)
             if binding:
@@ -384,12 +397,18 @@ class DueltraceWebBridge:
                 visible_counters["remaining_lp"]=counters[binding["life_points_criterion"]]
             compatible=(binding is None and not model_available(sha) and
                         x15_compatible_runtime(profile))
-            status=("Projeção usando SLUS e tabela RANK idênticos ao X15; "
-                    "LP confirmado nesta sessão, mas o resultado do duelo "
-                    "ainda exige comparação."
-                    if compatible else
-                    "Projeção se vencer por LP; resultado e mapeamento RAM "
-                    "não verificados no jogo.")
+            status=((
+                "Marcador de vitória por LP (+2) identificado em duas leituras "
+                "estáveis do X15; pontuação calculada, não lida diretamente do jogo."
+                if observed_adjustment==2 else
+                "Marcador de deck-out (-40) identificado em duas leituras "
+                "estáveis do X15; pontuação calculada, não lida diretamente do jogo."
+                ) if observed_adjustment is not None else
+                "Projeção usando SLUS e tabela RANK idênticos ao X15; "
+                "LP confirmado nesta sessão, resultado final ainda não verificado."
+                if compatible else
+                "Projeção se vencer por LP; resultado e mapeamento RAM "
+                "não verificados no jogo.")
             self._rank_last_snapshot={
                 "rom_sha256":sha,"pid":pid,"monotonic_at":monotonic(),
                 "score":result["score"],"category":display_category,
@@ -401,6 +420,11 @@ class DueltraceWebBridge:
                     "score":result["score"],"category":display_category,
                     "counters":visible_counters,"breakdown":result["breakdown"],
                     "model":result["model"],"rankSystem":rank_system(sha),
+                    "victorySource":("ram_lp" if observed_adjustment==2
+                                     else "ram_deckout" if observed_adjustment==-40
+                                     else "projected_lp"),
+                    "victoryBonus":(observed_adjustment
+                                    if observed_adjustment is not None else 2),
                     "final":False}
 
 
