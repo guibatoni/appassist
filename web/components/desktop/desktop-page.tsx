@@ -663,6 +663,15 @@ function Mods({mods,sha,onRefresh,configured}:{
                     </p>)}
                 </div>
               </div>}
+              {diagnostics[mod.sha256].possibleResourceFiles?.length>0&&<div className="mt-2">
+                <p className="font-semibold text-primary">
+                  Arquivos grandes para investigar (não identificados como WA):
+                </p>
+                {diagnostics[mod.sha256].possibleResourceFiles.map((file,i)=>
+                  <p key={i} className="mt-1 break-all">
+                    {file.name} · {file.size.toLocaleString("pt-BR")} bytes
+                  </p>)}
+              </div>}
               {diagnostics[mod.sha256].executableCandidates.length>0&&
                 <p className="mt-2 break-words">Executáveis candidatos: {diagnostics[mod.sha256].executableCandidates.join(", ")}</p>}
               {diagnostics[mod.sha256].waCandidates.length>0&&
