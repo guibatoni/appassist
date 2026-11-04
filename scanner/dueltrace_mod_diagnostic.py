@@ -39,6 +39,14 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
         "signature":str(signatures_by_name.get(row["name"].upper(),{}).get(
             "assinatura") or "não examinada")[:40]}
         for row in inventory]
+    # Apenas pistas por tamanho. Não afirmar que esses arquivos têm cartas
+    # ou que podem ser tratados como WA_MRG sem validação estrutural.
+    resource_candidates=sorted([
+        {"name":row["name"],"size":row["size"]}
+        for row in inventory if type(row["size"]) is int
+        and row["size"]>=1024*1024
+        and row["name"].upper() not in ("SYSTEM.CNF",boot_target.upper())
+    ],key=lambda x:-x["size"])[:12]
     boot=[x for x in names
           if _SUPPORTED_BOOT.fullmatch(x.rsplit("/",1)[-1])
           or x.endswith(".EXE")]
@@ -119,6 +127,7 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
         "sectorBytes":report.get("tipo_setor"),
         "indexedFiles":len(files),
         "files":inventory,
+        "possibleResourceFiles":resource_candidates,
         "systemCnf":{
             "found":boot_config.get("found") is True,
             "bootTarget":boot_target or None,
