@@ -18,6 +18,8 @@ from time import monotonic
 from auto_mods import ModCatalog, load_json, atomic_json
 from mod_autopilot import ModAutopilot, profile_summary
 from dueltrace_intelligence import MultiModIntelligence
+from dueltrace_card_matcher import compare_profiles
+from dueltrace_card_match_ai import review_card_candidates
 from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
                                  suggest_hand_pairs)
 from dueltrace_fusion_planner import plan_fusion_chains
@@ -74,6 +76,8 @@ class DueltraceWebBridge:
         self._fusion_cache = {}
         self._hand_suggestions_key = None
         self._hand_suggestions = None
+        self._cross_mod_cards_cache_key = None
+        self._cross_mod_cards_cache = None
         self.settings_path = self.catalog.home / "dueltrace_desktop_settings.json"
 
     def _active(self):
@@ -661,6 +665,81 @@ class DueltraceWebBridge:
             total=len(rows)
             return {"total":total,"offset":offset,"rows":rows[offset:offset+limit]}
 
+    def compare_mod_cards(self, source_sha, target_sha, query="",
+                          offset=0, limit=40, confidence="todas"):
+        """Retorna somente IDs/nomes/evidências: nenhuma arte/ISO é transmitida."""
+        if (type(source_sha) is not str or type(target_sha) is not str
+                or not re.fullmatch(r"[0-9a-f]{64}", source_sha)
+                or not re.fullmatch(r"[0-9a-f]{64}", target_sha)
+                or source_sha == target_sha):
+            raise ValueError("Selecione duas ISOs diferentes importadas.")
+        if (type(query) is not str or len(query)>100
+                or type(offset) is not int or not 0<=offset<=722
+                or type(limit) is not int or not 1<=limit<=75
+                or confidence not in ("todas","alta","revisar","sem_correspondencia")):
+            raise ValueError("Filtro de comparação inválido.")
+        with self._lock:
+            entries={row.get("sha256"):row for row in self.catalog.list()
+                     if isinstance(row,dict)}
+            if source_sha not in entries or target_sha not in entries:
+                raise ValueError("Importe e analise as duas ISOs antes de comparar.")
+            left_entry,right_entry=entries[source_sha],entries[target_sha]
+            left=self.catalog.profile_for(left_entry)
+            right=self.catalog.profile_for(right_entry)
+            if not left or not right:
+                raise ValueError("Os perfis das ISOs não estão disponíveis.")
+            try:
+                a=Path(left_entry["profile_path"]).stat()
+                b=Path(right_entry["profile_path"]).stat()
+                signature=(source_sha,target_sha,a.st_size,a.st_mtime_ns,
+                           b.st_size,b.st_mtime_ns)
+            except (OSError,KeyError,TypeError,ValueError):
+                raise ValueError("Não foi possível ler a revisão dos perfis.")
+            if self._cross_mod_cards_cache_key!=signature:
+                self._cross_mod_cards_cache=compare_profiles(left,right,self.catalog.home)
+                self._cross_mod_cards_cache_key=signature
+            data=self._cross_mod_cards_cache
+            def wanted(row):
+                if confidence!="todas" and row["confidence"]!=confidence:
+                    return False
+                if not query.strip():
+                    return True
+                text=(str(row["sourceId"])+" "+str(row.get("targetId") or "")+" "+
+                      row["sourceName"]+" "+(row["targetName"] or "")).casefold()
+                return query.strip().casefold() in text
+            filtered=[row for row in data["rows"] if wanted(row)]
+            filtered.sort(key=lambda row:(
+                0 if row["confidence"]=="alta" and row["sameId"] is False else
+                1 if row["confidence"]=="revisar" else
+                2 if row["confidence"]=="alta" else 3,
+                row["sourceId"]))
+            return {
+                "sourceSha":source_sha,"targetSha":target_sha,
+                "sourceName":str(left_entry.get("file_name") or "ISO")[:150],
+                "targetName":str(right_entry.get("file_name") or "ISO")[:150],
+                "summary":dict(data["summary"]),
+                "sourceCards":data["sourceCards"],
+                "targetCards":data["targetCards"],
+                "total":len(filtered),"offset":offset,
+                "rows":filtered[offset:offset+limit],
+                "status":data["status"],
+                "verifiedInGame":False,
+            }
+
+    def review_card_matches(self, source_sha, target_sha):
+        """Ollama revisa apenas candidatas existentes, não recebe ISO nem PNG.
+
+        Nunca aceita novos IDs produzidos pelo LLM e não promove resultados
+        a correspondências verificadas ou alterações de perfil.
+        """
+        self.compare_mod_cards(source_sha,target_sha,limit=1)
+        with self._lock:
+            data=self._cross_mod_cards_cache
+            if not isinstance(data,dict):
+                raise ValueError("Execute primeiro a comparação dos perfis.")
+            evidence={**data,"rows":[dict(row) for row in data["rows"]]}
+        return review_card_candidates(evidence)
+
     def get_drops(self, opponent_id=0, group="", query="", offset=0, limit=36,
                   sort="id", card_type="", rank=""):
         """Consulta exclusivamente tabelas validadas do perfil ISO ativo."""
@@ -937,6 +1016,8 @@ class DueltraceWebBridge:
             self._fusion_cache_key=None
             self._hand_suggestions_key=None
             self._hand_suggestions=None
+            self._cross_mod_cards_cache_key=None
+            self._cross_mod_cards_cache=None
             self._rank_calibration=None
             self._rank_legacy_trial=None
             self._rank_gap_started=None

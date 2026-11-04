@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic, CardMatchResult, CardAIMatchReport} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -339,6 +339,186 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   </div>
 }
 
+function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}) {
+  const [fromSha,setFromSha]=useState("")
+  const [toSha,setToSha]=useState("")
+  const [search,setSearch]=useState("")
+  const [confidence,setConfidence]=useState("todas")
+  const [result,setResult]=useState<CardMatchResult|null>(null)
+  const [error,setError]=useState<string|null>(null)
+  const [busy,setBusy]=useState(false)
+  const [aiBusy,setAiBusy]=useState(false)
+  const [aiError,setAiError]=useState<string|null>(null)
+  const [aiReview,setAiReview]=useState<CardAIMatchReport|null>(null)
+  useEffect(()=>{
+    const valid=new Set(mods.map(m=>m.sha256))
+    setFromSha(old=>valid.has(old)?old:activeSha&&valid.has(activeSha)?activeSha:mods[0]?.sha256??"")
+    setToSha(old=>valid.has(old)?old:mods.find(m=>m.sha256!==activeSha)?.sha256??mods[1]?.sha256??"")
+  },[mods,activeSha])
+  const compare=async(offset=0)=>{
+    const api=desktopApi()
+    if(!api||!fromSha||!toSha||fromSha===toSha)return
+    setBusy(true)
+    setError(null)
+    setAiReview(null)
+    setAiError(null)
+    try{
+      const data=await api.compare_mod_cards(fromSha,toSha,search,offset,30,confidence)
+      setResult(data)
+    }catch(e){
+      setResult(null)
+      setError(e instanceof Error?e.message:"Não foi possível comparar os catálogos locais.")
+    }finally{setBusy(false)}
+  }
+  const review=async()=>{
+    const api=desktopApi()
+    if(!api||!result)return
+    setAiBusy(true);setAiError(null);setAiReview(null)
+    try{setAiReview(await api.review_card_matches(result.sourceSha,result.targetSha))}
+    catch(e){setAiError(e instanceof Error?e.message:"Ollama não respondeu.")}
+    finally{setAiBusy(false)}
+  }
+  return <section className="panel mt-4 rounded-xl p-4" aria-label="Identificador Universal de Cartas">
+    <div className="mb-3">
+      <h2 className="font-display text-xl font-semibold text-gold">Identificador Universal de Cartas</h2>
+      <p className="mt-1 text-sm text-muted">
+        Compare dois mods importados: nomes e imagens extraídas do SLUS/WA_MRG,
+        atributos e IDs. Nenhuma correspondência altera automaticamente cartas, drops ou fusões.
+      </p>
+    </div>
+    {mods.length<2?<Empty>Importe ao menos duas ISOs/BIN para comparar as cartas entre mods.</Empty>:<>
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="flex flex-col gap-1 text-xs text-muted">
+          ISO de origem
+          <select className="field rounded-md px-3 py-2 text-sm" value={fromSha}
+            onChange={e=>{setFromSha(e.target.value);setResult(null)}}>
+            <option value="">Selecione uma ISO</option>
+            {mods.map(m=><option key={m.sha256} value={m.sha256}>{m.name}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted">
+          ISO de destino
+          <select className="field rounded-md px-3 py-2 text-sm" value={toSha}
+            onChange={e=>{setToSha(e.target.value);setResult(null)}}>
+            <option value="">Selecione outra ISO</option>
+            {mods.filter(m=>m.sha256!==fromSha).map(m=>
+              <option key={m.sha256} value={m.sha256}>{m.name}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs text-muted">
+          Buscar por nome ou ID
+          <input className="field rounded-md px-3 py-2 text-sm" value={search}
+            maxLength={100} placeholder="Ex.: Flower Wolf"
+            onChange={e=>{setSearch(e.target.value);setResult(null)}}/>
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted">
+          Confiança
+          <select className="field rounded-md px-3 py-2 text-sm" value={confidence}
+            onChange={e=>{setConfidence(e.target.value);setResult(null)}}>
+            <option value="todas">Todas</option>
+            <option value="alta">Candidatas fortes</option>
+            <option value="revisar">Revisão necessária</option>
+            <option value="sem_correspondencia">Sem correspondência</option>
+          </select>
+        </label>
+        <button type="button" className="btn-gold disabled:opacity-40"
+          disabled={busy||!fromSha||!toSha||fromSha===toSha||!desktopApi()}
+          onClick={()=>void compare(0)}>
+          {busy?"Comparando…":"Comparar cartas"}
+        </button>
+      </div>
+      {error&&<p className="mt-3 text-sm text-danger" role="alert">{error}</p>}
+      {result&&<>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {([
+            ["Candidatas fortes",result.summary.alta],
+            ["Revisar",result.summary.revisar],
+            ["Sem correspondência",result.summary.sem_correspondencia],
+            ["IDs diferentes",result.summary.reordered],
+          ] as const).map(([label,n])=><div key={label}
+            className="rounded-lg border border-line/60 bg-background/50 p-3">
+            <p className="font-display text-xl font-semibold text-primary tabular-nums">{n}</p>
+            <p className="text-xs text-muted">{label}</p>
+          </div>)}
+        </div>
+        {result.summary.revisar>0&&<div className="mt-3 flex flex-wrap items-center gap-3">
+          <button type="button" className="btn-ghost disabled:opacity-40"
+            disabled={aiBusy||busy||!desktopApi()} onClick={()=>void review()}>
+            {aiBusy?"Ollama analisando…":"Revisar dúvidas com Ollama (opcional)"}
+          </button>
+          <span className="text-xs text-muted">
+            A IA revisa somente nomes e sinais já extraídos; não interpreta arquivos binários.
+          </span>
+        </div>}
+        {aiError&&<p className="mt-2 text-sm text-gold" role="alert">{aiError}</p>}
+        {aiReview&&<div className="mt-3 rounded-lg border border-gold/30 bg-background/50 p-3">
+          <p className="text-sm font-semibold text-gold">Revisão do Ollama · hipótese, não confirmação</p>
+          <p className="mt-1 text-xs text-muted">{aiReview.note}</p>
+          <div className="mt-2 space-y-2">
+            {aiReview.revisoes.map(item=><p key={item.sourceId+"-"+item.targetId}
+              className="text-xs text-white">
+              #{item.sourceId} → #{item.targetId}: {item.assessment.replaceAll("_"," ")}
+              {item.reason?" · "+item.reason:""}
+            </p>)}
+            {aiReview.revisoes.length===0&&<p className="text-xs text-muted">
+              Nenhum parecer específico. As candidatas permanecem sem validação.
+            </p>}
+          </div>
+        </div>}
+        <p className="mt-2 text-xs text-muted">
+          Artes locais comparadas: {result.summary.sourceArtCount} na origem e {result.summary.targetArtCount} no destino.
+          Os nomes vêm dos perfis SLUS. Mesmo as candidatas fortes não foram verificadas dentro do jogo.
+        </p>
+        <div className="mt-3 space-y-2">
+          {result.rows.map(row=><div key={row.sourceId}
+            className="grid gap-2 rounded-lg border border-line/50 bg-background/40 p-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
+            <div className="min-w-0">
+              <p className="break-words text-sm font-semibold text-white">
+                <span className="text-primary">#{row.sourceId}</span> {row.sourceName}
+              </p>
+              <p className="text-xs text-muted">Origem</p>
+            </div>
+            <span aria-hidden className="hidden text-primary md:inline">→</span>
+            <div className="min-w-0">
+              <p className="break-words text-sm font-semibold text-white">
+                {row.targetId===null?"Nenhuma candidata":
+                  <><span className="text-primary">#{row.targetId}</span> {row.targetName}</>}
+              </p>
+              <p className="text-xs text-muted">
+                {row.confidence==="alta"?"Candidata forte":
+                  row.confidence==="revisar"?"Revisar correspondência":
+                  "Não encontrada"}
+                {row.ambiguous?" · existem alternativas":""}
+              </p>
+              {row.signals.length>0&&<p className="mt-1 text-xs text-gold">
+                {row.signals.join(" · ").replaceAll("_"," ")}
+              </p>}
+            </div>
+          </div>)}
+          {result.rows.length===0&&<Empty>Nenhuma carta encontrada neste filtro.</Empty>}
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted">
+          <span>{result.total?result.offset+1:0}–{Math.min(result.total,result.offset+result.rows.length)} de {result.total}</span>
+          <div className="flex gap-2">
+            <button type="button" className="btn-ghost disabled:opacity-40"
+              disabled={busy||result.offset===0}
+              onClick={()=>void compare(Math.max(0,result.offset-30))}>Anterior</button>
+            <button type="button" className="btn-ghost disabled:opacity-40"
+              disabled={busy||result.offset+30>=result.total}
+              onClick={()=>void compare(result.offset+30)}>Próxima</button>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-gold">
+          Comparação somente leitura. Confirme as candidatas ambíguas antes de
+          transferir qualquer referência de outro mod.
+        </p>
+      </>}
+    </>}
+  </section>
+}
+
 function Mods({mods,sha,onRefresh,configured}:{
   mods:LocalMod[];sha:string|null;onRefresh:()=>Promise<void>;configured:boolean
 }) {
@@ -422,6 +602,7 @@ function Mods({mods,sha,onRefresh,configured}:{
       </div>
       {!mods.length&&<Empty>Nenhum mod cadastrado. Importe uma ISO/BIN na versão Windows. Os arquivos não são enviados ao Vercel.</Empty>}
     </section>
+    <CardMatchPanel mods={mods} activeSha={sha}/>
   </>
 }
 
