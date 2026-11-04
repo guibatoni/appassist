@@ -78,6 +78,12 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_rank_comparison()
 
+    def compare_mod_cards(self, credential, source_sha, target_sha,
+                          query="", offset=0, limit=40, confidence="todas"):
+        self._authorize(credential)
+        return self._bridge.compare_mod_cards(
+            source_sha,target_sha,query,offset,limit,confidence)
+
     def get_fusions(self, credential, query="", offset=0, limit=100,
                     sort="id", card_type=""):
         self._authorize(credential)
