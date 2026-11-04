@@ -21,6 +21,11 @@ SYSTEM=(
     "Yu-Gi-Oh! Forbidden Memories. Use SOMENTE as evidências fornecidas. "
     "Não invente nomes, endereços, ranks, fórmulas, fusões ou probabilidades. "
     "Não afirme que uma hipótese é comprovada. "
+    "SE O SCANNER NÃO RECONHECER O LAYOUT OU MOSTRAR ZERO EXTRAÇÕES, "
+    "JAMAIS conclua que a ISO não contém cartas, oponentes, drops, fusões "
+    "ou arte: zero significa dado NÃO EXTRAÍDO. A ausência não foi "
+    "comprovada. Priorize passos concretos sobre SYSTEM.CNF, arquivo BOOT, "
+    "inventário ISO9660 e formatos desconhecidos. "
     "Responda em JSON estrito com campos: resumo (string), "
     "prioridades (array de strings), "
     "indices_candidatos_fusao (array de índices inteiros das candidatas disponíveis), "
@@ -65,6 +70,12 @@ def minimal_evidence(report: dict) -> dict:
             "exeSize":(report.get("scan_diagnostic") or {}).get("exeSize"),
             "waSize":(report.get("scan_diagnostic") or {}).get("waSize"),
             "sectorBytes":(report.get("scan_diagnostic") or {}).get("sectorBytes"),
+            "systemCnf":(report.get("scan_diagnostic") or {}).get("systemCnf"),
+            "files":[{
+                "name":str(row.get("name") or "")[:150],
+                "size":row.get("size"),"signature":str(row.get("signature") or "")[:40]
+            } for row in (report.get("scan_diagnostic") or {}).get("files",[])[:32]
+            if isinstance(row,dict)],
         },
         "uncertainties":report.get("uncertainties",[])[:15],
         "evidence":report.get("evidence",[])[:20],
