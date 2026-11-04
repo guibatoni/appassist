@@ -57,6 +57,16 @@ class LegacyX15TransferTests(unittest.TestCase):
         })
         self.assertEqual(decode_rank_result_adjustment(bytes(raw)),-40)
 
+    def test_legacy_plausibility_rejects_non_duel_memory(self):
+        # v10.5: no máximo 40 cartas, 80 turnos e 60 ações.
+        self.assertIsNone(decode_rank_record(make_record(cards_used=41)))
+        self.assertIsNone(decode_rank_record(make_record(turns=81)))
+        raw=bytearray(make_record())
+        raw[5]=61
+        self.assertIsNone(decode_rank_record(bytes(raw)))
+        self.assertIsNone(decode_rank_record(make_record(lp=0,turns=0)))
+        self.assertIsNotNone(decode_rank_record(make_record(lp=11300,turns=1)))
+
     def test_marker_2_and_d8_only_after_stable_double_read(self):
         raw=bytearray(make_record(lp=8000,turns=1))
         self.assertIsNone(decode_rank_result_adjustment(bytes(raw)))
