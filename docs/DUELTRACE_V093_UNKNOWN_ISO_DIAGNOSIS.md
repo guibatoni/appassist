@@ -61,6 +61,17 @@ O usuário confirmou que o Ollama está ativo com `qwen2.5:3b`. O painel mostrou
 
 **Limitação:** o GOG MOD 2.2 ainda NÃO foi decodificado. Para localizar as tabelas, é necessário examinar os nomes reais dos 9 arquivos (expanda **Evidências e próximas investigações**) e, se possível, o `relatorio.json`. Nenhum parser novo do conteúdo do GOG foi validado.
 
+## Novo caso real: RISING OF WICKED GODS 1.3.5 ver 2 — Drop 15 (NDC)
+
+A captura enviada mais recentemente apresenta um layout **diferente do GOG MOD**. O executável `SLUS_014.11` e o arquivo `DATA/WA_MRG.MRG` aparecem no índice de 9 arquivos. O `SYSTEM.CNF` aponta para `SLUS_014.11` e a ISO tem setor de 2352 bytes.
+
+- A leitura por offsets conhecidos retornou **0/39 nomes plausíveis de oponentes**, mas **722/722 nomes de cartas superficialmente plausíveis**. O método de plausibilidade é só um filtro de caracteres; NÃO prova que os nomes, seus IDs ou as estatísticas estejam corretos.
+- O leitor de drops rejeitou já na primeira tabela: encontrou apenas um formato candidato para o ID 1 / grupo inicial, mas com pesos que NÃO satisfazem validações estruturais exigidas para o catálogo completo.
+- A extração de artes depende de dados do catálogo validados e permanece indisponível; o modelo local NÃO pode contornar isso inventando correspondências.
+- O Ollama exibiu uma hipótese em cache mencionando **5555 fusões candidatas**. Candidatas de varredura não significam receitas comprovadas e o texto do Ollama não certifica o layout.
+- A nova função `inspect_known_name_layout` coleta dez amostras de nomes/ponteiros de cartas e sete de oponentes usando apenas offsets antigos. `diagnose_layout` exibe essas amostras como **NÃO VALIDADAS** e as torna acessíveis no painel, para investigar divergência de tabelas antes de criar qualquer parser alternativo.
+- A próxima evidência útil é o `relatorio.json` dessa ISO após nova leitura, especialmente `amostras_layout_nomes`, `nomes_status` e `drops_status`. **Não confundir os perfis** da ISO Rising com os do GOG MOD.
+
 ## Próximos passos
 
 1. Reanalisar GOG MOD 2.2 no Windows e abrir **Diagnosticar estrutura**. Conferir nomes presentes, setor, tamanho do SLUS/WA, `nomes_status`, `drops_status`, mensagens de erro. Caso Ollama local esteja disponível, clique **Investigar com Ollama** para hipóteses.
