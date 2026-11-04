@@ -253,7 +253,10 @@ class DueltraceWebBridge:
         if not sample.get("ready"):
             self._rank_calibration=None
             self._rank_last_turns=None
-            self._rank_pending_capture=None
+            # Captura explícita sobrevive à tela de resultado/transição,
+            # mesmo que o registro RAM desapareça. Ainda expira em 10 min.
+            if self._rank_pending_capture is not None:
+                self._rank_pending_capture["ram_gap"]=True
             return None,sha,{"state":"unavailable","ready":False,
                 "status":sample.get("status","Leitura indisponível"),
                 "score":None,"category":None,"counters":None}
@@ -270,12 +273,22 @@ class DueltraceWebBridge:
             _a,_e,profile=self._active()
             binding=validate_live_rank_binding(profile)
             turns=counters[binding["turns_criterion"]] if binding else counters["turns"]
+            capture=self._rank_pending_capture
+            if isinstance(capture,dict):
+                if capture.get("rom_sha256")!=sha or capture.get("pid")!=pid:
+                    self._rank_pending_capture=None
+                elif capture.get("returned_to_menu") and turns>0:
+                    self._rank_pending_capture=None  # outro duelo iniciou
+                elif capture.get("ram_gap") and turns>0:
+                    self._rank_pending_capture=None  # retomou com novo duelo
             if (self._rank_last_turns is not None and
                     (self._rank_last_turns[0]!=(sha,pid) or
                      turns < self._rank_last_turns[1])):
+                if (self._rank_last_turns[0]==(sha,pid)
+                        and self._rank_pending_capture is not None):
+                    self._rank_pending_capture["returned_to_menu"]=True
                 self._rank_calibration=None  # novo duelo ou contador reiniciado
                 self._rank_last_snapshot=None
-                self._rank_pending_capture=None
             self._rank_last_turns=((sha,pid),turns)
             calibrated=(self._rank_calibration is not None and
                 self._rank_calibration["sha"]==sha and
