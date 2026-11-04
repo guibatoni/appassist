@@ -52,9 +52,14 @@ function RankPanel({sha}:{sha:string|null}) {
   const [rank,setRank]=useState<RankState|null>(null)
   const [lp,setLp]=useState("")
   const [busy,setBusy]=useState(false)
+  const [captured,setCaptured]=useState<{score:number|null;category:string|null;status:string}|null>(null)
+  const [captureBusy,setCaptureBusy]=useState(false)
+  const [captureError,setCaptureError]=useState<string|null>(null)
   useEffect(()=>{
     let mounted=true,busyRead=false
     setRank(null)
+    setCaptured(null)
+    void desktopApi()?.get_pending_rank_capture().then(x=>{if(mounted&&x.ready)setCaptured(x)}).catch(()=>{})
     const refresh=async()=>{
       const api=desktopApi()
       if(!api||busyRead)return
@@ -77,6 +82,19 @@ function RankPanel({sha}:{sha:string|null}) {
     try{setRank(await api.confirm_rank_lp(value))}
     catch{setRank({ready:false,state:"unavailable",status:"Não foi possível confirmar os LP",score:null,category:null,counters:null})}
     finally{setBusy(false)}
+  }
+  const capture=async()=>{
+    const api=desktopApi()
+    if(!api)return
+    setCaptureBusy(true)
+    setCaptureError(null)
+    try{
+      const result=await api.capture_rank_prediction()
+      setCaptured(result)
+    }catch(e){
+      setCaptured(null)
+      setCaptureError(e instanceof Error?e.message:"Não foi possível capturar a previsão.")
+    }finally{setCaptureBusy(false)}
   }
   return <section className="panel rounded-xl p-4" aria-label="Contador de RANK">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -116,6 +134,21 @@ function RankPanel({sha}:{sha:string|null}) {
             <span className="block">{label}</span><strong className="font-display text-base text-white">{value??"—"}</strong>
           </div>)}
       </div>}
+    <div className="mt-3 rounded-lg border border-primary/30 bg-background/40 p-3">
+      <p className="text-xs font-semibold text-primary">Conferência com o resultado real</p>
+      <p className="mt-1 text-xs text-muted">
+        No final do duelo e antes da tela de recompensa, capture a previsão de vitória por LP.
+        Depois abra Drops e registre o resultado mostrado pelo jogo.
+      </p>
+      <button type="button" disabled={!rank?.ready||captureBusy||!desktopApi()}
+        className="btn-gold mt-2 disabled:opacity-40" onClick={()=>void capture()}>
+        {captureBusy?"Capturando…":"Capturar previsão de RANK"}
+      </button>
+      {captured&&<p className="mt-2 text-xs text-primary" role="status">
+        {captured.status} · {captured.score} pontos · {captured.category}
+      </p>}
+      {captureError&&<p className="mt-2 text-xs text-danger" role="alert">{captureError}</p>}
+    </div>
     <p className="mt-3 text-xs text-muted">
       Esta atualização mantém a fórmula de pontos já usada pelo DUELTRACE e altera apenas a letra
       exibida segundo o sistema da ISO ativa (X15 ou original). A leitura ao vivo requer RAM calibrada

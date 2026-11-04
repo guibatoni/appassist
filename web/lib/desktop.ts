@@ -239,6 +239,38 @@ export type RankState = {
   final?: boolean
 }
 
+export type RankCapture = {
+  ready: boolean
+  captureId: string | null
+  score: number | null
+  category: string | null
+  status: string
+}
+
+export type RankComparison = {
+  available: boolean
+  status: string
+  total?: number
+  fully_comparable?: number
+  matches?: number
+  mismatches?: number
+  rank_only_matches?: number
+  rank_only_mismatches?: number
+  invalid?: number
+  missing_prediction?: number
+  not_lp_win?: number
+  runtime_verified?: boolean
+  cases: Array<{
+    duel_id: string | null
+    status: string
+    observed_rank: string | null
+    observed_points: number | null
+    projected_rank: string | null
+    projected_score: number | null
+    score_delta: number | null
+  }>
+}
+
 export type UpdateCheck = {
   currentVersion: string
   channel: "stable" | "preview"
@@ -267,13 +299,16 @@ export interface DesktopAPI {
   get_hand(): Promise<HandState>
   get_rank(): Promise<RankState>
   confirm_rank_lp(lifePoints: number): Promise<RankState>
+  capture_rank_prediction(): Promise<RankCapture>
+  get_pending_rank_capture(): Promise<RankCapture>
+  get_rank_comparison(): Promise<RankComparison>
   get_fusions(query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
   get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
   get_rank_trace_status(): Promise<MipsTraceResult>
   import_rank_trace(duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(): Promise<RankAuditExport>
   get_duel_evidence(): Promise<DuelEvidence>
-  record_duel_result(opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string): Promise<DuelEvidence>
+  record_duel_result(opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string, captureId?: string | null): Promise<DuelEvidence>
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(sha: string): Promise<DeepScanResult>
   import_iso(): Promise<{cancelled: boolean; investigation?: string}>
@@ -289,13 +324,16 @@ interface ProtectedNativeAPI {
   get_hand(token: string): Promise<HandState>
   get_rank(token: string): Promise<RankState>
   confirm_rank_lp(token: string, lifePoints: number): Promise<RankState>
+  capture_rank_prediction(token: string): Promise<RankCapture>
+  get_pending_rank_capture(token: string): Promise<RankCapture>
+  get_rank_comparison(token: string): Promise<RankComparison>
   get_fusions(token: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
   get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
   get_rank_trace_status(token: string): Promise<MipsTraceResult>
   import_rank_trace(token: string, duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(token: string): Promise<RankAuditExport>
   get_duel_evidence(token: string): Promise<DuelEvidence>
-  record_duel_result(token: string, opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string): Promise<DuelEvidence>
+  record_duel_result(token: string, opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string, captureId?: string | null): Promise<DuelEvidence>
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(token: string, sha: string): Promise<DeepScanResult>
   import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
@@ -325,14 +363,17 @@ export function desktopApi(): DesktopAPI | null {
     get_hand: () => native.get_hand(token),
     get_rank: () => native.get_rank(token),
     confirm_rank_lp: (lifePoints) => native.confirm_rank_lp(token, lifePoints),
+    capture_rank_prediction: () => native.capture_rank_prediction(token),
+    get_pending_rank_capture: () => native.get_pending_rank_capture(token),
+    get_rank_comparison: () => native.get_rank_comparison(token),
     get_fusions: (query, offset, limit, sort, cardType) => native.get_fusions(token, query, offset, limit, sort, cardType),
     get_drops: (opponentId, group, query, offset, limit, sort, cardType, rank) => native.get_drops(token, opponentId, group, query, offset, limit, sort, cardType, rank),
     get_rank_trace_status: () => native.get_rank_trace_status(token),
     import_rank_trace: (duelId) => native.import_rank_trace(token, duelId),
     export_rank_audit: () => native.export_rank_audit(token),
     get_duel_evidence: () => native.get_duel_evidence(token),
-    record_duel_result: (opponentId, observedRank, cardId, observedPoints, victoryType) =>
-      native.record_duel_result(token, opponentId, observedRank, cardId, observedPoints, victoryType),
+    record_duel_result: (opponentId, observedRank, cardId, observedPoints, victoryType, captureId) =>
+      native.record_duel_result(token, opponentId, observedRank, cardId, observedPoints, victoryType, captureId),
     activate_mod: (sha, acknowledge) => native.activate_mod(token, sha, acknowledge),
     scan_sources: (sha) => native.scan_sources(token, sha),
     import_iso: () => native.import_iso(token),

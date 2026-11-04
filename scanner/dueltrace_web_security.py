@@ -50,6 +50,18 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.confirm_rank_lp(life_points)
 
+    def capture_rank_prediction(self, credential):
+        self._authorize(credential)
+        return self._bridge.capture_rank_prediction()
+
+    def get_pending_rank_capture(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_pending_rank_capture()
+
+    def get_rank_comparison(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_rank_comparison()
+
     def get_fusions(self, credential, query="", offset=0, limit=100,
                     sort="id", card_type=""):
         self._authorize(credential)
@@ -77,10 +89,11 @@ class ProtectedDesktopApi:
         return self._bridge.get_duel_evidence()
 
     def record_duel_result(self, credential, opponent_id, observed_rank,
-                           card_id, observed_points=None, victory_type="unknown"):
+                           card_id, observed_points=None, victory_type="unknown",
+                           capture_id=None):
         self._authorize(credential)
         return self._bridge.record_duel_result(
-            opponent_id,observed_rank,card_id,observed_points,victory_type)
+            opponent_id,observed_rank,card_id,observed_points,victory_type,capture_id)
 
     def activate_mod(self, credential, sha, acknowledge=False):
         self._authorize(credential)

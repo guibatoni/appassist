@@ -33,6 +33,7 @@ from dueltrace_rank_system import available_ranks,rank_system,rank_label_for_exi
 from dueltrace_mips_duel_trace import inspect_duel_mips_trace, MAX_TRACE_BYTES
 from dueltrace_rank_memory_trace import inspect_rank_memory_trace
 from dueltrace_rank_export import build_rank_evidence_report
+from dueltrace_rank_duel_verification import compare_rank_observations
 from dueltrace_library_sort import validate_sort,matches_type,sort_key
 from dueltrace_update_checker import (
     check_for_updates, open_official_releases, fetch_stable_release, CURRENT_VERSION
@@ -54,6 +55,7 @@ class DueltraceWebBridge:
         self._rank_calibration = None
         self._rank_last_turns = None
         self._rank_last_snapshot = None
+        self._rank_pending_capture = None
         self._process = None
         self._lock = threading.RLock()
         self._fusion_cache_key = None
@@ -133,15 +135,28 @@ class DueltraceWebBridge:
     def check_updates(self):
         """Detecta Preview e release estável; instalador somente com confiança."""
         status=check_for_updates()
-        if trusted_installer_ready() and status.get("status")=="update_available":
+        if status.get("status")!="update_available":
+            status["automaticInstallReason"]=(
+                "Não há release estável mais recente. As builds Preview "
+                "continuam sem instalação automática por segurança.")
+        elif not trusted_installer_ready():
+            status["automaticInstallReason"]=(
+                "Esta instalação não possui assinatura Authenticode "
+                "verificada. A atualização automática exige uma versão "
+                "estável assinada previamente instalada.")
+        else:
             try:
                 release=fetch_stable_release()
                 candidate=select_signed_installer(release,CURRENT_VERSION)
                 if candidate is not None:
                     status["automaticInstallReady"]=True
-                    status["automaticInstallReason"]="Instalador oficial assinado disponível."
+                    status["automaticInstallReason"]=(
+                        "Instalador oficial com hash publicado; a assinatura "
+                        "será comparada antes de executar.")
             except (OSError,ValueError,TypeError):
-                pass
+                status["automaticInstallReason"]=(
+                    "A release mais recente ainda não possui instalador "
+                    "com metadados de integridade verificáveis.")
         return status
 
     def install_signed_update(self):
@@ -222,6 +237,7 @@ class DueltraceWebBridge:
         binding=validate_live_rank_binding(profile)
         if binding is None and not model_available(sha) and not x15_compatible_runtime(profile):
             self._rank_calibration=None
+            self._rank_pending_capture=None
             return None,sha,{"state":"unsupported","ready":False,
                 "status":"Tabela e/ou rotina de RANK ainda não calibradas para esta ISO. "
                          "A leitura MIPS estática não autoriza inferir endereços RAM.",
@@ -237,6 +253,10 @@ class DueltraceWebBridge:
         if not sample.get("ready"):
             self._rank_calibration=None
             self._rank_last_turns=None
+            # Captura explícita sobrevive à tela de resultado/transição,
+            # mesmo que o registro RAM desapareça. Ainda expira em 10 min.
+            if self._rank_pending_capture is not None:
+                self._rank_pending_capture["ram_gap"]=True
             return None,sha,{"state":"unavailable","ready":False,
                 "status":sample.get("status","Leitura indisponível"),
                 "score":None,"category":None,"counters":None}
@@ -253,9 +273,20 @@ class DueltraceWebBridge:
             _a,_e,profile=self._active()
             binding=validate_live_rank_binding(profile)
             turns=counters[binding["turns_criterion"]] if binding else counters["turns"]
+            capture=self._rank_pending_capture
+            if isinstance(capture,dict):
+                if capture.get("rom_sha256")!=sha or capture.get("pid")!=pid:
+                    self._rank_pending_capture=None
+                elif capture.get("returned_to_menu") and turns>0:
+                    self._rank_pending_capture=None  # outro duelo iniciou
+                elif capture.get("ram_gap") and turns>0:
+                    self._rank_pending_capture=None  # retomou com novo duelo
             if (self._rank_last_turns is not None and
-                    self._rank_last_turns[0]==(sha,pid) and
-                    turns < self._rank_last_turns[1]):
+                    (self._rank_last_turns[0]!=(sha,pid) or
+                     turns < self._rank_last_turns[1])):
+                if (self._rank_last_turns[0]==(sha,pid)
+                        and self._rank_pending_capture is not None):
+                    self._rank_pending_capture["returned_to_menu"]=True
                 self._rank_calibration=None  # novo duelo ou contador reiniciado
                 self._rank_last_snapshot=None
             self._rank_last_turns=((sha,pid),turns)
@@ -298,6 +329,43 @@ class DueltraceWebBridge:
                     "model":result["model"],"rankSystem":rank_system(sha),
                     "final":False}
 
+
+    def capture_rank_prediction(self):
+        """Congela uma previsão de vitória LP com clique explícito no duelo.
+
+        Não confirma o resultado do jogo, nem reconhece qual ISO o ePSXe abriu.
+        Só compara com o resultado manual informado posteriormente.
+        """
+        with self._lock:
+            current=self.get_rank()
+            snap=self._rank_last_snapshot
+            if not current.get("ready") or not isinstance(snap,dict):
+                raise ValueError("Confirme os LP e obtenha um RANK válido antes de capturar.")
+            sha=snap["rom_sha256"]
+            capture={
+                "id":str(uuid4()),"rom_sha256":sha,
+                "pid":snap["pid"],"at":monotonic(),
+                "score":snap["score"],"category":snap["category"],
+                "counters":dict(snap["counters"]),
+            }
+            self._rank_pending_capture=capture
+            return self.get_pending_rank_capture()
+
+    def get_pending_rank_capture(self):
+        """Exibe somente metadados da captura ativa; sem RAM bruta ou PID."""
+        with self._lock:
+            active,_entry,profile=self._active()
+            capture=self._rank_pending_capture
+            if (not profile or not isinstance(capture,dict)
+                    or capture.get("rom_sha256")!=active.get("sha256")
+                    or monotonic()-capture.get("at",-1e9)>600):
+                self._rank_pending_capture=None
+                return {"ready":False,"captureId":None,"score":None,"category":None,
+                        "status":"Nenhuma previsão capturada neste duelo."}
+            return {"ready":True,"captureId":capture["id"],
+                    "score":capture["score"],"category":capture["category"],
+                    "status":"Previsão capturada para conferência após a partida (vitória LP)."}
+
     def confirm_rank_lp(self, life_points):
         if type(life_points) is not int or not 0<=life_points<=32766:
             raise ValueError("Informe os LP exatos mostrados no duelo (0 a 32766).")
@@ -312,6 +380,7 @@ class DueltraceWebBridge:
             if sample["counters"][lp_key]!=life_points:
                 self._rank_calibration=None
                 self._rank_last_snapshot=None
+                self._rank_pending_capture=None
                 return {"ready":False,"state":"lp_mismatch",
                     "status":"LP do jogo divergentes do candidato RAM. Contador não habilitado.",
                     "candidateLp":sample["counters"][lp_key],
@@ -524,13 +593,28 @@ class DueltraceWebBridge:
             observations=(raw.get("observations",[]) if isinstance(raw,dict) else [])
             return rank_drop_report(profile,observations)
 
+    def get_rank_comparison(self):
+        """Resumo local da divergência entre previsão capturada e duelo manual."""
+        with self._lock:
+            active,_entry,profile=self._active()
+            sha=active.get("sha256")
+            if not profile or not isinstance(sha,str):
+                return {"available":False,"status":"no_active_mod","cases":[]}
+            saved=load_json(self._observations_path(sha),{})
+            records=saved.get("observations",[]) if isinstance(saved,dict) else []
+            return {"available":True,**compare_rank_observations(sha,records)}
+
     def record_duel_result(self, opponent_id, observed_rank, card_id,
-                           observed_points=None, victory_type="unknown"):
+                           observed_points=None, victory_type="unknown",
+                           capture_id=None):
         """Registra recompensa e nota VISTAS pelo jogador, jamais auto-verificadas.
 
         A projeção do snapshot anterior não se torna verdade de treinamento:
         fica explicitamente marcada como previsão para futura comparação.
         """
+        if capture_id is not None and (type(capture_id) is not str or
+                not re.fullmatch(r"[0-9a-f-]{36}",capture_id)):
+            raise ValueError("Identificador de captura inválido.")
         if type(victory_type) is not str or victory_type not in ("lp","deckout","other","unknown"):
             raise ValueError("Resultado de vitória inválido.")
         if type(opponent_id) is not int or not 1<=opponent_id<=39:
@@ -560,13 +644,19 @@ class DueltraceWebBridge:
             observations=list(raw.get("observations",[])) if isinstance(raw,dict) else []
             if len(observations)>=500:
                 observations=observations[-499:]
-            snapshot=self._rank_last_snapshot
+            capture=self._rank_pending_capture
             estimate=None
-            if (isinstance(snapshot,dict) and snapshot.get("rom_sha256")==sha
-                    and monotonic()-snapshot.get("monotonic_at",-1e9)<600):
-                estimate={"projected_score":snapshot.get("score"),
-                          "projected_rank":snapshot.get("category"),
-                          "counters":snapshot.get("counters"),
+            if capture_id is not None:
+                if (not isinstance(capture,dict) or capture["id"]!=capture_id
+                        or capture["rom_sha256"]!=sha
+                        or monotonic()-capture["at"]>600):
+                    self._rank_pending_capture=None
+                    raise ValueError("Captura expirou ou pertence a outro duelo/mod. Capture novamente.")
+                estimate={"projected_score":capture["score"],
+                          "projected_rank":capture["category"],
+                          "counters":dict(capture["counters"]),
+                          "capture_id":capture["id"],
+                          "capture_source":"user_confirmed_lp_prediction",
                           "comparison_status":"projection_not_final"}
             observation={
                 "duel_id":str(uuid4()),"rom_sha256":sha,
@@ -580,6 +670,8 @@ class DueltraceWebBridge:
             observations.append(observation)
             atomic_json(path,{"schema":1,"rom_sha256":sha,
                               "observations":observations})
+            if capture_id is not None:
+                self._rank_pending_capture=None  # uso único após salvar
             return rank_drop_report(profile,observations)
 
     def activate_mod(self, sha, acknowledge=False):
@@ -591,6 +683,8 @@ class DueltraceWebBridge:
         self._fusion_cache_key=None
         self._rank_calibration=None
         self._rank_last_turns=None
+        self._rank_last_snapshot=None
+        self._rank_pending_capture=None
         return self.get_state()
 
     def scan_sources(self, sha):
