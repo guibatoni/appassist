@@ -215,7 +215,7 @@ try {{
     $unknown=@(Get-ChildItem -LiteralPath $backup -Force | Where-Object {{ $allowed -notcontains $_.Name }})
     if ($unknown.Count -gt 0) {{ exit 26 }}
     Remove-Item -LiteralPath $backup -Recurse -Force
-  }
+  }}
   Rename-Item -LiteralPath $old -NewName '{backup.name.replace("'","''")}'
   try {{
     Rename-Item -LiteralPath $stage -NewName '{original_name}'
