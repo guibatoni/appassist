@@ -123,6 +123,37 @@ class Disc:
         return self.read(lba,size)
     def close(self):self.f.close()
 
+def inspect_file_signatures(disc, *, max_files=48):
+    """Inventário de assinaturas dos arquivos ISO9660 sem extração de conteúdo.
+
+    Lê até 32 bytes por arquivo. Não assume que um arquivo sem extensão
+    SLUS/WA seja vazio ou que seu formato tenha sido reconhecido.
+    """
+    probes=[]
+    for name,(lba,size) in sorted(disc.files.items())[:max_files]:
+        if type(size) is not int or size<=0:
+            probes.append({"nome":name,"assinatura":"vazio_ou_invalido",
+                           "prefix_sha256":None})
+            continue
+        try:
+            raw=disc.get(name,limit_bytes=32)
+        except (OSError,ValueError,KeyError):
+            probes.append({"nome":name,"assinatura":"erro_leitura",
+                           "prefix_sha256":None})
+            continue
+        if raw.startswith(b"PS-X EXE"):
+            signature="psx_executavel"
+        elif raw.startswith(b"RIFF"):
+            signature="riff"
+        elif raw.startswith(b"TIM2"):
+            signature="tim2"
+        else:
+            signature="desconhecida"
+        probes.append({"nome":name,"assinatura":signature,
+                       "prefix_sha256":hashlib.sha256(raw).hexdigest()[:16]})
+    return probes
+
+
 def inspect_system_cnf(disc):
     """Consulta apenas a indicação BOOT, sem executar nem extrair binários.
 
@@ -317,6 +348,7 @@ def process(path,output,with_art=False,digest=None,progress=None):
         disc=Disc(path);info['tipo_setor']=disc.sector
         info['arquivos_discos']=[{'nome':n,'lba':lba,'tamanho':sz} for n,(lba,sz) in sorted(disc.files.items())]
         info['system_cnf']=inspect_system_cnf(disc)
+        info['assinaturas_arquivos']=inspect_file_signatures(disc)
         # SLUS_014.11 pode estar na raiz ou dentro da pasta DATA.
         sl_names=[n for n in disc.files if re.fullmatch(
             r'(?:SLUS|SCUS|SLES|SCES|SLPS|SCPS|SLPM|SLED|SCED|SLKA)[A-Z0-9_.-]+',
@@ -329,6 +361,7 @@ def process(path,output,with_art=False,digest=None,progress=None):
         if not sl_names:
             sl_names=sorted(n for n in disc.files if n.endswith('.EXE'))
         boot_candidate=info["system_cnf"].get("boot_target")
+        info['boot_alvo_indexado']=boot_candidate in disc.files if boot_candidate else None
         if (boot_candidate in disc.files
                 and boot_candidate not in sl_names):
             # Apenas tentar um arquivo indicado explicitamente pelo sistema
@@ -342,11 +375,16 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['wa_candidatos']=[n for n in sorted(disc.files)
                                if 'WA_MRG' in n or n.endswith('.MRG')][:20]
         if not sl_names or not wa_names:
+            hint=('BOOT aponta para arquivo ausente do índice ISO9660.'
+                  if boot_candidate and boot_candidate not in disc.files else
+                  'BOOT identificado mas formato de recursos desconhecido.'
+                  if boot_candidate else
+                  'Nenhuma indicação BOOT utilizável.')
             raise ValueError(
                 'Layout do mod ainda não reconhecido: '
                 f'executáveis candidatos={sl_names[:6]}, '
                 f'arquivos WA candidatos={info["wa_candidatos"][:6]}. '
-                'A ISO pode usar arquivos com nomes diferentes.')
+                +hint+' Os arquivos podem ter nomes ou contêineres diferentes.')
         # O catálogo e as imagens exigem o WA até os pacotes de duelo.
         # A extração profunda lê o WA completo, não apenas seu prefixo.
         wa_required=max(
