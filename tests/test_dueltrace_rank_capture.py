@@ -92,6 +92,10 @@ class CapturedRankTests(unittest.TestCase):
         self.bridge.capture_rank_prediction()
         self.counters["turns"]=0
         self.assertEqual(self.bridge.get_rank()["state"],"needs_lp_confirmation")
+        self.assertTrue(self.bridge.get_pending_rank_capture()["ready"])
+        # Transição de recompensa preserva captura; iniciar OUTRO duelo a invalida.
+        self.counters["turns"]=1
+        self.assertEqual(self.bridge.get_rank()["state"],"needs_lp_confirmation")
         self.assertFalse(self.bridge.get_pending_rank_capture()["ready"])
         self.bridge.confirm_rank_lp(8000)
         self.bridge.capture_rank_prediction()
@@ -103,6 +107,16 @@ class CapturedRankTests(unittest.TestCase):
         self.counters["remaining_lp"]=7999
         self.assertEqual(self.bridge.confirm_rank_lp(8000)["state"],"lp_mismatch")
         self.assertFalse(self.bridge.get_pending_rank_capture()["ready"])
+
+    def test_ram_gap_after_final_turn_preserves_capture_until_observation(self):
+        self.bridge.confirm_rank_lp(8000)
+        captured=self.bridge.capture_rank_prediction()
+        self.reader.return_value={"ready":False,"status":"Tela de vitória",
+                                  "pid":3456,"counters":None}
+        self.assertEqual(self.bridge.get_rank()["state"],"unavailable")
+        self.assertEqual(self.bridge.get_pending_rank_capture()["captureId"],captured["captureId"])
+        self.bridge.record_duel_result(1,"Z-POW",1,101,"lp",captured["captureId"])
+        self.assertEqual(self.bridge.get_rank_comparison()["matches"],1)
 
     def test_unsupported_mod_cannot_capture(self):
         other="a"*64
