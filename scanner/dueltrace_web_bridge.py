@@ -135,15 +135,28 @@ class DueltraceWebBridge:
     def check_updates(self):
         """Detecta Preview e release estável; instalador somente com confiança."""
         status=check_for_updates()
-        if trusted_installer_ready() and status.get("status")=="update_available":
+        if status.get("status")!="update_available":
+            status["automaticInstallReason"]=(
+                "Não há release estável mais recente. As builds Preview "
+                "continuam sem instalação automática por segurança.")
+        elif not trusted_installer_ready():
+            status["automaticInstallReason"]=(
+                "Esta instalação não possui assinatura Authenticode "
+                "verificada. A atualização automática exige uma versão "
+                "estável assinada previamente instalada.")
+        else:
             try:
                 release=fetch_stable_release()
                 candidate=select_signed_installer(release,CURRENT_VERSION)
                 if candidate is not None:
                     status["automaticInstallReady"]=True
-                    status["automaticInstallReason"]="Instalador oficial assinado disponível."
+                    status["automaticInstallReason"]=(
+                        "Instalador oficial com hash publicado; a assinatura "
+                        "será comparada antes de executar.")
             except (OSError,ValueError,TypeError):
-                pass
+                status["automaticInstallReason"]=(
+                    "A release mais recente ainda não possui instalador "
+                    "com metadados de integridade verificáveis.")
         return status
 
     def install_signed_update(self):
