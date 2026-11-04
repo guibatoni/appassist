@@ -423,8 +423,10 @@ class DueltraceWebBridge:
                     "victorySource":("ram_lp" if observed_adjustment==2
                                      else "ram_deckout" if observed_adjustment==-40
                                      else "projected_lp"),
-                    "victoryBonus":(observed_adjustment
-                                    if observed_adjustment is not None else 2),
+                    "victoryBonus":(
+                        observed_adjustment
+                        if observed_adjustment is not None else
+                        binding["victory_bonuses"]["lp"] if binding else 2),
                     "final":False}
 
 
