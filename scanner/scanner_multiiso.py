@@ -256,7 +256,8 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['arquivos_discos']=[{'nome':n,'lba':lba,'tamanho':sz} for n,(lba,sz) in sorted(disc.files.items())]
         # SLUS_014.11 pode estar na raiz ou dentro da pasta DATA.
         sl_names=[n for n in disc.files if re.fullmatch(
-            r'SL[UP][A-Z0-9_.]+',n.rsplit('/',1)[-1])]
+            r'(?:SLUS|SCUS|SLES|SCES|SLPS|SCPS|SLPM|SLED|SCED|SLKA)[A-Z0-9_.-]+',
+            n.rsplit('/',1)[-1])]
         # Mods podem ter múltiplos executáveis: priorizar o SLUS solicitado
         # em DATA, sem perder compatibilidade com ISOs de executável na raiz.
         sl_names=sorted(sl_names,key=lambda x:(
@@ -266,8 +267,17 @@ def process(path,output,with_art=False,digest=None,progress=None):
             sl_names=sorted(n for n in disc.files if n.endswith('.EXE'))
         wa_names=sorted((n for n in disc.files if n.endswith('WA_MRG.MRG')),
                         key=lambda x:(not x.startswith('DATA/'),x))
+        # Registrar candidatos alternativos para análise, mas não assumir
+        # automaticamente que outro .MRG contém as tabelas de Forbidden Memories.
+        info['executaveis_candidatos']=sl_names[:20]
+        info['wa_candidatos']=[n for n in sorted(disc.files)
+                               if 'WA_MRG' in n or n.endswith('.MRG')][:20]
         if not sl_names or not wa_names:
-            raise ValueError(f'Layout FM PS1 incompleto; executáveis={sl_names}, WA={wa_names}')
+            raise ValueError(
+                'Layout do mod ainda não reconhecido: '
+                f'executáveis candidatos={sl_names[:6]}, '
+                f'arquivos WA candidatos={info["wa_candidatos"][:6]}. '
+                'A ISO pode usar arquivos com nomes diferentes.')
         # O catálogo e as imagens exigem o WA até os pacotes de duelo.
         # A extração profunda lê o WA completo, não apenas seu prefixo.
         wa_required=max(
