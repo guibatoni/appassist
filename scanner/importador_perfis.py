@@ -125,7 +125,7 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "cartas": "verificado" if card_ok else "pendente",
         "oponentes": "verificado" if opponent_ok else "pendente",
         "tabelas_drops": (
-            "verificado_estruturalmente" if weights_ok else
+            "verificado" if weights_ok else
             "matrizes_candidatas_sem_identidade" if weights_structural_ok else
             "pendente"),
         "nomes_dos_ranks": "verificado" if known_x15 else "padrao_original_presumido",
