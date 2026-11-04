@@ -23,7 +23,7 @@ Isso evita baixar diretamente de GitHub Actions Artifacts com credenciais do usu
 - Valida que `DUELTRACE-WebUI.exe` e `dueltrace-build.json` correspondem à versão, ID do workflow e commit publicados.
 - Inicia helper PowerShell após conferência, fecha a janela do DUELTRACE, espera processo terminar, renomeia instalação atual como backup, posiciona pacote novo no mesmo diretório e reinicia o aplicativo. Em erro de troca, tenta restaurar a instalação anterior.
 - Os perfis, ISOs, configurações e observações permanecem em `%LOCALAPPDATA%/ForbiddenMemoriesMultiMod`, fora da pasta de binários.
-- Se existir backup de atualização anterior, recusa nova substituição automática em vez de apagar arquivos sem revisão; é necessário resolver/arquivar esse backup.
+- A atualização mantém um backup da versão anterior. Na atualização seguinte, gira esse backup **somente** quando a pasta anterior contém exclusivamente a distribuição conhecida; arquivos inesperados bloqueiam a exclusão e exigem revisão manual.
 - Falha de rede/GitHub 403/limite API: informa motivo sem modificar a instalação.
 
 **Aviso:** O SHA-256 protege contra corrupção/troca divergente do ativo publicado; não substitui assinatura de código e não prova que o binário é seguro. Apenas Releases do repositório oficial configurado são considerados. Nunca ignorar prompts de bloqueio do Windows.
