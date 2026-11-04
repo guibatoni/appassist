@@ -53,6 +53,13 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
     wa=[x for x in names
         if "WA_MRG" in x.rsplit("/",1)[-1]
         or x.rsplit("/",1)[-1].endswith(".MRG")]
+    # Formato alternativo do GOG MOD: contêineres podem ser renomeados.
+    # Comparação pelo tamanho serve como evidência de busca, não prova.
+    wa_size_matches=[str(x)[:150] for x in
+                     (report.get("wa_candidatos_por_tamanho") or [])[:12]
+                     if isinstance(x,str)]
+    suspected_wa=str(report.get("drops_source") or "")[:150]
+    wa_selection=str(report.get("wa_selecao_metodo") or "sem_sondagem")[:70]
     errors=[]
     if not files:
         errors.append("Índice ISO9660 indisponível ou não reconhecido.")
@@ -66,7 +73,13 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
             errors.append("BOOT indica "+boot_target+
                           ", porém não há executável conhecido no índice.")
         if not any(x.endswith("WA_MRG.MRG") for x in wa):
-            errors.append("Nenhum WA_MRG.MRG com nome esperado foi localizado.")
+            if wa_selection=="tamanho_identico_nao_validado":
+                errors.append(
+                    "WA_MRG.MRG não encontrado pelo nome; arquivo "
+                    +suspected_wa+" selecionado apenas por tamanho para "
+                    "testar as validações. Identidade não confirmada.")
+            else:
+                errors.append("Nenhum WA_MRG.MRG com nome esperado foi localizado.")
     status=str(report.get("status") or "não analisado")
     problem=str(report.get("problema") or "")[:250]
     if problem:
@@ -115,6 +128,9 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
                      " está em outra trilha, nome de arquivo ou entrada do diretório não indexada.")
     elif boot_found:
         steps.append("Conferir a assinatura do arquivo de boot e localizar tabelas por evidências, não por nome.")
+    if wa_size_matches:
+        steps.append("Comparar assinatura, tabelas e artes dos contêineres "
+                     "com mesmo tamanho do WA conhecido; não aprovar por tamanho.")
     if not boot or not wa:
         steps.append("Verificar nomes e posições reais de SLUS/SCUS/SLES e WA_MRG no disco.")
     if not flags.get("cards"):
@@ -132,7 +148,13 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
         "nextSteps":steps[:6],
         "executableCandidates":list(dict.fromkeys(
             ([boot_target] if boot_found and boot_target else [])+boot))[:12],
-        "waCandidates":wa[:12],
+        "waCandidates":list(dict.fromkeys(wa+wa_size_matches))[:12],
+        "waSelectionMethod":wa_selection,
+        "waSizeCandidates":wa_size_matches,
+        "suspectedWa":suspected_wa or None,
+        "suspectedWaVerified":(
+            bool(flags.get("drops")) if wa_selection=="tamanho_identico_nao_validado"
+            else False),
         "chosenExecutable":str(report.get("executavel") or "")[:150],
         "chosenWa":str(report.get("drops_source") or "")[:150],
         "exeSize":next((x.get("tamanho") for x in files if str(x.get("nome")).upper()==str(report.get("executavel","")).upper()),None),
