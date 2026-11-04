@@ -199,6 +199,59 @@ class PreviewInstallerTests(unittest.TestCase):
             self.assertIn("Start-Process",scripts[0])
             self.assertTrue(exe.exists())  # processo atual não é alterado imediatamente
 
+    def test_stable_portable_zip_never_requires_authenticode(self):
+        version="v0.9.0"
+        sha="b"*40
+        payload=b"zip-test"
+        asset=updater.STABLE_ASSET_NAME
+        stable={
+            "tag_name":version,"draft":False,"prerelease":False,
+            "target_commitish":sha,
+            "html_url":f"https://github.com/guibatoni/appassist/releases/tag/{version}",
+            "assets":[{
+                "name":asset,"size":len(payload),
+                "digest":"sha256:"+hashlib.sha256(payload).hexdigest(),
+                "browser_download_url":
+                    f"https://github.com/guibatoni/appassist/releases/download/{version}/{asset}",
+            }],
+        }
+        info=updater.select_portable_stable_release(stable,"0.8.5")
+        self.assertEqual(info["version"],"0.9.0")
+        self.assertIsNone(info["run_id"])
+        self.assertIsNone(updater.select_portable_stable_release(stable,"0.9.0","stable"))
+        self.assertIsNotNone(updater.select_portable_stable_release(stable,"0.9.0","preview"))
+        with tempfile.TemporaryDirectory() as td:
+            folder=Path(td)
+            archive=make_zip(folder,version="0.9.0",run_id=999,sha=sha)
+            exe=updater.unpack_preview_zip(archive,folder/"stable",info)
+            self.assertTrue(exe.exists())
+            self.assertEqual(updater.fetch_portable_stable_package(
+                current_version="0.8.5",fetcher=lambda:stable)["sha"],sha)
+
+    def test_stable_portable_zip_rejects_foreign_or_digestless_release(self):
+        version="v0.9.0"
+        filename=updater.STABLE_ASSET_NAME
+        valid={
+            "tag_name":version,"draft":False,"prerelease":False,
+            "target_commitish":"b"*40,
+            "html_url":f"https://github.com/guibatoni/appassist/releases/tag/{version}",
+            "assets":[{
+                "name":filename,"size":1200,"digest":"sha256:"+"f"*64,
+                "browser_download_url":f"https://github.com/guibatoni/appassist/releases/download/{version}/{filename}",
+            }],
+        }
+        for change in (
+            {"html_url":"https://elsewhere.example"},
+            {"prerelease":True},
+            {"target_commitish":"not-a-hash"},
+            {"assets":[{**valid["assets"][0],"digest":None}]},
+            {"assets":[{**valid["assets"][0],"browser_download_url":"https://evil.example"}]},
+        ):
+            with self.subTest(change=change),self.assertRaises(updater.UnsafeUpdate):
+                updater.select_portable_stable_release({**valid,**change},"0.8.5")
+        self.assertIsNone(updater.select_portable_stable_release(
+            {**valid,"assets":[]},"0.8.5"))
+
     def test_no_unsigned_executable_ever_runs_in_test_before_validation(self):
         with tempfile.TemporaryDirectory() as td:
             called=[]
