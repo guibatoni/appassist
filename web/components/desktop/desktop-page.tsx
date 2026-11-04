@@ -663,7 +663,7 @@ function Mods({mods,sha,onRefresh,configured}:{
               {diagnostics[mod.sha256].files?.length>0&&<div className="mt-2">
                 <p className="font-semibold text-primary">Arquivos encontrados no disco:</p>
                 <div className="mt-1 max-h-56 overflow-y-auto rounded border border-line/50 p-2">
-                  {diagnostics[mod.sha256].files.map((file,i)=>
+                  {(diagnostics[mod.sha256].files??[]).map((file,i)=>
                     <p key={i} className="break-all py-0.5">
                       {file.name} · {file.size===null?"tamanho não identificado":file.size.toLocaleString("pt-BR")+" bytes"}
                       {file.signature&&file.signature!=="não examinada"?" · "+file.signature:""}
@@ -674,7 +674,7 @@ function Mods({mods,sha,onRefresh,configured}:{
                 <p className="font-semibold text-primary">
                   Arquivos grandes para investigar (não identificados como WA):
                 </p>
-                {diagnostics[mod.sha256].possibleResourceFiles.map((file,i)=>
+                {(diagnostics[mod.sha256].possibleResourceFiles??[]).map((file,i)=>
                   <p key={i} className="mt-1 break-all">
                     {file.name} · {file.size.toLocaleString("pt-BR")} bytes
                   </p>)}
@@ -687,12 +687,12 @@ function Mods({mods,sha,onRefresh,configured}:{
                 <p className="font-semibold text-gold">Amostras dos nomes SLUS (não verificadas)</p>
                 <p className="mt-1">Esses textos vêm dos offsets conhecidos e podem pertencer a outras regiões da ISO.</p>
                 <p className="mt-1 font-semibold">Cartas</p>
-                {diagnostics[mod.sha256].nameLayoutProbe.cardSamples.map((row,i)=>
+                {(diagnostics[mod.sha256].nameLayoutProbe?.cardSamples??[]).map((row,i)=>
                   <p key={"card-"+i} className="mt-1 break-all">
                     #{row.index} ponteiro {row.pointer??"?"}: {row.name||"(vazio)"} · {row.status}
                   </p>)}
                 <p className="mt-2 font-semibold">Oponentes</p>
-                {diagnostics[mod.sha256].nameLayoutProbe.opponentSamples.map((row,i)=>
+                {(diagnostics[mod.sha256].nameLayoutProbe?.opponentSamples??[]).map((row,i)=>
                   <p key={"opp-"+i} className="mt-1 break-all">
                     #{row.index} ponteiro {row.pointer??"?"}: {row.name||"(vazio)"} · {row.status}
                   </p>)}
