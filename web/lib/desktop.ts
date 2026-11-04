@@ -37,6 +37,7 @@ export type ModScanDiagnostic = {
   sectorBytes: number | null
   indexedFiles: number
   files: Array<{name: string; size: number | null; lba: number | null; signature?: string}>
+  possibleResourceFiles?: Array<{name: string; size: number}>
   systemCnf: {
     found: boolean
     bootTarget: string | null
