@@ -282,9 +282,11 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(bad["category"],"A-POW")
         self.assertNotEqual(bad["category"],"Z-POW")
         counters["turns"]=0
+        counters["spells"]=0
         restarted=self.bridge.get_rank()
-        self.assertEqual(restarted["state"],"needs_lp_confirmation")
-        self.assertIsNone(self.bridge._rank_legacy_trial)
+        self.assertEqual(restarted["state"],"needs_ram_validation")
+        self.assertEqual(restarted["validationProgress"],0)
+        self.assertIsNotNone(self.bridge._rank_legacy_trial)
         reader.assert_called()
 
     def test_experimental_rank_survives_single_same_pid_frame_dropout(self):
