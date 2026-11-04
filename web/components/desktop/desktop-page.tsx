@@ -637,10 +637,23 @@ function Mods({mods,sha,onRefresh,configured}:{
               {" "}Setores: {diagnostics[mod.sha256].sectorBytes??"não identificados"} bytes.</p>
             <p className="mt-1">Executável: {diagnostics[mod.sha256].chosenExecutable||"não reconhecido"}.
               {" "}WA: {diagnostics[mod.sha256].chosenWa||"não reconhecido"}.</p>
+            <p className="mt-1">SYSTEM.CNF: {diagnostics[mod.sha256].systemCnf?.status??"não analisado"}
+              {diagnostics[mod.sha256].systemCnf?.bootTarget
+                ? " · BOOT: "+diagnostics[mod.sha256].systemCnf.bootTarget:""}
+            </p>
             {diagnostics[mod.sha256].issues.map((issue,i)=>
               <p className="mt-1 text-gold" key={"issue-"+i}>{issue}</p>)}
             <details className="mt-2">
               <summary className="cursor-pointer text-primary">Evidências e próximas investigações</summary>
+              {diagnostics[mod.sha256].files?.length>0&&<div className="mt-2">
+                <p className="font-semibold text-primary">Arquivos encontrados no disco:</p>
+                <div className="mt-1 max-h-56 overflow-y-auto rounded border border-line/50 p-2">
+                  {diagnostics[mod.sha256].files.map((file,i)=>
+                    <p key={i} className="break-all py-0.5">
+                      {file.name} · {file.size===null?"tamanho não identificado":file.size.toLocaleString("pt-BR")+" bytes"}
+                    </p>)}
+                </div>
+              </div>}
               {diagnostics[mod.sha256].executableCandidates.length>0&&
                 <p className="mt-2 break-words">Executáveis candidatos: {diagnostics[mod.sha256].executableCandidates.join(", ")}</p>}
               {diagnostics[mod.sha256].waCandidates.length>0&&
