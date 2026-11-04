@@ -79,7 +79,7 @@ function RankPanel({sha}:{sha:string|null}) {
       }finally{reading=false}
     }
     void read()
-    const interval=window.setInterval(()=>void read(),2200)
+    const interval=window.setInterval(()=>void read(),850)
     return()=>{mounted=false;window.clearInterval(interval)}
   },[sha])
 
@@ -133,7 +133,11 @@ function RankPanel({sha}:{sha:string|null}) {
   const ready=rank?.ready===true
   const needsLp=rank?.state==="needs_lp_confirmation"||rank?.state==="lp_mismatch"
   const pending=rank?.state==="unsupported"
-  const status=ready?"Leitura ativa":needsLp?"Confirme seus LP":pending?"Leitura não calibrada":"Aguardando leitura"
+  const observing=rank?.state==="needs_ram_validation"
+  const experimental=rank?.sourceMode==="experimental"
+  const status=ready?(experimental?"Em teste":"Leitura ativa"):
+    needsLp?"Confirme seus LP":observing?"Testando RAM":
+    pending?"Sem perfil":"Aguardando leitura"
   const rankSystem=rank?.rankSystem==="x15"?"Remaster X15":
     rank?.rankSystem==="classic"?"RANK original":"RANK por ISO"
   const details=rank?.victorySource==="ram_deckout"?"Marcador X15: deck-out":
@@ -142,12 +146,12 @@ function RankPanel({sha}:{sha:string|null}) {
   return <section className="panel rounded-xl p-4" aria-label="RANK ao vivo">
     <div className="flex items-center justify-between gap-2">
       <h2 className="font-display text-lg font-semibold text-gold">RANK ao vivo</h2>
-      <span className={"text-xs font-medium "+(ready?"text-success":"text-muted")} role="status">
+      <span className={"text-xs font-medium "+(ready?(experimental?"text-gold":"text-success"):"text-muted")} role="status">
         {ready?"●":"○"} {status}
       </span>
     </div>
     <div className="mt-4 rounded-lg border border-primary/20 bg-background/60 px-4 py-4 text-center">
-      <p className="text-xs text-muted">{ready?details:"Sem pontuação lida da RAM"}</p>
+      <p className="text-xs text-muted">{ready?(experimental?"Projeção experimental · vitória por LP":details):"Aguardando leitura confiável"}</p>
       <p className="mt-1 font-display text-4xl font-bold tabular-nums text-primary">
         {ready?rank.score:"—"} <span className="text-sm font-normal text-muted">pts</span>
       </p>
@@ -155,7 +159,7 @@ function RankPanel({sha}:{sha:string|null}) {
         {ready?rank.category:"RANK indisponível"}
       </p>
       <p className="mt-1 text-[11px] text-muted">
-        {rankSystem} · {ready?"Estimativa, não resultado oficial":"Sem projeção confiável"}
+        {rankSystem} · {ready?(experimental?"RAM antiga em teste; não validada":"Estimativa, não resultado oficial"):"Sem projeção confiável"}
       </p>
     </div>
     {ready&&rank.counters&&
@@ -175,9 +179,19 @@ function RankPanel({sha}:{sha:string|null}) {
           disabled={!lp||busy} onClick={()=>void confirmLp()}>Confirmar</button>
       </div>
     </div>}
-    {!ready&&!needsLp&&
+    {observing&&
+      <p className="mt-3 text-xs text-gold" role="status">
+        LP confirmados. Faça duas ações normais no duelo para testar a leitura antiga
+        ({rank?.validationProgress??0}/{rank?.validationRequired??2} mudanças identificadas).
+      </p>}
+    {ready&&experimental&&
+      <p className="mt-3 text-xs text-gold">
+        Leitura experimental: os pontos são estimados com a fórmula antiga,
+        mas a estrutura RAM desta ISO ainda não foi comprovada em duelos reais.
+      </p>}
+    {!ready&&!needsLp&&!observing&&
       <p className="mt-3 text-xs text-muted">
-        {pending?"A ISO selecionada ainda não possui leitura RAM validada.":
+        {pending?"Selecione uma ISO para iniciar a leitura de RAM.":
           rank?.status??"Conectando ao ePSXe…"}
       </p>}
     <details className="mt-3 border-t border-line/60 pt-2 text-xs text-muted">
@@ -195,12 +209,13 @@ function RankPanel({sha}:{sha:string|null}) {
             disabled={!sha||reanalysing||diagnosing} onClick={()=>void reanalyse()}>
             {reanalysing?"Relendo ISO…":"Reanalisar perfil"}
           </button>}
-        {ready&&<button type="button" className="btn-ghost disabled:opacity-40"
+        {ready&&!experimental&&<button type="button" className="btn-ghost disabled:opacity-40"
           disabled={busy} onClick={()=>void capture()}>Capturar previsão</button>}
       </div>
       {diagnostic&&<p className="mt-2">
         {diagnostic.reason} {diagnostic.nextStep}
         {" "}RAM validada: {diagnostic.ramBindingVerified?"sim":"não"}.
+        {diagnostic.legacyProbeAvailable&&" Leitura do Assistente antigo disponível em modo experimental."}
       </p>}
       {captured&&<p className="mt-2 text-success">Capturado: {captured}</p>}
       {feedback&&<p className="mt-2 text-gold" role="status">{feedback}</p>}

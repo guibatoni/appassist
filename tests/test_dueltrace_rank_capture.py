@@ -228,10 +228,13 @@ class CapturedRankTests(unittest.TestCase):
         entries=self.catalog.list()
         atomic_json(self.catalog.registry_file,{"schema":1,"entries":entries+[entry]})
         self.bridge.activate_mod(other)
-        self.assertEqual(self.bridge.get_rank()["state"],"unsupported")
+        candidate=self.bridge.get_rank()
+        self.assertEqual(candidate["state"],"needs_lp_confirmation")
+        self.assertEqual(candidate["rankSystem"],"classic")
+        self.assertEqual(candidate["sourceMode"],"experimental")
         with self.assertRaises(ValueError):
             self.bridge.capture_rank_prediction()
-        self.reader.assert_not_called()
+        self.reader.assert_called()
 
     def test_capability_guards_capture_and_comparison(self):
         api=ProtectedDesktopApi(self.bridge,"t"*64)

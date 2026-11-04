@@ -36,6 +36,7 @@ from dueltrace_rank_memory_trace import inspect_rank_memory_trace
 from dueltrace_rank_export import build_rank_evidence_report
 from dueltrace_rank_duel_verification import compare_rank_observations
 from dueltrace_rank_diagnostic import diagnose_rank_profile
+from dueltrace_rank_legacy_probe import start_legacy_trial, update_legacy_trial
 from dueltrace_spoils_manual import calculate_manual_spoils
 from dueltrace_library_sort import validate_sort,matches_type,sort_key
 from dueltrace_update_checker import (
@@ -61,6 +62,7 @@ class DueltraceWebBridge:
         self._rank_reader = rank_reader or read_rank_candidate
         self._rank_mod_reader = rank_mod_reader or read_rank_from_verified_binding
         self._rank_calibration = None
+        self._rank_legacy_trial = None
         self._rank_last_turns = None
         self._rank_last_snapshot = None
         self._rank_pending_capture = None
@@ -307,15 +309,20 @@ class DueltraceWebBridge:
         active,entry,profile=self._active()
         sha=active.get("sha256") if profile else None
         binding=validate_live_rank_binding(profile)
-        if binding is None and not model_available(sha) and not x15_compatible_runtime(profile):
+        if (not isinstance(profile,dict) or type(sha) is not str
+                or not re.fullmatch(r"[0-9a-f]{64}",sha)):
             self._rank_calibration=None
+            self._rank_legacy_trial=None
             self._rank_pending_capture=None
-            diagnosis=diagnose_rank_profile(sha,profile)
             return None,sha,{"state":"unsupported","ready":False,
-                "status":diagnosis["reason"],
-                "diagnosticCode":diagnosis["code"],
-                "rankSystem":diagnosis["rankSystem"],
+                "status":"Selecione uma ISO com perfil antes de tentar ler o RANK.",
+                "rankSystem":rank_system(sha),
                 "score":None,"category":None,"counters":None}
+        # Restaura o leitor do Assistente antigo, mesmo quando a tabela WA
+        # dessa ISO não foi reconhecida. Este caminho é EXPERIMENTAL e não
+        # registra binding validado, nem transporta o marcador de vitória X15.
+        experimental=(binding is None and not model_available(sha)
+                      and not x15_compatible_runtime(profile))
         preferred=(self._process.pid if self._process is not None and
                    self._process.poll() is None else None)
         try:
@@ -326,6 +333,7 @@ class DueltraceWebBridge:
             sample={"ready":False,"status":str(exc)[:150],"pid":None,"counters":None}
         if not sample.get("ready"):
             self._rank_calibration=None
+            self._rank_legacy_trial=None
             self._rank_last_turns=None
             # Captura explícita sobrevive à tela de resultado/transição,
             # mesmo que o registro RAM desapareça. Ainda expira em 10 min.
@@ -333,7 +341,10 @@ class DueltraceWebBridge:
                 self._rank_pending_capture["ram_gap"]=True
             return None,sha,{"state":"unavailable","ready":False,
                 "status":sample.get("status","Leitura indisponível"),
+                "sourceMode":"experimental" if experimental else "verified",
+                "rankSystem":rank_system(sha),
                 "score":None,"category":None,"counters":None}
+        sample["experimental"]=experimental
         return sample,sha,None
 
     def calculate_spoils(self, counters, victory):
@@ -356,6 +367,7 @@ class DueltraceWebBridge:
             pid=sample["pid"]
             _a,_e,profile=self._active()
             binding=validate_live_rank_binding(profile)
+            experimental=sample.get("experimental") is True
             turns=counters[binding["turns_criterion"]] if binding else counters["turns"]
             capture=self._rank_pending_capture
             if isinstance(capture,dict):
@@ -372,6 +384,7 @@ class DueltraceWebBridge:
                         and self._rank_pending_capture is not None):
                     self._rank_pending_capture["returned_to_menu"]=True
                 self._rank_calibration=None  # novo duelo ou contador reiniciado
+                self._rank_legacy_trial=None
                 self._rank_last_snapshot=None
             self._rank_last_turns=((sha,pid),turns)
             calibrated=(self._rank_calibration is not None and
@@ -381,9 +394,35 @@ class DueltraceWebBridge:
             if not calibrated:
                 self._rank_calibration=None
                 return {"ready":False,"state":"needs_lp_confirmation",
-                    "status":"Confirme os LP exibidos pelo jogo neste duelo para habilitar a projeção.",
-                    "candidateLp":counters[binding["life_points_criterion"]] if binding else counters["remaining_lp"],"score":None,
-                    "category":None,"counters":None}
+                    "status":("Leitura experimental do Assistente antigo detectada. "
+                              "Confirme os LP do jogo para testar as mudanças dos contadores."
+                              if experimental else
+                              "Confirme os LP exibidos pelo jogo neste duelo para habilitar a projeção."),
+                    "sourceMode":"experimental" if experimental else "verified",
+                    "rankSystem":rank_system(sha),
+                    "candidateLp":counters[binding["life_points_criterion"]] if binding else counters["remaining_lp"],
+                    "score":None,"category":None,"counters":None}
+            if experimental:
+                verdict,events=update_legacy_trial(
+                    self._rank_legacy_trial,sha,pid,counters)
+                if verdict=="invalid":
+                    self._rank_calibration=None
+                    self._rank_legacy_trial=None
+                    self._rank_last_snapshot=None
+                    return {"ready":False,"state":"needs_lp_confirmation",
+                            "sourceMode":"experimental","rankSystem":rank_system(sha),
+                            "status":"Contadores mudaram de forma incoerente ou o processo mudou. "
+                                     "Confira os LP e inicie nova validação experimental.",
+                            "candidateLp":counters["remaining_lp"],
+                            "score":None,"category":None,"counters":None}
+                if verdict=="observing":
+                    return {"ready":False,"state":"needs_ram_validation",
+                            "sourceMode":"experimental","rankSystem":rank_system(sha),
+                            "status":"LP confirmados. Faça ações normais no duelo; "
+                                     "aguardando duas alterações coerentes da RAM antiga.",
+                            "validationProgress":events,"validationRequired":2,
+                            "candidateLp":counters["remaining_lp"],
+                            "score":None,"category":None,"counters":None}
             # O Assistente X15 v10.5 usa o primeiro byte assinado da
             # estrutura do duelista como ajuste de resultado. Somente a ISO
             # X15 exata pode ativar esta inferência; não transportar os
@@ -396,6 +435,10 @@ class DueltraceWebBridge:
                     project_spoils_with_adjustment(counters,observed_adjustment)
                     if observed_adjustment is not None else
                     project_lp_win_rank(counters))
+            if experimental:
+                result["model"]=(
+                    "Modelo de SPOILS legado em teste nesta ISO; "
+                    "pontuação ainda não validada no jogo.")
             # A classificação é SEMPRE decidida pelo SHA da ISO selecionada.
             # Mesmo que os pontos e as tabelas numéricas sejam iguais, Z-POW
             # não é exibido para Original, FM13 nem outros mods.
@@ -406,25 +449,36 @@ class DueltraceWebBridge:
                 visible_counters["remaining_lp"]=counters[binding["life_points_criterion"]]
             compatible=(binding is None and not model_available(sha) and
                         x15_compatible_runtime(profile))
-            status=((
-                "Marcador de vitória por LP (+2) identificado em duas leituras "
-                "estáveis do X15; pontuação calculada, não lida diretamente do jogo."
-                if observed_adjustment==2 else
-                "Marcador de deck-out (-40) identificado em duas leituras "
-                "estáveis do X15; pontuação calculada, não lida diretamente do jogo."
-                ) if observed_adjustment is not None else
-                "Projeção usando SLUS e tabela RANK idênticos ao X15; "
-                "LP confirmado nesta sessão, resultado final ainda não verificado."
-                if compatible else
-                "Projeção se vencer por LP; resultado e mapeamento RAM "
-                "não verificados no jogo.")
-            self._rank_last_snapshot={
-                "rom_sha256":sha,"pid":pid,"monotonic_at":monotonic(),
-                "score":result["score"],"category":display_category,
-                "counters":visible_counters.copy(),
-            }
+            if experimental:
+                status=("Leitura experimental do registro antigo: LP conferidos e "
+                        "duas alterações de contadores observadas. A pontuação "
+                        "é provisória e a ISO no ePSXe não foi confirmada.")
+            elif observed_adjustment==2:
+                status=("Marcador de vitória por LP (+2) detectado em duas "
+                        "leituras estáveis do X15; não é o score oficial do jogo.")
+            elif observed_adjustment==-40:
+                status=("Marcador de deck-out (-40) detectado em duas "
+                        "leituras estáveis do X15; não é o score oficial do jogo.")
+            elif compatible:
+                status=("SLUS e tabela RANK idênticos ao X15; LP confirmado, "
+                        "mas resultado final do jogo ainda não verificado.")
+            else:
+                status=("Projeção se vencer por LP; resultado e mapeamento RAM "
+                        "ainda exigem comparação no jogo.")
+            if not experimental:
+                self._rank_last_snapshot={
+                    "rom_sha256":sha,"pid":pid,"monotonic_at":monotonic(),
+                    "score":result["score"],"category":display_category,
+                    "counters":visible_counters.copy(),
+                }
+            else:
+                # Projeção experimental NUNCA pode ser usada como evidência
+                # para desbloquear o binding ou confirmar um drop.
+                self._rank_last_snapshot=None
             return {"ready":True,"state":"provisional",
                     "status":status,
+                    "sourceMode":"experimental" if experimental else "verified",
+                    "validationProgress":2 if experimental else None,
                     "candidateLp":counters[binding["life_points_criterion"]] if binding else counters["remaining_lp"],
                     "score":result["score"],"category":display_category,
                     "counters":visible_counters,"breakdown":result["breakdown"],
@@ -448,6 +502,9 @@ class DueltraceWebBridge:
         with self._lock:
             current=self.get_rank()
             snap=self._rank_last_snapshot
+            if current.get("sourceMode")=="experimental":
+                raise ValueError("Uma leitura experimental não pode ser capturada "
+                                 "como RANK validado. Confirme em duelos reais.")
             if not current.get("ready") or not isinstance(snap,dict):
                 raise ValueError("Confirme os LP e obtenha um RANK válido antes de capturar.")
             sha=snap["rom_sha256"]
@@ -488,6 +545,7 @@ class DueltraceWebBridge:
             turns_key=binding["turns_criterion"] if binding else "turns"
             if sample["counters"][lp_key]!=life_points:
                 self._rank_calibration=None
+                self._rank_legacy_trial=None
                 self._rank_last_snapshot=None
                 self._rank_pending_capture=None
                 return {"ready":False,"state":"lp_mismatch",
@@ -495,6 +553,9 @@ class DueltraceWebBridge:
                     "candidateLp":sample["counters"][lp_key],
                     "score":None,"category":None,"counters":None}
             self._rank_calibration={"sha":sha,"pid":sample["pid"],"at":monotonic()}
+            self._rank_legacy_trial=(
+                start_legacy_trial(sha,sample["pid"],sample["counters"])
+                if sample.get("experimental") is True else None)
             self._rank_last_turns=((sha,sample["pid"]),sample["counters"][turns_key])
             return self.get_rank()
 
@@ -793,6 +854,7 @@ class DueltraceWebBridge:
         self._hand_suggestions_key=None
         self._hand_suggestions=None
         self._rank_calibration=None
+        self._rank_legacy_trial=None
         self._rank_last_turns=None
         self._rank_last_snapshot=None
         self._rank_pending_capture=None
@@ -822,6 +884,7 @@ class DueltraceWebBridge:
             self._hand_suggestions_key=None
             self._hand_suggestions=None
             self._rank_calibration=None
+            self._rank_legacy_trial=None
             analysis=MultiModIntelligence(self.catalog).inspect(source,use_ollama=False)
             profile=self.catalog.profile_for(updated)
             graphic=(profile or {}).get("graphic_assets",{})
