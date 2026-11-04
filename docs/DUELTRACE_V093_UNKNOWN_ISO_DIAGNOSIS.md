@@ -41,6 +41,26 @@ Para tornar essa evidência acionável, o diagnóstico passa a apresentar os nom
 
 A próxima evidência essencial é a lista desses nove arquivos no painel **Evidências e próximas investigações**, ou o `relatorio.json` local. Sem identificar qual arquivo contém o executável/recursos, não é possível mapear nomes, artes ou drops do GOG MOD.
 
+## Resultado real do novo diagnóstico — GOG MOD 2.2
+
+O usuário confirmou que o Ollama está ativo com `qwen2.5:3b`. O painel mostrou:
+
+- 9 arquivos ISO9660 indexados, setores de 2352 bytes.
+- `SYSTEM.CNF` identificou `BOOT: GOG_VNT.223`, arquivo fora das famílias convencionais SLUS/SCUS. Ainda não havia indicação visual de que o arquivo BOOT **constava no índice**.
+- O scanner registrou `executáveis=[]` e `WA=[]`, portanto NÃO analisou as tabelas de nomes/drops/artes.
+- Ollama retornou **hipóteses em cache**, com conclusão **incorreta** de que a ISO havia sido verificada como sem cartas. Isso foi uma alucinação: falha do extrator não prova ausência de conteúdo.
+
+**Correções adicionais no PR #43:**
+
+1. Inspecionar até 32 bytes do cabeçalho de até 48 arquivos no índice, com assinaturas classificadas como `psx_executavel`, `riff`, `tim2` ou desconhecido, sem transmitir binários e sem tentar executá-los.
+2. Distinguir `BOOT: GOG_VNT.223` **indexado** de **BOOT apontando para arquivo ausente** do ISO9660. Só quando indexado pode ser testado como arquivo candidato. Assinatura PS-X EXE não comprova layout de cartas.
+3. Mostrar lista dos arquivos do disco com assinaturas e arquivos maiores como **candidatos de recursos apenas por tamanho**, sem declarar que sejam WA.
+4. Ocultar o resumo conclusivo do Ollama quando a estrutura não é reconhecida, inclusive nos relatórios antigos em cache. Mostrar aviso e sugestões como hipóteses; não atribuir ausência de cartas, fusões, drops ou oponentes.
+5. Melhorar as instruções do modelo local para priorizar evidências do SYSTEM.CNF e dos nomes de arquivos em vez de inventar conclusões.
+6. Testar o caso real `GOG_VNT.223` presente/ausente, os limites de leitura, o cache do Ollama com falsa afirmação de ISO vazia e o inventário de recursos desconhecidos.
+
+**Limitação:** o GOG MOD 2.2 ainda NÃO foi decodificado. Para localizar as tabelas, é necessário examinar os nomes reais dos 9 arquivos (expanda **Evidências e próximas investigações**) e, se possível, o `relatorio.json`. Nenhum parser novo do conteúdo do GOG foi validado.
+
 ## Próximos passos
 
 1. Reanalisar GOG MOD 2.2 no Windows e abrir **Diagnosticar estrutura**. Conferir nomes presentes, setor, tamanho do SLUS/WA, `nomes_status`, `drops_status`, mensagens de erro. Caso Ollama local esteja disponível, clique **Investigar com Ollama** para hipóteses.
