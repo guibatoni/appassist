@@ -5,8 +5,8 @@ import { ArrowUpRight, CheckCircle2, Download, RefreshCw, ShieldAlert, X } from 
 import { desktopApi, type UpdateCheck } from "@/lib/desktop"
 
 /**
- * Consulta automática após abertura e opção de verificação manual. Não instala binários.
- * A abertura da página oficial é feita no navegador do Windows pelo motor Python.
+ * Consulta automática após abertura; instalação explícita apenas para release
+ * assinada de editor já confiável. Previews não assinadas nunca são instaladas.
  */
 export function UpdateChecker() {
   const [result, setResult] = useState<UpdateCheck | null>(null)
@@ -16,6 +16,7 @@ export function UpdateChecker() {
   const [installing, setInstalling] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const [automaticNotice, setAutomaticNotice] = useState(false)
+  const [installFeedback, setInstallFeedback] = useState<string | null>(null)
 
   // Verificação automática UMA vez por inicialização, após a API local
   // pywebview disponibilizar o token. Não instala conteúdo em segundo plano.
@@ -57,6 +58,7 @@ export function UpdateChecker() {
   const check = async () => {
     setVisible(true)
     setProblem(null)
+    setInstallFeedback(null)
     const api = desktopApi()
     if (!api) {
       setResult(null)
@@ -92,18 +94,29 @@ export function UpdateChecker() {
 
   const installOfficialUpdate = async () => {
     const api=desktopApi()
-    if (!api || !result?.automaticInstallReady || installing) return
-    if (!window.confirm(
-      "Instalar a nova versão estável assinada do DUELTRACE? "
-      +"O Windows solicitará sua confirmação."
-    )) return
+    if (!api || installing) return
+    setInstallFeedback(null)
     setInstalling(true)
     try {
+      // Atualiza o estado antes de oferecer a instalação e consulta os
+      // metadados novamente no backend ao iniciar o instalador.
+      const fresh=await api.check_updates()
+      setResult(fresh)
+      setAutomaticNotice(fresh.updateAvailable)
+      if(!fresh.automaticInstallReady) {
+        setInstallFeedback(fresh.automaticInstallReason ||
+          "Nenhuma atualização estável assinada disponível para instalação.")
+        return
+      }
+      if (!window.confirm(
+        "Instalar a versão estável assinada do DUELTRACE encontrada no GitHub? "
+        +"Os dados locais serão mantidos; o Windows pode pedir confirmação."
+      )) return
       const response=await api.install_signed_update()
-      setProblem(response.status)
-      if (response.started) setAutomaticNotice(false)
+      setInstallFeedback(response.status)
+      if(response.started)setAutomaticNotice(false)
     } catch(e) {
-      setProblem(e instanceof Error ? e.message : "Atualização assinada não pôde ser iniciada.")
+      setInstallFeedback(e instanceof Error ? e.message : "Não foi possível iniciar a atualização segura.")
     } finally {setInstalling(false)}
   }
 
@@ -146,15 +159,19 @@ export function UpdateChecker() {
                   {available ? <Download className="size-5 shrink-0"/> : <CheckCircle2 className="size-5 shrink-0 text-primary"/>}
                   {result.message}
                 </p>
-                {result.automaticInstallReady&&
-                  <button type="button" disabled={installing}
-                    onClick={()=>void installOfficialUpdate()}
-                    className="btn-gold mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50">
-                    <Download className="size-4"/>
-                    {installing?"Verificando assinatura e preparando…":"Instalar atualização estável assinada"}
-                  </button>}
-                {!result.automaticInstallReady && <p className="mt-3 text-xs text-gold">
-                  Instalação automática indisponível até termos instalador assinado digitalmente.
+                <button type="button" disabled={installing||checking}
+                  onClick={()=>void installOfficialUpdate()}
+                  className="btn-gold mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50"
+                  aria-label="Atualizar DUELTRACE automaticamente pelo GitHub">
+                  <Download className="size-4"/>
+                  {installing?"Verificando versão e assinatura…":"Atualizar automaticamente pelo GitHub"}
+                </button>
+                <p className="mt-2 text-xs text-muted">
+                  Instalação em um clique apenas para releases estáveis assinadas e verificadas.
+                  Prévia de testes não assinada não é executada automaticamente.
+                </p>
+                {installFeedback&&<p className="mt-2 text-xs text-gold" role="status">
+                  {installFeedback}
                 </p>}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" onClick={() => void openOfficialPage(result.previewRunId ?? 0)}
