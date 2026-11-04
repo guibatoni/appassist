@@ -9,7 +9,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 
 from auto_mods import ModCatalog, atomic_json
 from dueltrace_mod_diagnostic import diagnose_layout
-from scanner_multiiso import select_known_executable_layout, inspect_system_cnf, inspect_file_signatures
+from scanner_multiiso import select_known_executable_layout, inspect_system_cnf, inspect_file_signatures, inspect_known_name_layout
 from dueltrace_web_bridge import DueltraceWebBridge
 from dueltrace_web_security import ProtectedDesktopApi
 from ia_local import minimal_evidence
@@ -266,6 +266,41 @@ class UnknownISOTests(unittest.TestCase):
         self.assertIn("NÃO comprova ausência",result["ai"]["resumo"])
         self.assertNotIn("Foi verificado",result["ai"]["resumo"])
         self.assertFalse(result["automaticExtractionComplete"])
+
+    def test_unverified_name_samples_keep_original_parser_guard(self):
+        import struct
+        from scanner_multiiso import SLUS_GLYPHS, SLUS_PTR_BASE, SLUS_TEXT_BASE
+        sl=bytearray(SLUS_GLYPHS+93*4)
+        # IDs conhecidos são meras amostras; um ponteiro válido não
+        # transforma 722 possíveis strings em um catálogo aprovado.
+        struct.pack_into("<H",sl,SLUS_GLYPHS+1*4,ord("A"))
+        struct.pack_into("<H",sl,SLUS_PTR_BASE+1*2,9)
+        sl[SLUS_TEXT_BASE+9:SLUS_TEXT_BASE+13]=bytes([1,1,255,0])
+        result=inspect_known_name_layout(bytes(sl))
+        self.assertEqual(result["state"],"amostras_nao_validadas")
+        self.assertEqual(len(result["cardSamples"]),10)
+        self.assertEqual(len(result["opponentSamples"]),7)
+        self.assertEqual(result["cardSamples"][0]["name"],"AA")
+        self.assertEqual(result["opponentPlausibleSamples"],0)
+        self.assertIn("não identidades confirmadas",result["note"])
+
+    def test_probe_report_without_original_data_defaults_to_uninvestigated(self):
+        diag=diagnose_layout(self.report,self.profile)
+        self.assertEqual(diag["nameLayoutProbe"]["state"],"não investigado")
+        self.assertEqual(diag["nameLayoutProbe"]["cardSamples"],[])
+        self.assertFalse(diag["automaticExtractionComplete"])
+        self.report["amostras_layout_nomes"]={
+            "state":"amostras_nao_validadas",
+            "cardSamples":[{"index":1,"pointer":9,"name":"AA",
+                            "status":"caracteres_plausiveis","invalidGlyphs":0}],
+            "opponentSamples":[{"index":809,"pointer":0,"name":"",
+                                "status":"invalido_ou_vazio","invalidGlyphs":2}],
+            "cardPlausibleSamples":1,"opponentPlausibleSamples":0,
+        }
+        result=diagnose_layout(self.report,self.profile)
+        self.assertEqual(result["nameLayoutProbe"]["cardSamples"][0]["name"],"AA")
+        self.assertEqual(result["nameLayoutProbe"]["opponentSamples"][0]["invalidGlyphs"],2)
+        self.assertFalse(result["cardsVerified"])
 
     def test_scan_report_error_is_visible(self):
         info=diagnose_layout({
