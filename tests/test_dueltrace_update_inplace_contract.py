@@ -15,7 +15,7 @@ class UpdateInPlaceContractTests(unittest.TestCase):
         self.assertIn('stage=work/("stage-"+token)',updater)
         self.assertIn('backup=work/("rollback-"+token)',updater)
         self.assertNotIn('stage=original.parent/',updater)
-        self.assertNotIn('backup=original.parent/',updater)
+        self.assertNotIn('\n    backup=original.parent/',updater)
         self.assertIn('Move-Item -LiteralPath $target -Destination (Join-Path $backup $name)',updater)
         self.assertIn('Start-Process -FilePath $exe -WorkingDirectory $old -PassThru',updater)
         self.assertIn('if ($newProcess.HasExited)',updater)

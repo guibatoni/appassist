@@ -397,125 +397,28 @@ try {
     catch { Write-UpdateLog "Pasta temporária não pôde ser limpa." }
   }
   if ($restarted) {
-    # Pastas temporárias de versões antigas também são realocadas para AppData.
-    # Preservar conteúdo e somente tocar padrões gerados pelo instalador antigo.
+    # Temporários antigos criados pelo instalador anterior são realocados
+    # para os dados locais, sem apagar qualquer arquivo.
     $parent=Split-Path $old -Parent
     $legacyPrefix='.' + (Split-Path $old -Leaf) + '-staged-'
     $possible=@(Get-ChildItem -LiteralPath $parent -Directory -Force -ErrorAction SilentlyContinue)
     foreach ($candidate in $possible) {
       if (!$candidate.Name.StartsWith($legacyPrefix,[StringComparison]::OrdinalIgnoreCase)) { continue }
       $suffix=$candidate.Name.Substring($legacyPrefix.Length)
-      if ($suffix -cnotmatch '^[0-9a-f]{12}
-    if ($legacy -and (Test-Path -LiteralPath $legacy)) {
-      if (Confirm-ManagedBackup $legacy) {
-        try {
-          $destination=Join-Path (Split-Path $backup -Parent) ('backup-legado-'+[guid]::NewGuid().ToString('N'))
-          Move-Item -LiteralPath $legacy -Destination $destination -ErrorAction Stop
-          Write-UpdateLog "Backup legado removido da pasta de instalação."
-        } catch { Write-UpdateLog "Backup legado preservado no local antigo por falha na migração." }
-      } else { Write-UpdateLog "Backup legado não movido: conteúdo não reconhecido." }
-    }
-  } elseif (Test-Path -LiteralPath $backup) {
-    # Em erro, manter o backup caso algum componente não tenha sido restaurado.
-    $remaining=@(Get-ChildItem -LiteralPath $backup -Force -ErrorAction SilentlyContinue)
-    if ($remaining.Count -eq 0) {
-      try { Remove-Item -LiteralPath $backup -Force -ErrorAction Stop } catch {}
-    }
-  }
-}
-"""
-    for old, new in paths.items():
-        script = script.replace(old, new)
-    return script
-
-
-def stage_preview_update(*, info: dict, data_home: Path,
-                         current_executable: Path | None = None,
-                         downloader=None, unpacker=None, launcher=None) -> dict:
-    if sys.platform!="win32" and current_executable is None:
-        raise UnsafeUpdate("Atualização disponível apenas no Windows.")
-    if current_executable is None and not getattr(sys,"frozen",False):
-        raise UnsafeUpdate("Atualização automática exige aplicativo Windows empacotado.")
-    executable=Path(current_executable or sys.executable).resolve(strict=True)
-    if executable.name!="DUELTRACE-WebUI.exe":
-        raise UnsafeUpdate("Instalação Windows não reconhecida.")
-    home=Path(data_home).resolve()
-    original=executable.parent
-    if home==original/"_internal" or home.is_relative_to(original/"_internal"):
-        raise UnsafeUpdate("Os dados pessoais estão dentro de _internal; mova-os para fora antes de atualizar.")
-    if (not original.is_dir() or original.is_symlink() or
-            any((original / name).is_symlink() for name in
-                ("DUELTRACE-WebUI.exe","_internal","LEIA-ME-SEGURANCA.txt"))):
-        raise UnsafeUpdate("Pasta de instalação inválida ou contém links simbólicos.")
-    # Os temporários e backups ficam no diretório de dados, não em uma nova pasta
-    # vizinha ao executável. Nunca sobrescrever o usuário por padrão.
-    work=home/"preview_updates"
-    work.mkdir(parents=True,exist_ok=True)
-    if work.is_symlink():
-        raise UnsafeUpdate("Diretório temporário de atualizações inválido.")
-    legacy_backup=original.parent/("."+original.name+"-backup")
-    if legacy_backup.is_symlink():
-        raise UnsafeUpdate("Backup legado contém link simbólico; revise-o antes.")
-    token=uuid4().hex[:12]
-    stage=work/("stage-"+token)
-    backup=work/("rollback-"+token)
-    archive=work/("download-"+uuid4().hex+".zip")
-    if any(p.exists() or p.is_symlink() for p in (stage,backup,archive)):
-        raise UnsafeUpdate("Preparação de atualização já existe.")
-    try:
-        (downloader or download_preview_zip)(info,archive)
-        (unpacker or unpack_preview_zip)(archive,stage,info)
-        script=_powershell_replace_script(original,stage,backup,
-                                          __import__("os").getpid(),legacy_backup)
-        if launcher is None:
-            encoded=base64.b64encode(script.encode("utf-16le")).decode("ascii")
-            subprocess.Popen(
-                ["powershell.exe","-NoProfile","-NonInteractive",
-                 "-WindowStyle","Hidden","-EncodedCommand",encoded],
-                creationflags=(getattr(subprocess,"CREATE_NEW_PROCESS_GROUP",0)
-                               | getattr(subprocess,"CREATE_NO_WINDOW",0)),
-                close_fds=True)
-        else:
-            launcher(script)
-        return {"started":True,"status":(
-            f"DUELTRACE v{info['version']} verificado. O aplicativo fecha e "
-            "reabre automaticamente na mesma pasta. Os arquivos pessoais são preservados."),
-            "version":info["version"]}
-    except BaseException:
-        import shutil
-        if stage.exists():
-            shutil.rmtree(stage,ignore_errors=True)
-        raise
-    finally:
-        archive.unlink(missing_ok=True)
-
-
-def install_preview_release(*, data_home: Path,
-                            current_version: str = CURRENT_VERSION,
-                            installed_run_id: int | None = None,
-                            fetcher=None, **kwargs) -> dict:
-    info=fetch_latest_preview_package(
-        current_version=current_version,
-        installed_run_id=(installed_run_id if installed_run_id is not None
-                          else installed_preview_build_id()),fetcher=fetcher)
-    if not info:
-        return {"started":False,
-                "status":"Não há nova Preview pública verificada no GitHub Releases."}
-    return stage_preview_update(info=info,data_home=data_home,**kwargs)
-) { continue }
+      if ($suffix -cnotmatch '^[0-9a-f]{12}$') { continue }
       if ($candidate.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
       $items=@(Get-ChildItem -LiteralPath $candidate.FullName -Force -ErrorAction SilentlyContinue)
       $unknown=@($items | Where-Object { ($managed -notcontains $_.Name) -or
         ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) })
       if ($unknown.Count -gt 0) {
-        Write-UpdateLog "Pasta temporária anterior contém dados desconhecidos: preservada."
+        Write-UpdateLog "Pasta temporária antiga contém dados desconhecidos: preservada."
         continue
       }
       try {
         $destination=Join-Path (Split-Path $backup -Parent) ('stage-legado-'+[guid]::NewGuid().ToString('N'))
         Move-Item -LiteralPath $candidate.FullName -Destination $destination -ErrorAction Stop
-        Write-UpdateLog "Pasta temporária de versão antiga movida para dados do aplicativo."
-      } catch { Write-UpdateLog "Não foi possível mover uma pasta temporária anterior." }
+        Write-UpdateLog "Pasta temporária de versão antiga realocada para os dados locais."
+      } catch { Write-UpdateLog "Pasta temporária anterior preservada por falha na migração." }
     }
     # Pastas de backups locais ficam nos dados do aplicativo, não junto ao EXE.
     # Mover SOMENTE pastas legadas conhecidas da versão anterior.
