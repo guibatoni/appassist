@@ -428,7 +428,7 @@ function Mods({mods,sha,onRefresh,configured}:{
       const result=await api.scan_sources(mod.sha256)
       await onRefresh()
       setMessage((result.cardCount??0)>0
-        ?`${result.cardCount} cartas identificadas. Confira as informações do mod.`
+        ?`${result.cardCount} cartas identificadas; ${result.opponentCount??0} adversários disponíveis.`
         :(result.candidateCardCount??0)>0
           ?`${result.candidateCardCount} cartas candidatas encontradas, aguardando validação.`
           :"Análise concluída, mas as cartas continuam não identificadas. O scanner preservou as evidências para investigação.")
@@ -497,6 +497,15 @@ function Mods({mods,sha,onRefresh,configured}:{
               </div>
               {mod.cardEvidence==="extraidas_estruturalmente"&&<p className="mt-3 text-xs text-gold">
                 Cartas extraídas do próprio executável, mas a identidade dos IDs ainda não foi confirmada em jogo. Oponentes e drops permanecem separados.
+              </p>}
+              {mod.opponentEvidence==="extraidos_estruturalmente"&&<p className="mt-3 text-xs text-gold">
+                {mod.opponents} adversários recuperados do executável. IDs ainda não confirmados em jogo; drops e RANK não são liberados por essa hipótese.
+              </p>}
+              {!mod.opponents&&(mod.opponentCandidateCount??0)>0&&<p className="mt-3 text-xs text-muted">
+                Até {mod.opponentCandidateCount} nomes de adversários candidatos detectados (não verificados). A análise continua sem copiar dados de outro mod.
+              </p>}
+              {!mod.dropEntries&&(mod.dropCandidateEntries??0)>0&&<p className="mt-3 text-xs text-muted">
+                {mod.dropCandidateEntries?.toLocaleString("pt-BR")} entradas de drops candidatas, sem associação confirmada com IDs e grupos RANK desta ISO.
               </p>}
               {!mod.cards&&(mod.candidateCards??0)>0&&<p className="mt-3 text-xs text-gold">
                 ${mod.candidateCards?.toLocaleString("pt-BR")} cartas candidatas em análise. Elas ainda não aparecem na Biblioteca para evitar dados incorretos.
