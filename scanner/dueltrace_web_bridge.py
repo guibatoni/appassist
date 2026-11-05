@@ -146,6 +146,14 @@ class DueltraceWebBridge:
             "frameStyles":(profile or {}).get("graphic_assets",{}).get("frames",0),
             "opponents":len((profile or {}).get("opponents",[]))
                 if (profile or {}).get("supported_features",{}).get("opponents") else 0,
+            "opponentCandidateCount":(
+                (profile or {}).get("opponent_layout_discovery",{})
+                .get("candidateOpponentCount",0)),
+            "opponentDiscoveryState":(
+                (profile or {}).get("opponent_layout_discovery",{})
+                .get("state","nao_analisado")),
+            "opponentEvidence":(
+                (profile or {}).get("verified",{}).get("oponentes","pendente")),
             "dropEntries":len((profile or {}).get("drops",[]))
                 if (profile or {}).get("supported_features",{}).get("drops") else 0,
             "dropCandidateEntries":((profile or {}).get("drops_provenance",{})
@@ -1292,6 +1300,9 @@ class DueltraceWebBridge:
                 "framedCards":graphic.get("composed_cards",0),
                 "opponentCount":len((profile or {}).get("opponents",[]))
                     if (profile or {}).get("supported_features",{}).get("opponents") else 0,
+                "opponentCandidateCount":(
+                    (profile or {}).get("opponent_layout_discovery",{})
+                    .get("candidateOpponentCount",0)),
                 "dropEntries":len((profile or {}).get("drops",[]))
                     if (profile or {}).get("supported_features",{}).get("drops") else 0,
                 "frameStyles":graphic.get("frames",0),

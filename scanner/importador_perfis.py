@@ -48,6 +48,9 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     identity_validation = validate_identity_catalogs(cards, opponents)
     card_ok = identity_validation["cards_valid"]
     opponent_ok = identity_validation["opponents_valid"]
+    # Nome de adversário em bloco realocado e completo é evidência
+    # estrutural; não comprova que os IDs e a ordem são usados em duelo.
+    opponent_structural = result.get("opponent_identification") == "extraidos_estruturalmente"
     # O formato das matrizes pode ser estruturalmente coerente mesmo quando
     # as cartas e os oponentes da ISO ainda não foram identificados.
     # Não expor esses IDs como drops confiáveis para o cliente: IDs e nomes
@@ -57,7 +60,11 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     ) and len(drops) > 0)
     association_validation = validate_drop_associations(
         checks, drops, rom_sha256=result["sha256"])
+    # A coerência de pesos e IDs não identifica qual dos três grupos físicos
+    # é POW/TEC. Não liberar drops publicamente sem rótulos comprovados.
+    rank_group_unknown = result.get("drop_group_mapping_status") == "grupos_nao_identificados"
     weights_ok = (weights_structural_ok and card_ok and opponent_ok
+                  and not opponent_structural and not rank_group_unknown
                   and association_validation["valid"])
 
     # Códigos de tipo extraídos do executável; não inferimos por nome.
@@ -122,7 +129,8 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     status = {
         "cartas": ("verificado" if card_ok and opponent_ok else
                     "extraidas_estruturalmente" if card_ok else "pendente"),
-        "oponentes": "verificado" if opponent_ok else "pendente",
+        "oponentes": ("extraidos_estruturalmente" if opponent_ok and opponent_structural
+                      else "verificado" if opponent_ok else "pendente"),
         "tabelas_drops": (
             "verificado" if weights_ok else
             ("matrizes_candidatas_sem_identidade" if not (card_ok and opponent_ok)
@@ -149,6 +157,9 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
                                 if isinstance(result.get("candidate_catalogue"),dict)
                                 else {"status":"nao_identificado","cards":0,"opponents":0}),
         "name_discovery_status": str(result.get("nomes_status") or "")[:220],
+        "opponent_layout_discovery": (result.get("independent_opponent_discovery")
+                                     if isinstance(result.get("independent_opponent_discovery"),dict)
+                                     else {"state":"nao_analisado","candidateOpponentCount":0}),
         "source": "ISO/BIN fornecida pelo usuário; extração estritamente local",
         "verified": status,
         "supported_features": {
@@ -217,7 +228,7 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
             {"opponent_id": integer(r["oponente_id"]), "card_id": integer(r["carta_id"]),
              "weight": integer(r["peso"])}
             for r in decks
-        ] if card_ok and opponent_ok and all(
+        ] if card_ok and opponent_ok and not opponent_structural and all(
             integer(r.get("oponente_id")) in range(1, 40)
             and integer(r.get("carta_id")) in range(1, 723)
             and integer(r.get("peso")) is not None
@@ -233,6 +244,10 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     }
     for warning in effect_warnings:
         payload["notes"].append(warning)
+    if opponent_ok and opponent_structural:
+        payload["notes"].append(
+            "39 adversários extraídos de tabela independente do mesmo executável. "
+            "Ordem e IDs não confirmados em duelo; drops e RANK permanecem bloqueados.")
     if card_ok and not opponent_ok:
         payload["notes"].append(
             "722 cartas estruturalmente coerentes; nomes de adversários ainda "
