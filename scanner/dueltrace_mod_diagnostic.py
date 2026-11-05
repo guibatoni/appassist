@@ -220,6 +220,39 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
             "opponentNamesTerminated":row.get("opponentNamesTerminated",0),
             "validated":False,
         })
+    card_attributes=report.get("card_attribute_layouts")
+    if not isinstance(card_attributes,dict):
+        card_attributes={}
+    card_attribute_links=[]
+    for link in card_attributes.get("links",[])[:6]:
+        if not isinstance(link,dict):
+            continue
+        card_attribute_links.append({
+            "namePointerBase":link.get("namePointerBase"),
+            "packedBase":link.get("packedBase"),
+            "detailBase":link.get("detailBase"),
+            "packedShift":link.get("packedShift"),
+            "detailShift":link.get("detailShift"),
+            "sharedShift":link.get("sharedShift") is True,
+            "samples":[{
+                "id":row.get("id"),"name":str(row.get("name") or "")[:52],
+                "atk":row.get("atk"),"def":row.get("def"),
+                "typeCode":row.get("typeCode"),
+                "levelCode":row.get("levelCode"),
+                "attributeCode":row.get("attributeCode")
+            } for row in link.get("samples",[])[:5] if isinstance(row,dict)],
+            "validated":False,
+        })
+    attribute_mips=report.get("mips_card_attribute_evidence")
+    if not isinstance(attribute_mips,dict):
+        attribute_mips={}
+    attribute_xrefs=[{
+        "pc":str(row.get("pc") or "")[:14],
+        "tableFileOffset":row.get("tableFileOffset"),
+        "matchType":str(row.get("matchType") or "")[:24],
+        "validated":False,
+    } for row in attribute_mips.get("references",[])[:8]
+        if isinstance(row,dict)]
     flags=profile.get("supported_features") or {}
     if status.startswith("incerto") or status.startswith("erro"):
         level="estrutura_desconhecida"
@@ -324,6 +357,16 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
             "state":str(pointer_report.get("state") or "não pesquisado")[:85],
             "candidates":pointer_candidates,
             "verified":False,
+        },
+        "cardAttributeEvidence":{
+            "state":str(card_attributes.get("state") or "não pesquisado")[:80],
+            "exeSha256":str(card_attributes.get("exeSha256") or "")[:64] or None,
+            "links":card_attribute_links,
+            "packedCandidates":len(card_attributes.get("packedCandidates",[])),
+            "detailCandidates":len(card_attributes.get("detailCandidates",[])),
+            "mipsReferences":attribute_xrefs,
+            "validated":False,
+            "inGameVerified":False,
         },
         "relocatedNameLayoutProbe":{
             "state":str(relocated.get("state") or "não pesquisado")[:80],

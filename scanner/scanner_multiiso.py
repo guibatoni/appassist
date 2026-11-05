@@ -10,6 +10,7 @@ from dueltrace_layout_discovery import discover_disc_layout, candidate_files_for
 from dueltrace_cdrom_layout import detect_disc_geometry
 from dueltrace_card_opponent_discovery import discover_relocated_name_table
 from dueltrace_relocated_names import discover_relocated_name_layout
+from dueltrace_card_attribute_probe import discover_card_attribute_layout
 from dueltrace_mips_reference_probe import inspect_mips_table_references
 from dueltrace_name_layout_probe import find_opponent_pointer_candidates
 from dueltrace_name_boundaries import inspect_opponent_name_boundaries, read_name_table
@@ -29,7 +30,7 @@ WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
-SCAN_PARSER_REVISION=11  # bases realocadas de ponteiros, textos e glifos
+SCAN_PARSER_REVISION=12  # ligação interna de IDs/nome com atributos realocados
 
 
 def sha256(path:Path, progress=None):
@@ -588,6 +589,20 @@ def process(path,output,with_art=False,digest=None,progress=None):
             if target_offsets:
                 info["mips_name_pointer_evidence"]=inspect_mips_table_references(
                     sl,target_offsets)
+            # Atribuições de IDs, ataques e tipos permanecem hipóteses.
+            # Todas as tabelas e nomes são lidos do mesmo executável.
+            if relocated:
+                info["card_attribute_layouts"]=discover_card_attribute_layout(
+                    sl,name_layouts=relocated,
+                    packed_base=SLUS_ATTRIBUTES,detail_base=0x1C5B33)
+                attributes=info["card_attribute_layouts"]
+                offsets=list(dict.fromkeys(
+                    [c["offset"] for c in attributes["packedCandidates"][:4]]
+                    +[c["offset"] for c in attributes["detailCandidates"][:4]]
+                ))[:8]
+                if offsets:
+                    info["mips_card_attribute_evidence"]=inspect_mips_table_references(
+                        sl,offsets)
             info["amostras_layout_nomes"]=inspect_known_name_layout(sl)
             # Quando 722 nomes parecem possíveis e a lista de oponentes
             # falha, sondar deslocamentos limitados na tabela de ponteiros.

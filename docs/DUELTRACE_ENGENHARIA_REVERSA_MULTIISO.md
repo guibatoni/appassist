@@ -134,6 +134,34 @@ Tudo acontece localmente. Cache e perfil separados por SHA-256 da imagem.
   compressão, texto com ponteiros 32-bit, glifos sem célula Shift-JIS,
   tabelas com nomes fora de ordem ou alterações de cardinalidade.
 
+## Etapa 2D — vínculo de nomes, IDs e atributos (somente evidências)
+
+- `scanner/dueltrace_card_attribute_probe.py` investiga as duas tabelas
+  conhecidas do layout FM dentro do mesmo executável: 722 palavras de
+  quatro bytes (ATK/DEF/tipo/estrelas) e 722 bytes (nível/atributo).
+- Cada tabela pode ser deslocada independentemente até ±16 KiB. A análise
+  exige limites do arquivo, amostras distribuídas, variedade real de
+  estatísticas e categorias, além de coerência dos registros completos.
+- **Não** procurar por tamanho ou cabeçalho apenas: o scanner só cruza
+  atributos com layouts de nomes identificados *no mesmo executável*,
+  redecodificando 722 cartas e 39 oponentes antes de vincular os IDs.
+- Deslocamentos adjacentes podem produzir registros parecidos. O algoritmo
+  verifica os extremos e favorece fronteiras plausíveis, mas **não**
+  considera esse indício confirmação da posição correta.
+- Relatórios `card_attribute_layouts` e `mips_card_attribute_evidence`
+  contêm base das tabelas, deslocamentos, 5 amostras de cartas e referências
+  estáticas à RAM. Só chegam a diagnósticos internos e a um resumo compacto
+  para Ollama; não alteram o perfil público, os drops ou a calculadora.
+- `validated=false` e `inGameVerified=false` persistem até
+  confirmação independente com uma ISO real e o jogo no emulador.
+- `SCAN_PARSER_REVISION=12` invalida o cache do scanner para reanálise.
+- Testes sintéticos cobrem deslocamento conjunto/independente, duplicação,
+  registros ausentes, intervalos e correspondência do hash do executável.
+- Os limiares correspondem ao **layout clássico** com ATK/DEF em dezenas
+  e distribuição típica de valores. Mods que alterem a codificação,
+  removam cartas ou mudem a cardinalidade exigirão adaptadores novos.
+  Rejeição do layout não prova ausência de cartas nem de atributos.
+
 ## Etapa 3 — parser de mod sem layout conhecido
 
 - Inferir deslocamentos com referências cruzadas MIPS, estrutura de ponteiros,
