@@ -8,6 +8,8 @@ que o JavaScript da origem local seja confiável; não substitui CSP e auditoria
 from __future__ import annotations
 
 import hmac
+import threading
+import time
 
 
 class ProtectedDesktopApi:
@@ -16,11 +18,52 @@ class ProtectedDesktopApi:
             raise ValueError("Token de sessão inválido")
         self._bridge=bridge
         self._token=token
+        # Janela nativa só pode ser anexada pelo ponto de entrada Windows.
+        # Ações expostas ao JS passam por token e uma lista estrita.
+        self._native_window=None
+        self._native_window_lock=threading.RLock()
+        self._native_maximized=False
+        self._native_close_requested=False
 
     def _authorize(self, credential):
         if not isinstance(credential,str) or not hmac.compare_digest(
                 credential,self._token):
             raise PermissionError("Acesso não autorizado à API local.")
+
+    def window_control(self, credential, action):
+        """Controles da moldura customizada, limitados à janela deste processo.
+
+        Nunca aceita comandos arbitrários, caminhos ou IDs de outras janelas.
+        O encerramento é assíncrono para liberar a resposta ao WebView.
+        """
+        self._authorize(credential)
+        if type(action) is not str or action not in (
+                "state","minimize","toggle_maximize","close"):
+            raise ValueError("Comando da janela inválido.")
+        with self._native_window_lock:
+            window=self._native_window
+            if window is None:
+                raise RuntimeError("Janela nativa ainda não está pronta.")
+            if action=="state":
+                return {"maximized":self._native_maximized}
+            if action=="minimize":
+                window.minimize()
+            elif action=="toggle_maximize":
+                if self._native_maximized:
+                    window.restore()
+                    self._native_maximized=False
+                else:
+                    window.maximize()
+                    self._native_maximized=True
+            elif action=="close" and not self._native_close_requested:
+                self._native_close_requested=True
+                def close_after_response():
+                    time.sleep(0.25)
+                    window.destroy()
+                threading.Thread(
+                    target=close_after_response,name="dueltrace-window-close",
+                    daemon=True).start()
+            return {"maximized":self._native_maximized}
 
     def check_updates(self, credential):
         self._authorize(credential)

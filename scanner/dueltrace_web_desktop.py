@@ -208,9 +208,23 @@ def main():
     url=f"http://127.0.0.1:{server.server_port}/"
     try:
         window=webview.create_window(
-            "DUELTRACE — MultiMod Companion | Interface v0",
+            "DUELTRACE — MultiMod Companion",
             url=url,js_api=api,width=1450,height=870,
-            min_size=(1100,700),background_color="#040a1a")
+            min_size=(1100,700),background_color="#040a1a",
+            frameless=True,easy_drag=False,resizable=True)
+        if window is None:
+            raise RuntimeError("Não foi possível criar a janela do DUELTRACE.")
+        # A região .pywebview-drag-region no cabeçalho move a janela;
+        # controles nativos são chamados somente pela API local autenticada.
+        api._native_window=window
+        def mark_maximized():
+            with api._native_window_lock:
+                api._native_maximized=True
+        def mark_restored():
+            with api._native_window_lock:
+                api._native_maximized=False
+        window.events.maximized+=mark_maximized
+        window.events.restored+=mark_restored
         def secure_loaded(window):
             current=window.get_current_url()
             if trusted_window_url(current,url):

@@ -1,5 +1,6 @@
 import { ShieldCheck } from "lucide-react"
 import { UpdateChecker } from "./update-checker"
+import { WindowControls } from "./window-controls"
 
 function Logo() {
   return (
@@ -30,14 +31,17 @@ function Logo() {
 
 export function TopBar() {
   return (
-    <header className="flex items-center justify-between gap-4 px-4 pb-3 pt-4 sm:px-6 lg:px-8 lg:pt-5">
-      <Logo />
-      <div className="flex flex-wrap items-center justify-end gap-2">
+    <header className="sticky top-0 z-[60] flex items-center justify-between gap-3 rounded-t-2xl border-b border-line/40 bg-[#040b1f]/95 px-3 pb-3 pt-3 backdrop-blur-xl sm:px-5 lg:px-6">
+      <div className="pywebview-drag-region flex min-w-0 flex-1 cursor-grab select-none items-center">
+        <Logo />
+      </div>
+      <div className="flex shrink-0 items-center justify-end gap-2">
         <UpdateChecker />
         <div className="hidden items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary xl:flex">
           <ShieldCheck className="size-5" />
           <span>Interface local · Windows</span>
         </div>
+        <WindowControls />
       </div>
     </header>
   )

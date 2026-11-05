@@ -534,7 +534,11 @@ export type UpdateCheck = {
   message: string
 }
 
+export type WindowControlAction="state"|"minimize"|"toggle_maximize"|"close"
+export type WindowControlState={maximized:boolean}
+
 export interface DesktopAPI {
+  window_control(action:WindowControlAction):Promise<WindowControlState>
   check_updates(): Promise<UpdateCheck>
   open_updates_page(runId?: number): Promise<{opened: boolean}>
   install_signed_update(): Promise<{started: boolean; status: string; version?: string}>
@@ -571,6 +575,7 @@ export interface DesktopAPI {
 }
 
 interface ProtectedNativeAPI {
+  window_control(token:string,action:WindowControlAction):Promise<WindowControlState>
   check_updates(token: string): Promise<UpdateCheck>
   open_updates_page(token: string, runId?: number): Promise<{opened: boolean}>
   install_signed_update(token: string): Promise<{started: boolean; status: string; version?: string}>
@@ -621,6 +626,7 @@ export function desktopApi(): DesktopAPI | null {
   const token = window.__DUELTRACE_TOKEN__
   if (!native || typeof token !== "string" || token.length < 32) return null
   return {
+    window_control: (action) => native.window_control(token,action),
     check_updates: () => native.check_updates(token),
     open_updates_page: (runId) => native.open_updates_page(token, runId),
     install_signed_update: () => native.install_signed_update(token),
