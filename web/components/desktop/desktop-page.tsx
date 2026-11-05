@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FilePlus2, Gamepad2,
   GitMerge, Layers, Play, RefreshCcw, Search, Shield, Swords, Upload,
@@ -19,17 +19,18 @@ function Heading({title,subtitle}:{title:string;subtitle:string}) {
   </div>
 }
 
-function CardThumbnail({card,sha}:{card:LocalCard|null;sha:string|null}) {
+function CardThumbnail({card,sha,expanded=false}:{card:LocalCard|null;sha:string|null;expanded?:boolean}) {
   const [source,setSource]=useState<"composite"|"large"|"none">("composite")
   useEffect(()=>setSource("composite"),[sha,card?.id])
   const framed=card?cardWithFrame(sha,card.id):null
   const large=card?cardArt(sha,card.id):null
   const url=source==="composite"?framed:source==="large"?large:null
-  return <div className={"relative mx-auto flex w-full max-w-32 items-center justify-center overflow-hidden bg-[#061126] shadow-[0_0_18px_rgb(56_200_255/0.18)] "+
+  return <div className={"relative mx-auto flex w-full items-center justify-center overflow-hidden bg-[#061126] shadow-[0_0_18px_rgb(56_200_255/0.18)] "+
+      (expanded?"max-w-48 ":"max-w-32 ")+
       (source==="composite"
         ? "aspect-[52/60] rounded-sm border border-gold/20"
         : "aspect-[102/96] rounded-lg border border-line/50 p-1")}>
-    {url?<Image src={url} alt={card?.name??""} fill unoptimized sizes="160px"
+    {url?<Image src={url} alt={card?.name??""} fill unoptimized sizes={expanded?"240px":"160px"}
       className={source==="composite"?"object-fill [image-rendering:pixelated]":"object-contain p-1"}
       onError={()=>setSource(source==="composite"?"large":"none")}/>:
       <Layers className="size-9 text-primary/45" aria-label="Imagem não extraída"/>}
@@ -922,7 +923,7 @@ type FusionPreviewCard = {id:number;name:string;card:LocalCard}
 
 function FusionIllustration({id,name,sha,card,role,onPreview}:{
   id:number;name:string;sha:string|null;card:LocalCard|null;role:string;
-  onPreview:(card:FusionPreviewCard|null)=>void
+  onPreview:(card:FusionPreviewCard|null,anchor:HTMLButtonElement|null)=>void
 }) {
   const displayed:LocalCard=card??{
     id,name,type:"",attribute:"",category:"Não identificada",
@@ -931,10 +932,10 @@ function FusionIllustration({id,name,sha,card,role,onPreview}:{
   return <div className="flex min-w-0 flex-col items-center gap-1.5">
     <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{role}</span>
     <button type="button" aria-label={`Ver detalhes e drops de ${name}`}
-      onMouseEnter={()=>onPreview({id,name,card:displayed})}
-      onMouseLeave={()=>onPreview(null)}
-      onFocus={()=>onPreview({id,name,card:displayed})}
-      onBlur={()=>onPreview(null)}
+      onMouseEnter={event=>onPreview({id,name,card:displayed},event.currentTarget)}
+      onMouseLeave={()=>onPreview(null,null)}
+      onFocus={event=>onPreview({id,name,card:displayed},event.currentTarget)}
+      onBlur={()=>onPreview(null,null)}
       className="group flex min-w-0 w-full flex-col items-center gap-1.5 rounded-md p-1 transition-all duration-200 hover:bg-primary/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
       <div className="w-16 origin-center transition-transform duration-200 group-hover:scale-105 group-focus-visible:scale-105 sm:w-20">
         <CardThumbnail key={String(sha)+"-"+id} card={displayed} sha={sha}/>
@@ -955,6 +956,15 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [records,setRecords]=useState<FusionPage|null>(null)
   const [error,setError]=useState<string|null>(null)
   const [hoveredCard,setHoveredCard]=useState<FusionPreviewCard|null>(null)
+  const previewAnchor=useRef<HTMLButtonElement|null>(null)
+  const previewElement=useRef<HTMLDivElement|null>(null)
+  const [previewPosition,setPreviewPosition]=useState<{left:number;top:number}|null>(null)
+  const onPreview=(card:FusionPreviewCard|null,anchor:HTMLButtonElement|null)=>{
+    previewAnchor.current=anchor
+    // Não reaproveitar a posição da carta anterior durante a troca de hover.
+    setPreviewPosition(null)
+    setHoveredCard(card)
+  }
   const [dropCache,setDropCache]=useState<Record<number,CardDropSources>>({})
   const [dropErrors,setDropErrors]=useState<Record<number,boolean>>({})
   const cardsById=useMemo(()=>new Map(cards.map(c=>[c.id,c])),[cards])
@@ -989,6 +999,46 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const dropRows=(drops?.available&&drops.romSha===sha&&
                   drops.cardId===hoveredCard?.id)?drops.rows:[]
   const displayDrops=dropRows.slice(0,4)
+  // Janela alinhada à carta selecionada, não ao canto do aplicativo.
+  useEffect(()=>{
+    if(!hoveredCard){
+      setPreviewPosition(null)
+      return
+    }
+    const place=()=>{
+      const anchor=previewAnchor.current
+      const panel=previewElement.current
+      if(!anchor||!panel||!anchor.isConnected)return
+      const rect=anchor.getBoundingClientRect()
+      if(rect.bottom<=0||rect.top>=window.innerHeight){
+        setPreviewPosition(null)
+        return
+      }
+      const margin=12
+      const gap=10
+      const width=panel.offsetWidth
+      const height=panel.offsetHeight
+      const left=Math.max(margin,Math.min(
+        rect.left+rect.width/2-width/2,
+        window.innerWidth-width-margin
+      ))
+      const above=rect.top-height-gap
+      // Prefere aparecer acima; em telas baixas, sobrepõe a carta suavemente.
+      const candidateTop=above>=margin?above:rect.top-36
+      const top=Math.max(margin,Math.min(
+        candidateTop,window.innerHeight-height-margin
+      ))
+      setPreviewPosition({left,top})
+    }
+    const frame=window.requestAnimationFrame(place)
+    window.addEventListener("resize",place)
+    window.addEventListener("scroll",place,true)
+    return()=>{
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener("resize",place)
+      window.removeEventListener("scroll",place,true)
+    }
+  },[hoveredCard,dropRows.length])
   const pageSize=12
   useEffect(()=>{
     let mounted=true
@@ -1034,11 +1084,11 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         {records?.rows.map((r,i)=><article key={r.a+"-"+r.b+"-"+r.result+"-"+i}
           className="relative rounded-xl border border-line/80 bg-gradient-to-br from-panel-strong/90 via-[#0b1a35] to-background p-3 shadow-[inset_0_1px_0_rgb(245_184_61/0.09)] transition-colors hover:border-primary/60">
           <div className="grid grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)_24px_minmax(0,1fr)] items-start gap-1">
-            <FusionIllustration id={r.a} name={r.nameA} card={cardsById.get(r.a)??null} sha={sha} role="Material A" onPreview={setHoveredCard}/>
+            <FusionIllustration id={r.a} name={r.nameA} card={cardsById.get(r.a)??null} sha={sha} role="Material A" onPreview={onPreview}/>
             <span className="pt-14 text-center font-display text-xl font-bold text-primary" aria-hidden>+</span>
-            <FusionIllustration id={r.b} name={r.nameB} card={cardsById.get(r.b)??null} sha={sha} role="Material B" onPreview={setHoveredCard}/>
+            <FusionIllustration id={r.b} name={r.nameB} card={cardsById.get(r.b)??null} sha={sha} role="Material B" onPreview={onPreview}/>
             <span className="pt-14 text-center font-display text-xl font-bold text-gold" aria-hidden>→</span>
-            <FusionIllustration id={r.result} name={r.nameResult} card={cardsById.get(r.result)??null} sha={sha} role="Resultado" onPreview={setHoveredCard}/>
+            <FusionIllustration id={r.result} name={r.nameResult} card={cardsById.get(r.result)??null} sha={sha} role="Resultado" onPreview={onPreview}/>
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/50 pt-2">
             <span className="text-xs text-muted">#{r.a} + #{r.b} → #{r.result}</span>
@@ -1061,13 +1111,14 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             onClick={()=>setOffset(x=>x+pageSize)}>Próxima <ChevronRight className="size-4"/></button>
         </div>
       </div>
-      <div role="tooltip" aria-hidden={!hoveredCard}
-        className={"pointer-events-none fixed bottom-4 right-4 z-50 w-[min(92vw,380px)] rounded-xl border border-primary/45 bg-[#09172e]/95 p-4 shadow-[0_18px_60px_rgb(0_0_0/0.7)] backdrop-blur-lg transition-all duration-200 "+
-          (hoveredCard?"translate-y-0 opacity-100":"translate-y-3 opacity-0")}>
+      <div ref={previewElement} role="tooltip" aria-hidden={!hoveredCard}
+        style={previewPosition??{left:0,top:0}}
+        className={"pointer-events-none fixed z-50 max-h-[calc(100vh-24px)] w-[min(92vw,440px)] overflow-hidden rounded-xl border border-primary/45 bg-[#09172e]/95 p-4 shadow-[0_18px_60px_rgb(0_0_0/0.7)] backdrop-blur-lg transition-all duration-200 "+
+          (hoveredCard&&previewPosition?"scale-100 opacity-100":"scale-95 opacity-0")}>
         {hoveredCard&&<div>
           <div className="flex items-start gap-3">
-            <div className="w-24 shrink-0 sm:w-28">
-              <CardThumbnail card={hoveredCard.card} sha={sha}/>
+            <div className="w-40 shrink-0 sm:w-44">
+              <CardThumbnail card={hoveredCard.card} sha={sha} expanded/>
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold text-gold">#{hoveredCard.id}</p>

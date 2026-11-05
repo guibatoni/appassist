@@ -46,15 +46,35 @@ class PublicUiContractTests(unittest.TestCase):
 
     def test_fusion_preview_is_mouse_and_keyboard_accessible(self):
         source=self.fusions
-        self.assertIn("onMouseEnter={()=>onPreview(",source)
-        self.assertIn("onMouseLeave={()=>onPreview(null)}",source)
-        self.assertIn("onFocus={()=>onPreview(",source)
-        self.assertIn("onBlur={()=>onPreview(null)}",source)
+        self.assertIn("onMouseEnter={event=>onPreview(",source)
+        self.assertIn("onMouseLeave={()=>onPreview(null,null)}",source)
+        self.assertIn("onFocus={event=>onPreview(",source)
+        self.assertIn("onBlur={()=>onPreview(null,null)}",source)
         self.assertIn('role="tooltip"',source)
         self.assertIn('backdrop-blur-lg',source)
         self.assertIn('transition-all duration-200',source)
         self.assertIn('Onde conseguir',source)
         self.assertIn('MonsterStats card={hoveredCard.card}',source)
+
+    def test_hover_preview_tracks_own_card_is_bigger_and_stays_within_viewport(self):
+        source=self.fusions
+        self.assertIn("previewAnchor.current=anchor",source)
+        self.assertIn("const rect=anchor.getBoundingClientRect()",source)
+        self.assertIn("const width=panel.offsetWidth",source)
+        self.assertIn("const height=panel.offsetHeight",source)
+        self.assertIn("rect.left+rect.width/2-width/2",source)
+        self.assertIn("window.innerWidth-width-margin",source)
+        self.assertIn("const above=rect.top-height-gap",source)
+        self.assertIn("window.innerHeight-height-margin",source)
+        self.assertIn('window.addEventListener("scroll",place,true)',source)
+        self.assertIn('window.addEventListener("resize",place)',source)
+        self.assertIn("ref={previewElement}",source)
+        self.assertIn("style={previewPosition??{left:0,top:0}}",source)
+        self.assertIn("w-[min(92vw,440px)]",source)
+        self.assertIn("sm:w-44",source)
+        self.assertIn("<CardThumbnail card={hoveredCard.card} sha={sha} expanded/>",source)
+        self.assertNotIn("fixed bottom-4 right-4",source)
+        self.assertIn("pointer-events-none",source)
 
     def test_card_drops_are_fetched_for_current_mod_and_exact_card_id(self):
         source=self.fusions
