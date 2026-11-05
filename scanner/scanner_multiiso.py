@@ -8,6 +8,7 @@ import argparse, csv, hashlib, json, re, struct, sys, unicodedata
 from pathlib import Path
 from dueltrace_layout_discovery import discover_disc_layout, candidate_files_for_decoder
 from dueltrace_cdrom_layout import detect_disc_geometry
+from dueltrace_card_opponent_discovery import discover_relocated_name_table
 from dueltrace_name_layout_probe import find_opponent_pointer_candidates
 from dueltrace_name_boundaries import inspect_opponent_name_boundaries, read_name_table
 
@@ -26,7 +27,7 @@ WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
-SCAN_PARSER_REVISION=8  # suporte RAW 2336/2448, limites e validação ISO9660
+SCAN_PARSER_REVISION=9  # descoberta confinada de tabelas de nomes realocadas
 
 
 def sha256(path:Path, progress=None):
@@ -564,6 +565,11 @@ def process(path,output,with_art=False,digest=None,progress=None):
         if progress:progress("Decodificando cartas e adversários",0,1)
         info['nomes_status']=nomes_status
         if not opponents or not cards:
+            # Descoberta limitada de tabela de nomes completa. Nenhuma
+            # hipótese é promovida a cartas, oponentes ou drops neste passo.
+            info["name_pointer_discovery"]=discover_relocated_name_table(
+                sl,pointer_base=SLUS_PTR_BASE,text_base=SLUS_TEXT_BASE,
+                glyph_base=SLUS_GLYPHS)
             info["amostras_layout_nomes"]=inspect_known_name_layout(sl)
             # Quando 722 nomes parecem possíveis e a lista de oponentes
             # falha, sondar deslocamentos limitados na tabela de ponteiros.

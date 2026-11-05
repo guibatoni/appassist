@@ -47,6 +47,25 @@ Tudo acontece localmente. Cache e perfil separados por SHA-256 da imagem.
 4. Reportar, por estrutura, estado `confirmado`, `candidato` ou
    `indisponível`. A UI pública só mostra dados utilizáveis e textos simples.
 
+## Etapa 2A — sondagem de nomes realocados (implementada como diagnóstico)
+
+- `scanner/dueltrace_card_opponent_discovery.py` examina, em no máximo
+  ±32 KiB da tabela de ponteiros de referência, candidatos a uma tabela
+  conjunta de 722 cartas e 39 oponentes em executáveis de até 8 MiB.
+- A busca usa glifos e a base de texto do layout conhecido; valida registros
+  terminados por 0xFF, diversidade de nomes, amostras de IDs extremos e
+  limites físicos entre nomes. Os offsets não são copiados de outras ISOs.
+- O relatório interno `name_pointer_discovery` inclui deslocamento,
+  contagens e amostras somente quando o decoder atual falha. Não popula
+  o catálogo público, nem habilita drops/fusões/RANK a partir de hipóteses.
+- Duas tabelas plausíveis continuam ambíguas. Glifos ou textos relocados,
+  terminadores diferentes e layouts totalmente novos ainda não são
+  identificados nesta etapa.
+- `SCAN_PARSER_REVISION=9` faz o cache ser reavaliado.
+- Testes sintéticos contemplam uma tabela relocada, ambiguidade, um nome
+  truncado, orçamento de busca e ausência de glifos. Para promover dados à
+  biblioteca será exigida evidência independente de identidade dos IDs.
+
 ## Etapa 3 — parser de mod sem layout conhecido
 
 - Inferir deslocamentos com referências cruzadas MIPS, estrutura de ponteiros,
