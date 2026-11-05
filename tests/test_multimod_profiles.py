@@ -135,7 +135,7 @@ class ProfileTests(unittest.TestCase):
             launch_epsxe(catalog,exe,sha,popen=process,platform="win32")
             self.assertEqual(process.call_count,1)
             args=process.call_args.args[0]
-            self.assertEqual(args[-1],str(rom))
+            self.assertEqual(Path(args[-1]).resolve(),rom.resolve())
             self.assertIn("-loadiso",args)
             self.assertIs(process.call_args.kwargs["shell"],False)
 
