@@ -506,9 +506,15 @@ function Mods({mods,sha,onRefresh,configured}:{
               </p>}
               {!mod.opponents&&(mod.opponentCandidateCount??0)>0&&<p className="mt-3 text-xs text-muted">
                 Até {mod.opponentCandidateCount} nomes de adversários candidatos detectados (não verificados).
-                {mod.opponentDiagnosticReason&&<span className="mt-1 block text-gold">
-                  Motivo: {mod.opponentDiagnosticReason}
-                </span>}
+                {mod.opponentDiagnosticReason
+                  ?<span className="mt-1 block text-gold">
+                    Motivo: {mod.opponentDiagnosticReason}
+                  </span>
+                  :<span className="mt-1 block text-gold">
+                    {typeof mod.scanParserRevision==="number"&&mod.scanParserRevision<19
+                      ?"Análise anterior à revisão 19: clique em Atualizar dados para registrar o motivo."
+                      :"Motivo ainda não registrado neste perfil. Clique em Atualizar dados e confira o resultado."}
+                  </span>}
               </p>}
               {!mod.cards&&(mod.candidateCards??0)>0&&<p className="mt-3 text-xs text-gold">
                 ${mod.candidateCards?.toLocaleString("pt-BR")} cartas candidatas em análise. Elas ainda não aparecem na Biblioteca para evitar dados incorretos.

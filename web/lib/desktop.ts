@@ -216,6 +216,7 @@ export type LocalMod = {
   sha256: string
   name: string
   level: string
+  scanParserRevision?: number | null
   cards: number
   candidateCards?: number
   cardEvidence?: string
