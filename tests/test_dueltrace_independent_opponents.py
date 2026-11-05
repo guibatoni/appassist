@@ -88,14 +88,22 @@ class IndependentOpponentTests(unittest.TestCase):
         self.assertEqual(result["candidateOpponentCount"],39)
         self.assertGreaterEqual(result["candidateCount"],2)
 
-    def test_alternative_terminator_is_only_hypothesis(self):
+    def test_alternative_terminator_with_proven_physical_boundaries(self):
         result=probe(relocated_opponents(terminator=0xfe))
-        self.assertEqual(result["state"],"hipotese_terminador_alternativo")
-        self.assertIsNone(result["selected"])
+        self.assertEqual(result["state"],"layout_terminador_alternativo_estrutural")
         self.assertEqual(result["candidateOpponentCount"],39)
-        self.assertTrue(any(x["possibleDifferentTerminator"]=="0xFE"
-                            for x in result["candidates"]))
+        self.assertEqual(len(result["selected"]["opponents"]),39)
+        self.assertEqual(result["selected"]["opponents"][0]["nome"],"OPP01")
+        self.assertEqual(result["selected"]["opponents"][-1]["nome"],"OPP39")
+        self.assertEqual(result["selected"]["evidence"],
+                         "marcador_alternativo_e_38_fronteiras_fisicas")
+        boundary=result["boundaryTerminatorEvidence"]
+        self.assertEqual(boundary["candidateCount"],1)
+        self.assertEqual(boundary["candidates"][0]["terminator"],"0xFE")
+        self.assertEqual(boundary["candidates"][0]["verifiedBoundaries"],38)
         self.assertFalse(result["inGameVerified"])
+        self.assertFalse(result["dropsVerified"])
+        self.assertFalse(result["rankVerified"])
 
     def test_random_or_truncated_binary_not_promoted(self):
         self.assertIsNone(probe(bytes(3_000_000))["selected"])
@@ -181,14 +189,15 @@ class IndependentOpponentTests(unittest.TestCase):
             self.assertEqual(profile["drops"],[])
             self.assertEqual(profile["drops_provenance"]["candidate_table_count"],117)
 
-    def test_real_reason_explains_39_readable_without_ff(self):
+    def test_strict_boundary_evidence_is_structural_only(self):
         report=probe(relocated_opponents(terminator=0xfe))
         reason=explain_opponent_blocker(report)
-        self.assertEqual(reason["code"],"terminador_incompativel")
-        self.assertIn("0xFE",reason["reason"])
+        self.assertEqual(reason["code"],"nomes_estruturais")
         compact=compact_opponent_evidence(report)
-        self.assertEqual(compact["reasonCode"],"terminador_incompativel")
+        self.assertEqual(compact["reasonCode"],"nomes_estruturais")
         self.assertEqual(compact["candidateOpponentCount"],39)
+        self.assertEqual(compact["boundaryTerminatorEvidence"]["candidateCount"],1)
+        self.assertNotIn("OPP01",str(compact))
         self.assertFalse(compact["inGameVerified"])
 
     def test_ambiguous_table_reason_never_chooses_arbitrary_index(self):
@@ -237,6 +246,80 @@ class IndependentOpponentTests(unittest.TestCase):
         self.assertNotIn("quarantinedRecords",ui)
         self.assertNotIn("get_mod_scan_diagnostic",ui.split("function Mods(",1)[1].split(
             "function CardDropSourcesPanel(",1)[0])
+
+    def test_nonzero_data_after_fe_blocks_structural_promotion(self):
+        exe=bytearray(relocated_opponents(terminator=0xfe))
+        first=struct.unpack_from("<H",exe,SLUS_PTR_BASE+0x360*2)[0]
+        pos=SLUS_TEXT_BASE+first
+        marker=exe.index(0xfe,pos,pos+32)
+        exe[marker+1]=1
+        result=probe(bytes(exe))
+        self.assertIsNone(result["selected"])
+        self.assertEqual(result["state"],"hipotese_terminador_alternativo")
+        self.assertEqual(result["boundaryTerminatorEvidence"]["candidateCount"],0)
+
+    def test_mixed_control_bytes_never_select_opponent_ids(self):
+        exe=bytearray(relocated_opponents(terminator=0xfe))
+        first=struct.unpack_from("<H",exe,SLUS_PTR_BASE+0x360*2)[0]
+        pos=SLUS_TEXT_BASE+first
+        marker=exe.index(0xfe,pos,pos+32)
+        exe[marker]=0xfd
+        result=probe(bytes(exe))
+        self.assertIsNone(result["selected"])
+        self.assertEqual(result["boundaryTerminatorEvidence"]["candidateCount"],0)
+
+    def test_ambiguous_terminated_physical_blocks_are_rejected(self):
+        result=probe(relocated_opponents(starts=(0x360,0x3b0),terminator=0xfe))
+        self.assertEqual(result["state"],"layouts_completos_ambiguos")
+        self.assertEqual(result["boundaryTerminatorEvidence"]["candidateCount"],2)
+        self.assertIsNone(result["selected"])
+
+    def test_nonmonotonic_pointers_do_not_verify_physical_boundaries(self):
+        exe=bytearray(relocated_opponents(terminator=0xfe))
+        a=SLUS_PTR_BASE+0x360*2
+        b=a+2
+        first,second=struct.unpack_from("<HH",exe,a)
+        struct.pack_into("<HH",exe,a,second,first)
+        result=probe(bytes(exe))
+        self.assertIsNone(result["selected"])
+        self.assertEqual(result["boundaryTerminatorEvidence"]["candidateCount"],0)
+
+    def test_duplicate_physical_pointers_do_not_select_ids(self):
+        exe=bytearray(relocated_opponents(terminator=0xfe))
+        a=SLUS_PTR_BASE+0x360*2
+        struct.pack_into("<H",exe,a+2,struct.unpack_from("<H",exe,a)[0])
+        result=probe(bytes(exe))
+        self.assertIsNone(result["selected"])
+        self.assertEqual(result["boundaryTerminatorEvidence"]["candidateCount"],0)
+
+    def test_alternative_terminator_in_profile_preserves_drop_and_rank_gate(self):
+        exe=relocated_opponents(terminator=0xfe)
+        candidates=probe(exe)
+        opponents=candidates["selected"]["opponents"]
+        _,cards,_=decode_names(exe)
+        with tempfile.TemporaryDirectory() as d:
+            folder=Path(d)
+            write_rows(folder/"cartas.csv",cards)
+            write_rows(folder/"oponentes.csv",opponents)
+            fake_drops=[]
+            checks=[]
+            for oid in range(1,40):
+                for group in ("GRUPO_1","GRUPO_2","GRUPO_3"):
+                    checks.append({"oponente_id":oid,"rank":group,"peso_total":2048})
+                    fake_drops.append({"oponente_id":oid,"rank":group,
+                                       "carta_id":1,"peso":2048})
+            write_rows(folder/"validacao_pesos.csv",checks)
+            write_rows(folder/"drops_por_oponente.csv",fake_drops)
+            meta={"sha256":SHA,"opponent_identification":"extraidos_estruturalmente",
+                  "independent_opponent_discovery":compact_opponent_evidence(candidates)}
+            profile=analyse(folder,meta,folder/"gog_synthetic.iso")
+            self.assertEqual(len(profile["opponents"]),39)
+            self.assertEqual(profile["verified"]["oponentes"],"extraidos_estruturalmente")
+            self.assertTrue(profile["supported_features"]["opponents"])
+            self.assertFalse(profile["supported_features"]["drops"])
+            self.assertFalse(profile["supported_features"]["ranks"])
+            self.assertFalse(profile["supported_features"]["scoring"])
+            self.assertEqual(profile["drops"],[])
 
     def test_revision_and_no_cross_mod_publish(self):
         self.assertGreaterEqual(SCAN_PARSER_REVISION,18)
