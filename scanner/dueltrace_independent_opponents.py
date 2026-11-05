@@ -106,8 +106,11 @@ def discover_independent_opponents(
             continue
         distinct = len(set(x for x in complete if x))
         ptr_unique = len({pointers[i] for i in indices})
-        left = bool(names.get(start - 1))
-        right = bool(names.get(start + OPP_COUNT))
+        # Neighbors with readable but unterminated prefixes also count as
+        # populated. A shifted window cannot redefine the first ID merely
+        # because a mod uses a different terminator byte.
+        left = bool(readable.get(start - 1))
+        right = bool(readable.get(start + OPP_COUNT))
         edge_isolated = not left and not right
         invalid_bytes = Counter(invalid[i] for i in indices
                                 if invalid.get(i) is not None)
@@ -148,7 +151,7 @@ def discover_independent_opponents(
     output["candidates"] = compact
     output["candidateCount"] = len(compact)
     output["candidateOpponentCount"] = max(
-        (x["recognized"] for x in hypotheses), default=0)
+        (max(x["recognized"], x["readablePrefixes"]) for x in hypotheses), default=0)
     if len(isolated) == 1:
         row, opponents = isolated[0]
         output["state"] = "layout_independente_unico_estrutural"
