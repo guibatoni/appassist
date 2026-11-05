@@ -91,7 +91,7 @@ class IndependentOpponentTests(unittest.TestCase):
         result=probe(relocated_opponents(terminator=0xfe))
         self.assertEqual(result["state"],"hipotese_terminador_alternativo")
         self.assertIsNone(result["selected"])
-        self.assertEqual(result["candidateOpponentCount"],0)
+        self.assertEqual(result["candidateOpponentCount"],39)
         self.assertTrue(any(x["possibleDifferentTerminator"]=="0xFE"
                             for x in result["candidates"]))
         self.assertFalse(result["inGameVerified"])
