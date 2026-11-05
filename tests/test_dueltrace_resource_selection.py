@@ -178,7 +178,7 @@ class PartialScanTests(unittest.TestCase):
         self.assertIsNone(result["executavel"])
         self.assertIsNone(result["hash_executavel"])
         self.assertEqual(result["wa_total_bytes"],0)
-        self.assertEqual(result["executavel_status"][:18],"Nenhum executável")
+        self.assertTrue(result["executavel_status"].startswith("Nenhum executável"))
         self.assertEqual(result["scan_parser_revision"],SCAN_PARSER_REVISION)
         self.assertTrue((Path(result["resultado_dir"])/"relatorio.json").is_file())
 

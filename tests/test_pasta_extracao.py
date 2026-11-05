@@ -68,7 +68,7 @@ class FolderContractTests(unittest.TestCase):
                 stale.write_text("id,nome\\n1,ERRADO",encoding="utf-8")
                 result2=process(rom,output,digest=result["sha256"])
                 self.assertFalse(stale.exists())
-                self.assertEqual(result2["status"],"incerto: estrutura não reconhecida; sem atribuições automáticas")
+                self.assertEqual(result2["status"],"incerto: estrutura não reconhecida; evidências parciais preservadas")
 
     def test_import_must_not_accept_outside_path(self):
         with tempfile.TemporaryDirectory() as directory:

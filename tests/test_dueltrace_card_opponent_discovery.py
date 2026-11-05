@@ -118,7 +118,7 @@ class RelocatedNameTableTests(unittest.TestCase):
         source=(ROOT/"scanner/scanner_multiiso.py").read_text(encoding="utf-8")
         self.assertIn("discover_relocated_name_table(",source)
         self.assertIn('info["name_pointer_discovery"]=',source)
-        self.assertIn("if not opponents or not cards:",source)
+        self.assertIn("if sl and (not opponents or not cards):",source)
         self.assertGreaterEqual(SCAN_PARSER_REVISION,9)
         self.assertNotIn("candidate['name']",source)
 
