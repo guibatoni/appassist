@@ -174,7 +174,7 @@ class PreviewInstallerTests(unittest.TestCase):
             self.assertTrue(result["started"])
             self.assertTrue((legacy/"alguma-configuracao.json").exists())
             self.assertIn("Confirm-ManagedBackup $legacy",scripts[0])
-            self.assertIn(str(home/"preview_updates"),scripts[0])
+            self.assertIn(str((home/"preview_updates").resolve()),scripts[0])
             self.assertNotIn(str(root/".app-staged-"),scripts[0])
 
     def test_updater_never_replaces_unknown_files_in_install_folder(self):
@@ -196,7 +196,7 @@ class PreviewInstallerTests(unittest.TestCase):
             self.assertTrue(result["started"])
             self.assertTrue((app/"minha-configuracao.json").exists())
             self.assertIn("$managed=@",scripts[0])
-            self.assertIn(str(home/"preview_updates"),scripts[0])
+            self.assertIn(str((home/"preview_updates").resolve()),scripts[0])
             self.assertIn("Start-Process -FilePath $exe -WorkingDirectory $old -PassThru",scripts[0])
             self.assertIn("Stop-Process -Id $pidOld -Force",scripts[0])
             self.assertIn("Remove-Item -LiteralPath $stage -Recurse -Force",scripts[0])
