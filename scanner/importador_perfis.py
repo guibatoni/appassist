@@ -120,7 +120,8 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
                 groups.append(rank)
 
     status = {
-        "cartas": "verificado" if card_ok else "pendente",
+        "cartas": ("verificado" if card_ok and opponent_ok else
+                    "extraidas_estruturalmente" if card_ok else "pendente"),
         "oponentes": "verificado" if opponent_ok else "pendente",
         "tabelas_drops": (
             "verificado" if weights_ok else
@@ -144,6 +145,10 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "exe_sha256": result.get("hash_executavel"),
         "wa_sha256": result.get("hash_wa"),
         "catalog_validation": identity_validation,
+        "candidate_catalogue": (result.get("candidate_catalogue")
+                                if isinstance(result.get("candidate_catalogue"),dict)
+                                else {"status":"nao_identificado","cards":0,"opponents":0}),
+        "name_discovery_status": str(result.get("nomes_status") or "")[:220],
         "source": "ISO/BIN fornecida pelo usuário; extração estritamente local",
         "verified": status,
         "supported_features": {
@@ -228,6 +233,10 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     }
     for warning in effect_warnings:
         payload["notes"].append(warning)
+    if card_ok and not opponent_ok:
+        payload["notes"].append(
+            "722 cartas estruturalmente coerentes; nomes de adversários ainda "
+            "não validados. IDs, efeitos e resultados devem ser conferidos em jogo.")
     if weights_structural_ok and not weights_ok:
         payload["notes"].append(
             f"{len(checks)} matrizes e {len(drops)} entradas de drops candidatas "
