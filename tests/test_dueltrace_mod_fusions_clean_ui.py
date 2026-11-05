@@ -23,7 +23,7 @@ class PublicUiContractTests(unittest.TestCase):
         self.assertIn("setExpandedSha(open?null:mod.sha256)",mods)
         self.assertIn("ChevronDown",mods)
         self.assertIn('rotate-180',mods)
-        self.assertIn('"Ativo"',mods)
+        self.assertIn('>Ativo</span>',mods)
         self.assertIn('"Ativar mod"',mods)
         self.assertIn('Atualizar dados',mods)
         self.assertIn('Adicionar mod',mods)
@@ -33,12 +33,13 @@ class PublicUiContractTests(unittest.TestCase):
             "rankMipsCandidates","rankOffset","Offset WA:","dropCandidateTables",
             "dropCandidateEntries","WA_MRG + SLUS","chosenExecutable",
             "chosenWa","waSelectionMethod","Ollama:","Arquivos indexados:",
-            "Evidências e próximas investigações","sha256.slice",
+            "Evidências e próximas investigações",
             "get_mod_scan_diagnostic","investigate(mod","rankBinaryVerified",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden,self.mods)
         # Os métodos de análise continuam no backend e não são expostos como UI.
+        self.assertNotIn(">{mod.sha256",self.mods)
         self.assertIn("api.scan_sources(mod.sha256)",self.mods)
         self.assertIn('mod.requiresReview',self.mods)
         self.assertNotIn("CardMatchPanel mods=",self.mods)
