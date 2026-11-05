@@ -94,7 +94,11 @@ class ScannerSpeedTests(unittest.TestCase):
             self.assertIsNone(self_obj["disc"].limit)
             # A busca de RANK exige o WA inteiro; o mock oferece só
             # 64 bytes, portanto o SHA integral não é atribuído.
-            self.assertEqual(info["wa_total_bytes"],64*1024*1024)
+            # A leitura truncada não é usada como WA, mesmo com nome
+            # convencional: o perfil segue parcial, sem dados falsos.
+            self.assertEqual(info["wa_total_bytes"],0)
+            self.assertEqual(info["wa_resource_selection"]["candidates"][0]["state"],
+                             "leitura_incompleta")
             self.assertFalse(info["wa_lido_integralmente"])
 
 

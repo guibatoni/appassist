@@ -162,6 +162,36 @@ Tudo acontece localmente. Cache e perfil separados por SHA-256 da imagem.
   removam cartas ou mudem a cardinalidade exigirão adaptadores novos.
   Rejeição do layout não prova ausência de cartas nem de atributos.
 
+## Etapa 2E — importação parcial e seleção segura de recursos (implementada)
+
+- O scanner não exige mais WA para aproveitar nomes, atributos e oponentes
+  extraídos de um executável válido. Ausência de WA deixa drops, artes e
+  tabelas de pontos indisponíveis, sem abortar a análise completa.
+- Também preserva inventário, SYSTEM.CNF, assinaturas, cabeçalhos e relatório
+  quando não existe um executável compatível.
+- `scanner/dueltrace_resource_selection.py` sonda **até 6 contêineres de
+  96 MiB**, identificados por nome, tamanho ou matrizes estruturais.
+- Cada candidato precisa ser lido por completo, com SHA-256, e testado
+  com as 117 matrizes de pesos. Um único resultado estrutural permite
+  selecionar o *arquivo*, mas não comprova os IDs de cartas, oponentes ou
+  etiquetas de RANK. Isso só ocorre na validação específica do perfil.
+- Duas alternativas estruturalmente consistentes com SHA diferente
+  continuam **ambíguas**. Cópias idênticas são equivalentes.
+  Contêineres com leitura truncada ou alterações entre duas leituras
+  são rejeitados, sem reutilizar conteúdo de varredura anterior.
+- Se nenhum contêiner tiver layout conhecido, somente uma alternativa
+  isolada ou um nome convencional único pode ser mantido para investigação
+  de outras estruturas; dados de drops permanecem indisponíveis.
+- Memória máxima simultânea evita armazenar seis arquivos inteiros:
+  o scanner mantém só digests e metadados até reler o vencedor.
+- `SCAN_PARSER_REVISION=13` reavalia caches criados por leitores antigos.
+- Testes cobrem WA ausente com cartas presentes, inventário sem EXE,
+  múltiplos candidatos válidos, cópias iguais, conteúdo truncado e
+  arquivo alterado durante a leitura.
+- **Importante:** reconhecer uma ISO parcialmente não significa que
+  todas as funcionalidades funcionem para aquele mod. Falhas de parsing
+  são preservadas como diagnóstico, sem criar dados de outros mods.
+
 ## Etapa 3 — parser de mod sem layout conhecido
 
 - Inferir deslocamentos com referências cruzadas MIPS, estrutura de ponteiros,

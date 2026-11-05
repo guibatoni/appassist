@@ -12,6 +12,7 @@ from dueltrace_card_opponent_discovery import discover_relocated_name_table
 from dueltrace_relocated_names import discover_relocated_name_layout
 from dueltrace_card_attribute_probe import discover_card_attribute_layout
 from dueltrace_mips_reference_probe import inspect_mips_table_references
+from dueltrace_resource_selection import inspect_resource_candidates
 from dueltrace_name_layout_probe import find_opponent_pointer_candidates
 from dueltrace_name_boundaries import inspect_opponent_name_boundaries, read_name_table
 
@@ -30,7 +31,7 @@ WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
-SCAN_PARSER_REVISION=12  # ligação interna de IDs/nome com atributos realocados
+SCAN_PARSER_REVISION=13  # aproveitamento parcial e seleção segura de contêineres
 
 
 def sha256(path:Path, progress=None):
@@ -490,18 +491,28 @@ def process(path,output,with_art=False,digest=None,progress=None):
             if name not in sl_names:
                 sl_names.append(name)
         wa_names,wa_source,size_matches=select_wa_candidates(disc.files)
-        if not wa_names:
-            structural=candidate_files_for_decoder(
-                info['layout_discovery'],role="recursos")
-            if structural:
-                wa_names=structural
-                wa_source="matrizes_2048_candidatas"
+        structural=candidate_files_for_decoder(
+            info['layout_discovery'],role="recursos")
+        resource_names=list(dict.fromkeys(wa_names+size_matches+structural))
+        # Não interromper a análise da ISO se WA for desconhecido: pode
+        # existir um executável com um catálogo utilizável independente.
+        from dueltrace_rank_system import CLASSIC_POOLS
+        resource=inspect_resource_candidates(
+            disc,resource_names,
+            decode_tables=lambda data:decode_drops(
+                data,RANKS if info['sha256']==X15_SHA else CLASSIC_POOLS),
+            preferred_names=wa_names)
+        wa=resource["selected_bytes"]
+        wa_names=[resource["source"]] if resource["source"] else []
+        wa_source=resource["method"]
+        info['wa_resource_selection']={
+            k:v for k,v in resource.items() if k!="selected_bytes"}
         info['wa_selecao_metodo']=wa_source
         info['wa_candidatos_por_tamanho']=size_matches[:12]
-        # Nome alterado é SÓ hipótese: os decoders ainda devem validar
-        # dados/offsets antes de habilitar cartas, artes e drops.
-        info['wa_nome_alternativo_nao_validado']=wa_source in (
-            "tamanho_identico_nao_validado","matrizes_2048_candidatas")
+        # Nenhum contêiner renomeado será tomado como WA confirmado apenas
+        # por suas 117 matrizes: identidade depende de cartas/oponentes.
+        info['wa_nome_alternativo_nao_validado']=(
+            bool(wa_names) and not wa_names[0].endswith("WA_MRG.MRG"))
         # Registrar candidatos alternativos para análise, mas não assumir
         # automaticamente que outro .MRG contém as tabelas de Forbidden Memories.
         info['executaveis_candidatos']=sl_names[:20]
@@ -511,50 +522,48 @@ def process(path,output,with_art=False,digest=None,progress=None):
             +size_matches
             +[row["name"] for row in info["layout_discovery"]["resources"]
               if row.get("dropArrayMatches",0)>=1]))[:20]
-        if not sl_names or not wa_names:
-            hint=('BOOT aponta para arquivo ausente do índice ISO9660.'
-                  if boot_candidate and boot_candidate not in disc.files else
-                  'BOOT identificado mas formato de recursos desconhecido.'
-                  if boot_candidate else
-                  'Nenhuma indicação BOOT utilizável.')
-            raise ValueError(
-                'Layout do mod ainda não reconhecido: '
-                f'executáveis candidatos={sl_names[:6]}, '
-                f'arquivos WA candidatos={info["wa_candidatos"][:6]}. '
-                +hint+' Os arquivos podem ter nomes ou contêineres diferentes. '
-                f'Indícios por tamanho: {size_matches[:4]} ({wa_source}).')
-        # O catálogo e as imagens exigem o WA até os pacotes de duelo.
-        # A extração profunda lê o WA completo, não apenas seu prefixo.
+        if not sl_names:
+            info['executavel_status']=(
+                'Nenhum executável compatível com PS-X EXE identificado; '
+                'mantidas apenas as evidências do índice ISO.')
+        if not wa_names:
+            info['wa_identificacao_obs']=(
+                'Nenhum contêiner WA identificado com segurança; '
+                'cartas e oponentes ainda podem ser extraídos do executável.')
+        # A ausência de um subsistema NÃO cancela a leitura dos demais.
+        # WA só será utilizado quando um candidato único for identificado.
         wa_required=max(
             WA_OPP_BASE+(OPP_COUNT-1)*WA_OPP_STEP+3*WA_RANK_STRIDE+WA_ARRAY_BYTES,
             ((CARD_COUNT-1)*WA_CARD_SECTORS+WA_CARD_SECTOR_START)*2048+0x2840,
             7475*2048+0x16D0+39*3*2048+200,
         )
         if progress:progress("Lendo executáveis candidatos do jogo",0,1)
-        selected_exe,sl,opponents,cards,nomes_status,exe_checks=(
-            select_known_executable_layout(disc,sl_names))
+        if sl_names:
+            selected_exe,sl,opponents,cards,nomes_status,exe_checks=(
+                select_known_executable_layout(disc,sl_names))
+        else:
+            selected_exe=None
+            sl=b""
+            opponents,cards=[],[]
+            nomes_status="Executável não identificado"
+            exe_checks=[]
         info['testes_executaveis']=exe_checks
-        info['executavel_selecionado_por_catalogo']=selected_exe!=sl_names[0]
-        if progress:progress("Lendo WA_MRG completo para localizar RANK",0,1)
-        wa_size=disc.files[wa_names[0]][1]
-        if wa_size>96*1024*1024:
-            raise ValueError('WA_MRG maior que 96 MiB: análise interrompida por segurança')
-        if wa_size<wa_required:
+        info['executavel_selecionado_por_catalogo']=bool(
+            sl_names and selected_exe!=sl_names[0])
+        if progress:progress("Analisando recursos da ISO",0,1)
+        wa_size=disc.files[wa_names[0]][1] if wa_names else 0
+        if wa and wa_size<wa_required:
             info['wa_incompleto_para_layout_x15']=True
-        # O RANK pode estar deslocado em outros mods. Sem a leitura integral,
-        # um scan sem artes ignorava os últimos 216 bytes do bloco conhecido
-        # e nunca conseguiria identificar tabelas realocadas.
-        wa=disc.get(wa_names[0])
         info['executavel']=selected_exe
-        info['hash_executavel']=hashlib.sha256(sl).hexdigest()
+        info['hash_executavel']=hashlib.sha256(sl).hexdigest() if sl else None
         from fm_rank_mips_evidence import inspect_mips_rank_routines
         info['rank_mips_evidence']=inspect_mips_rank_routines(sl)
         info['wa_prefix_bytes']=len(wa)
-        info['wa_total_bytes']=disc.files[wa_names[0]][1]
-        wa_sha=hashlib.sha256(wa).hexdigest()
+        info['wa_total_bytes']=wa_size
+        wa_sha=hashlib.sha256(wa).hexdigest() if wa else None
         info['hash_wa_prefix']=wa_sha
-        info['hash_wa']=wa_sha if len(wa)==wa_size else None
-        info['wa_lido_integralmente']=len(wa)==wa_size
+        info['hash_wa']=wa_sha if len(wa)==wa_size and wa else None
+        info['wa_lido_integralmente']=bool(wa and len(wa)==wa_size)
         if info['wa_nome_alternativo_nao_validado']:
             info['wa_identificacao_obs']=(
                 "Contêiner sem nome WA_MRG selecionado por tamanho ou "
@@ -567,7 +576,7 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['versao_conhecida']='Remaster X15 1.2.1' if info['sha256']==X15_SHA else 'desconhecida — não atribuir dados X15'
         if progress:progress("Decodificando cartas e adversários",0,1)
         info['nomes_status']=nomes_status
-        if not opponents or not cards:
+        if sl and (not opponents or not cards):
             # Descoberta limitada de tabela de nomes completa. Nenhuma
             # hipótese é promovida a cartas, oponentes ou drops neste passo.
             info["name_pointer_discovery"]=discover_relocated_name_table(
@@ -634,13 +643,13 @@ def process(path,output,with_art=False,digest=None,progress=None):
             else 'padrao_original_presumido')
         info['rotulos_ranks_confirmados']=info['sha256']==X15_SHA
         info['drops_status']=drop_status
-        info['drops_source']=wa_names[0]
+        info['drops_source']=wa_names[0] if wa_names else None
         if drops is not None:
             info['tabelas_drops']=len(drops['verificacao']);info['drops']=len(drops['drops'])
             for keyname,filename in [('drops','drops_por_oponente.csv'),('decks','decks.csv'),('verificacao','validacao_pesos.csv')]:write_csv(dest/filename,drops[keyname])
             info['codificacao_drops']=drops['codificacoes']
         if with_art:
-            if opponents:
+            if opponents and wa:
                 from fm_deep_assets import extract_asset_pack
                 pack=extract_asset_pack(wa,cards,dest,rom_sha256=info['sha256'],
                                         wa_name=wa_names[0])
@@ -656,11 +665,15 @@ def process(path,output,with_art=False,digest=None,progress=None):
                 info['artes_layout_confirmado_na_versao']=info['sha256']==X15_SHA
             else:
                 info['artes_extraidas']=0
-                info['artes_obs']="O scanner não reconheceu uma tabela de cartas compatível com a extração de artes."
+                info['artes_obs']=(
+                    "Sem contêiner de recursos único ou catálogo de cartas "
+                    "compatível; nenhuma arte inventada.")
         if opponents and drops:
             info['status']='validado: nomes e drops'
-        elif opponents:info['status']='parcial: nomes/cartas identificados; drops sem validação'
-        else:info['status']='incerto: estrutura não reconhecida; sem atribuições automáticas'
+        elif opponents:
+            info['status']='parcial: nomes/cartas identificados; drops sem validação'
+        else:
+            info['status']='incerto: estrutura não reconhecida; evidências parciais preservadas'
     except Exception as e:
         info['status']='erro/estrutura incompatível';info['problema']=str(e)
     finally:
