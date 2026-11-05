@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"scanner"))
@@ -18,7 +19,7 @@ from scanner_multiiso import (
 )
 from test_dueltrace_card_opponent_discovery import synthetic_executable
 from importador_perfis import analyse
-from auto_mods import report_level, supported_for_runtime
+from auto_mods import report_level, supported_for_runtime, ModCatalog, atomic_json
 
 
 def make_known_layout(*, opponents=True, attributes=True):
@@ -112,6 +113,44 @@ class IndependentCardTests(unittest.TestCase):
             self.assertEqual(report_level(profile),"parcial_revisar")
             self.assertTrue(supported_for_runtime(profile)["nomes_cartas"])
             self.assertFalse(supported_for_runtime(profile)["rank"])
+
+    def test_active_basic_profile_receives_validated_new_features_on_rescan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            rom=root/"partially_known.iso"
+            rom.write_bytes(b"S"*110000)
+            sha=hashlib.sha256(rom.read_bytes()).hexdigest()
+            catalog=ModCatalog(root/"home")
+            profile_path=catalog.home/"profiles"/sha[:16]/"profile.json"
+            basic={"rom_sha256":sha,"name":"Test mod",
+                   "verified":{"cartas":"pendente","oponentes":"pendente",
+                               "tabelas_drops":"pendente"},
+                   "supported_features":{"cards":False,"opponents":False,
+                                         "drops":False,"ranks":False,
+                                         "scoring":False,"fusions":False},
+                   "cards":[],"opponents":[]}
+            atomic_json(profile_path,basic)
+            with patch("auto_mods.import_rom",return_value=(basic,profile_path)):
+                catalog.analyse(rom)
+            old=catalog.activate(sha,acknowledge_uncertainty=True)
+            self.assertEqual(old["compatibility_mode"],"basic")
+            structural={**basic,"verified":{**basic["verified"],
+                         "cartas":"extraidas_estruturalmente"},
+                        "supported_features":{**basic["supported_features"],
+                                              "cards":True}}
+            def importer(*args,**kwargs):
+                atomic_json(profile_path,structural)
+                return structural,profile_path
+            with patch("auto_mods.import_rom",side_effect=importer):
+                updated=catalog.analyse(rom,force=True)
+            active=catalog.current()
+            self.assertEqual(updated["level"],"parcial_revisar")
+            self.assertEqual(active["sha256"],sha)
+            self.assertEqual(active["compatibility_mode"],"recognized")
+            self.assertTrue(active["features"]["nomes_cartas"])
+            self.assertFalse(active["features"]["drops_brutos"])
+            self.assertFalse(active["features"]["rank"])
+            self.assertFalse(active["features"]["pontuacao"])
 
     def test_parser_revision_forces_rescan(self):
         self.assertGreaterEqual(SCAN_PARSER_REVISION,17)
