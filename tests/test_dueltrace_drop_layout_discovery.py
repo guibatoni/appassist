@@ -20,7 +20,7 @@ from scanner_multiiso import (
 from dueltrace_drop_layout_discovery import discover_relocated_drops
 
 GROUPS=("GRUPO_1","GRUPO_2","GRUPO_3")
-WEIGHTS=struct.pack("<722H",2048,*([0]*721))
+WEIGHTS=struct.pack("<722H",1024,*([0]*720),1024)
 
 
 def fixture(layouts, *, mode="simple"):
@@ -34,8 +34,8 @@ def fixture(layouts, *, mode="simple"):
                 if mode=="simple":
                     wa[off:off+len(WEIGHTS)]=WEIGHTS
                 else:
-                    encoded=struct.pack("<722H",2512+2048*8,
-                                        *([2512]*721))
+                    encoded=struct.pack("<722H",2512+1024*8,
+                                        *([2512]*720),2512+1024*8)
                     wa[off:off+len(encoded)]=encoded
     return bytes(wa)
 
@@ -67,7 +67,7 @@ class RelocatedWATests(unittest.TestCase):
         tables,status=decode_drops(wa,GROUPS,
                  opp_base=base,opp_step=WA_OPP_STEP,rank_stride=WA_RANK_STRIDE)
         self.assertEqual(len(tables["verificacao"]),117)
-        self.assertEqual(len(tables["drops"]),117)
+        self.assertEqual(len(tables["drops"]),234)
         self.assertEqual(tables["drops"][0]["rank"],"GRUPO_1")
         self.assertEqual(tables["drops"][-1]["oponente_id"],39)
         self.assertNotEqual(tables["drops"][0]["source_offset"],
@@ -110,6 +110,21 @@ class RelocatedWATests(unittest.TestCase):
         found=probe(bytes(raw))
         self.assertEqual(found["state"],"nao_encontrado")
         self.assertIsNone(found["selected"])
+
+    def test_single_card_weight_2048_does_not_force_ambiguous_alignment(self):
+        base=WA_OPP_BASE+0x6000
+        wa=bytearray(fixture([(base,WA_OPP_STEP,WA_RANK_STRIDE)]))
+        sparse=struct.pack("<722H",2048,*([0]*721))
+        for oid in range(39):
+            for group in (1,2,3):
+                at=base+oid*WA_OPP_STEP+group*WA_RANK_STRIDE
+                wa[at:at+len(sparse)]=sparse
+        found=probe(bytes(wa))
+        # Um deslocamento anterior por 4 bytes também soma 2048.
+        # A identidade de cada carta precisa de evidência independente.
+        self.assertEqual(found["state"],"layouts_ambiguos")
+        self.assertIsNone(found["selected"])
+        self.assertFalse(found["validated"])
 
     def test_missing_and_bounded_scan_remain_unavailable(self):
         small=probe(b"\0"*10000)

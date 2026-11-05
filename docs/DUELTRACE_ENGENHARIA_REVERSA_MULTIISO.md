@@ -237,6 +237,32 @@ Tudo acontece localmente. Cache e perfil separados por SHA-256 da imagem.
   cardinalidades alteradas ou formatos sem tabela de 16 bits. Futuras
   famílias precisam de novos adaptadores e evidência real do mod.
 
+## Etapa 2H — matriz automática para testar coleções de mods
+
+- `scanner/dueltrace_compatibility_matrix.py` gera um JSON **local**
+  por SHA-256, com cobertura de cartas, oponentes, drops, fusões, artes,
+  descrições, efeitos e RANK, mais estados das sondagens ainda incertas.
+- Nunca exporta bytes de ROM/ISO, caminhos originais, dados RAM, nomes de
+  usuários ou as tabelas completas. Não chama Ollama nem envia dados à rede.
+- Pode analisar uma pasta inteira reaproveitando o cache do Catálogo:
+
+  ```powershell
+  python scanner/dueltrace_compatibility_matrix.py --folder "D:\MeusMods" --output "D:\Relatorios\compatibilidade.json"
+  ```
+
+- Também funciona sobre mods já importados, com `--home` apontando ao
+  diretório local de dados do DUELTRACE e sem `--folder`.
+- Níveis de compatibilidade não significam validação em duelo: o campo
+  `inGameValidationClaimed=false` permanece explícito. Só dados com SHA
+  correspondente entram no resumo.
+- Esse relatório é a entrada recomendada para comparar Original, X15,
+  GOG MOD 2.2, FM13 e variações legais fornecidas pelos usuários.
+- Mantenha tabelas originais de jogadores e dados de ROM fora do GitHub,
+  compartilhando apenas o JSON quando desejar revisar compatibilidade.
+- Em tabelas degeneradas com peso 2048 em uma única carta, múltiplos
+  alinhamentos de bytes podem parecer válidos. O parser **mantém ambiguidade**
+  em vez de assumir o primeiro offset encontrado.
+
 ## Etapa 3 — parser de mod sem layout conhecido
 
 - Inferir deslocamentos com referências cruzadas MIPS, estrutura de ponteiros,
