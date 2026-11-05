@@ -5,7 +5,7 @@ import { ArrowUpRight, CheckCircle2, Download, RefreshCw, ShieldAlert, X } from 
 import { desktopApi, type UpdateCheck } from "@/lib/desktop"
 
 /**
- * Consulta automática após abertura; instalação após consentimento para
+ * Consulta automática após abertura; um clique inicia a instalação para
  * release estável assinada OU Preview oficial com SHA-256 e identidade do build.
  * Não altera as proteções do Windows nem executa artefatos Actions diretamente.
  */
@@ -95,52 +95,28 @@ export function UpdateChecker() {
 
   const installOfficialUpdate = async () => {
     const api=desktopApi()
-    if (!api || installing) return
+    if(!api || installing) return
     setInstallFeedback(null)
     setInstalling(true)
     try {
-      // Atualiza o estado antes de oferecer a instalação e consulta os
-      // metadados novamente no backend ao iniciar o instalador.
+      // O próprio clique autoriza a instalação. Metadados são validados de novo.
       const fresh=await api.check_updates()
       setResult(fresh)
       setAutomaticNotice(fresh.updateAvailable)
-      if(fresh.automaticPreviewReady) {
-        if (!window.confirm(
-          "Instalar a Preview experimental do DUELTRACE? Este pacote NÃO possui "+
-          "assinatura digital. O GitHub publicou um hash SHA-256 e uma identidade "+
-          "de build, que serão conferidos antes da instalação. "+
-          "O aplicativo será fechado, atualizado e reiniciado. "+
-          "Você autoriza esta atualização de testes?"
-        )) return
-        const preview=await api.install_preview_update()
-        setInstallFeedback(preview.status)
-        if(preview.started)setAutomaticNotice(false)
-        return
-      }
-      if(fresh.automaticPortableReady) {
-        if(!window.confirm(
-          "Instalar a versão estável oficial do DUELTRACE sem assinatura digital? "+
-          "O ZIP publicado no GitHub será validado por SHA-256 e identidade "+
-          "de build antes de substituir o aplicativo. "+
-          "A versão anterior será preservada para recuperação."
-        ))return
-        const portable=await api.install_portable_update()
-        setInstallFeedback(portable.status)
-        if(portable.started)setAutomaticNotice(false)
-        return
-      }
-      if(!fresh.automaticInstallReady) {
+      let outcome:{started:boolean;status:string;version?:string}|null=null
+      if(fresh.automaticInstallReady) {
+        outcome=await api.install_signed_update()
+      } else if(fresh.automaticPortableReady) {
+        outcome=await api.install_portable_update()
+      } else if(fresh.automaticPreviewReady) {
+        outcome=await api.install_preview_update()
+      } else {
         setInstallFeedback(fresh.automaticInstallReason ||
           "Nenhum pacote de atualização aprovado está disponível.")
         return
       }
-      if (!window.confirm(
-        "Instalar a versão estável assinada do DUELTRACE encontrada no GitHub? "
-        +"Os dados locais serão mantidos; o Windows pode pedir confirmação."
-      )) return
-      const response=await api.install_signed_update()
-      setInstallFeedback(response.status)
-      if(response.started)setAutomaticNotice(false)
+      setInstallFeedback(outcome.status)
+      if(outcome.started)setAutomaticNotice(false)
     } catch(e) {
       setInstallFeedback(e instanceof Error ? e.message : "Não foi possível iniciar a atualização segura.")
     } finally {setInstalling(false)}
@@ -190,11 +166,11 @@ export function UpdateChecker() {
                   className="btn-gold mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50"
                   aria-label="Atualizar DUELTRACE automaticamente pelo GitHub">
                   <Download className="size-4"/>
-                  {installing?"Baixando e verificando atualização…":"Atualizar automaticamente pelo GitHub"}
+                  {installing?"Baixando e verificando atualização…":"Atualizar agora"}
                 </button>
                 <p className="mt-2 text-xs text-muted">
-                  ZIPs oficiais estáveis ou Preview podem ser instalados sem assinatura digital,
-                  após confirmação, verificação SHA-256 e identidade do build.
+                  O clique inicia a atualização na pasta atual, sem confirmação extra do aplicativo.
+                  Pacotes são verificados por SHA-256 e identidade do build antes da substituição.
                   Instalação assinada continua opcional quando disponível.
                 </p>
                 {installFeedback&&<p className="mt-2 text-xs text-gold" role="status">

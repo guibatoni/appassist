@@ -227,6 +227,9 @@ def unpack_preview_zip(archive: Path, directory: Path, info: dict) -> Path:
                 with z.open(entry) as src, target.open("xb") as dest:
                     while chunk:=src.read(1024*1024):
                         dest.write(chunk)
+        allowed={"DUELTRACE-WebUI.exe","_internal","LEIA-ME-SEGURANCA.txt"}
+        if any(child.name not in allowed for child in directory.iterdir()):
+            raise UnsafeUpdate("Pacote contém arquivos inesperados fora de _internal.")
         exe=directory/"DUELTRACE-WebUI.exe"
         manifest_candidates=[directory/"_internal"/BUILD_INFO_FILE,
                              directory/BUILD_INFO_FILE]
@@ -255,38 +258,62 @@ def _ps_quote(value: Path) -> str:
 
 def _powershell_replace_script(original: Path, staged: Path, backup: Path,
                                old_pid: int) -> str:
-    """Troca atômica de pastas depois da saída do processo atual, com rollback."""
+    """Troca somente arquivos gerenciados do app na pasta atual, com rollback."""
     old=_ps_quote(original)
     stage=_ps_quote(staged)
     prev=_ps_quote(backup)
-    original_name=original.name.replace("'","''")
     return f"""$ErrorActionPreference='Stop'
 $pidOld={old_pid}
 $old='{old}'
 $stage='{stage}'
 $backup='{prev}'
+$managed=@('DUELTRACE-WebUI.exe','_internal','LEIA-ME-SEGURANCA.txt')
 try {{
   Wait-Process -Id $pidOld -Timeout 90 -ErrorAction SilentlyContinue
   if (Get-Process -Id $pidOld -ErrorAction SilentlyContinue) {{ exit 20 }}
-  if (!(Test-Path -LiteralPath (Join-Path $stage 'DUELTRACE-WebUI.exe'))) {{ exit 21 }}
+  if (!(Test-Path -LiteralPath (Join-Path $stage 'DUELTRACE-WebUI.exe') -PathType Leaf) -or
+      !(Test-Path -LiteralPath (Join-Path $stage '_internal') -PathType Container)) {{ exit 21 }}
   if (Test-Path -LiteralPath $backup) {{
-    if (!(Test-Path -LiteralPath (Join-Path $backup 'DUELTRACE-WebUI.exe')) -or
-        !(Test-Path -LiteralPath (Join-Path $backup '_internal'))) {{ exit 22 }}
-    $allowed=@('DUELTRACE-WebUI.exe','_internal','LEIA-ME-SEGURANCA.txt')
-    $unknown=@(Get-ChildItem -LiteralPath $backup -Force | Where-Object {{ $allowed -notcontains $_.Name }})
+    if (!(Test-Path -LiteralPath (Join-Path $backup 'DUELTRACE-WebUI.exe') -PathType Leaf) -or
+        !(Test-Path -LiteralPath (Join-Path $backup '_internal') -PathType Container)) {{ exit 22 }}
+    $unknown=@(Get-ChildItem -LiteralPath $backup -Force | Where-Object {{ $managed -notcontains $_.Name }})
     if ($unknown.Count -gt 0) {{ exit 26 }}
     Remove-Item -LiteralPath $backup -Recurse -Force
   }}
-  Rename-Item -LiteralPath $old -NewName '{backup.name.replace("'","''")}'
+  New-Item -ItemType Directory -Path $backup -ErrorAction Stop | Out-Null
+  $installed=@()
   try {{
-    Rename-Item -LiteralPath $stage -NewName '{original_name}'
-    Start-Process -FilePath (Join-Path $old 'DUELTRACE-WebUI.exe') -WorkingDirectory $old
+    foreach ($name in $managed) {{
+      $target=Join-Path $old $name
+      if (Test-Path -LiteralPath $target) {{
+        Move-Item -LiteralPath $target -Destination (Join-Path $backup $name) -ErrorAction Stop
+      }}
+    }}
+    foreach ($name in $managed) {{
+      $source=Join-Path $stage $name
+      if (Test-Path -LiteralPath $source) {{
+        Move-Item -LiteralPath $source -Destination (Join-Path $old $name) -ErrorAction Stop
+        $installed+= $name
+      }}
+    }}
+    Start-Process -FilePath (Join-Path $old 'DUELTRACE-WebUI.exe') -WorkingDirectory $old -ErrorAction Stop
   }} catch {{
-    if ((Test-Path -LiteralPath $old) -and !(Test-Path -LiteralPath $backup)) {{ exit 23 }}
-    if (Test-Path -LiteralPath $old) {{ Rename-Item -LiteralPath $old -NewName '{staged.name.replace("'","''")}' }}
-    Rename-Item -LiteralPath $backup -NewName '{original_name}'
+    foreach ($name in $installed) {{
+      $installedFile=Join-Path $old $name
+      if (Test-Path -LiteralPath $installedFile) {{
+        Remove-Item -LiteralPath $installedFile -Recurse -Force -ErrorAction Stop
+      }}
+    }}
+    foreach ($name in $managed) {{
+      $previous=Join-Path $backup $name
+      if (Test-Path -LiteralPath $previous) {{
+        Move-Item -LiteralPath $previous -Destination (Join-Path $old $name) -ErrorAction Stop
+      }}
+    }}
+    try {{ Start-Process -FilePath (Join-Path $old 'DUELTRACE-WebUI.exe') -WorkingDirectory $old }} catch {{}}
     exit 24
   }}
+  if (Test-Path -LiteralPath $stage) {{ Remove-Item -LiteralPath $stage -Recurse -Force }}
 }} catch {{ exit 25 }}
 """
 
@@ -303,10 +330,12 @@ def stage_preview_update(*, info: dict, data_home: Path,
         raise UnsafeUpdate("Instalação Windows não reconhecida.")
     home=Path(data_home).resolve()
     original=executable.parent
-    if home==original or home.is_relative_to(original):
-        raise UnsafeUpdate("A pasta do programa contém dados pessoais. Atualização bloqueada.")
-    if not original.is_dir() or original.is_symlink():
-        raise UnsafeUpdate("Pasta de instalação inválida.")
+    if home==original/"_internal" or home.is_relative_to(original/"_internal"):
+        raise UnsafeUpdate("Os dados pessoais estão dentro de _internal; mova-os para fora antes de atualizar.")
+    if (not original.is_dir() or original.is_symlink() or
+            any((original / name).is_symlink() for name in
+                ("DUELTRACE-WebUI.exe","_internal","LEIA-ME-SEGURANCA.txt"))):
+        raise UnsafeUpdate("Pasta de instalação inválida ou contém links simbólicos.")
     backup=original.parent/("."+original.name+"-backup")
     if backup.is_symlink() or (backup.exists() and (
             not backup.is_dir() or
@@ -336,7 +365,7 @@ def stage_preview_update(*, info: dict, data_home: Path,
             launcher(script)
         return {"started":True,"status":(
             f"DUELTRACE v{info['version']} verificado. O aplicativo será fechado, "
-            "substituído e reaberto. Uma cópia anterior será preservada."),
+            "atualizado na mesma pasta e reaberto, preservando dados pessoais. Backup mantido."),
             "version":info["version"]}
     except BaseException:
         import shutil

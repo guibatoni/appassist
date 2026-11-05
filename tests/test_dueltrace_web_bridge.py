@@ -117,6 +117,16 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             protected.get_drops("not-authorized",2,groups[1],"",0,20)
         self.assertEqual(protected.get_drops("x"*64,2,groups[1],"",0,20)["total"],1)
+        by_card=self.bridge.get_card_drop_sources(2)
+        self.assertTrue(by_card["available"])
+        self.assertEqual(by_card["cardId"],2)
+        self.assertEqual(by_card["romSha"],self.sha)
+        self.assertEqual(by_card["total"],39)
+        self.assertEqual(len(by_card["rows"]),39)
+        self.assertTrue(all(r["cardId"]==2 for r in by_card["rows"]))
+        with self.assertRaises(PermissionError):
+            protected.get_card_drop_sources("invalid",2)
+        self.assertEqual(protected.get_card_drop_sources("x"*64,2)["total"],39)
         with self.assertRaises(PermissionError):
             protected.record_duel_result("invalid",2,"Z-POW",2,95)
         evidence=protected.record_duel_result("x"*64,2,"S-POW",2,95)
@@ -421,6 +431,7 @@ class BridgeTests(unittest.TestCase):
             ("get_hand",()),
             ("get_fusions",("",0,10)),
             ("get_drops",(0,"","",0,10)),
+            ("get_card_drop_sources",(1,)),
             ("get_duel_evidence",()),
             ("get_rank_trace_status",()),
             ("export_rank_audit",()),

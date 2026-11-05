@@ -31,7 +31,7 @@ from dueltrace_rank_profile_live import (
     validate_live_rank_binding, project_rank_for_mod, x15_compatible_runtime
 )
 from epsxe_launcher import launch_epsxe
-from dueltrace_drops import get_drop_catalog
+from dueltrace_drops import get_drop_catalog, get_card_drop_sources
 from dueltrace_drop_rank_evidence import rank_drop_report
 from dueltrace_rank_system import available_ranks,rank_system,rank_label_for_existing_score
 from dueltrace_mips_duel_trace import inspect_duel_mips_trace, MAX_TRACE_BYTES
@@ -775,6 +775,16 @@ class DueltraceWebBridge:
                 profile, opponent_id=opponent_id, group=group,
                 query=query, offset=offset, limit=limit,
                 sort=sort,card_type=card_type,rank=rank)
+
+    def get_card_drop_sources(self, card_id):
+        """Consulta somente o perfil da ISO ativa."""
+        with self._lock:
+            active, _entry, profile = self._active()
+            result = get_card_drop_sources(profile, card_id)
+            if result["romSha"] != active.get("sha256"):
+                return {**result, "available": False, "rows": [], "total": 0,
+                        "status": "Perfil não corresponde à ISO ativa"}
+            return result
 
     def export_rank_audit(self):
         """Exporta evidências numéricas locais para validar uma ISO no Windows."""

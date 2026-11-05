@@ -98,6 +98,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_drops(opponent_id,group,query,offset,limit,sort,card_type,rank)
 
+    def get_card_drop_sources(self, credential, card_id):
+        self._authorize(credential)
+        return self._bridge.get_card_drop_sources(card_id)
+
     def export_rank_audit(self, credential):
         self._authorize(credential)
         return self._bridge.export_rank_audit()

@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic, CardMatchResult, CardAIMatchReport, ModScanDiagnostic} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -799,6 +799,60 @@ function Mods({mods,sha,onRefresh,configured}:{
   </>
 }
 
+function CardDropSourcesPanel({sha,card}:{sha:string|null;card:LocalCard}) {
+  const [result,setResult]=useState<CardDropSources|null>(null)
+  const [loading,setLoading]=useState(true)
+  const [error,setError]=useState<string|null>(null)
+
+  useEffect(()=>{
+    let mounted=true
+    setResult(null)
+    setError(null)
+    const api=desktopApi()
+    if(!api||!sha){setLoading(false);return()=>{mounted=false}}
+    setLoading(true)
+    void api.get_card_drop_sources(card.id).then(data=>{
+      if(mounted)setResult(data)
+    }).catch(e=>{
+      if(mounted)setError(e instanceof Error?e.message:"Consulta de drops indisponível.")
+    }).finally(()=>{if(mounted)setLoading(false)})
+    return()=>{mounted=false}
+  },[sha,card.id])
+
+  const verifiedResponse=result?.romSha===sha && result.cardId===card.id
+  const rows=verifiedResponse&&result.available?result.rows:[]
+  return <section className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3" aria-label="Onde conseguir esta carta">
+    <h3 className="mb-2 font-semibold text-gold">Onde conseguir esta carta</h3>
+    {loading?<p className="text-sm text-muted" role="status">Consultando drops da ISO ativa…</p>:
+      error?<p className="text-sm text-danger" role="alert">{error}</p>:
+      !verifiedResponse?<p className="text-sm text-muted">Aguardando dados da ISO ativa.</p>:
+      !result.available?<p className="text-sm text-muted">Drops ainda não identificados neste mod. {result.status}</p>:
+      rows.length===0?<p className="text-sm text-muted">Nenhum oponente confirmado para esta carta.</p>:
+      <div className="space-y-2">
+        <p className="text-xs text-primary">{result.total} possibilidade(s), ordenadas por chance de drop.</p>
+        {!result.rankLabelsVerified&&<p className="text-xs text-gold">
+          RANKs agrupados segundo o padrão original; confira o mapeamento em duelo neste mod.
+        </p>}
+        <ul className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
+          {rows.map(row=><li key={row.opponentId+"-"+row.group}
+            className="flex items-start justify-between gap-2 rounded-md border border-line/50 bg-panel-strong/50 p-2">
+            <div className="min-w-0">
+              <p className="break-words text-sm font-semibold text-white">#{row.opponentId} {row.opponentName}</p>
+              <p className="text-xs text-muted">{row.eligibleRanks.join(" / ")} · {row.groupLabel}</p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-sm font-semibold tabular-nums text-primary">
+                {row.chancePercent.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:4})}%
+              </p>
+              <p className="text-[11px] text-muted">{row.weight}/2048</p>
+            </div>
+          </li>)}
+        </ul>
+        <p className="text-[11px] text-muted">Fonte: {result.source}. Pesos extraídos da ISO ativa; não são garantia de obtenção.</p>
+      </div>}
+  </section>
+}
+
 function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
   const [search,setSearch]=useState("")
   const [sort,setSort]=useState<"id"|"atk"|"def"|"type"|"name">("id")
@@ -883,7 +937,8 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
                 Mecânica no duelo ainda não confirmada — descrição não é prova de execução.
               </p>}
               {chosen.effectSource&&<p className="mt-1 break-all text-xs text-muted">Fonte: {chosen.effectSource}</p>}
-            </div></>:<Empty>Selecione uma carta.</Empty>}
+            </div>
+            <CardDropSourcesPanel key={(sha??"sem-iso")+"-"+chosen.id} sha={sha} card={chosen}/></>:<Empty>Selecione uma carta.</Empty>}
         </aside>
       </div>
     </section>

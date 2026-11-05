@@ -399,6 +399,18 @@ export type DropsPage = {
   rankPoints: RankPoints | Record<string,never>
 }
 
+export type CardDropSources = {
+  romSha: string | null
+  cardId: number
+  available: boolean
+  status: string
+  total: number
+  rows: DropRow[]
+  rankSystem: "x15" | "classic" | null
+  rankLabelsVerified: boolean
+  source: string
+}
+
 export type RankDiagnostic = {
   readyForLiveRead: boolean
   code: string
@@ -538,6 +550,7 @@ export interface DesktopAPI {
   get_rank_comparison(): Promise<RankComparison>
   get_fusions(query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
   get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
+  get_card_drop_sources(cardId: number): Promise<CardDropSources>
   get_rank_trace_status(): Promise<MipsTraceResult>
   import_rank_trace(duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(): Promise<RankAuditExport>
@@ -570,6 +583,7 @@ interface ProtectedNativeAPI {
   get_rank_comparison(token: string): Promise<RankComparison>
   get_fusions(token: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
   get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
+  get_card_drop_sources(token: string, cardId: number): Promise<CardDropSources>
   get_rank_trace_status(token: string): Promise<MipsTraceResult>
   import_rank_trace(token: string, duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(token: string): Promise<RankAuditExport>
@@ -617,6 +631,7 @@ export function desktopApi(): DesktopAPI | null {
     get_rank_comparison: () => native.get_rank_comparison(token),
     get_fusions: (query, offset, limit, sort, cardType) => native.get_fusions(token, query, offset, limit, sort, cardType),
     get_drops: (opponentId, group, query, offset, limit, sort, cardType, rank) => native.get_drops(token, opponentId, group, query, offset, limit, sort, cardType, rank),
+    get_card_drop_sources: (cardId) => native.get_card_drop_sources(token, cardId),
     get_rank_trace_status: () => native.get_rank_trace_status(token),
     import_rank_trace: (duelId) => native.import_rank_trace(token, duelId),
     export_rank_audit: () => native.export_rank_audit(token),

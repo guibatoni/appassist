@@ -29,8 +29,10 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
                      group: str = "", query: str = "",
                      offset: int = 0, limit: int = 36,
                      sort: str = "id", card_type: str = "",
-                     rank: str = "") -> dict:
+                     rank: str = "", card_id: int = 0) -> dict:
     validate_sort(sort,card_type)
+    if type(card_id) is not int or not 0 <= card_id <= MAX_CARDS:
+        raise ValueError("Carta inválida")
     if type(opponent_id) is not int or not 0 <= opponent_id <= EXPECTED_OPPONENTS:
         raise ValueError("Oponente inválido")
     if type(rank) is not str or len(rank)>32:
@@ -156,6 +158,8 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
     text = query.strip().casefold()
     matched = []
     for oid, raw_rank, cid, weight, source_offset in checked:
+        if card_id and cid != card_id:
+            continue
         if opponent_id and oid != opponent_id:
             continue
         if group and raw_rank != group:
@@ -216,3 +220,35 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         "cardTypes": card_types,
         "rankLabelsVerified": is_known,
     }
+
+def get_card_drop_sources(profile: dict | None, card_id: int) -> dict:
+    """Exibe todos os drops validados da carta na ISO ativa, com paginação interna."""
+    if type(card_id) is not int or not 1 <= card_id <= MAX_CARDS:
+        raise ValueError("Carta inválida")
+    first = get_drop_catalog(profile, card_id=card_id, offset=0, limit=100)
+    rom_sha = profile.get("rom_sha256") if isinstance(profile, dict) else None
+    result = {
+        "romSha": rom_sha if isinstance(rom_sha, str) else None,
+        "cardId": card_id,
+        "available": first["available"],
+        "status": first["status"],
+        "total": first["total"],
+        "rows": [],
+        "rankSystem": first["rankSystem"],
+        "rankLabelsVerified": first["rankLabelsVerified"],
+        "source": first["source"],
+    }
+    if not first["available"]:
+        return result
+    rows = list(first["rows"])
+    if first["total"] > len(rows):
+        second = get_drop_catalog(profile, card_id=card_id, offset=100, limit=100)
+        if not second["available"] or second["total"] != first["total"]:
+            return {**result, "available": False, "status": "Perfil alterado durante a consulta"}
+        rows.extend(second["rows"])
+    if len(rows) != first["total"]:
+        return {**result, "available": False, "status": "Resultado incompleto"}
+    rows.sort(key=lambda row: (
+        -row["chancePercent"], row["opponentName"].casefold(), row["opponentId"], row["groupLabel"].casefold()
+    ))
+    return {**result, "rows": rows}

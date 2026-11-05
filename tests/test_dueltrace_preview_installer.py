@@ -171,6 +171,28 @@ class PreviewInstallerTests(unittest.TestCase):
                     current_executable=exe,downloader=lambda *a:None,
                     unpacker=lambda *a:None,launcher=lambda *a:None)
 
+    def test_updater_never_replaces_unknown_files_in_install_folder(self):
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)
+            app=base/"DUELTRACE-WebUI"; app.mkdir()
+            exe=app/"DUELTRACE-WebUI.exe"; exe.write_bytes(b"MZ")
+            (app/"minha-configuracao.json").write_text('{"favoritos":[1]}')
+            home=app/"dados-locais"; home.mkdir()
+            info=updater.select_preview_release(release(),"0.8.4")
+            scripts=[]
+            def prepare(_archive,stage,_info):
+                stage.mkdir()
+                (stage/"DUELTRACE-WebUI.exe").write_bytes(b"MZ")
+            result=updater.stage_preview_update(
+                info=info,data_home=home,current_executable=exe,
+                downloader=lambda *_:None,unpacker=prepare,launcher=scripts.append)
+            self.assertTrue(result["started"])
+            self.assertTrue((app/"minha-configuracao.json").exists())
+            self.assertIn("$managed=@",scripts[0])
+            self.assertIn("Move-Item -LiteralPath $target",scripts[0])
+            self.assertNotIn("Rename-Item -LiteralPath $old",scripts[0])
+
     def test_known_backup_can_rotate_for_multiple_updates(self):
         with tempfile.TemporaryDirectory() as td:
             base=Path(td)
@@ -213,7 +235,9 @@ class PreviewInstallerTests(unittest.TestCase):
             self.assertTrue(result["started"])
             self.assertFalse(list(home.glob("preview_updates/*.zip")))
             self.assertIn("Wait-Process",scripts[0])
-            self.assertIn("Rename-Item",scripts[0])
+            self.assertIn("Move-Item -LiteralPath $target",scripts[0])
+            self.assertIn("foreach ($name in $managed)",scripts[0])
+            self.assertNotIn("Rename-Item -LiteralPath $old",scripts[0])
             self.assertIn("Start-Process",scripts[0])
             self.assertTrue(exe.exists())  # processo atual não é alterado imediatamente
 

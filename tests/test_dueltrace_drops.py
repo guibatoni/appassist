@@ -109,6 +109,33 @@ class DropCatalogTests(unittest.TestCase):
         p["supported_features"]["cards"]=False
         self.assertFalse(get_drop_catalog(p)["available"])
 
+    def test_card_sources_use_exact_id_and_return_all_117_rows(self):
+        from dueltrace_drops import get_card_drop_sources
+        p=fake_profile()
+        for record in p["drops"]:
+            record["card_id"]=1
+        p["cards"][11]["name"]="Carta 1 falsa com ID 12"
+        result=get_card_drop_sources(p,1)
+        self.assertTrue(result["available"])
+        self.assertEqual(result["total"],117)
+        self.assertEqual(len(result["rows"]),117)
+        self.assertTrue(all(r["cardId"]==1 for r in result["rows"]))
+        self.assertEqual(result["romSha"],p["rom_sha256"])
+        self.assertEqual(get_card_drop_sources(p,12)["total"],0)
+
+    def test_card_sources_do_not_promote_unverified_or_foreign_iso(self):
+        from dueltrace_drops import get_card_drop_sources
+        p=fake_profile()
+        self.assertEqual(get_card_drop_sources(p,2)["total"],39)
+        p["drops_provenance"]={"rom_sha256":"b"*64}
+        self.assertFalse(get_card_drop_sources(p,2)["available"])
+        p=fake_profile()
+        p["supported_features"]["drops"]=False
+        self.assertFalse(get_card_drop_sources(p,2)["available"])
+        for bad in (-1,0,723,True,1.2,"2"):
+            with self.subTest(card_id=bad),self.assertRaises(ValueError):
+                get_card_drop_sources(p,bad)
+
     def test_malicious_or_bad_filter_rejected(self):
         p=fake_profile()
         for oid in (-1,40,1.2,True):
