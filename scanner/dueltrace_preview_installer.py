@@ -257,65 +257,176 @@ def _ps_quote(value: Path) -> str:
 
 
 def _powershell_replace_script(original: Path, staged: Path, backup: Path,
-                               old_pid: int) -> str:
-    """Troca somente arquivos gerenciados do app na pasta atual, com rollback."""
-    old=_ps_quote(original)
-    stage=_ps_quote(staged)
-    prev=_ps_quote(backup)
-    return f"""$ErrorActionPreference='Stop'
-$pidOld={old_pid}
-$old='{old}'
-$stage='{stage}'
-$backup='{prev}'
+                               old_pid: int, legacy_backup: Path | None = None) -> str:
+    """Substitui componentes dentro da pasta atual e relança o mesmo EXE.
+
+    Usa a pasta de dados local para staging, log e rollback, nunca uma segunda
+    pasta de instalação. O processo anterior precisa terminar antes da troca.
+    """
+    paths = {
+        "@@OLD@@": _ps_quote(original),
+        "@@STAGE@@": _ps_quote(staged),
+        "@@BACKUP@@": _ps_quote(backup),
+        "@@LEGACY@@": _ps_quote(legacy_backup) if legacy_backup else "",
+        "@@LOG@@": _ps_quote(backup.parent / "ultima-atualizacao.log"),
+        "@@PID@@": str(old_pid),
+    }
+    script = r"""$ErrorActionPreference='Stop'
+$old='@@OLD@@'
+$stage='@@STAGE@@'
+$backup='@@BACKUP@@'
+$legacy='@@LEGACY@@'
+$log='@@LOG@@'
+$pidOld=@@PID@@
 $managed=@('DUELTRACE-WebUI.exe','_internal','LEIA-ME-SEGURANCA.txt')
-try {{
-  Wait-Process -Id $pidOld -Timeout 90 -ErrorAction SilentlyContinue
-  if (Get-Process -Id $pidOld -ErrorAction SilentlyContinue) {{ exit 20 }}
+$exe=Join-Path $old 'DUELTRACE-WebUI.exe'
+$installed=@()
+$moved=@()
+$newProcess=$null
+$restarted=$false
+
+function Write-UpdateLog([string]$message) {
+  try {
+    Add-Content -LiteralPath $log -Value ("{0:u} {1}" -f (Get-Date),$message) -Encoding UTF8
+  } catch {}
+}
+
+function Confirm-ManagedBackup([string]$folder) {
+  if (!(Test-Path -LiteralPath $folder -PathType Container)) { return $false }
+  if (!(Test-Path -LiteralPath (Join-Path $folder 'DUELTRACE-WebUI.exe') -PathType Leaf)) { return $false }
+  if (!(Test-Path -LiteralPath (Join-Path $folder '_internal') -PathType Container)) { return $false }
+  foreach ($item in (Get-ChildItem -LiteralPath $folder -Force)) {
+    if ($managed -notcontains $item.Name -or
+        ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { return $false }
+  }
+  return $true
+}
+
+try {
+  Write-UpdateLog "Preparando a atualização na pasta original."
+  if (!(Test-Path -LiteralPath $old -PathType Container)) { throw 'Pasta original ausente.' }
   if (!(Test-Path -LiteralPath (Join-Path $stage 'DUELTRACE-WebUI.exe') -PathType Leaf) -or
-      !(Test-Path -LiteralPath (Join-Path $stage '_internal') -PathType Container)) {{ exit 21 }}
-  if (Test-Path -LiteralPath $backup) {{
-    if (!(Test-Path -LiteralPath (Join-Path $backup 'DUELTRACE-WebUI.exe') -PathType Leaf) -or
-        !(Test-Path -LiteralPath (Join-Path $backup '_internal') -PathType Container)) {{ exit 22 }}
-    $unknown=@(Get-ChildItem -LiteralPath $backup -Force | Where-Object {{ $managed -notcontains $_.Name }})
-    if ($unknown.Count -gt 0) {{ exit 26 }}
-    Remove-Item -LiteralPath $backup -Recurse -Force
-  }}
+      !(Test-Path -LiteralPath (Join-Path $stage '_internal') -PathType Container)) {
+    throw 'Pacote de atualização incompleto.'
+  }
+  if (Test-Path -LiteralPath $backup) { throw 'Backup temporário já existe.' }
+
+  # Esperar o encerramento normal da janela e do processo antigo.
+  Wait-Process -Id $pidOld -Timeout 30 -ErrorAction SilentlyContinue
+  $still=Get-Process -Id $pidOld -ErrorAction SilentlyContinue
+  if ($null -ne $still) {
+    # Só força o encerramento se o PID ainda pertence a este EXE exato.
+    $runningPath=$null
+    try { $runningPath=$still.Path } catch {}
+    if ([string]::IsNullOrWhiteSpace($runningPath) -or
+        !([string]::Equals([IO.Path]::GetFullPath($runningPath),
+                          [IO.Path]::GetFullPath($exe),
+                          [StringComparison]::OrdinalIgnoreCase))) {
+      throw 'Processo antigo ainda aberto e identidade não confirmada.'
+    }
+    Write-UpdateLog "Janela encerrada mas processo persistiu; finalizando somente o DUELTRACE."
+    Stop-Process -Id $pidOld -Force -ErrorAction Stop
+    Wait-Process -Id $pidOld -Timeout 10 -ErrorAction SilentlyContinue
+    if (Get-Process -Id $pidOld -ErrorAction SilentlyContinue) {
+      throw 'Processo antigo continua bloqueando os arquivos.'
+    }
+  }
   New-Item -ItemType Directory -Path $backup -ErrorAction Stop | Out-Null
-  $installed=@()
-  try {{
-    foreach ($name in $managed) {{
+  try {
+    # Backup e substituição de itens gerenciados; arquivos pessoais não são tocados.
+    foreach ($name in $managed) {
       $target=Join-Path $old $name
-      if (Test-Path -LiteralPath $target) {{
+      if (Test-Path -LiteralPath $target) {
         Move-Item -LiteralPath $target -Destination (Join-Path $backup $name) -ErrorAction Stop
-      }}
-    }}
-    foreach ($name in $managed) {{
+        $moved+= $name
+      }
+    }
+    foreach ($name in $managed) {
       $source=Join-Path $stage $name
-      if (Test-Path -LiteralPath $source) {{
+      if (Test-Path -LiteralPath $source) {
         Move-Item -LiteralPath $source -Destination (Join-Path $old $name) -ErrorAction Stop
         $installed+= $name
-      }}
-    }}
-    Start-Process -FilePath (Join-Path $old 'DUELTRACE-WebUI.exe') -WorkingDirectory $old -ErrorAction Stop
-  }} catch {{
-    foreach ($name in $installed) {{
-      $installedFile=Join-Path $old $name
-      if (Test-Path -LiteralPath $installedFile) {{
-        Remove-Item -LiteralPath $installedFile -Recurse -Force -ErrorAction Stop
-      }}
-    }}
-    foreach ($name in $managed) {{
+      }
+    }
+    if (!(Test-Path -LiteralPath $exe -PathType Leaf) -or
+        !(Test-Path -LiteralPath (Join-Path $old '_internal') -PathType Container)) {
+      throw 'O patch não instalou os componentes necessários.'
+    }
+    # -PassThru permite verificar que o aplicativo novo realmente abriu.
+    $newProcess=Start-Process -FilePath $exe -WorkingDirectory $old -PassThru -ErrorAction Stop
+    Start-Sleep -Seconds 3
+    $newProcess.Refresh()
+    if ($newProcess.HasExited) { throw 'O executável atualizado fechou durante a inicialização.' }
+    $restarted=$true
+    Write-UpdateLog "Atualização aplicada e aplicativo reiniciado no mesmo caminho."
+  } catch {
+    Write-UpdateLog ("Falha na substituição/reinício: " + $_.Exception.Message)
+    if ($null -ne $newProcess) {
+      try {
+        $newProcess.Refresh()
+        if (!$newProcess.HasExited) { Stop-Process -Id $newProcess.Id -Force -ErrorAction Stop }
+      } catch {}
+    }
+    foreach ($name in $installed) {
+      $newFile=Join-Path $old $name
+      if (Test-Path -LiteralPath $newFile) {
+        Remove-Item -LiteralPath $newFile -Recurse -Force -ErrorAction Stop
+      }
+    }
+    foreach ($name in $moved) {
       $previous=Join-Path $backup $name
-      if (Test-Path -LiteralPath $previous) {{
+      if (Test-Path -LiteralPath $previous) {
         Move-Item -LiteralPath $previous -Destination (Join-Path $old $name) -ErrorAction Stop
-      }}
-    }}
-    try {{ Start-Process -FilePath (Join-Path $old 'DUELTRACE-WebUI.exe') -WorkingDirectory $old }} catch {{}}
-    exit 24
-  }}
-  if (Test-Path -LiteralPath $stage) {{ Remove-Item -LiteralPath $stage -Recurse -Force }}
-}} catch {{ exit 25 }}
+      }
+    }
+    if (Test-Path -LiteralPath $exe -PathType Leaf) {
+      try {
+        Start-Process -FilePath $exe -WorkingDirectory $old -ErrorAction Stop | Out-Null
+        Write-UpdateLog "Rollback concluído; versão anterior reiniciada."
+      } catch {
+        Write-UpdateLog ("Rollback efetuado; reinício antigo falhou: "+$_.Exception.Message)
+      }
+    }
+  }
+} catch {
+  Write-UpdateLog ("Falha antes da substituição: "+$_.Exception.Message)
+} finally {
+  # Staging contém apenas arquivos do pacote verificado e não é usado após a troca.
+  if (Test-Path -LiteralPath $stage) {
+    try { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction Stop }
+    catch { Write-UpdateLog "Pasta temporária não pôde ser limpa." }
+  }
+  if ($restarted) {
+    # Pastas temporárias de versões antigas também são realocadas para AppData.
+    # Preservar conteúdo e somente tocar padrões gerados pelo instalador antigo.
+    $parent=Split-Path $old -Parent
+    $legacyPrefix='.' + (Split-Path $old -Leaf) + '-staged-'
+    $possible=@(Get-ChildItem -LiteralPath $parent -Directory -Force -ErrorAction SilentlyContinue)
+    foreach ($candidate in $possible) {
+      if (!$candidate.Name.StartsWith($legacyPrefix,[StringComparison]::OrdinalIgnoreCase)) { continue }
+      $suffix=$candidate.Name.Substring($legacyPrefix.Length)
+      if ($suffix -cnotmatch '^[0-9a-f]{12}
+    if ($legacy -and (Test-Path -LiteralPath $legacy)) {
+      if (Confirm-ManagedBackup $legacy) {
+        try {
+          $destination=Join-Path (Split-Path $backup -Parent) ('backup-legado-'+[guid]::NewGuid().ToString('N'))
+          Move-Item -LiteralPath $legacy -Destination $destination -ErrorAction Stop
+          Write-UpdateLog "Backup legado removido da pasta de instalação."
+        } catch { Write-UpdateLog "Backup legado preservado no local antigo por falha na migração." }
+      } else { Write-UpdateLog "Backup legado não movido: conteúdo não reconhecido." }
+    }
+  } elseif (Test-Path -LiteralPath $backup) {
+    # Em erro, manter o backup caso algum componente não tenha sido restaurado.
+    $remaining=@(Get-ChildItem -LiteralPath $backup -Force -ErrorAction SilentlyContinue)
+    if ($remaining.Count -eq 0) {
+      try { Remove-Item -LiteralPath $backup -Force -ErrorAction Stop } catch {}
+    }
+  }
+}
 """
+    for old, new in paths.items():
+        script = script.replace(old, new)
+    return script
 
 
 def stage_preview_update(*, info: dict, data_home: Path,
@@ -336,36 +447,152 @@ def stage_preview_update(*, info: dict, data_home: Path,
             any((original / name).is_symlink() for name in
                 ("DUELTRACE-WebUI.exe","_internal","LEIA-ME-SEGURANCA.txt"))):
         raise UnsafeUpdate("Pasta de instalação inválida ou contém links simbólicos.")
-    backup=original.parent/("."+original.name+"-backup")
-    if backup.is_symlink() or (backup.exists() and (
-            not backup.is_dir() or
-            not (backup/"DUELTRACE-WebUI.exe").is_file() or
-            not (backup/"_internal").is_dir() or
-            any(p.name not in ("DUELTRACE-WebUI.exe","_internal",
-                               "LEIA-ME-SEGURANCA.txt")
-                for p in backup.iterdir()))):
-        raise UnsafeUpdate("Backup anterior contém dados inesperados. "
-                           "Revise manualmente antes de atualizar.")
-    stage=original.parent/("."+original.name+"-staged-"+uuid4().hex[:12])
-    archive=home/"preview_updates"/("preview-"+uuid4().hex+".zip")
-    archive.parent.mkdir(parents=True,exist_ok=True)
+    # Os temporários e backups ficam no diretório de dados, não em uma nova pasta
+    # vizinha ao executável. Nunca sobrescrever o usuário por padrão.
+    work=home/"preview_updates"
+    work.mkdir(parents=True,exist_ok=True)
+    if work.is_symlink():
+        raise UnsafeUpdate("Diretório temporário de atualizações inválido.")
+    legacy_backup=original.parent/("."+original.name+"-backup")
+    if legacy_backup.is_symlink():
+        raise UnsafeUpdate("Backup legado contém link simbólico; revise-o antes.")
+    token=uuid4().hex[:12]
+    stage=work/("stage-"+token)
+    backup=work/("rollback-"+token)
+    archive=work/("download-"+uuid4().hex+".zip")
+    if any(p.exists() or p.is_symlink() for p in (stage,backup,archive)):
+        raise UnsafeUpdate("Preparação de atualização já existe.")
     try:
         (downloader or download_preview_zip)(info,archive)
         (unpacker or unpack_preview_zip)(archive,stage,info)
         script=_powershell_replace_script(original,stage,backup,
-                                          __import__("os").getpid())
+                                          __import__("os").getpid(),legacy_backup)
         if launcher is None:
             encoded=base64.b64encode(script.encode("utf-16le")).decode("ascii")
             subprocess.Popen(
                 ["powershell.exe","-NoProfile","-NonInteractive",
                  "-WindowStyle","Hidden","-EncodedCommand",encoded],
-                creationflags=getattr(subprocess,"CREATE_NEW_PROCESS_GROUP",0),
+                creationflags=(getattr(subprocess,"CREATE_NEW_PROCESS_GROUP",0)
+                               | getattr(subprocess,"CREATE_NO_WINDOW",0)),
                 close_fds=True)
         else:
             launcher(script)
         return {"started":True,"status":(
-            f"DUELTRACE v{info['version']} verificado. O aplicativo será fechado, "
-            "atualizado na mesma pasta e reaberto, preservando dados pessoais. Backup mantido."),
+            f"DUELTRACE v{info['version']} verificado. O aplicativo fecha e "
+            "reabre automaticamente na mesma pasta. Os arquivos pessoais são preservados."),
+            "version":info["version"]}
+    except BaseException:
+        import shutil
+        if stage.exists():
+            shutil.rmtree(stage,ignore_errors=True)
+        raise
+    finally:
+        archive.unlink(missing_ok=True)
+
+
+def install_preview_release(*, data_home: Path,
+                            current_version: str = CURRENT_VERSION,
+                            installed_run_id: int | None = None,
+                            fetcher=None, **kwargs) -> dict:
+    info=fetch_latest_preview_package(
+        current_version=current_version,
+        installed_run_id=(installed_run_id if installed_run_id is not None
+                          else installed_preview_build_id()),fetcher=fetcher)
+    if not info:
+        return {"started":False,
+                "status":"Não há nova Preview pública verificada no GitHub Releases."}
+    return stage_preview_update(info=info,data_home=data_home,**kwargs)
+) { continue }
+      if ($candidate.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+      $items=@(Get-ChildItem -LiteralPath $candidate.FullName -Force -ErrorAction SilentlyContinue)
+      $unknown=@($items | Where-Object { ($managed -notcontains $_.Name) -or
+        ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) })
+      if ($unknown.Count -gt 0) {
+        Write-UpdateLog "Pasta temporária anterior contém dados desconhecidos: preservada."
+        continue
+      }
+      try {
+        $destination=Join-Path (Split-Path $backup -Parent) ('stage-legado-'+[guid]::NewGuid().ToString('N'))
+        Move-Item -LiteralPath $candidate.FullName -Destination $destination -ErrorAction Stop
+        Write-UpdateLog "Pasta temporária de versão antiga movida para dados do aplicativo."
+      } catch { Write-UpdateLog "Não foi possível mover uma pasta temporária anterior." }
+    }
+    # Pastas de backups locais ficam nos dados do aplicativo, não junto ao EXE.
+    # Mover SOMENTE pastas legadas conhecidas da versão anterior.
+    if ($legacy -and (Test-Path -LiteralPath $legacy)) {
+      if (Confirm-ManagedBackup $legacy) {
+        try {
+          $destination=Join-Path (Split-Path $backup -Parent) ('backup-legado-'+[guid]::NewGuid().ToString('N'))
+          Move-Item -LiteralPath $legacy -Destination $destination -ErrorAction Stop
+          Write-UpdateLog "Backup legado removido da pasta de instalação."
+        } catch { Write-UpdateLog "Backup legado preservado no local antigo por falha na migração." }
+      } else { Write-UpdateLog "Backup legado não movido: conteúdo não reconhecido." }
+    }
+  } elseif (Test-Path -LiteralPath $backup) {
+    # Em erro, manter o backup caso algum componente não tenha sido restaurado.
+    $remaining=@(Get-ChildItem -LiteralPath $backup -Force -ErrorAction SilentlyContinue)
+    if ($remaining.Count -eq 0) {
+      try { Remove-Item -LiteralPath $backup -Force -ErrorAction Stop } catch {}
+    }
+  }
+}
+"""
+    for old, new in paths.items():
+        script = script.replace(old, new)
+    return script
+
+
+def stage_preview_update(*, info: dict, data_home: Path,
+                         current_executable: Path | None = None,
+                         downloader=None, unpacker=None, launcher=None) -> dict:
+    if sys.platform!="win32" and current_executable is None:
+        raise UnsafeUpdate("Atualização disponível apenas no Windows.")
+    if current_executable is None and not getattr(sys,"frozen",False):
+        raise UnsafeUpdate("Atualização automática exige aplicativo Windows empacotado.")
+    executable=Path(current_executable or sys.executable).resolve(strict=True)
+    if executable.name!="DUELTRACE-WebUI.exe":
+        raise UnsafeUpdate("Instalação Windows não reconhecida.")
+    home=Path(data_home).resolve()
+    original=executable.parent
+    if home==original/"_internal" or home.is_relative_to(original/"_internal"):
+        raise UnsafeUpdate("Os dados pessoais estão dentro de _internal; mova-os para fora antes de atualizar.")
+    if (not original.is_dir() or original.is_symlink() or
+            any((original / name).is_symlink() for name in
+                ("DUELTRACE-WebUI.exe","_internal","LEIA-ME-SEGURANCA.txt"))):
+        raise UnsafeUpdate("Pasta de instalação inválida ou contém links simbólicos.")
+    # Os temporários e backups ficam no diretório de dados, não em uma nova pasta
+    # vizinha ao executável. Nunca sobrescrever o usuário por padrão.
+    work=home/"preview_updates"
+    work.mkdir(parents=True,exist_ok=True)
+    if work.is_symlink():
+        raise UnsafeUpdate("Diretório temporário de atualizações inválido.")
+    legacy_backup=original.parent/("."+original.name+"-backup")
+    if legacy_backup.is_symlink():
+        raise UnsafeUpdate("Backup legado contém link simbólico; revise-o antes.")
+    token=uuid4().hex[:12]
+    stage=work/("stage-"+token)
+    backup=work/("rollback-"+token)
+    archive=work/("download-"+uuid4().hex+".zip")
+    if any(p.exists() or p.is_symlink() for p in (stage,backup,archive)):
+        raise UnsafeUpdate("Preparação de atualização já existe.")
+    try:
+        (downloader or download_preview_zip)(info,archive)
+        (unpacker or unpack_preview_zip)(archive,stage,info)
+        script=_powershell_replace_script(original,stage,backup,
+                                          __import__("os").getpid(),legacy_backup)
+        if launcher is None:
+            encoded=base64.b64encode(script.encode("utf-16le")).decode("ascii")
+            subprocess.Popen(
+                ["powershell.exe","-NoProfile","-NonInteractive",
+                 "-WindowStyle","Hidden","-EncodedCommand",encoded],
+                creationflags=(getattr(subprocess,"CREATE_NEW_PROCESS_GROUP",0)
+                               | getattr(subprocess,"CREATE_NO_WINDOW",0)),
+                close_fds=True)
+        else:
+            launcher(script)
+        return {"started":True,"status":(
+            f"DUELTRACE v{info['version']} verificado. O aplicativo fecha e "
+            "reabre automaticamente na mesma pasta. Os arquivos pessoais são preservados."),
             "version":info["version"]}
     except BaseException:
         import shutil

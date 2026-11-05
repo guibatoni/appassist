@@ -187,7 +187,7 @@ class DueltraceWebBridge:
                     "previewError":None,
                     "message":(
                         f"Preview v{candidate['version']} verificada no GitHub "
-                        "Releases. Pode ser instalada diretamente após confirmação."),
+                        "Releases. Basta clicar em Atualizar agora para instalar."),
                 })
         except (OSError,ValueError,TypeError):
             status["previewError"]=(

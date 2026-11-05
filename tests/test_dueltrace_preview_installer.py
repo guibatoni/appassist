@@ -154,22 +154,28 @@ class PreviewInstallerTests(unittest.TestCase):
             with self.assertRaises(updater.UnsafeUpdate):
                 updater.unpack_preview_zip(source,base/"repeated",info)
 
-    def test_update_requires_executable_and_refuses_existing_backup(self):
+    def test_update_ignores_old_sibling_backup_without_overwriting_it(self):
+        """Um backup criado pela versão anterior não bloqueia o novo método."""
         with tempfile.TemporaryDirectory() as td:
             root=Path(td)
-            app=root/"app"
-            app.mkdir()
-            exe=app/"DUELTRACE-WebUI.exe"
-            exe.write_bytes(b"MZ")
-            home=root/"user-data"
-            home.mkdir()
-            backup=root/".app-backup"
-            backup.mkdir()
+            app=root/"app"; app.mkdir()
+            exe=app/"DUELTRACE-WebUI.exe"; exe.write_bytes(b"MZ")
+            home=root/"user-data"; home.mkdir()
+            legacy=root/".app-backup"; legacy.mkdir()
+            (legacy/"alguma-configuracao.json").write_text("preservar")
             info=updater.select_preview_release(release(),"0.8.4")
-            with self.assertRaises(updater.UnsafeUpdate):
-                updater.stage_preview_update(info=info,data_home=home,
-                    current_executable=exe,downloader=lambda *a:None,
-                    unpacker=lambda *a:None,launcher=lambda *a:None)
+            scripts=[]
+            def prepare(_archive,stage,_info):
+                stage.mkdir()
+                (stage/"DUELTRACE-WebUI.exe").write_bytes(b"MZ")
+            result=updater.stage_preview_update(
+                info=info,data_home=home,current_executable=exe,
+                downloader=lambda *_:None,unpacker=prepare,launcher=scripts.append)
+            self.assertTrue(result["started"])
+            self.assertTrue((legacy/"alguma-configuracao.json").exists())
+            self.assertIn("Confirm-ManagedBackup $legacy",scripts[0])
+            self.assertIn(str(home/"preview_updates"),scripts[0])
+            self.assertNotIn(str(root/".app-staged-"),scripts[0])
 
     def test_updater_never_replaces_unknown_files_in_install_folder(self):
         from pathlib import Path
@@ -190,6 +196,10 @@ class PreviewInstallerTests(unittest.TestCase):
             self.assertTrue(result["started"])
             self.assertTrue((app/"minha-configuracao.json").exists())
             self.assertIn("$managed=@",scripts[0])
+            self.assertIn(str(home/"preview_updates"),scripts[0])
+            self.assertIn("Start-Process -FilePath $exe -WorkingDirectory $old -PassThru",scripts[0])
+            self.assertIn("Stop-Process -Id $pidOld -Force",scripts[0])
+            self.assertIn("Remove-Item -LiteralPath $stage -Recurse -Force",scripts[0])
             self.assertIn("Move-Item -LiteralPath $target",scripts[0])
             self.assertNotIn("Rename-Item -LiteralPath $old",scripts[0])
 
@@ -212,7 +222,8 @@ class PreviewInstallerTests(unittest.TestCase):
                 downloader=lambda info,where: where.write_bytes(b"zip"),
                 unpacker=prepare,launcher=scripts.append)
             self.assertTrue(result["started"])
-            self.assertIn("Remove-Item -LiteralPath $backup",scripts[0])
+            self.assertIn("Confirm-ManagedBackup $legacy",scripts[0])
+            self.assertIn("Move-Item -LiteralPath $legacy -Destination $destination",scripts[0])
             self.assertTrue(backup.exists()) # backup not destroyed by current process
 
     def test_install_prepares_and_launcher_receives_wait_then_swap(self):
@@ -240,6 +251,100 @@ class PreviewInstallerTests(unittest.TestCase):
             self.assertNotIn("Rename-Item -LiteralPath $old",scripts[0])
             self.assertIn("Start-Process",scripts[0])
             self.assertTrue(exe.exists())  # processo atual não é alterado imediatamente
+
+    @unittest.skipUnless(sys.platform=="win32","Teste de transação PowerShell exige Windows")
+    def test_windows_helper_overwrites_in_place_and_relaunches_same_executable(self):
+        """Executa PowerShell real, com Start-Process isolado por mock."""
+        import subprocess
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)
+            app=base/"Programa com espaço"; app.mkdir()
+            exe=app/"DUELTRACE-WebUI.exe"; exe.write_bytes(b"versao antiga")
+            internal=app/"_internal"; internal.mkdir()
+            (internal/"versao.txt").write_text("anterior")
+            private=app/"minhas-configuracoes.json"; private.write_text("meu arquivo")
+            work=base/"AppData"/"preview_updates"; work.mkdir(parents=True)
+            stage=work/"stage-abc"; stage.mkdir()
+            (stage/"DUELTRACE-WebUI.exe").write_bytes(b"versao nova")
+            (stage/"_internal").mkdir()
+            (stage/"_internal"/"versao.txt").write_text("atualizada")
+            backup=work/"rollback-abc"
+            launch_log=work/"processo-iniciado.txt"
+            old_stage=base/("."+app.name+"-staged-a1b2c3d4e5f6")
+            old_stage.mkdir()
+            (old_stage/"DUELTRACE-WebUI.exe").write_bytes(b"stage antigo")
+            legacy=base/("."+app.name+"-backup")
+            legacy.mkdir()
+            (legacy/"DUELTRACE-WebUI.exe").write_bytes(b"backup anterior")
+            (legacy/"_internal").mkdir()
+            helper=updater._powershell_replace_script(app,stage,backup,2_000_000_000,legacy)
+            log_file=str(launch_log).replace("'","''")
+            mocks=(
+                "function Start-Sleep {param([int]$Seconds)}\n"
+                "function Start-Process {\n"
+                " [CmdletBinding()]\n"
+                " param([string]$FilePath,[string]$WorkingDirectory,"
+                "[switch]$PassThru)\n"
+                f" Set-Content -LiteralPath '{log_file}' -Value "
+                "($FilePath + '|' + $WorkingDirectory)\n"
+                " $process=[PSCustomObject]@{ HasExited=$false; Id=999999 }\n"
+                " $process | Add-Member -MemberType ScriptMethod -Name Refresh -Value {}\n"
+                " return $process\n"
+                "}\n"
+            )
+            ps1=work/"test-update.ps1"
+            ps1.write_text(mocks+helper,encoding="utf-8-sig")
+            run=subprocess.run(["powershell.exe","-NoProfile","-NonInteractive",
+                                "-File",str(ps1)],capture_output=True,text=True,timeout=40)
+            self.assertEqual(run.returncode,0,run.stdout+"\n"+run.stderr)
+            self.assertEqual(exe.read_bytes(),b"versao nova")
+            self.assertEqual((internal/"versao.txt").read_text(),"atualizada")
+            self.assertEqual(private.read_text(),"meu arquivo")
+            self.assertEqual((backup/"DUELTRACE-WebUI.exe").read_bytes(),b"versao antiga")
+            self.assertFalse(stage.exists())
+            self.assertIn(str(exe),launch_log.read_text())
+            self.assertFalse(old_stage.exists())
+            self.assertFalse(legacy.exists())
+            self.assertEqual(len(list(work.glob("stage-legado-*"))),1)
+            self.assertEqual(len(list(work.glob("backup-legado-*"))),1)
+
+    @unittest.skipUnless(sys.platform=="win32","Teste de rollback PowerShell exige Windows")
+    def test_windows_failed_restart_restores_previous_exe_and_data(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)
+            app=base/"DUELTRACE-WebUI"; app.mkdir()
+            exe=app/"DUELTRACE-WebUI.exe"; exe.write_bytes(b"versao original")
+            internal=app/"_internal"; internal.mkdir()
+            (internal/"versao.txt").write_text("original")
+            (app/"usuario.txt").write_text("preservado")
+            work=base/"AppData"/"preview_updates"; work.mkdir(parents=True)
+            stage=work/"stage-abc"; stage.mkdir()
+            (stage/"DUELTRACE-WebUI.exe").write_bytes(b"patch com falha")
+            (stage/"_internal").mkdir()
+            (stage/"_internal"/"versao.txt").write_text("patch")
+            backup=work/"rollback-abc"
+            helper=updater._powershell_replace_script(app,stage,backup,2_000_000_000)
+            ps1=work/"test-rollback.ps1"
+            ps1.write_text(
+                "function Start-Sleep {param([int]$Seconds)}\n"
+                "$script:tries=0\n"
+                "function Start-Process {\n"
+                " [CmdletBinding()]\n"
+                " param([string]$FilePath,[string]$WorkingDirectory,"
+                "[switch]$PassThru)\n"
+                " $script:tries++\n"
+                " if ($script:tries -eq 1) { throw 'falha simulada no patch' }\n"
+                "}\n"
+                +helper,encoding="utf-8-sig")
+            run=subprocess.run(["powershell.exe","-NoProfile","-NonInteractive",
+                                "-File",str(ps1)],capture_output=True,text=True,timeout=40)
+            self.assertEqual(run.returncode,0,run.stdout+"\n"+run.stderr)
+            self.assertEqual(exe.read_bytes(),b"versao original")
+            self.assertEqual((internal/"versao.txt").read_text(),"original")
+            self.assertEqual((app/"usuario.txt").read_text(),"preservado")
+            self.assertFalse(stage.exists())
+            self.assertIn("Rollback concluído",(work/"ultima-atualizacao.log").read_text(encoding="utf-8-sig"))
 
     def test_stable_portable_zip_never_requires_authenticode(self):
         version="v0.9.0"

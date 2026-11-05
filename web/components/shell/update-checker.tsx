@@ -104,12 +104,14 @@ export function UpdateChecker() {
       setResult(fresh)
       setAutomaticNotice(fresh.updateAvailable)
       let outcome:{started:boolean;status:string;version?:string}|null=null
-      if(fresh.automaticInstallReady) {
-        outcome=await api.install_signed_update()
-      } else if(fresh.automaticPortableReady) {
+      // Sempre preferir atualização portátil in-place. Instalador assinado
+      // é a alternativa apenas quando nenhum ZIP oficial está disponível.
+      if(fresh.automaticPortableReady) {
         outcome=await api.install_portable_update()
       } else if(fresh.automaticPreviewReady) {
         outcome=await api.install_preview_update()
+      } else if(fresh.automaticInstallReady) {
+        outcome=await api.install_signed_update()
       } else {
         setInstallFeedback(fresh.automaticInstallReason ||
           "Nenhum pacote de atualização aprovado está disponível.")
@@ -169,9 +171,11 @@ export function UpdateChecker() {
                   {installing?"Baixando e verificando atualização…":"Atualizar agora"}
                 </button>
                 <p className="mt-2 text-xs text-muted">
-                  O clique inicia a atualização na pasta atual, sem confirmação extra do aplicativo.
-                  Pacotes são verificados por SHA-256 e identidade do build antes da substituição.
-                  Instalação assinada continua opcional quando disponível.
+                  Atualizações ZIP são instaladas na pasta atual: o DUELTRACE fecha,
+                  substitui os arquivos e reinicia automaticamente no mesmo local.
+                  Arquivos temporários e backups ficam nos dados locais do Windows.
+                  Pacotes seguem verificação SHA-256 e identidade do build.
+                  Instaladores assinados, quando necessários, seguem seu próprio fluxo.
                 </p>
                 {installFeedback&&<p className="mt-2 text-xs text-gold" role="status">
                   {installFeedback}
