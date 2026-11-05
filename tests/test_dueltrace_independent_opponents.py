@@ -150,6 +150,36 @@ class IndependentOpponentTests(unittest.TestCase):
             self.assertFalse(supported_for_runtime(profile)["rank"])
             self.assertFalse(supported_for_runtime(profile)["pontuacao"])
 
+    def test_unmapped_drop_groups_never_enter_public_catalogue(self):
+        from test_dueltrace_independent_cards import make_known_layout
+        original=make_known_layout()
+        opponents,cards,_=decode_names(original)
+        self.assertEqual(len(cards),722)
+        self.assertEqual(len(opponents),39)
+        checks=[]; drops=[]
+        for oid in range(1,40):
+            for group in ("GRUPO_1","GRUPO_2","GRUPO_3"):
+                checks.append({"oponente_id":oid,"rank":group,"peso_total":2048})
+                drops.append({"oponente_id":oid,"rank":group,
+                              "carta_id":1,"peso":2048})
+        with tempfile.TemporaryDirectory() as d:
+            folder=Path(d)
+            write_rows(folder/"cartas.csv",cards)
+            write_rows(folder/"oponentes.csv",opponents)
+            write_rows(folder/"validacao_pesos.csv",checks)
+            write_rows(folder/"drops_por_oponente.csv",drops)
+            profile=analyse(folder,{
+                "sha256":SHA,
+                "drop_group_mapping_status":"grupos_nao_identificados",
+            },folder/"unknown_groups.iso")
+            self.assertTrue(profile["supported_features"]["cards"])
+            self.assertTrue(profile["supported_features"]["opponents"])
+            self.assertFalse(profile["supported_features"]["drops"])
+            self.assertFalse(profile["supported_features"]["ranks"])
+            self.assertEqual(profile["drop_group_labels"],[])
+            self.assertEqual(profile["drops"],[])
+            self.assertEqual(profile["drops_provenance"]["candidate_table_count"],117)
+
     def test_revision_and_no_cross_mod_publish(self):
         self.assertGreaterEqual(SCAN_PARSER_REVISION,18)
         source=(ROOT/"scanner/scanner_multiiso.py").read_text(encoding="utf8")
