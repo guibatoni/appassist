@@ -44,48 +44,31 @@ class PublicUiContractTests(unittest.TestCase):
         self.assertIn('mod.requiresReview',self.mods)
         self.assertNotIn("CardMatchPanel mods=",self.mods)
 
-    def test_fusion_preview_is_mouse_and_keyboard_accessible(self):
+    def test_fusions_use_shared_overlay_for_mouse_and_keyboard(self):
         source=self.fusions
         self.assertIn("onMouseEnter={event=>onPreview(",source)
-        self.assertIn("onMouseLeave={()=>onPreview(null,null)}",source)
+        self.assertIn("onMouseLeave={()=>onPreview(null)}",source)
         self.assertIn("onFocus={event=>onPreview(",source)
-        self.assertIn("onBlur={()=>onPreview(null,null)}",source)
-        self.assertIn('role="tooltip"',source)
-        self.assertIn('backdrop-blur-lg',source)
-        self.assertIn('transition-all duration-200',source)
-        self.assertIn('Onde conseguir',source)
-        self.assertIn('MonsterStats card={hoveredCard.card}',source)
-
-    def test_hover_preview_tracks_own_card_is_bigger_and_stays_within_viewport(self):
-        source=self.fusions
-        self.assertIn("previewAnchor.current=anchor",source)
-        self.assertIn("const rect=anchor.getBoundingClientRect()",source)
-        self.assertIn("const width=panel.offsetWidth",source)
-        self.assertIn("const height=panel.offsetHeight",source)
-        self.assertIn("rect.left+rect.width/2-width/2",source)
-        self.assertIn("window.innerWidth-width-margin",source)
-        self.assertIn("const above=rect.top-height-gap",source)
-        self.assertIn("window.innerHeight-height-margin",source)
-        self.assertIn('window.addEventListener("scroll",place,true)',source)
-        self.assertIn('window.addEventListener("resize",place)',source)
-        self.assertIn("ref={previewElement}",source)
-        self.assertIn("style={previewPosition??{left:0,top:0}}",source)
-        self.assertIn("w-[min(92vw,440px)]",source)
-        self.assertIn("sm:w-44",source)
-        self.assertIn("<CardThumbnail card={hoveredCard.card} sha={sha} expanded/>",source)
+        self.assertIn("onBlur={()=>onPreview(null)}",source)
+        self.assertIn('onPreview={setPreview}',source)
+        self.assertIn('<CardHoverPreview selection={preview} sha={sha}',source)
+        self.assertNotIn('role="tooltip"',source)
         self.assertNotIn("fixed bottom-4 right-4",source)
-        self.assertIn("pointer-events-none",source)
 
-    def test_card_drops_are_fetched_for_current_mod_and_exact_card_id(self):
+    def test_old_fusion_card_overlay_replaced_with_shared_component(self):
         source=self.fusions
-        self.assertIn("api.get_card_drop_sources(hoveredId)",source)
-        self.assertIn("data.romSha===sha&&data.cardId===hoveredId",source)
-        self.assertIn("drops?.available",source)
-        self.assertIn("dropRows.slice(0,4)",source)
-        self.assertIn("row.eligibleRanks.join",source)
-        self.assertIn("row.chancePercent.toLocaleString",source)
-        self.assertNotIn("drops.source",source)
-        self.assertNotIn("As imagens só aparecem quando o scanner",source)
+        self.assertIn("setPreview(null)",source)
+        self.assertIn("const [preview,setPreview]",source)
+        self.assertNotIn("previewElement",source)
+        self.assertNotIn("previewPosition",source)
+        self.assertNotIn("getBoundingClientRect",source)
+
+    def test_fusions_keep_exact_source_card_and_sha(self):
+        source=self.fusions
+        self.assertIn("card:displayed,anchor:event.currentTarget",source)
+        self.assertIn('<CardHoverPreview selection={preview} sha={sha}',source)
+        self.assertIn("useEffect(()=>{setPreview(null)},[sha,query,offset,sort,cardType])",source)
+
 
 
 if __name__=="__main__":

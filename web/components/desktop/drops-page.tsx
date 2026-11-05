@@ -4,7 +4,9 @@ import Image from "next/image"
 import {useEffect, useState} from "react"
 import {ChevronLeft, ChevronRight, Database, RefreshCcw, Search, ShieldCheck} from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi} from "@/lib/desktop"
-import type {DropsPage, DropRow} from "@/lib/desktop"
+import {CardHoverPreview} from "./card-hover-preview"
+import type {CardPreviewSelection} from "./card-hover-preview"
+import type {DropsPage, DropRow, LocalCard} from "@/lib/desktop"
 
 function DropArtwork({sha,id,name}:{sha:string|null;id:number;name:string}) {
   const [source,setSource]=useState<"frame"|"art"|"none">("frame")
@@ -18,21 +20,30 @@ function DropArtwork({sha,id,name}:{sha:string|null;id:number;name:string}) {
   </div>
 }
 
-function DropCard({row,sha}:{row:DropRow;sha:string|null}) {
-  return <article className="flex items-center gap-3 rounded-xl border border-gold/20 bg-gradient-to-r from-[#122644] to-[#071426] p-3 transition-colors hover:border-primary/50">
+function DropCard({row,sha,onPreview}:{row:DropRow;sha:string|null;onPreview:(selection:CardPreviewSelection|null)=>void}) {
+  const card:LocalCard={
+    id:row.cardId,name:row.cardName,type:row.cardType,
+    category:row.category,attribute:"",atk:row.atk,def:row.def,
+    effect:null,effectSource:null,
+  }
+  return <button type="button" aria-label={`Ver detalhes e locais de drop de ${row.cardName}`}
+    onMouseEnter={event=>onPreview({card,anchor:event.currentTarget,fallbackDrop:row})}
+    onMouseLeave={()=>onPreview(null)}
+    onFocus={event=>onPreview({card,anchor:event.currentTarget,fallbackDrop:row})}
+    onBlur={()=>onPreview(null)}
+    className="flex w-full items-center gap-3 rounded-xl border border-gold/20 bg-gradient-to-r from-[#122644] to-[#071426] p-3 text-left transition-colors hover:border-primary/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
     <DropArtwork sha={sha} id={row.cardId} name={row.cardName}/>
     <div className="min-w-0 flex-1">
       <p className="text-xs text-gold">#{row.cardId} · {row.groupLabel}</p>
       <p className="mt-1 truncate font-semibold text-white" title={row.cardName}>{row.cardName}</p>
       {row.category==="Monstros"&&<p className="mt-1 text-xs tabular-nums text-primary">ATK {row.atk??"—"} · DEF {row.def??"—"}</p>}
       <p className="mt-1 text-xs text-muted">{row.opponentName}</p>
-      {row.sourceOffset&&<p className="mt-1 text-[10px] text-muted">WA offset: {row.sourceOffset}</p>}
     </div>
     <div className="shrink-0 text-right">
       <p className="font-display text-xl font-semibold tabular-nums text-primary">{row.chancePercent.toLocaleString("pt-BR",{maximumFractionDigits:4})}%</p>
       <p className="text-xs text-muted">{row.weight}/2048</p>
     </div>
-  </article>
+  </button>
 }
 
 export function DropsPage({sha}:{sha:string|null}) {
@@ -46,6 +57,7 @@ export function DropsPage({sha}:{sha:string|null}) {
   const [result,setResult]=useState<DropsPage|null>(null)
   const [loading,setLoading]=useState(false)
   const [error,setError]=useState<string|null>(null)
+  const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
   const pageSize=36
 
   // Nunca reutilizar filtros de um mod em outro perfil SHA.
@@ -58,6 +70,7 @@ export function DropsPage({sha}:{sha:string|null}) {
     setOffset(0)
     setResult(null)
     setError(null)
+    setPreview(null)
   },[sha])
 
   useEffect(()=>{
@@ -79,6 +92,8 @@ export function DropsPage({sha}:{sha:string|null}) {
     },200)
     return()=>{mounted=false;window.clearTimeout(timer)}
   },[sha,opponent,rankFilter,query,offset,sort,cardType,revision])
+
+  useEffect(()=>{setPreview(null)},[opponent,rankFilter,query,sort,cardType,offset,revision])
 
   const options=result?.opponents??[]
   const rankOptions=result?.rankOptions??[]
@@ -145,7 +160,7 @@ export function DropsPage({sha}:{sha:string|null}) {
         </p>
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
           {result.rows.map(row=><DropCard key={row.opponentId+"-"+row.group+"-"+row.cardId}
-            row={row} sha={sha}/>)}
+            row={row} sha={sha} onPreview={setPreview}/>)}
         </div>
         {!result.rows.length&&<p className="py-8 text-center text-sm text-muted">Nenhuma carta para os filtros selecionados.</p>}
         <div className="mt-4 flex items-center justify-between gap-2">
@@ -159,6 +174,7 @@ export function DropsPage({sha}:{sha:string|null}) {
           </div>
         </div>
       </>}
+      <CardHoverPreview selection={preview} sha={sha} onClose={()=>setPreview(null)}/>
     </section>
   </div>
 }

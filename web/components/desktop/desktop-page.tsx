@@ -1,13 +1,15 @@
 "use client"
 
 import Image from "next/image"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FilePlus2, Gamepad2,
   GitMerge, Layers, Play, RefreshCcw, Search, Shield, Swords, Upload,
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
+import {CardHoverPreview} from "./card-hover-preview"
+import type {CardPreviewSelection} from "./card-hover-preview"
 import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, SpoilsCounters, SpoilsResult} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
@@ -919,11 +921,9 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
   </>
 }
 
-type FusionPreviewCard = {id:number;name:string;card:LocalCard}
-
 function FusionIllustration({id,name,sha,card,role,onPreview}:{
   id:number;name:string;sha:string|null;card:LocalCard|null;role:string;
-  onPreview:(card:FusionPreviewCard|null,anchor:HTMLButtonElement|null)=>void
+  onPreview:(preview:CardPreviewSelection|null)=>void
 }) {
   const displayed:LocalCard=card??{
     id,name,type:"",attribute:"",category:"Não identificada",
@@ -932,10 +932,10 @@ function FusionIllustration({id,name,sha,card,role,onPreview}:{
   return <div className="flex min-w-0 flex-col items-center gap-1.5">
     <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{role}</span>
     <button type="button" aria-label={`Ver detalhes e drops de ${name}`}
-      onMouseEnter={event=>onPreview({id,name,card:displayed},event.currentTarget)}
-      onMouseLeave={()=>onPreview(null,null)}
-      onFocus={event=>onPreview({id,name,card:displayed},event.currentTarget)}
-      onBlur={()=>onPreview(null,null)}
+      onMouseEnter={event=>onPreview({card:displayed,anchor:event.currentTarget})}
+      onMouseLeave={()=>onPreview(null)}
+      onFocus={event=>onPreview({card:displayed,anchor:event.currentTarget})}
+      onBlur={()=>onPreview(null)}
       className="group flex min-w-0 w-full flex-col items-center gap-1.5 rounded-md p-1 transition-all duration-200 hover:bg-primary/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
       <div className="w-16 origin-center transition-transform duration-200 group-hover:scale-105 group-focus-visible:scale-105 sm:w-20">
         <CardThumbnail key={String(sha)+"-"+id} card={displayed} sha={sha}/>
@@ -955,90 +955,11 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [offset,setOffset]=useState(0)
   const [records,setRecords]=useState<FusionPage|null>(null)
   const [error,setError]=useState<string|null>(null)
-  const [hoveredCard,setHoveredCard]=useState<FusionPreviewCard|null>(null)
-  const previewAnchor=useRef<HTMLButtonElement|null>(null)
-  const previewElement=useRef<HTMLDivElement|null>(null)
-  const [previewPosition,setPreviewPosition]=useState<{left:number;top:number}|null>(null)
-  const onPreview=(card:FusionPreviewCard|null,anchor:HTMLButtonElement|null)=>{
-    previewAnchor.current=anchor
-    // Não reaproveitar a posição da carta anterior durante a troca de hover.
-    setPreviewPosition(null)
-    setHoveredCard(card)
-  }
-  const [dropCache,setDropCache]=useState<Record<number,CardDropSources>>({})
-  const [dropErrors,setDropErrors]=useState<Record<number,boolean>>({})
+  const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
   const cardsById=useMemo(()=>new Map(cards.map(c=>[c.id,c])),[cards])
   const types=useMemo(()=>Array.from(new Set(cards.map(c=>c.type||c.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"pt-BR")),[cards])
   useEffect(()=>{setQuery("");setSort("id");setCardType("");setOffset(0);setRecords(null)},[sha])
-  useEffect(()=>{setHoveredCard(null);setDropCache({});setDropErrors({})},[sha])
-  useEffect(()=>{
-    setHoveredCard(null)
-  },[query,offset,sort,cardType])
-  const hoveredId=hoveredCard?.id??null
-  useEffect(()=>{
-    if(!sha||hoveredId===null||dropCache[hoveredId]||dropErrors[hoveredId])return
-    const api=desktopApi()
-    if(!api)return
-    let active=true
-    // Não disparar consultas para um simples movimento rápido do mouse.
-    const timer=window.setTimeout(()=>{
-      void api.get_card_drop_sources(hoveredId).then(data=>{
-        if(!active)return
-        if(data.romSha===sha&&data.cardId===hoveredId){
-          setDropCache(old=>({...old,[hoveredId]:data}))
-        }else{
-          setDropErrors(old=>({...old,[hoveredId]:true}))
-        }
-      }).catch(()=>{
-        if(active)setDropErrors(old=>({...old,[hoveredId]:true}))
-      })
-    },180)
-    return()=>{active=false;window.clearTimeout(timer)}
-  },[sha,hoveredId,dropCache,dropErrors])
-  const drops=hoveredCard?dropCache[hoveredCard.id]:null
-  const dropRows=(drops?.available&&drops.romSha===sha&&
-                  drops.cardId===hoveredCard?.id)?drops.rows:[]
-  const displayDrops=dropRows.slice(0,4)
-  // Janela alinhada à carta selecionada, não ao canto do aplicativo.
-  useEffect(()=>{
-    if(!hoveredCard){
-      setPreviewPosition(null)
-      return
-    }
-    const place=()=>{
-      const anchor=previewAnchor.current
-      const panel=previewElement.current
-      if(!anchor||!panel||!anchor.isConnected)return
-      const rect=anchor.getBoundingClientRect()
-      if(rect.bottom<=0||rect.top>=window.innerHeight){
-        setPreviewPosition(null)
-        return
-      }
-      const margin=12
-      const gap=10
-      const width=panel.offsetWidth
-      const height=panel.offsetHeight
-      const left=Math.max(margin,Math.min(
-        rect.left+rect.width/2-width/2,
-        window.innerWidth-width-margin
-      ))
-      const above=rect.top-height-gap
-      // Prefere aparecer acima; em telas baixas, sobrepõe a carta suavemente.
-      const candidateTop=above>=margin?above:rect.top-36
-      const top=Math.max(margin,Math.min(
-        candidateTop,window.innerHeight-height-margin
-      ))
-      setPreviewPosition({left,top})
-    }
-    const frame=window.requestAnimationFrame(place)
-    window.addEventListener("resize",place)
-    window.addEventListener("scroll",place,true)
-    return()=>{
-      window.cancelAnimationFrame(frame)
-      window.removeEventListener("resize",place)
-      window.removeEventListener("scroll",place,true)
-    }
-  },[hoveredCard,dropRows.length])
+  useEffect(()=>{setPreview(null)},[sha,query,offset,sort,cardType])
   const pageSize=12
   useEffect(()=>{
     let mounted=true
@@ -1084,11 +1005,11 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         {records?.rows.map((r,i)=><article key={r.a+"-"+r.b+"-"+r.result+"-"+i}
           className="relative rounded-xl border border-line/80 bg-gradient-to-br from-panel-strong/90 via-[#0b1a35] to-background p-3 shadow-[inset_0_1px_0_rgb(245_184_61/0.09)] transition-colors hover:border-primary/60">
           <div className="grid grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)_24px_minmax(0,1fr)] items-start gap-1">
-            <FusionIllustration id={r.a} name={r.nameA} card={cardsById.get(r.a)??null} sha={sha} role="Material A" onPreview={onPreview}/>
+            <FusionIllustration id={r.a} name={r.nameA} card={cardsById.get(r.a)??null} sha={sha} role="Material A" onPreview={setPreview}/>
             <span className="pt-14 text-center font-display text-xl font-bold text-primary" aria-hidden>+</span>
-            <FusionIllustration id={r.b} name={r.nameB} card={cardsById.get(r.b)??null} sha={sha} role="Material B" onPreview={onPreview}/>
+            <FusionIllustration id={r.b} name={r.nameB} card={cardsById.get(r.b)??null} sha={sha} role="Material B" onPreview={setPreview}/>
             <span className="pt-14 text-center font-display text-xl font-bold text-gold" aria-hidden>→</span>
-            <FusionIllustration id={r.result} name={r.nameResult} card={cardsById.get(r.result)??null} sha={sha} role="Resultado" onPreview={onPreview}/>
+            <FusionIllustration id={r.result} name={r.nameResult} card={cardsById.get(r.result)??null} sha={sha} role="Resultado" onPreview={setPreview}/>
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/50 pt-2">
             <span className="text-xs text-muted">#{r.a} + #{r.b} → #{r.result}</span>
@@ -1111,49 +1032,7 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             onClick={()=>setOffset(x=>x+pageSize)}>Próxima <ChevronRight className="size-4"/></button>
         </div>
       </div>
-      <div ref={previewElement} role="tooltip" aria-hidden={!hoveredCard}
-        style={previewPosition??{left:0,top:0}}
-        className={"pointer-events-none fixed z-50 max-h-[calc(100vh-24px)] w-[min(92vw,440px)] overflow-hidden rounded-xl border border-primary/45 bg-[#09172e]/95 p-4 shadow-[0_18px_60px_rgb(0_0_0/0.7)] backdrop-blur-lg transition-all duration-200 "+
-          (hoveredCard&&previewPosition?"scale-100 opacity-100":"scale-95 opacity-0")}>
-        {hoveredCard&&<div>
-          <div className="flex items-start gap-3">
-            <div className="w-40 shrink-0 sm:w-44">
-              <CardThumbnail card={hoveredCard.card} sha={sha} expanded/>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-gold">#{hoveredCard.id}</p>
-              <p className="mt-1 line-clamp-3 font-display text-base font-bold text-white">{hoveredCard.name}</p>
-              {(hoveredCard.card.type||hoveredCard.card.attribute)&&<p className="mt-1 text-xs text-muted">
-                {[hoveredCard.card.type,hoveredCard.card.attribute].filter(Boolean).join(" · ")}
-              </p>}
-              <MonsterStats card={hoveredCard.card} className="mt-2 text-xs"/>
-            </div>
-          </div>
-          {hoveredCard.card.effect&&<p className="mt-2 line-clamp-3 text-xs text-muted">{hoveredCard.card.effect}</p>}
-          <div className="mt-3 border-t border-line/60 pt-3">
-            <p className="mb-2 text-xs font-semibold text-primary">Onde conseguir</p>
-            {displayDrops.length>0?<div className="space-y-1.5">
-              {displayDrops.map(row=><div key={row.opponentId+"-"+row.group}
-                className="flex items-start justify-between gap-2 text-xs">
-                <div className="min-w-0">
-                  <p className="truncate font-medium text-white">{row.opponentName}</p>
-                  <p className="text-[11px] text-muted">{row.eligibleRanks.join(" / ")}</p>
-                </div>
-                <span className="shrink-0 font-semibold tabular-nums text-gold">
-                  {row.chancePercent.toLocaleString("pt-BR",{maximumFractionDigits:3})}%
-                </span>
-              </div>)}
-              {dropRows.length>displayDrops.length&&<p className="text-[11px] text-muted">
-                +{dropRows.length-displayDrops.length} outras possibilidades
-              </p>}
-            </div>:<p className="text-xs text-muted">
-              {drops?.available?"Nenhum drop registrado para esta carta.":
-                drops||dropErrors[hoveredCard.id]?"Drops não disponíveis neste mod.":
-                "Consultando drops…"}
-            </p>}
-          </div>
-        </div>}
-      </div>
+      <CardHoverPreview selection={preview} sha={sha} onClose={()=>setPreview(null)}/>
     </section>
   </>
 }

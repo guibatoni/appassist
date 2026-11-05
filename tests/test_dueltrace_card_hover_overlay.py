@@ -1,0 +1,72 @@
+"""Regressão da mesma prévia sobre carta nas abas Fusões e Drops."""
+from pathlib import Path
+import unittest
+
+ROOT=Path(__file__).resolve().parents[1]
+SHARED=ROOT/"web/components/desktop/card-hover-preview.tsx"
+FUSION=ROOT/"web/components/desktop/desktop-page.tsx"
+DROPS=ROOT/"web/components/desktop/drops-page.tsx"
+
+
+class SharedCardPreviewTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.overlay=SHARED.read_text(encoding="utf-8")
+        cls.fusions=FUSION.read_text(encoding="utf-8")
+        cls.drops=DROPS.read_text(encoding="utf-8")
+
+    def test_overlay_centers_on_selected_card_not_corner(self):
+        source=self.overlay
+        self.assertIn("createPortal(<>",source)
+        self.assertIn("document.body",source)
+        self.assertIn("selection.anchor",source)
+        self.assertIn("anchor.getBoundingClientRect()",source)
+        self.assertIn("const centerX=rect.left+rect.width/2",source)
+        self.assertIn("const centerY=rect.top+rect.height/2",source)
+        self.assertIn("centerX-width/2",source)
+        self.assertIn("centerY-height/2",source)
+        self.assertIn("window.innerWidth-width-margin",source)
+        self.assertIn("window.innerHeight-height-margin",source)
+        self.assertNotIn("bottom-4 right-4",source)
+        self.assertIn("ResizeObserver(place)",source)
+
+    def test_background_darkens_without_blocking_mouse(self):
+        source=self.overlay
+        self.assertIn('fixed inset-0 z-[90] bg-[#020713]/75',source)
+        self.assertIn('pointer-events-none fixed z-[100]',source)
+        self.assertIn('role="tooltip"',source)
+        self.assertIn('event.key==="Escape"',source)
+        self.assertIn('onClose()',source)
+        self.assertIn('onMouseLeave={()=>onPreview(null)}',self.fusions)
+        self.assertIn('onMouseLeave={()=>onPreview(null)}',self.drops)
+
+    def test_fusions_and_drops_share_identical_preview(self):
+        for source in (self.fusions,self.drops):
+            self.assertIn('import {CardHoverPreview} from "./card-hover-preview"',source)
+            self.assertIn('<CardHoverPreview selection={preview} sha={sha}',source)
+            self.assertIn('onFocus={event=>onPreview(',source)
+            self.assertIn('onMouseEnter={event=>onPreview(',source)
+        self.assertNotIn('WA offset:',self.drops)
+
+    def test_retrieves_validated_drops_for_active_iso(self):
+        source=self.overlay
+        self.assertIn('api.get_card_drop_sources(cardId)',source)
+        self.assertIn('data.cardId===cardId&&data.romSha===sha',source)
+        self.assertIn('matched&&result.available',source)
+        self.assertIn('rows.slice(0,4)',source)
+        self.assertIn('row.eligibleRanks.join(" / ")',source)
+        self.assertIn('row.chancePercent.toLocaleString("pt-BR"',source)
+        self.assertNotIn('result.source',source)
+        self.assertNotIn('sourceOffset',source)
+
+    def test_preview_is_larger_than_list_thumbnail_and_reset_when_filter_changes(self):
+        self.assertIn('w-40 shrink-0 sm:w-48',self.overlay)
+        self.assertIn('sizes="192px"',self.overlay)
+        self.assertIn('w-[min(94vw,500px)]',self.overlay)
+        self.assertIn('useEffect(()=>{setPreview(null)},[sha,query,offset,sort,cardType])',self.fusions)
+        self.assertIn('setPreview(null)',self.drops)
+        self.assertIn('fallbackDrop:row',self.drops)
+
+
+if __name__=="__main__":
+    unittest.main()
