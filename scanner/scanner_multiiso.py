@@ -17,6 +17,8 @@ from dueltrace_drop_layout_discovery import discover_relocated_drops
 from dueltrace_candidate_catalog import build_quarantined_catalog
 from dueltrace_name_layout_probe import find_opponent_pointer_candidates
 from dueltrace_name_boundaries import inspect_opponent_name_boundaries, read_name_table
+from dueltrace_independent_opponents import (
+    discover_independent_opponents, compact_opponent_evidence)
 
 OPP_COUNT=39
 CARD_COUNT=722
@@ -33,7 +35,7 @@ WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
-SCAN_PARSER_REVISION=17  # exporta catálogo candidato isolado por SHA
+SCAN_PARSER_REVISION=18  # exporta catálogo candidato isolado por SHA
 
 
 def sha256(path:Path, progress=None):
@@ -637,6 +639,25 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['versao_conhecida']='Remaster X15 1.2.1' if info['sha256']==X15_SHA else 'desconhecida — não atribuir dados X15'
         if progress:progress("Decodificando cartas e adversários",0,1)
         info['nomes_status']=nomes_status
+        if sl and not opponents:
+            # Procurar 39 adversários INDEPENDENTEMENTE dos 722 nomes de cartas.
+            # Um único bloco completo e isolado de ponteiros só comprova
+            # estrutura; os IDs seguem sem validação durante um duelo.
+            found_opponents=discover_independent_opponents(
+                sl,pointer_base=SLUS_PTR_BASE,text_base=SLUS_TEXT_BASE,
+                glyph_base=SLUS_GLYPHS,rom_sha256=info['sha256'])
+            info['independent_opponent_discovery']=compact_opponent_evidence(
+                found_opponents)
+            if found_opponents['candidateCount']:
+                (dest/'oponentes_candidatos_nao_verificados.json').write_text(
+                    json.dumps(found_opponents,ensure_ascii=False,
+                               separators=(',',':')),encoding='utf8')
+            if cards and isinstance(found_opponents.get('selected'),dict):
+                opponents=found_opponents['selected']['opponents']
+                info['opponent_identification']='extraidos_estruturalmente'
+                info['nomes_status']+=(
+                    '; 39 adversários recuperados de ponteiros independentes'
+                    ' (IDs não verificados em jogo)')
         if sl and (not opponents or not cards):
             # Descoberta limitada de tabela de nomes completa. Nenhuma
             # hipótese é promovida a cartas, oponentes ou drops neste passo.
@@ -773,7 +794,9 @@ def process(path,output,with_art=False,digest=None,progress=None):
                 info['artes_obs']=(
                     "Sem contêiner de recursos único ou catálogo de cartas "
                     "compatível; nenhuma arte inventada.")
-        if opponents and drops:
+        if opponents and drops and info.get('opponent_identification')=='extraidos_estruturalmente':
+            info['status']='parcial: adversários recuperados; drops requerem associação validada'
+        elif opponents and drops:
             info['status']=(
                 'parcial: cartas e drops por grupo sem RANK identificado'
                 if info.get("drop_group_mapping_status")=="grupos_nao_identificados"
