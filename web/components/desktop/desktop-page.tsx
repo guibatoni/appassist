@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
 import {
-  AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, FilePlus2, Gamepad2,
+  AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FilePlus2, Gamepad2,
   GitMerge, Layers, Play, RefreshCcw, Search, Shield, Swords, Upload,
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
@@ -665,280 +665,110 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
 function Mods({mods,sha,onRefresh,configured}:{
   mods:LocalMod[];sha:string|null;onRefresh:()=>Promise<void>;configured:boolean
 }) {
+  const [expandedSha,setExpandedSha]=useState<string|null>(null)
   const [busy,setBusy]=useState(false)
   const [message,setMessage]=useState<string|null>(null)
-  const [diagnostics,setDiagnostics]=useState<Record<string,ModScanDiagnostic>>({})
-  const [diagnosing,setDiagnosing]=useState<string|null>(null)
-  const investigate=async(mod:LocalMod,ollama=false)=>{
-    const api=desktopApi()
-    if(!api)return
-    setDiagnosing(mod.sha256);setMessage(null)
+
+  // A análise detalhada permanece disponível no motor, não nesta tela pública.
+  const run=async(action:()=>Promise<unknown>,success:string)=>{
+    setBusy(true);setMessage(null)
     try{
-      const result=await api.get_mod_scan_diagnostic(mod.sha256,ollama)
-      setDiagnostics(old=>({...old,[mod.sha256]:result}))
-    }catch(e){setMessage(e instanceof Error?e.message:"Diagnóstico não disponível.")}
-    finally{setDiagnosing(null)}
+      await action()
+      await onRefresh()
+      setMessage(success)
+    }catch{
+      setMessage("Não foi possível concluir a operação. Confira o arquivo e tente novamente.")
+    }finally{setBusy(false)}
   }
   const rescan=async(mod:LocalMod)=>{
     const api=desktopApi()
     if(!api)return
     setBusy(true);setMessage(null)
     try{
-      const result=await api.scan_sources(mod.sha256)
+      await api.scan_sources(mod.sha256)
       await onRefresh()
-      if(result.diagnostic){
-        setDiagnostics(old=>({...old,[mod.sha256]:result.diagnostic!}))
-      }
-      setMessage(
-        result.diagnostic&&!result.diagnostic.automaticExtractionComplete
-          ?"Estrutura não identificada: "+(result.diagnostic.issues[0]??"O scanner não validou as tabelas.")+
-            " · Ollama: "+(result.aiState??"não disponível")+
-            ". Consulte o diagnóstico deste mod."
-          :"Extração concluída: "+result.opponentCount+" oponentes, "+
-            result.dropEntries+" drops e "+result.artCount+" artes. "+
-            "Ollama: "+(result.aiState??"não iniciada")+".")
-    }catch(e){
-      setMessage(e instanceof Error?e.message:"Falha na análise local dos arquivos")
+      setMessage("Dados do mod atualizados.")
+    }catch{
+      setMessage("Não foi possível atualizar este mod. Verifique a ISO e tente novamente.")
     }finally{setBusy(false)}
   }
-  const run=async (action:()=>Promise<unknown>,label:string)=>{
-    setBusy(true);setMessage(null)
-    try{const result=await action();await onRefresh();setMessage(label)}
-    catch(e){setMessage(e instanceof Error?e.message:"Operação não concluída")}
-    finally{setBusy(false)}
-  }
   return <>
-    <Heading title="Biblioteca de Mods" subtitle="Importe e ative imagens locais, com dados separados por SHA da ISO"/>
+    <Heading title="Biblioteca de Mods" subtitle="Seus jogos organizados em um só lugar"/>
     <section className="panel rounded-xl p-4">
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn-gold disabled:opacity-40" disabled={busy||!desktopApi()}
-          onClick={()=>void run(()=>desktopApi()!.import_iso(),"Processamento de ISO concluído ou cancelado.")}>
-          <FilePlus2 className="size-4"/> Importar ISO/BIN</button>
+          onClick={()=>void run(()=>desktopApi()!.import_iso(),"Biblioteca atualizada.")}>
+          <FilePlus2 className="size-4"/> Adicionar mod</button>
         <button type="button" className="btn-ghost disabled:opacity-40" disabled={busy||!desktopApi()}
-          onClick={()=>void run(()=>desktopApi()!.configure_epsxe(),"Configuração do emulador atualizada.")}>
-          <Gamepad2 className="size-4"/> {configured?"Alterar ePSXe.exe":"Configurar ePSXe.exe"}</button>
+          onClick={()=>void run(()=>desktopApi()!.configure_epsxe(),"Emulador configurado.")}>
+          <Gamepad2 className="size-4"/> {configured?"Alterar emulador":"Configurar ePSXe"}</button>
         <button type="button" className="btn-ghost disabled:opacity-40" disabled={busy||!configured||!sha||!desktopApi()}
-          onClick={()=>void run(()=>desktopApi()!.start_game(),"Comando enviado ao ePSXe.")}>
-          <Play className="size-4"/> Iniciar jogo</button>
+          onClick={()=>void run(()=>desktopApi()!.start_game(),"Jogo iniciado.")}>
+          <Play className="size-4"/> Jogar</button>
         <button type="button" className="btn-ghost disabled:opacity-40" disabled={busy||!desktopApi()}
-          onClick={()=>void run(async()=>{}, "Lista de mods atualizada. Para reler os arquivos da ISO, use 'Ler WA_MRG + SLUS novamente'.")}>
+          onClick={()=>void onRefresh()}>
           <RefreshCcw className="size-4"/> Atualizar lista</button>
       </div>
       {message&&<p className="mt-3 text-sm text-gold" role="status">{message}</p>}
-      <div className="mt-4 grid gap-3 xl:grid-cols-2">
-        {mods.map(mod=><div key={mod.sha256} className={"rounded-xl border bg-gradient-to-b from-panel-strong/90 to-panel/50 p-4 "+(sha===mod.sha256?"border-success/70":"border-line/70")}>
-          <div className="flex items-start justify-between gap-3"><div className="min-w-0">
-            <p className="truncate font-semibold text-white">{mod.name}</p>
-            <p className="mt-1 text-xs text-muted">{mod.sha256.slice(0,18)}…</p>
-          </div><span className={sha===mod.sha256?"text-xs text-success":"text-xs text-gold"}>{sha===mod.sha256?"Ativo":mod.requiresReview?"Revisão necessária":"Conhecido"}</span></div>
-          <div className="my-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-3 xl:grid-cols-3">
-            {([["Cartas",mod.cards],["Oponentes",mod.opponents??0],["Drops confirmados",mod.dropEntries??0],
-              ["Fusões",mod.fusions],["Textos de efeito",mod.effects],["Descrições",mod.descriptions??0],
-              ["Tabelas WA confirmadas",mod.dropTables??0],["Molduras WA",mod.frameStyles??0],
-              ["Cartas emolduradas",mod.framedCards??0]] as const).map(([label,n])=>
-              <div key={label} className="rounded-lg border border-line/50 bg-background/70 p-2"><p className="font-display text-xl text-primary">{n}</p><p className="text-xs text-muted">{label}</p></div>)}
-          </div>
-          {(mod.dropCandidateTables??0)>0&&<p className="mb-3 rounded-lg border border-gold/40 bg-background/50 px-3 py-2 text-xs text-gold">
-            Drops provisórios: {mod.dropCandidateEntries??0} entradas em
-            {" "}{mod.dropCandidateTables} tabelas com pesos estruturalmente coerentes.
-            IDs de cartas e oponentes ainda não verificados; estes dados não são usados em Drops ou RANK.
-          </p>}
-          <p className="mb-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted">
-            <span className="font-semibold text-primary">RANK automático: </span>
-            {mod.rankBinaryVerified
-              ? "Tabela e identidade do executável verificadas. A RAM ainda precisa de teste em duelo."
-              : mod.rankDetected
-                ? "Pontos encontrados no WA. O uso dessas regras pelo SLUS ainda está em investigação."
-                : "Tabela de pontos não confirmada para este mod."}
-            {mod.rankMipsCandidates ? <span className="ml-1"> · {mod.rankMipsCandidates} trechos MIPS candidatos (não confirmados)</span> : null}
-            {mod.rankDetected&&typeof mod.rankOffset==="number"&&
-              <span className="ml-1 tabular-nums">Offset WA: 0x{mod.rankOffset.toString(16).toUpperCase()}</span>}
-          </p>
-          <button type="button" disabled={busy||!desktopApi()||sha===mod.sha256}
-            className="btn-gold w-full disabled:opacity-40" onClick={()=>{
-              const ok=!mod.requiresReview||window.confirm("O mod requer revisão. Ativar somente os dados comprovados?")
-              if(ok)void run(()=>desktopApi()!.activate_mod(mod.sha256,mod.requiresReview),"Perfil ativado.")
-            }}>{sha===mod.sha256?"Perfil ativo":"Ativar perfil"}</button>
-          <button type="button" className="btn-ghost mt-2 w-full disabled:opacity-40"
-            disabled={busy||!desktopApi()}
-            onClick={()=>void rescan(mod)}>
-            <RefreshCcw className="size-4"/> Ler WA_MRG + SLUS novamente
-          </button>
-          {mod.cards===0&&<p className="mt-2 text-xs text-gold">
-            Estrutura não reconhecida. Zero cartas extraídas não significa que a ISO não contenha cartas.
-          </p>}
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" className="btn-ghost flex-1 disabled:opacity-40"
-              disabled={busy||diagnosing!==null||!desktopApi()}
-              onClick={()=>void investigate(mod,false)}>
-              {diagnosing===mod.sha256?"Analisando…":"Diagnosticar estrutura"}
+      <div className="mt-4 space-y-2">
+        {mods.map(mod=>{
+          const active=sha===mod.sha256
+          const open=expandedSha===mod.sha256
+          const details=[
+            ["Cartas",mod.cards],
+            ["Fusões",mod.fusions],
+            ["Oponentes",mod.opponents??0],
+            ["Drops",mod.dropEntries??0],
+          ] as const
+          return <article key={mod.sha256} className={
+            "overflow-hidden rounded-xl border bg-panel-strong/70 transition-colors "+
+            (active?"border-primary/65":"border-line/70 hover:border-primary/45")
+          }>
+            <button type="button" aria-expanded={open}
+              aria-controls={"mod-info-"+mod.sha256.slice(0,16)}
+              onClick={()=>setExpandedSha(open?null:mod.sha256)}
+              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-primary/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-line/60 bg-background/80">
+                <Gamepad2 className="size-5 text-primary"/>
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold text-white">{mod.name}</span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  {active?"Pronto para jogar":mod.requiresReview?"Compatibilidade limitada":"Disponível"}
+                </span>
+              </span>
+              {active&&<span className="rounded-md bg-primary/15 px-2 py-1 text-xs font-semibold text-primary">Ativo</span>}
+              <ChevronDown className={"size-5 shrink-0 text-primary transition-transform duration-200 "+(open?"rotate-180":"")}/>
             </button>
-            <button type="button" className="btn-ghost flex-1 disabled:opacity-40"
-              disabled={busy||diagnosing!==null||!desktopApi()}
-              onClick={()=>void investigate(mod,true)}>
-              {diagnosing===mod.sha256?"Consultando…":"Investigar com Ollama"}
-            </button>
-          </div>
-          {diagnostics[mod.sha256]&&<div className="mt-3 rounded-lg border border-primary/30 bg-background/60 p-3 text-xs text-muted">
-            <p className="font-semibold text-primary">Diagnóstico do layout: {diagnostics[mod.sha256].state.replaceAll("_"," ")}</p>
-            <p className="mt-1">Arquivos indexados: {diagnostics[mod.sha256].indexedFiles}.
-              {" "}Setores: {diagnostics[mod.sha256].sectorBytes??"não identificados"} bytes.</p>
-            <p className="mt-1">Executável: {diagnostics[mod.sha256].chosenExecutable||"não reconhecido"}.
-              {" "}WA: {diagnostics[mod.sha256].chosenWa||"não reconhecido"}.</p>
-            {diagnostics[mod.sha256].waSelectionMethod==="tamanho_identico_nao_validado"&&
-              <p className="mt-2 text-gold">
-                Arquivo de recursos renomeado identificado como candidato:
-                {" "}{diagnostics[mod.sha256].suspectedWa}.
-                A seleção foi feita somente pelo tamanho; estrutura, drops e artes
-                ainda precisam de validação.
+            {open&&<div id={"mod-info-"+mod.sha256.slice(0,16)}
+              className="border-t border-line/60 px-4 pb-4 pt-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {details.map(([label,value])=>
+                  <div key={label} className="rounded-lg border border-line/40 bg-background/50 px-3 py-2 text-center">
+                    <p className="font-display text-lg font-bold text-primary">{value>0?value.toLocaleString("pt-BR"):"—"}</p>
+                    <p className="text-xs text-muted">{label}</p>
+                  </div>)}
+              </div>
+              {mod.requiresReview&&<p className="mt-3 text-xs text-muted">
+                Alguns recursos deste mod podem não estar disponíveis.
               </p>}
-            <p className="mt-1">SYSTEM.CNF: {diagnostics[mod.sha256].systemCnf?.status??"não analisado"}
-              {diagnostics[mod.sha256].systemCnf?.bootTarget
-                ? " · BOOT: "+diagnostics[mod.sha256].systemCnf.bootTarget:""}
-            </p>
-            {diagnostics[mod.sha256].systemCnf?.bootTarget&&<p className="mt-1 font-semibold text-gold">
-              Alvo BOOT no índice ISO9660: {diagnostics[mod.sha256].systemCnf.bootTargetIndexed===true
-                ?"sim · arquivo localizado"
-                :diagnostics[mod.sha256].systemCnf.bootTargetIndexed===false
-                ?"não · arquivo ausente do índice":"não confirmado"}
-              {diagnostics[mod.sha256].systemCnf.bootFileSignature
-                ?" · assinatura: "+diagnostics[mod.sha256].systemCnf.bootFileSignature:""}
-            </p>}
-            {diagnostics[mod.sha256].issues.map((issue,i)=>
-              <p className="mt-1 text-gold" key={"issue-"+i}>{issue}</p>)}
-            <details className="mt-2">
-              <summary className="cursor-pointer text-primary">Evidências e próximas investigações</summary>
-              {(diagnostics[mod.sha256].files?.length??0)>0&&<div className="mt-2">
-                <p className="font-semibold text-primary">Arquivos encontrados no disco:</p>
-                <div className="mt-1 max-h-56 overflow-y-auto rounded border border-line/50 p-2">
-                  {(diagnostics[mod.sha256].files??[]).map((file,i)=>
-                    <p key={i} className="break-all py-0.5">
-                      {file.name} · {file.size===null?"tamanho não identificado":file.size.toLocaleString("pt-BR")+" bytes"}
-                      {file.signature&&file.signature!=="não examinada"?" · "+file.signature:""}
-                    </p>)}
-                </div>
-              </div>}
-              {(diagnostics[mod.sha256].possibleResourceFiles?.length??0)>0&&<div className="mt-2">
-                <p className="font-semibold text-primary">
-                  Arquivos grandes para investigar (não identificados como WA):
-                </p>
-                {(diagnostics[mod.sha256].possibleResourceFiles??[]).map((file,i)=>
-                  <p key={i} className="mt-1 break-all">
-                    {file.name} · {file.size.toLocaleString("pt-BR")} bytes
-                  </p>)}
-              </div>}
-              {diagnostics[mod.sha256].layoutCandidates&&<div className="mt-3 rounded-md border border-primary/30 p-3">
-                <p className="font-semibold text-primary">
-                  Detector universal · candidatos por assinatura e conteúdo
-                </p>
-                <p className="mt-1">
-                  {diagnostics[mod.sha256].layoutCandidates?.inspectedFiles??0} arquivos examinados,
-                  {" "}{diagnostics[mod.sha256].layoutCandidates?.resourceProbes??0} sondagens de recursos.
-                  São pistas, não tabelas comprovadas.
-                </p>
-                {(["executables","resources"] as const).map(kind=><div key={kind} className="mt-2">
-                  <p className="font-semibold">{kind==="executables"?"Executáveis":"Contêineres de recursos"}</p>
-                  {(diagnostics[mod.sha256].layoutCandidates?.[kind]??[]).map((candidate,i)=>
-                    <div key={kind+"-"+i} className="mt-1 border-b border-line/40 py-1">
-                      <p className="break-all text-white">{candidate.name}</p>
-                      <p className="text-muted">
-                        {candidate.size?.toLocaleString("pt-BR")??"?"} bytes
-                        {candidate.dropArrayMatches>0?" · matrizes candidatas: "+candidate.dropArrayMatches:""}
-                        {" · "}{candidate.signals.join(" / ").replaceAll("_"," ")}
-                      </p>
-                    </div>)}
-                  {(diagnostics[mod.sha256].layoutCandidates?.[kind]??[]).length===0&&
-                    <p className="text-muted">Nenhum candidato identificado neste grupo.</p>}
-                </div>)}
-              </div>}
-              {diagnostics[mod.sha256].executableCandidates.length>0&&
-                <p className="mt-2 break-words">Executáveis candidatos: {diagnostics[mod.sha256].executableCandidates.join(", ")}</p>}
-              {diagnostics[mod.sha256].waCandidates.length>0&&
-                <p className="mt-1 break-words">Arquivos WA candidatos: {diagnostics[mod.sha256].waCandidates.join(", ")}</p>}
-              {diagnostics[mod.sha256].nameLayoutProbe?.state==="amostras_nao_validadas"&&<div className="mt-3 border-t border-line/50 pt-2">
-                <p className="font-semibold text-gold">Amostras dos nomes SLUS (não verificadas)</p>
-                <p className="mt-1">Esses textos vêm dos offsets conhecidos e podem pertencer a outras regiões da ISO.</p>
-                <p className="mt-1 font-semibold">Cartas</p>
-                {(diagnostics[mod.sha256].nameLayoutProbe?.cardSamples??[]).map((row,i)=>
-                  <p key={"card-"+i} className="mt-1 break-all">
-                    #{row.index} ponteiro {row.pointer??"?"}: {row.name||"(vazio)"} · {row.status}
-                  </p>)}
-                <p className="mt-2 font-semibold">Oponentes</p>
-                {(diagnostics[mod.sha256].nameLayoutProbe?.opponentSamples??[]).map((row,i)=>
-                  <p key={"opp-"+i} className="mt-1 break-all">
-                    #{row.index} ponteiro {row.pointer??"?"}: {row.name||"(vazio)"} · {row.status}
-                  </p>)}
-              </div>}
-              {diagnostics[mod.sha256].opponentNameBoundaries?.state==="limites_nao_validados"&&
-                <div className="mt-3 rounded-lg border border-primary/30 p-2">
-                  <p className="font-semibold text-primary">Análise dos terminadores dos nomes — não validada</p>
-                  <p className="mt-1">
-                    Nomes examinados: {diagnostics[mod.sha256].opponentNameBoundaries?.examined??0}.
-                    {" "}Registros com 0xFF antes do próximo ponteiro:
-                    {" "}{diagnostics[mod.sha256].opponentNameBoundaries?.hasFFBeforeNext??0}.
-                    {" "}Sem 0xFF: {diagnostics[mod.sha256].opponentNameBoundaries?.noFFBeforeNext??0}.
-                  </p>
-                  <p className="mt-1">
-                    Primeiro byte ilegível mais comum:
-                    {" "}{diagnostics[mod.sha256].opponentNameBoundaries?.commonFirstInvalidByte??"não observado"}
-                    {" "}({diagnostics[mod.sha256].opponentNameBoundaries?.commonFirstInvalidCount??0} registros).
-                  </p>
-                  {diagnostics[mod.sha256].opponentNameBoundaries?.pointerAudit&&<p className="mt-1">
-                    Ponteiros fora do arquivo: {diagnostics[mod.sha256].opponentNameBoundaries?.pointerAudit?.outOfFile??0}.
-                    {" "}Registros compartilhando ponteiro: {diagnostics[mod.sha256].opponentNameBoundaries?.pointerAudit?.sharedRecords??0}.
-                    {" "}Pares fora de ordem: {diagnostics[mod.sha256].opponentNameBoundaries?.pointerAudit?.nonIncreasingPairs??0}.
-                  </p>}
-                  {diagnostics[mod.sha256].opponentNameBoundaries?.terminatedRecords!==undefined&&<p className="mt-1">
-                    Registros com 0xFF reconhecido: {diagnostics[mod.sha256].opponentNameBoundaries?.terminatedRecords}.
-                    {" "}Segmentos integralmente examinados: {diagnostics[mod.sha256].opponentNameBoundaries?.boundedRecords??0}.
-                  </p>}
-                  <p className="mt-1">
-                    Byte mais frequente no fim dos registros:
-                    {" "}{diagnostics[mod.sha256].opponentNameBoundaries?.commonEndByte??"?"}
-                    {" "}({diagnostics[mod.sha256].opponentNameBoundaries?.commonEndByteCount??0} ocorrências).
-                  </p>
-                  {(diagnostics[mod.sha256].opponentNameBoundaries?.samples??[]).map((row,i)=>
-                    <p key={i} className="mt-1 break-all">
-                      #{row.id} {row.readablePrefix||"(sem texto legível)"}
-                      {" "}· delta {row.nextPointerDelta??"?"}
-                      {" "}· último byte {row.endByteHex??"?"}
-                      {" "}· 1º inválido {row.firstInvalidHex??"nenhum"}
-                      {row.recordStatus&&<> · {row.recordStatus.replaceAll("_"," ")}</>}
-                      {row.ambiguousBoundary&&<> · limite ambíguo, identidade pendente</>}
-                      {row.lastGlyph&&<> · último glifo: “{row.lastGlyph}” ({row.lastGlyphHex??"?"})</>}
-                      {row.headerHex&&<> · cabeçalho {row.headerHex}</>}
-                      {" "}· final em hex {row.tailHex}
-                    </p>)}
-                  <p className="mt-2 text-gold">
-                    O aplicativo não remove sufixos nem libera esses nomes sem conferência.
-                  </p>
-                </div>}
-              {(diagnostics[mod.sha256].opponentPointerProbe?.candidates?.length??0)>0&&
-                <div className="mt-3 rounded-lg border border-gold/30 p-2">
-                  <p className="font-semibold text-gold">Possíveis tabelas de nomes de oponentes — não confirmadas</p>
-                  {(diagnostics[mod.sha256].opponentPointerProbe?.candidates??[]).map((c,i)=>
-                    <div key={i} className="mt-2 text-muted">
-                      <p>Índice inicial {c.startIndex} · {c.plausible}/39 nomes plausíveis · {c.distinct} diferentes</p>
-                      <p className="mt-1 break-words">{c.samples.join(" · ")}</p>
-                    </div>)}
-                  <p className="mt-2">Somente evidências. Nenhuma lista foi atribuída à ISO.</p>
-                </div>}
-              {diagnostics[mod.sha256].nextSteps.map((step,i)=><p key={"step-"+i} className="mt-1">{i+1}. {step}</p>)}
-            </details>
-            {diagnostics[mod.sha256].ai&&diagnostics[mod.sha256].ai!.state!=="nao_solicitada"&&
-              <div className="mt-2 border-t border-line/60 pt-2">
-                <p className="font-semibold text-primary">Ollama: {diagnostics[mod.sha256].ai!.state.replaceAll("_"," ")}</p>
-                {diagnostics[mod.sha256].ai!.message&&<p className="mt-1">{diagnostics[mod.sha256].ai!.message}</p>}
-                {diagnostics[mod.sha256].ai!.note&&<p className="mt-1 text-gold">{diagnostics[mod.sha256].ai!.note}</p>}
-                {diagnostics[mod.sha256].ai!.resumo&&<p className="mt-1">{diagnostics[mod.sha256].ai!.resumo}</p>}
-                {diagnostics[mod.sha256].ai!.prioridades?.map((step,i)=><p key={"ai-"+i} className="mt-1">{i+1}. {step}</p>)}
-              </div>}
-          </div>}
-        </div>)}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" disabled={busy||!desktopApi()||active}
+                  className="btn-gold flex-1 disabled:opacity-40" onClick={()=>{
+                    const ok=!mod.requiresReview||window.confirm("Este mod tem compatibilidade parcial. Ativar os recursos disponíveis?")
+                    if(ok)void run(()=>desktopApi()!.activate_mod(mod.sha256,mod.requiresReview),"Mod ativado.")
+                  }}>{active?"Mod ativo":"Ativar mod"}</button>
+                <button type="button" className="btn-ghost flex-1 disabled:opacity-40"
+                  disabled={busy||!desktopApi()} onClick={()=>void rescan(mod)}>
+                  <RefreshCcw className="size-4"/> Atualizar dados
+                </button>
+              </div>
+            </div>}
+          </article>
+        })}
       </div>
-      {!mods.length&&<Empty>Nenhum mod cadastrado. Importe uma ISO/BIN na versão Windows. Os arquivos não são enviados ao Vercel.</Empty>}
+      {!mods.length&&<Empty>Nenhum mod adicionado. Importe uma ISO/BIN para começar.</Empty>}
     </section>
-    <CardMatchPanel mods={mods} activeSha={sha}/>
   </>
 }
 
@@ -1088,23 +918,34 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
   </>
 }
 
-function FusionIllustration({id,name,sha,card,role}:{
-  id:number;name:string;sha:string|null;card:LocalCard|null;role:string
+type FusionPreviewCard = {id:number;name:string;card:LocalCard}
+
+function FusionIllustration({id,name,sha,card,role,onPreview}:{
+  id:number;name:string;sha:string|null;card:LocalCard|null;role:string;
+  onPreview:(card:FusionPreviewCard|null)=>void
 }) {
   const displayed:LocalCard=card??{
     id,name,type:"",attribute:"",category:"Não identificada",
     atk:null,def:null,effect:null,effectSource:null
   }
-  return <div className="flex min-w-0 flex-col items-center gap-1.5" title={name}>
+  return <div className="flex min-w-0 flex-col items-center gap-1.5">
     <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{role}</span>
-    <div className="w-16 sm:w-20">
-      <CardThumbnail key={String(sha)+"-"+id} card={displayed} sha={sha}/>
-    </div>
-    <span className="text-center text-[11px] font-semibold text-gold">#{id}</span>
-    <span className="line-clamp-2 min-h-8 break-words text-center text-xs font-medium text-foreground">{name}</span>
-    <MonsterStats card={displayed} className="text-center text-[10px]"/>
+    <button type="button" aria-label={`Ver detalhes e drops de ${name}`}
+      onMouseEnter={()=>onPreview({id,name,card:displayed})}
+      onMouseLeave={()=>onPreview(null)}
+      onFocus={()=>onPreview({id,name,card:displayed})}
+      onBlur={()=>onPreview(null)}
+      className="group flex min-w-0 w-full flex-col items-center gap-1.5 rounded-md p-1 transition-all duration-200 hover:bg-primary/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+      <div className="w-16 origin-center transition-transform duration-200 group-hover:scale-105 group-focus-visible:scale-105 sm:w-20">
+        <CardThumbnail key={String(sha)+"-"+id} card={displayed} sha={sha}/>
+      </div>
+      <span className="text-center text-[11px] font-semibold text-gold">#{id}</span>
+      <span className="line-clamp-2 min-h-8 break-words text-center text-xs font-medium text-foreground">{name}</span>
+      <MonsterStats card={displayed} className="text-center text-[10px]"/>
+    </button>
   </div>
 }
+
 
 function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [query,setQuery]=useState("")
@@ -1113,9 +954,41 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [offset,setOffset]=useState(0)
   const [records,setRecords]=useState<FusionPage|null>(null)
   const [error,setError]=useState<string|null>(null)
+  const [hoveredCard,setHoveredCard]=useState<FusionPreviewCard|null>(null)
+  const [dropCache,setDropCache]=useState<Record<number,CardDropSources>>({})
+  const [dropErrors,setDropErrors]=useState<Record<number,boolean>>({})
   const cardsById=useMemo(()=>new Map(cards.map(c=>[c.id,c])),[cards])
   const types=useMemo(()=>Array.from(new Set(cards.map(c=>c.type||c.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"pt-BR")),[cards])
   useEffect(()=>{setQuery("");setSort("id");setCardType("");setOffset(0);setRecords(null)},[sha])
+  useEffect(()=>{setHoveredCard(null);setDropCache({});setDropErrors({})},[sha])
+  useEffect(()=>{
+    setHoveredCard(null)
+  },[query,offset,sort,cardType])
+  const hoveredId=hoveredCard?.id??null
+  useEffect(()=>{
+    if(!sha||hoveredId===null||dropCache[hoveredId]||dropErrors[hoveredId])return
+    const api=desktopApi()
+    if(!api)return
+    let active=true
+    // Não disparar consultas para um simples movimento rápido do mouse.
+    const timer=window.setTimeout(()=>{
+      void api.get_card_drop_sources(hoveredId).then(data=>{
+        if(!active)return
+        if(data.romSha===sha&&data.cardId===hoveredId){
+          setDropCache(old=>({...old,[hoveredId]:data}))
+        }else{
+          setDropErrors(old=>({...old,[hoveredId]:true}))
+        }
+      }).catch(()=>{
+        if(active)setDropErrors(old=>({...old,[hoveredId]:true}))
+      })
+    },180)
+    return()=>{active=false;window.clearTimeout(timer)}
+  },[sha,hoveredId,dropCache,dropErrors])
+  const drops=hoveredCard?dropCache[hoveredCard.id]:null
+  const dropRows=(drops?.available&&drops.romSha===sha&&
+                  drops.cardId===hoveredCard?.id)?drops.rows:[]
+  const displayDrops=dropRows.slice(0,4)
   const pageSize=12
   useEffect(()=>{
     let mounted=true
@@ -1159,13 +1032,13 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       {error&&<p className="mt-3 text-sm text-danger" role="alert">{error}</p>}
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         {records?.rows.map((r,i)=><article key={r.a+"-"+r.b+"-"+r.result+"-"+i}
-          className="rounded-xl border border-line/80 bg-gradient-to-br from-panel-strong/90 via-[#0b1a35] to-background p-3 shadow-[inset_0_1px_0_rgb(245_184_61/0.09)] transition-colors hover:border-primary/60">
+          className="relative rounded-xl border border-line/80 bg-gradient-to-br from-panel-strong/90 via-[#0b1a35] to-background p-3 shadow-[inset_0_1px_0_rgb(245_184_61/0.09)] transition-colors hover:border-primary/60">
           <div className="grid grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)_24px_minmax(0,1fr)] items-start gap-1">
-            <FusionIllustration id={r.a} name={r.nameA} card={cardsById.get(r.a)??null} sha={sha} role="Material A"/>
+            <FusionIllustration id={r.a} name={r.nameA} card={cardsById.get(r.a)??null} sha={sha} role="Material A" onPreview={setHoveredCard}/>
             <span className="pt-14 text-center font-display text-xl font-bold text-primary" aria-hidden>+</span>
-            <FusionIllustration id={r.b} name={r.nameB} card={cardsById.get(r.b)??null} sha={sha} role="Material B"/>
+            <FusionIllustration id={r.b} name={r.nameB} card={cardsById.get(r.b)??null} sha={sha} role="Material B" onPreview={setHoveredCard}/>
             <span className="pt-14 text-center font-display text-xl font-bold text-gold" aria-hidden>→</span>
-            <FusionIllustration id={r.result} name={r.nameResult} card={cardsById.get(r.result)??null} sha={sha} role="Resultado"/>
+            <FusionIllustration id={r.result} name={r.nameResult} card={cardsById.get(r.result)??null} sha={sha} role="Resultado" onPreview={setHoveredCard}/>
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/50 pt-2">
             <span className="text-xs text-muted">#{r.a} + #{r.b} → #{r.result}</span>
@@ -1188,10 +1061,48 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             onClick={()=>setOffset(x=>x+pageSize)}>Próxima <ChevronRight className="size-4"/></button>
         </div>
       </div>
-      <p className="mt-3 text-xs text-muted">
-        As imagens só aparecem quando o scanner extraiu PNGs da ISO ativa.
-        Na ausência de arte, mostramos um cartão simbólico; nenhuma imagem é inventada.
-      </p>
+      <div role="tooltip" aria-hidden={!hoveredCard}
+        className={"pointer-events-none fixed bottom-4 right-4 z-50 w-[min(92vw,380px)] rounded-xl border border-primary/45 bg-[#09172e]/95 p-4 shadow-[0_18px_60px_rgb(0_0_0/0.7)] backdrop-blur-lg transition-all duration-200 "+
+          (hoveredCard?"translate-y-0 opacity-100":"translate-y-3 opacity-0")}>
+        {hoveredCard&&<div>
+          <div className="flex items-start gap-3">
+            <div className="w-24 shrink-0 sm:w-28">
+              <CardThumbnail card={hoveredCard.card} sha={sha}/>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-gold">#{hoveredCard.id}</p>
+              <p className="mt-1 line-clamp-3 font-display text-base font-bold text-white">{hoveredCard.name}</p>
+              {(hoveredCard.card.type||hoveredCard.card.attribute)&&<p className="mt-1 text-xs text-muted">
+                {[hoveredCard.card.type,hoveredCard.card.attribute].filter(Boolean).join(" · ")}
+              </p>}
+              <MonsterStats card={hoveredCard.card} className="mt-2 text-xs"/>
+            </div>
+          </div>
+          {hoveredCard.card.effect&&<p className="mt-2 line-clamp-3 text-xs text-muted">{hoveredCard.card.effect}</p>}
+          <div className="mt-3 border-t border-line/60 pt-3">
+            <p className="mb-2 text-xs font-semibold text-primary">Onde conseguir</p>
+            {displayDrops.length>0?<div className="space-y-1.5">
+              {displayDrops.map(row=><div key={row.opponentId+"-"+row.group}
+                className="flex items-start justify-between gap-2 text-xs">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-white">{row.opponentName}</p>
+                  <p className="text-[11px] text-muted">{row.eligibleRanks.join(" / ")}</p>
+                </div>
+                <span className="shrink-0 font-semibold tabular-nums text-gold">
+                  {row.chancePercent.toLocaleString("pt-BR",{maximumFractionDigits:3})}%
+                </span>
+              </div>)}
+              {dropRows.length>displayDrops.length&&<p className="text-[11px] text-muted">
+                +{dropRows.length-displayDrops.length} outras possibilidades
+              </p>}
+            </div>:<p className="text-xs text-muted">
+              {drops?.available?"Nenhum drop registrado para esta carta.":
+                drops||dropErrors[hoveredCard.id]?"Drops não disponíveis neste mod.":
+                "Consultando drops…"}
+            </p>}
+          </div>
+        </div>}
+      </div>
     </section>
   </>
 }
