@@ -67,7 +67,7 @@ def report_level(profile: dict) -> str:
                 and verified.get("tabelas_drops") == "verificado"):
             return "conhecido_validado"
     if (verified.get("cartas") in ("verificado", "extraidas_estruturalmente")
-            or verified.get("oponentes") == "verificado"
+            or verified.get("oponentes") in ("verificado", "extraidos_estruturalmente")
             or verified.get("tabelas_drops") == "verificado"):
         return "parcial_revisar"
     return "desconhecido"
