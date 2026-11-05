@@ -102,6 +102,8 @@ def build_compatibility_matrix(catalog:ModCatalog)->dict:
                 if isinstance(resources.get("candidates"),list) else 0,
             "dropLayouts":len(drops.get("candidates",[]))
                 if isinstance(drops.get("candidates"),list) else 0,
+            "quarantinedCards":scan.get("candidate_catalogue",{}).get("cards",0)
+                if isinstance(scan.get("candidate_catalogue"),dict) else 0,
         }
         item={"sha256":sha,"level":_short_status(entry.get("level")),
               "modeAvailable":"basic" if not profile.get("scanner_error")

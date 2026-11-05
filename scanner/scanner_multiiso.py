@@ -14,6 +14,7 @@ from dueltrace_card_attribute_probe import discover_card_attribute_layout
 from dueltrace_mips_reference_probe import inspect_mips_table_references
 from dueltrace_resource_selection import inspect_resource_candidates
 from dueltrace_drop_layout_discovery import discover_relocated_drops
+from dueltrace_candidate_catalog import build_quarantined_catalog
 from dueltrace_name_layout_probe import find_opponent_pointer_candidates
 from dueltrace_name_boundaries import inspect_opponent_name_boundaries, read_name_table
 
@@ -32,7 +33,7 @@ WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
-SCAN_PARSER_REVISION=15  # descobre contêiner WA renomeado e drops realocados
+SCAN_PARSER_REVISION=16  # exporta catálogo candidato isolado por SHA
 
 
 def sha256(path:Path, progress=None):
@@ -460,7 +461,8 @@ def process(path,output,with_art=False,digest=None,progress=None):
     info['resultado_dir']=str(dest.resolve())
     # Não reaproveitar CSVs desatualizados de uma tentativa anterior.
     for previous in ('cartas.csv','oponentes.csv','drops_por_oponente.csv',
-                     'decks.csv','validacao_pesos.csv'):
+                     'decks.csv','validacao_pesos.csv',
+                     'catalogo_candidato_nao_verificado.json'):
         (dest/previous).unlink(missing_ok=True)
     disc=None
     try:
@@ -634,6 +636,19 @@ def process(path,output,with_art=False,digest=None,progress=None):
                 if offsets:
                     info["mips_card_attribute_evidence"]=inspect_mips_table_references(
                         sl,offsets)
+                candidate_catalog=build_quarantined_catalog(
+                    sl,info['sha256'],attributes)
+                info["candidate_catalogue"]={
+                    "status":candidate_catalog["status"],
+                    "cards":candidate_catalog["cardsCount"],
+                    "opponents":candidate_catalog["opponentsCount"],
+                    "validated":False,"inGameVerified":False}
+                if candidate_catalog["status"]=="catalogo_candidato_reconstruido":
+                    # Arquivo de investigação APARTADO do CSV público.
+                    # Nunca criar perfil validado a partir dessas hipóteses.
+                    (dest/'catalogo_candidato_nao_verificado.json').write_text(
+                        json.dumps(candidate_catalog,ensure_ascii=False,
+                                   separators=(',',':')),encoding='utf8')
             info["amostras_layout_nomes"]=inspect_known_name_layout(sl)
             # Quando 722 nomes parecem possíveis e a lista de oponentes
             # falha, sondar deslocamentos limitados na tabela de ponteiros.

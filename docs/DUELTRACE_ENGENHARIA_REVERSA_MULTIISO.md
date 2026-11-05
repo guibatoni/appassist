@@ -263,6 +263,30 @@ Tudo acontece localmente. Cache e perfil separados por SHA-256 da imagem.
   alinhamentos de bytes podem parecer válidos. O parser **mantém ambiguidade**
   em vez de assumir o primeiro offset encontrado.
 
+## Etapa 2I — exportação isolada de 722 cartas candidatas
+
+- Se a sondagem conjunta de nomes + atributos tiver **exatamente um**
+  layout forte, o DUELTRACE reconstrói os registros completos de
+  722 cartas e 39 oponentes a partir do **mesmo executável e SHA**.
+- Os dados são escritos em
+  `catalogo_candidato_nao_verificado.json` no diretório local da análise,
+  com IDs, nomes, ATK, DEF, tipo, atributo, nível e estrelas guardiãs.
+- A exportação só é feita quando os 761 nomes têm terminadores válidos,
+  a tabela de atributos respeita os limites e as identidades são
+  internamente consistentes. Qualquer divergência cancela o arquivo.
+- Cada reanálise apaga o arquivo candidato antigo antes de iniciar, para
+  não reutilizar cartas de outra versão de ISO ou de um scan fracassado.
+- **Quarentena obrigatória:** o arquivo nunca substitui `cartas.csv`,
+  `oponentes.csv` nem o catálogo do perfil ativo. O jogador só recebe
+  informações confirmadas pelos decodificadores habilitados.
+- O campo `mayActivate=false` e os indicadores `validated=false` e
+  `inGameVerified=false` não são alterados pelo Ollama.
+- A matriz local de compatibilidade contabiliza esses registros sem
+  exportar nomes de cartas, tabelas ou dados binários.
+- `SCAN_PARSER_REVISION=16` revalida caches de importações antigas.
+- Próxima prova necessária: comparar IDs e efeitos com a execução do
+  mod no emulador antes de usar esses registros na Biblioteca pública.
+
 ## Etapa 3 — parser de mod sem layout conhecido
 
 - Inferir deslocamentos com referências cruzadas MIPS, estrutura de ponteiros,
