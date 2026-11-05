@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse, csv, hashlib, json, re, struct, sys, unicodedata
 from pathlib import Path
 from dueltrace_layout_discovery import discover_disc_layout, candidate_files_for_decoder
+from dueltrace_cdrom_layout import detect_disc_geometry
 from dueltrace_name_layout_probe import find_opponent_pointer_candidates
 from dueltrace_name_boundaries import inspect_opponent_name_boundaries, read_name_table
 
@@ -25,7 +26,7 @@ WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
-SCAN_PARSER_REVISION=7  # limites de nomes, descoberta e validação de catálogos/drops
+SCAN_PARSER_REVISION=8  # suporte RAW 2336/2448, limites e validação ISO9660
 
 
 def sha256(path:Path, progress=None):
@@ -47,16 +48,19 @@ def sha256(path:Path, progress=None):
 
 class Disc:
     def __init__(self,p:Path):
-        self.p=p; self.f=p.open('rb'); self.size=p.stat().st_size
-        if self.size%2352==0:
-            self.sector=2352
-            self.offset=24 if self._magic(16,24)==b'CD001' else 16
-            if self._magic(16,self.offset)!=b'CD001':raise ValueError('CD-ROM de 2352 B sem ISO9660 detectado')
-        elif self.size%2048==0:
-            self.sector=2048;self.offset=0
-            if self._magic(16,1)!=b'CD001':raise ValueError('Imagem de 2048 B sem ISO9660 detectado')
-        else:raise ValueError('Tamanho não corresponde a CD-ROM raw 2352 B ou ISO 2048 B')
-        self.files=self.list_files()
+        self.p=Path(p)
+        self.f=self.p.open('rb')
+        self.size=self.p.stat().st_size
+        try:
+            geometry=detect_disc_geometry(self.f,self.size)
+            self.sector=geometry.sector
+            self.offset=geometry.offset
+            self.geometry=geometry.format
+            self.files=self.list_files()
+        except Exception:
+            # Não manter descritores abertos se um BIN/ISO estiver corrompido.
+            self.f.close()
+            raise
     def _magic(self,lba,off):
         self.f.seek(lba*self.sector+off+1)
         return self.f.read(5)
@@ -93,29 +97,62 @@ class Disc:
             length=data[at]
             if length==0:
                 at=((at//2048)+1)*2048;continue
-            if at+length>len(data):break
+            if length<34 or at+length>len(data):
+                raise ValueError('Registro de diretório ISO9660 inválido.')
             chunk=data[at:at+length]
-            if len(chunk)>=34:
-                lba=struct.unpack_from('<I',chunk,2)[0]
-                size=struct.unpack_from('<I',chunk,10)[0]
-                flag=chunk[25]; nlen=chunk[32]
-                name=chunk[33:33+nlen].decode('ascii','replace').split(';')[0]
-                yield(name,lba,size,flag)
+            nlen=chunk[32]
+            if not nlen or 33+nlen>len(chunk):
+                raise ValueError('Nome do registro ISO9660 truncado.')
+            lba=struct.unpack_from('<I',chunk,2)[0]
+            size=struct.unpack_from('<I',chunk,10)[0]
+            flag=chunk[25]
+            name=chunk[33:33+nlen].decode('ascii','replace').split(';')[0]
+            yield(name,lba,size,flag)
             at+=length
     def list_files(self):
+        # Evita loop em diretórios e consumo ilimitado de RAM por imagem
+        # corrompida ou criada para explorar o scanner.
+        max_dir_bytes=8*1024*1024
+        max_dir_total=32*1024*1024
+        max_files=8192
+        max_directories=1024
         pvd=self.read(16,2048)
         root=pvd[156:156+pvd[156]]
         if len(root)<34:raise ValueError('Diretório raiz inválido')
         start,size=struct.unpack_from('<I',root,2)[0],struct.unpack_from('<I',root,10)[0]
         found={}
+        visited=set()
+        total_dir_bytes=0
         def walk(prefix,lba,length,depth):
+            nonlocal total_dir_bytes
             if depth>8:raise ValueError('Árvore de diretórios muito profunda')
+            if type(lba) is not int or type(length) is not int or not 0<length<=max_dir_bytes:
+                raise ValueError('Diretório ISO9660 com tamanho inválido.')
+            key=(lba,length)
+            if key in visited:
+                raise ValueError('Diretório ISO9660 cíclico ou compartilhado; análise suspensa.')
+            if len(visited)>=max_directories or total_dir_bytes+length>max_dir_total:
+                raise ValueError('Índice de diretórios acima do limite seguro.')
+            visited.add(key)
+            total_dir_bytes+=length
             for name,entry_lba,nbytes,flag in self._records(self.read(lba,length)):
                 if name in ('\x00','\x01','.', '..'):continue
                 name=name.upper().strip()
+                if not name or '/' in name or '\\' in name or name in ('.','..'):
+                    raise ValueError('Nome ISO9660 inválido.')
                 p=(prefix+'/'+name).lstrip('/')
-                if flag&2:walk(p,entry_lba,nbytes,depth+1)
-                else:found[p]=(entry_lba,nbytes)
+                if len(p)>255:raise ValueError('Caminho ISO9660 muito longo.')
+                if flag&2:
+                    walk(p,entry_lba,nbytes,depth+1)
+                else:
+                    if len(found)>=max_files:
+                        raise ValueError('ISO9660 com arquivos demais.')
+                    # Não aceitar extents que saem da geometria detectada.
+                    if ((entry_lba+(nbytes+2047)//2048)*self.sector>self.size):
+                        raise ValueError('Arquivo além do limite do disco.')
+                    if p in found:
+                        raise ValueError('Nome de arquivo duplicado no ISO9660.')
+                    found[p]=(entry_lba,nbytes)
         walk('',start,size,0)
         return found
     def get(self,name,limit_bytes=None):
@@ -418,6 +455,7 @@ def process(path,output,with_art=False,digest=None,progress=None):
     try:
         if progress:progress("Lendo índice ISO9660",0,1)
         disc=Disc(path);info['tipo_setor']=disc.sector
+        info['formato_fisico']=getattr(disc,'geometry',None)
         info['arquivos_discos']=[{'nome':n,'lba':lba,'tamanho':sz} for n,(lba,sz) in sorted(disc.files.items())]
         info['system_cnf']=inspect_system_cnf(disc)
         info['assinaturas_arquivos']=inspect_file_signatures(disc)
