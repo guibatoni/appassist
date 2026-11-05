@@ -13,6 +13,8 @@ import re
 import struct
 
 from dueltrace_name_boundaries import read_name_table
+from dueltrace_opponent_boundary_probe import (find_boundary_candidates,
+    compact_boundary_evidence)
 
 OPP_COUNT = 39
 MIN_INDEX = 723
@@ -62,6 +64,9 @@ def discover_independent_opponents(
         # omit candidate names, ROM paths and extracted source bytes.
         "quarantinedRecords": [],
         "candidateCount": 0, "candidateOpponentCount": 0,
+        "boundaryTerminatorEvidence": {"schema": 1, "candidateCount": 0,
+                                      "candidates": [], "inGameVerified": False,
+                                      "dropsVerified": False, "rankVerified": False},
         "validated": False, "inGameVerified": False,
         "rankVerified": False, "dropsVerified": False,
         "note": "Identidade dos adversarios e seus drops requer prova independente."
@@ -167,19 +172,36 @@ def discover_independent_opponents(
     output["candidateCount"] = len(compact)
     output["candidateOpponentCount"] = max(
         (max(x["recognized"], x["readablePrefixes"]) for x in hypotheses), default=0)
-    if len(isolated) == 1:
-        row, opponents = isolated[0]
-        output["state"] = "layout_independente_unico_estrutural"
-        # This is the only full, isolated table with a sufficiently diverse
-        # name set; the names have not been observed in the actual emulator.
+    # A second path considers ONLY physical record boundaries. A common
+    # invalid byte is not enough: each of the 39 records must end on the
+    # same control marker with no nonzero bytes before the next pointer.
+    boundary_candidates = find_boundary_candidates(
+        exe, hypotheses=hypotheses, records=records,
+        pointers=pointers, text_base=text_base)
+    output["boundaryTerminatorEvidence"] = compact_boundary_evidence(
+        boundary_candidates)
+    if len(isolated) + len(boundary_candidates) == 1:
+        if isolated:
+            row, opponents = isolated[0]
+            output["state"] = "layout_independente_unico_estrutural"
+            selected_evidence = "ff_terminado_39_ponteiros_unicos"
+            start = row["startIndex"]
+        else:
+            boundary = boundary_candidates[0]
+            output["state"] = "layout_terminador_alternativo_estrutural"
+            opponents = [{"id": i + 1, "nome": name}
+                         for i, name in enumerate(boundary["names"])]
+            selected_evidence = "marcador_alternativo_e_38_fronteiras_fisicas"
+            start = boundary["startIndex"]
+        # Structural only: this does not verify in-game opponent ID order,
+        # drop weights, fusion mapping, MIPS behavior or rank labels.
         output["selected"] = {
-            "startIndex": row["startIndex"],
-            "opponents": opponents,
-            "count": OPP_COUNT, "evidence": "ff_terminado_39_ponteiros_unicos",
+            "startIndex": start, "opponents": opponents, "count": OPP_COUNT,
+            "evidence": selected_evidence,
             "validated": False, "inGameVerified": False
         }
         return output
-    if len(isolated) > 1:
+    if len(isolated) + len(boundary_candidates) > 1:
         output["state"] = "layouts_completos_ambiguos"
     elif hypotheses:
         output["state"] = ("hipotese_terminador_alternativo"
@@ -199,7 +221,8 @@ def explain_opponent_blocker(report: dict) -> dict:
     state = report.get("state", "nao_localizado")
     candidates = report.get("candidates") or []
     best = candidates[0] if candidates and isinstance(candidates[0], dict) else {}
-    if state == "layout_independente_unico_estrutural":
+    if state in ("layout_independente_unico_estrutural",
+                 "layout_terminador_alternativo_estrutural"):
         return {"code": "nomes_estruturais", "reason":
                 "39 nomes encontrados estruturalmente; ordem e IDs ainda dependem de prova em jogo."}
     if state == "layouts_completos_ambiguos":
@@ -249,6 +272,10 @@ def compact_opponent_evidence(report: dict) -> dict:
         "selectedStartIndex": (
             report["selected"]["startIndex"]
             if isinstance(report.get("selected"), dict) else None),
+        "boundaryTerminatorEvidence": (report.get("boundaryTerminatorEvidence")
+                                       if isinstance(report.get("boundaryTerminatorEvidence"), dict)
+                                       else {"schema": 1, "candidateCount": 0,
+                                             "candidates": []}),
         "validated": False, "inGameVerified": False,
         "rankVerified": False, "dropsVerified": False
     }
