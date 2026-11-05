@@ -134,6 +134,10 @@ class DueltraceWebBridge:
             "name":entry.get("file_name") or summary.get("name") or "Mod local",
             "level":entry.get("level","desconhecido"),
             "cards":summary.get("cards_total",0),
+            "candidateCards":max(0,min(722,int((profile or {}).get("candidate_catalogue",{}).get("cards",0))))
+                if isinstance((profile or {}).get("candidate_catalogue"),dict) else 0,
+            "cardEvidence":str((profile or {}).get("verified",{}).get("cartas") or "pendente"),
+            "nameDiscoveryStatus":str((profile or {}).get("name_discovery_status") or "")[:180],
             "fusions":summary.get("fusion_count",0),
             "effects":summary.get("effect_count",0),
             "descriptions":len([c for c in (profile or {}).get("cards",[])
@@ -1279,6 +1283,10 @@ class DueltraceWebBridge:
             diagnostic=diagnose_layout(meta,profile)
             return {
                 "sha256":sha,
+                "cardCount":len((profile or {}).get("cards",[]))
+                    if (profile or {}).get("supported_features",{}).get("cards") else 0,
+                "candidateCardCount":max(0,min(722,int((profile or {}).get("candidate_catalogue",{}).get("cards",0))))
+                    if isinstance((profile or {}).get("candidate_catalogue"),dict) else 0,
                 "artCount":graphic.get("art_count",0),
                 "thumbnailCount":graphic.get("thumbnails",0),
                 "framedCards":graphic.get("composed_cards",0),

@@ -33,7 +33,7 @@ WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
-SCAN_PARSER_REVISION=16  # exporta catálogo candidato isolado por SHA
+SCAN_PARSER_REVISION=17  # exporta catálogo candidato isolado por SHA
 
 
 def sha256(path:Path, progress=None):
@@ -234,33 +234,69 @@ def inspect_system_cnf(disc):
 
 
 def decode_names(sl):
-    if len(sl)<0x1C9800+93*4: return [],[], 'Executável menor que o layout conhecido'
+    """Lê cartas e adversários separadamente, sem contaminar suas fronteiras.
+
+    Um mod pode ter 722 cartas no layout FM e mover só os 39 adversários.
+    Catálogos de cartas desacompanhados só são admitidos com 722 nomes
+    terminados, diversidade e ambas as tabelas de atributos coerentes.
+    Isso demonstra consistência estrutural, NÃO identidade em ePSXe.
+    """
+    detail_base=0x1C5B33
+    minimum=max(SLUS_GLYPHS+93*4,SLUS_PTR_BASE+(722+1)*2,
+                SLUS_ATTRIBUTES+CARD_COUNT*4,detail_base+CARD_COUNT)
+    if len(sl)<minimum:
+        return [],[], 'Executável menor que as tabelas de cartas conhecidas'
     try:
-        records=read_name_table(sl,pointer_base=SLUS_PTR_BASE,
-            text_base=SLUS_TEXT_BASE,glyph_base=SLUS_GLYPHS,
-            indices=tuple(range(1,723))+tuple(range(0x329,0x350)))
-    except (ValueError,struct.error):return [],[],'Fonte de glifos/ponteiros não encontrada'
-    def txt(index):
-        record=records[index]
-        # Um FF além do próximo registro não termina este nome. Não adivinhar
-        # terminadores alternativos nem retirar um glifo legível (como "v").
-        return record['readablePrefix'] if record['recordStatus']=='ff_encontrado' else None
-    opponents=[];cards=[]
-    for i in range(1,40):opponents.append({'id':i,'nome':txt(0x328+i) or ''})
-    for i in range(1,723):
-        name=txt(i) or ''
+        card_records=read_name_table(
+            sl,pointer_base=SLUS_PTR_BASE,text_base=SLUS_TEXT_BASE,
+            glyph_base=SLUS_GLYPHS,indices=tuple(range(1,CARD_COUNT+1)))
+    except (ValueError,struct.error):
+        return [],[], 'Ponteiros/glifos das cartas incompatíveis'
+    # Ponteiros de adversários falsos não podem encurtar o último nome de
+    # carta, nem um erro nos adversários descartar os nomes das cartas.
+    try:
+        opp_records=read_name_table(
+            sl,pointer_base=SLUS_PTR_BASE,text_base=SLUS_TEXT_BASE,
+            glyph_base=SLUS_GLYPHS,indices=tuple(range(0x329,0x350)))
+    except (ValueError,struct.error):
+        opp_records={}
+    def txt(records,index):
+        record=records.get(index,{})
+        return record.get('readablePrefix','') if record.get('recordStatus')=='ff_encontrado' else ''
+    cards=[]
+    for i in range(1,CARD_COUNT+1):
         packed=struct.unpack_from('<I',sl,SLUS_ATTRIBUTES+(i-1)*4)[0]
-        detail=sl[0x1C5B33+i-1] if 0x1C5B33+i-1<len(sl) else 0
-        cards.append({'id':i,'nome':name,'atk':(packed&511)*10,
-            'def':((packed>>9)&511)*10,'tipo':(packed>>26)&31,
-            'nivel':detail&15,'atributo':(detail>>4)&15,
-            'estrela_1':(packed>>18)&15,'estrela_2':(packed>>22)&15})
-    def plausible(s):return bool(s) and len(s)<=64 and '�' not in s and '[' not in s and sum(ch.isalpha() or ch.isdigit() for ch in s)>=2
-    n_good=sum(plausible(x['nome']) for x in opponents)
+        detail=sl[detail_base+i-1]
+        cards.append({'id':i,'nome':txt(card_records,i),'atk':(packed&511)*10,
+                      'def':((packed>>9)&511)*10,'tipo':(packed>>26)&31,
+                      'nivel':detail&15,'atributo':detail>>4,
+                      'estrela_1':(packed>>18)&15,'estrela_2':(packed>>22)&15})
+    opponents=[{'id':i,'nome':txt(opp_records,0x328+i)} for i in range(1,OPP_COUNT+1)]
+    def plausible(value):
+        return (bool(value) and len(value)<=64 and '�' not in value
+                and '[' not in value and
+                sum(ch.isalpha() or ch.isdigit() for ch in value)>=2)
     card_good=sum(plausible(x['nome']) for x in cards)
-    if n_good<30 or card_good<600:
-        return [],[],f'Codificação diferente/ambígua: {n_good}/39 nomes, {card_good}/722 cartas plausíveis'
-    return opponents,cards,f'{n_good}/39 nomes, {card_good}/722 cartas decodificados'
+    opp_good=sum(plausible(x['nome']) for x in opponents)
+    # Caminho histórico, sem mudar a regra para perfis já reconhecidos.
+    if card_good>=600 and opp_good>=30:
+        return opponents,cards,(f'{opp_good}/39 adversários, '
+                                f'{card_good}/722 cartas decodificados')
+    if card_good==CARD_COUNT and len({x['nome'] for x in cards})>=680:
+        # Exigir estatística e fronteiras fortes ao liberar SÓ as cartas.
+        # Não inventar conteúdo de tabelas movidas para outros endereços.
+        from dueltrace_card_attribute_probe import _full_packed, _full_details
+        if (_full_packed(sl,SLUS_ATTRIBUTES) is not None and
+                _full_details(sl,detail_base) is not None):
+            return [],cards,(f'{CARD_COUNT}/722 cartas do layout conhecido; '
+                             f'{opp_good}/39 adversários indisponíveis; '
+                             'atributos consistentes, identidade em jogo não verificada')
+    if opp_good>=30 and len({x['nome'] for x in opponents if plausible(x['nome'])})>=28:
+        return opponents,[],(f'{opp_good}/39 adversários decodificados; '
+                             f'{card_good}/722 cartas insuficientes')
+    return [],[],(f'Layout incompleto: {card_good}/722 cartas e '
+                 f'{opp_good}/39 adversários plausíveis')
+
 
 def inspect_known_name_layout(sl):
     """Amostras de offsets do FM original em mod não reconhecido.
@@ -307,34 +343,35 @@ def inspect_known_name_layout(sl):
 
 
 def select_known_executable_layout(disc, candidates, *, max_candidates=8):
-    """Testa executáveis existentes; nunca adivinha/valida offsets novos.
+    """Prefere catálogo completo; aceita 722 cartas isoladas sem adversários.
 
-    Sempre começa pela prioridade tradicional. Só muda de executável se
-    `decode_names` reconhecer o catálogo completo pelo mesmo critério usado
-    antes. Lê no máximo oito arquivos de até 8 MiB para reduzir custo.
+    Nenhum executável troca de identidade por nome, tamanho ou heurística
+    isolada: toda seleção requer decode_names daquele próprio arquivo.
     """
     if not candidates:
         raise ValueError("Nenhum executável candidato.")
     tried=[]
-    chosen=candidates[0]
-    sl=disc.get(chosen)
-    opponents,cards,status=decode_names(sl)
-    tried.append({"name":chosen,"status":status,"recognized":bool(opponents and cards)})
-    if opponents and cards:
-        return chosen,sl,opponents,cards,status,tried
-    for alternative in candidates[1:max_candidates]:
-        size=disc.files.get(alternative,(None,0))[1]
+    best=None
+    best_score=-1
+    for name in candidates[:max_candidates]:
+        size=disc.files.get(name,(None,0))[1]
         if type(size) is not int or not 0<size<=8*1024*1024:
-            tried.append({"name":alternative,"status":"tamanho fora do limite de análise",
-                          "recognized":False})
+            tried.append({'name':name,'status':'tamanho fora do limite de análise',
+                          'recognized':False})
             continue
-        contender=disc.get(alternative)
-        opp2,cards2,status2=decode_names(contender)
-        tried.append({"name":alternative,"status":status2,
-                      "recognized":bool(opp2 and cards2)})
-        if opp2 and cards2:
-            return alternative,contender,opp2,cards2,status2,tried
-    return chosen,sl,opponents,cards,status,tried
+        sl=disc.get(name)
+        opponents,cards,status=decode_names(sl)
+        score=(2 if opponents and cards else 1 if cards else 0)
+        tried.append({'name':name,'status':status,'recognized':bool(cards),
+                      'cards':len(cards),'opponents':len(opponents)})
+        if score>best_score:
+            best=(name,sl,opponents,cards,status)
+            best_score=score
+        if score==2:
+            break
+    if best is None:
+        raise ValueError("Nenhum executável candidato dentro do orçamento.")
+    return (*best,tried)
 
 
 # Tamanho da tabela de recursos observado em ISOs com WA_MRG.MRG.
@@ -667,10 +704,13 @@ def process(path,output,with_art=False,digest=None,progress=None):
                 row=descriptions.get(card['id'])
                 card['descricao']=row['text'] if row else ''
                 card['descricao_fonte']=row['source'] if row else ''
+        # Recursos independentes: falha nos 39 adversários não apaga 722 cartas.
+        if cards:
+            write_csv(dest/'cartas.csv',cards)
+            info['cartas']=len(cards)
         if opponents:
             write_csv(dest/'oponentes.csv',opponents)
-            write_csv(dest/'cartas.csv',cards)
-            info['oponentes']=len(opponents);info['cartas']=len(cards)
+            info['oponentes']=len(opponents)
         if progress:progress("Validando pesos das tabelas de drops",0,1)
         from dueltrace_rank_system import CLASSIC_POOLS
         drops,drop_status=decode_drops(
@@ -738,8 +778,12 @@ def process(path,output,with_art=False,digest=None,progress=None):
                 'parcial: cartas e drops por grupo sem RANK identificado'
                 if info.get("drop_group_mapping_status")=="grupos_nao_identificados"
                 else 'validado: nomes e drops')
-        elif opponents:
+        elif opponents and cards:
             info['status']='parcial: nomes/cartas identificados; drops sem validação'
+        elif cards:
+            info['status']='parcial: cartas identificadas estruturalmente; adversários pendentes'
+        elif opponents:
+            info['status']='parcial: adversários identificados; cartas pendentes'
         else:
             info['status']='incerto: estrutura não reconhecida; evidências parciais preservadas'
     except Exception as e:

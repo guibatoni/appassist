@@ -66,7 +66,7 @@ def report_level(profile: dict) -> str:
                 and verified.get("oponentes") == "verificado"
                 and verified.get("tabelas_drops") == "verificado"):
             return "conhecido_validado"
-    if (verified.get("cartas") == "verificado"
+    if (verified.get("cartas") in ("verificado", "extraidas_estruturalmente")
             or verified.get("oponentes") == "verificado"
             or verified.get("tabelas_drops") == "verificado"):
         return "parcial_revisar"
@@ -238,6 +238,25 @@ class ModCatalog:
                            if e.get("source_path") != str(path) and e.get("sha256") != entry["sha256"]]
             new_entries.append(entry)
             atomic_json(self.registry_file, {"schema": 1, "entries": new_entries})
+            # Uma reanálise de perfil ATIVO na MESMA ISO deve atualizar as
+            # features autorizadas. O modo básico anterior não pode manter
+            # os novos nomes invisíveis após "Atualizar dados".
+            active=load_json(self.active_file,{})
+            if (entry["approved"] and active.get("sha256")==entry["sha256"]):
+                if entry["level"]=="desconhecido":
+                    features={
+                        "ids_e_lp":True,"nomes_cartas":False,"artes":False,
+                        "oponentes":False,"drops_brutos":False,"rank":False,
+                        "pontuacao":False,"fusoes":False,"categorias":False,
+                        "efeitos":False}
+                    mode="basic"
+                else:
+                    features=entry["features"]
+                    mode="recognized"
+                atomic_json(self.active_file,{
+                    **active,"profile_path":entry["profile_path"],
+                    "features":features,"level":entry["level"],
+                    "compatibility_mode":mode})
         return entry
 
     def activate(self, sha256: str, *, acknowledge_uncertainty: bool = False) -> dict:
