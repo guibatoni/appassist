@@ -504,6 +504,9 @@ function Mods({mods,sha,onRefresh,configured}:{
               {!mod.cards&&!(mod.candidateCards??0)&&<p className="mt-3 text-xs text-muted">
                 O leitor ainda não localizou uma tabela confiável de cartas neste mod. Atualizar dados executa uma nova investigação da ISO.
               </p>}
+              {!mod.cards&&mod.nameDiscoveryStatus&&<p className="mt-1 text-[11px] text-muted">
+                Resultado dos nomes: {mod.nameDiscoveryStatus}
+              </p>}
               {mod.requiresReview&&<p className="mt-3 text-xs text-muted">
                 Alguns recursos deste mod podem não estar disponíveis.
               </p>}
