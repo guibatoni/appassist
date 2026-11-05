@@ -20,7 +20,8 @@ MAX_DETAILS=8
 
 def inspect_resource_candidates(disc, candidate_names, *,
                                 decode_tables:Callable,
-                                preferred_names=()) -> dict:
+                                preferred_names=(),
+                                discover_relocated=None) -> dict:
     """Retorna bytes exclusivamente em `selected_bytes` para o scanner.
 
     Relatórios armazenáveis devem omitir `selected_bytes`. Permite escolher
@@ -70,6 +71,20 @@ def inspect_resource_candidates(disc, candidate_names, *,
             row["state"]=("matrizes_117_plausiveis"
                           if row["fullMatrixLayout"] else
                           "layout_nao_identificado")
+            if not row["fullMatrixLayout"] and callable(discover_relocated):
+                discovery=discover_relocated(raw)
+                if isinstance(discovery,dict):
+                    row["relocatedState"]=str(discovery.get("state") or "")[:65]
+                    candidate=discovery.get("selected")
+                    if (isinstance(candidate,dict)
+                            and discovery.get("state")=="layout_candidato_unico"):
+                        row["relocatedLayout"]={
+                            key:candidate[key] for key in (
+                                "opponentBase","opponentStep","rankStride")
+                            if type(candidate.get(key)) is int}
+                        if len(row["relocatedLayout"])==3:
+                            row["fullMatrixLayout"]=True
+                            row["state"]="matrizes_117_realocadas_plausiveis"
             # Guardar somente digest/metadados: não reter 6 WA de 96 MiB.
             choices.append((name,digest,row["fullMatrixLayout"]))
         except (OSError,ValueError,KeyError,MemoryError,OverflowError):
@@ -116,4 +131,6 @@ def inspect_resource_candidates(disc, candidate_names, *,
     result["source"]=name
     result["selected_bytes"]=data
     result["sourceSha256"]=digest
+    meta=next((r for r in result["candidates"] if r["name"]==name),{})
+    result["selectedLayout"]=meta.get("relocatedLayout")
     return result

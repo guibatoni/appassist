@@ -208,6 +208,35 @@ Tudo acontece localmente. Cache e perfil separados por SHA-256 da imagem.
 - Testes verificam ausência de vazamentos de dados entre ISOs e comando
   de inicialização do ePSXe limitado ao arquivo ativo.
 
+## Etapa 2G — descoberta de 117 matrizes de drops em contêiner realocado
+
+- `scanner/dueltrace_drop_layout_discovery.py` procura conjuntos de
+  39 duelistas × 3 grupos × 722 pesos dentro de um WA renomeado ou deslocado.
+  Usa limites de ±128 KiB da base conhecida, alinhamento progressivo e
+  candidatos limitados de stride de oponente e distância entre grupos.
+- Não basta uma tabela com soma 2048: a validação exige **117 matrizes**
+  completas, cada uma com codificação simples ou mascarada consistente.
+  Registros corrompidos ou dois layouts plausíveis não são ativados.
+- `decode_drops` recebeu parâmetros de base, stride e distância, para
+  extrair offsets de origem reais quando um layout candidato é único.
+- Em layout novo, os grupos recebem nomes genéricos
+  `GRUPO_1`, `GRUPO_2`, `GRUPO_3`; não afirmar que correspondam a
+  S-POW, S-TEC ou Z-POW sem evidência independente.
+- `scanner/dueltrace_resource_selection.py` pode reconhecer um arquivo
+  arbitrário de recursos quando a estrutura deslocada é única. Se nome,
+  assinatura e tamanho não ajudarem, investiga um conjunto limitado de
+  grandes contêineres inventariados pelo índice ISO9660.
+- Os critérios completos do importador continuam obrigatórios para
+  associar drops a cartas e oponentes da ISO. Extração estrutural não
+  demonstra qual RANK é mostrado pelo jogo.
+- `SCAN_PARSER_REVISION=15` invalida caches anteriores.
+- Testes sintéticos verificam base deslocada, stride alterado, pesos
+  mascarados, 117 matrizes, corrupções, duas hipóteses e recursos
+  arbitrariamente renomeados.
+- **Limitação:** não cobre todas as compressões, hashes, criptografias,
+  cardinalidades alteradas ou formatos sem tabela de 16 bits. Futuras
+  famílias precisam de novos adaptadores e evidência real do mod.
+
 ## Etapa 3 — parser de mod sem layout conhecido
 
 - Inferir deslocamentos com referências cruzadas MIPS, estrutura de ponteiros,

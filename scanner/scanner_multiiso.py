@@ -13,6 +13,7 @@ from dueltrace_relocated_names import discover_relocated_name_layout
 from dueltrace_card_attribute_probe import discover_card_attribute_layout
 from dueltrace_mips_reference_probe import inspect_mips_table_references
 from dueltrace_resource_selection import inspect_resource_candidates
+from dueltrace_drop_layout_discovery import discover_relocated_drops
 from dueltrace_name_layout_probe import find_opponent_pointer_candidates
 from dueltrace_name_boundaries import inspect_opponent_name_boundaries, read_name_table
 
@@ -31,7 +32,7 @@ WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
-SCAN_PARSER_REVISION=13  # aproveitamento parcial e seleção segura de contêineres
+SCAN_PARSER_REVISION=15  # descobre contêiner WA renomeado e drops realocados
 
 
 def sha256(path:Path, progress=None):
@@ -364,20 +365,25 @@ def select_wa_candidates(files):
                else "nenhum_candidato"),possibilities
 
 
-def decode_drops(wa,rank_names=None):
+def decode_drops(wa,rank_names=None,*,opp_base=WA_OPP_BASE,
+                 opp_step=WA_OPP_STEP,rank_stride=WA_RANK_STRIDE):
     # A interpretação dos três grupos de drops varia por mod. Somente X15
     # tem os nomes Z-POW/S-POW/S-TEC confirmados nesta base.
     rank_names = rank_names or tuple(f"TABELA_{i+1}_RANK_DESCONHECIDO" for i in range(3))
-    if len(wa)<WA_OPP_BASE+(OPP_COUNT-1)*WA_OPP_STEP+3*WA_RANK_STRIDE+WA_ARRAY_BYTES:
-        return None,'Arquivo WA menor que a tabela conhecida'
+    if (not all(type(x) is int and x>=0
+                for x in (opp_base,opp_step,rank_stride)) or
+            opp_step<3*rank_stride+WA_ARRAY_BYTES or
+            len(wa)<opp_base+(OPP_COUNT-1)*opp_step
+                +3*rank_stride+WA_ARRAY_BYTES):
+        return None,'Arquivo WA menor que as 117 tabelas solicitadas'
     rows=[];check=[];deck=[];encodings=[]
     for i in range(OPP_COUNT):
-        base=WA_OPP_BASE+i*WA_OPP_STEP
+        base=opp_base+i*opp_step
         deckweights=struct.unpack_from('<722H',wa,base)
         for cid,w in enumerate(deckweights,1):
             if w:deck.append({'oponente_id':i+1,'carta_id':cid,'peso':w})
         for ri,rank in enumerate(rank_names):
-            a=base+(ri+1)*WA_RANK_STRIDE
+            a=base+(ri+1)*rank_stride
             raw=struct.unpack_from('<722H',wa,a)
             candidates=[]
             if max(raw)<=2048 and sum(raw)==2048:
@@ -494,14 +500,30 @@ def process(path,output,with_art=False,digest=None,progress=None):
         structural=candidate_files_for_decoder(
             info['layout_discovery'],role="recursos")
         resource_names=list(dict.fromkeys(wa_names+size_matches+structural))
+        if not resource_names:
+            # WA deslocado pode não apresentar matrizes nos offsets legados
+            # nem manter nome/tamanho. Investigar até 6 contêineres grandes
+            # inventariados, sem adotar nenhum pela extensão.
+            resource_names=[
+                row["name"] for row in info["layout_discovery"]["resources"]
+                if type(row.get("size")) is int
+                and 15*1024*1024<=row["size"]<=96*1024*1024
+            ][:6]
         # Não interromper a análise da ISO se WA for desconhecido: pode
         # existir um executável com um catálogo utilizável independente.
         from dueltrace_rank_system import CLASSIC_POOLS
+        def probe_relocated_resource(data):
+            return discover_relocated_drops(
+                data,known_base=WA_OPP_BASE,
+                decode_at_layout=lambda base,step,stride:decode_drops(
+                    data,("GRUPO_1","GRUPO_2","GRUPO_3"),
+                    opp_base=base,opp_step=step,rank_stride=stride))
         resource=inspect_resource_candidates(
             disc,resource_names,
             decode_tables=lambda data:decode_drops(
                 data,RANKS if info['sha256']==X15_SHA else CLASSIC_POOLS),
-            preferred_names=wa_names)
+            preferred_names=wa_names,
+            discover_relocated=probe_relocated_resource)
         wa=resource["selected_bytes"]
         wa_names=[resource["source"]] if resource["source"] else []
         wa_source=resource["method"]
@@ -638,6 +660,34 @@ def process(path,output,with_art=False,digest=None,progress=None):
         from dueltrace_rank_system import CLASSIC_POOLS
         drops,drop_status=decode_drops(
             wa,RANKS if info['sha256']==X15_SHA else CLASSIC_POOLS)
+        if wa and drops is None:
+            # Descobre deslocamentos, mas não inventa qual grupo equivale
+            # a S-POW/S-TEC em uma ISO ainda não identificada.
+            unknown_groups=("GRUPO_1","GRUPO_2","GRUPO_3")
+            def decode_at_layout(base,step,stride):
+                return decode_drops(
+                    wa,unknown_groups,
+                    opp_base=base,opp_step=step,rank_stride=stride)
+            chosen_by_file=resource.get("selectedLayout")
+            if chosen_by_file:
+                relocated={
+                    "schema":1,"state":"layout_candidato_unico",
+                    "selected":chosen_by_file,
+                    "candidates":[chosen_by_file],
+                    "validated":False,"rankLabelsVerified":False,
+                    "inGameVerified":False}
+            else:
+                relocated=discover_relocated_drops(
+                    wa,known_base=WA_OPP_BASE,decode_at_layout=decode_at_layout)
+            info["drop_layout_discovery"]=relocated
+            chosen=relocated.get("selected")
+            if chosen is not None:
+                drops,drop_status=decode_at_layout(
+                    chosen["opponentBase"],chosen["opponentStep"],
+                    chosen["rankStride"])
+                if drops is not None:
+                    info["drop_group_mapping_status"]="grupos_nao_identificados"
+                    info["drop_layout_status"]="117_matrizes_estruturais_sem_rank_rotulado"
         info['rank_display_model']=(
             'x15_sha_verificado' if info['sha256']==X15_SHA
             else 'padrao_original_presumido')
@@ -669,7 +719,10 @@ def process(path,output,with_art=False,digest=None,progress=None):
                     "Sem contêiner de recursos único ou catálogo de cartas "
                     "compatível; nenhuma arte inventada.")
         if opponents and drops:
-            info['status']='validado: nomes e drops'
+            info['status']=(
+                'parcial: cartas e drops por grupo sem RANK identificado'
+                if info.get("drop_group_mapping_status")=="grupos_nao_identificados"
+                else 'validado: nomes e drops')
         elif opponents:
             info['status']='parcial: nomes/cartas identificados; drops sem validação'
         else:

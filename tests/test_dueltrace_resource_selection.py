@@ -72,6 +72,27 @@ class ResourceSelectionTests(unittest.TestCase):
         self.assertEqual(out["source"],"DATA/B.MRG")
         self.assertEqual(out["method"],"117_matrizes_compativeis")
 
+    def test_unique_relocated_layout_chooses_renamed_container_by_content(self):
+        disc=ResourceDisc({
+            "GOG/MOVED.DAT":b"RELOC defined weights",
+            "GOG/VIDEO.DAT":b"opaque movie"}
+        )
+        def discovery(data):
+            if data.startswith(b"RELOC"):
+                return {"state":"layout_candidato_unico",
+                        "selected":{"opponentBase":123456,
+                                    "opponentStep":6144,"rankStride":1460}}
+            return {"state":"nao_encontrado","selected":None}
+        out=inspect_resource_candidates(
+            disc,list(disc.files),decode_tables=decode_synthetic,
+            discover_relocated=discovery)
+        self.assertEqual(out["source"],"GOG/MOVED.DAT")
+        self.assertEqual(out["method"],"117_matrizes_compativeis")
+        self.assertEqual(out["selectedLayout"]["opponentBase"],123456)
+        self.assertFalse(out["dropsVerified"])
+        self.assertEqual(out["candidates"][0]["state"],
+                         "matrizes_117_realocadas_plausiveis")
+
     def test_single_unnamed_fallback_is_not_considered_verified(self):
         _,out=self.select({"GOSD/UNKNOWN.1":b"unknown mod payload"})
         self.assertEqual(out["source"],"GOSD/UNKNOWN.1")
