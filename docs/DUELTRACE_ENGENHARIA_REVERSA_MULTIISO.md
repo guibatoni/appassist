@@ -109,6 +109,31 @@ Tudo acontece localmente. Cache e perfil separados por SHA-256 da imagem.
 - A IA só recebe resumos e evidências; não recebe ISO, ROM, SLUS ou arquivos
   de memória completos, não edita offsets e não aprova catálogos/drops/RANK.
 
+## Etapa 2C — identificação conjunta de textos e glifos (candidatos)
+
+- `scanner/dueltrace_relocated_names.py` pesquisa tabelas de ponteiros u16
+  próximas ao offset de referência; identifica bases de texto usando
+  cabeçalhos `F8 0A` distribuídos em registros de cartas e oponentes,
+  e procura glifos Shift-JIS em células de 4 bytes.
+- A sondagem considera até ±32 KiB para ponteiros/textos e ±16 KiB para
+  glifos, 6 candidatos de ponteiros, 8 de textos/glifos e 6 combinações
+  finais; são limites de desempenho, não uma garantia de compatibilidade.
+- Cada combinação exige registros `FF` completos para os IDs extremos,
+  no mínimo 720/722 cartas, 38/39 oponentes e diversidade de nomes.
+  Nenhum candidato é ativado na Biblioteca.
+- Há risco de falso positivo mesmo com as evidências. Dois layouts válidos
+  permanecem `hipoteses_ambiguas`; no catálogo público a resposta continua
+  como indisponível até prova independente da identidade.
+- O relatório `relocated_name_layouts` guarda deslocamentos, amostras
+  e contagens para desenvolvedores; as referências MIPS analisam também
+  as novas bases encontradas.
+- Ollama recebe apenas resumos compactos não verificados, sem os bytes
+  do executável, e não pode promover qualquer hipótese a fonte oficial.
+- `SCAN_PARSER_REVISION=11` invalida resultados de cache antigo.
+- Ainda não cobre mods com outro terminador, formato sem F8 0A,
+  compressão, texto com ponteiros 32-bit, glifos sem célula Shift-JIS,
+  tabelas com nomes fora de ordem ou alterações de cardinalidade.
+
 ## Etapa 3 — parser de mod sem layout conhecido
 
 - Inferir deslocamentos com referências cruzadas MIPS, estrutura de ponteiros,

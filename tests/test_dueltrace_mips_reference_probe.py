@@ -158,7 +158,7 @@ class MipsTableReferenceTests(unittest.TestCase):
         source=(ROOT/"scanner/scanner_multiiso.py").read_text(encoding="utf-8")
         self.assertIn('info["mips_name_pointer_evidence"]=',source)
         self.assertIn('inspect_mips_table_references(',source)
-        self.assertIn("SCAN_PARSER_REVISION=10",source)
+        self.assertIn("SCAN_PARSER_REVISION=11",source)
 
 
 if __name__=="__main__":

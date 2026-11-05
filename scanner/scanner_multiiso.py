@@ -9,6 +9,7 @@ from pathlib import Path
 from dueltrace_layout_discovery import discover_disc_layout, candidate_files_for_decoder
 from dueltrace_cdrom_layout import detect_disc_geometry
 from dueltrace_card_opponent_discovery import discover_relocated_name_table
+from dueltrace_relocated_names import discover_relocated_name_layout
 from dueltrace_mips_reference_probe import inspect_mips_table_references
 from dueltrace_name_layout_probe import find_opponent_pointer_candidates
 from dueltrace_name_boundaries import inspect_opponent_name_boundaries, read_name_table
@@ -28,7 +29,7 @@ WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
-SCAN_PARSER_REVISION=10  # evidências de referências MIPS às tabelas candidatas
+SCAN_PARSER_REVISION=11  # bases realocadas de ponteiros, textos e glifos
 
 
 def sha256(path:Path, progress=None):
@@ -571,13 +572,22 @@ def process(path,output,with_art=False,digest=None,progress=None):
             info["name_pointer_discovery"]=discover_relocated_name_table(
                 sl,pointer_base=SLUS_PTR_BASE,text_base=SLUS_TEXT_BASE,
                 glyph_base=SLUS_GLYPHS)
-            # Cruza os endereços candidatos com referências estáticas de
-            # LUI/ADDIU/ORI/loads dentro do PS-X EXE desta MESMA imagem.
-            # Uma referência não demonstra execução, identidade ou RANK.
-            candidates=info["name_pointer_discovery"].get("candidates",[])
-            if candidates:
+            # Um mod pode ter deslocado simultaneamente ponteiros,
+            # registros e glifos. A sondagem é interna e nunca confirma IDs.
+            info["relocated_name_layouts"]=discover_relocated_name_layout(
+                sl,pointer_base=SLUS_PTR_BASE,text_base=SLUS_TEXT_BASE,
+                glyph_base=SLUS_GLYPHS)
+            # Cruzar as bases deslocadas com o MIPS do MESMO executável.
+            # Um endereço no código não demonstra execução nem identidade.
+            known=info["name_pointer_discovery"].get("candidates",[])
+            relocated=info["relocated_name_layouts"].get("candidates",[])
+            target_offsets=list(dict.fromkeys(
+                [x["pointerBase"] for x in known]
+                +[x["pointerBase"] for x in relocated]
+                +[x["glyphBase"] for x in relocated]))[:8]
+            if target_offsets:
                 info["mips_name_pointer_evidence"]=inspect_mips_table_references(
-                    sl,[x["pointerBase"] for x in candidates])
+                    sl,target_offsets)
             info["amostras_layout_nomes"]=inspect_known_name_layout(sl)
             # Quando 722 nomes parecem possíveis e a lista de oponentes
             # falha, sondar deslocamentos limitados na tabela de ponteiros.

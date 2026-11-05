@@ -202,6 +202,24 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
             "matchType":str(row.get("matchType") or "")[:20],
             "validated":False,
         })
+    relocated=report.get("relocated_name_layouts")
+    if not isinstance(relocated,dict):
+        relocated={}
+    relocated_candidates=[]
+    for row in relocated.get("candidates",[])[:6]:
+        if not isinstance(row,dict):continue
+        relocated_candidates.append({
+            "pointerBase":row.get("pointerBase"),
+            "textBase":row.get("textBase"),
+            "glyphBase":row.get("glyphBase"),
+            "pointerShift":row.get("pointerShift"),
+            "textShift":row.get("textShift"),
+            "glyphShift":row.get("glyphShift"),
+            "headerVotes":row.get("headerVotes",0),
+            "cardNamesTerminated":row.get("cardNamesTerminated",0),
+            "opponentNamesTerminated":row.get("opponentNamesTerminated",0),
+            "validated":False,
+        })
     flags=profile.get("supported_features") or {}
     if status.startswith("incerto") or status.startswith("erro"):
         level="estrutura_desconhecida"
@@ -306,6 +324,14 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
             "state":str(pointer_report.get("state") or "não pesquisado")[:85],
             "candidates":pointer_candidates,
             "verified":False,
+        },
+        "relocatedNameLayoutProbe":{
+            "state":str(relocated.get("state") or "não pesquisado")[:80],
+            "candidates":relocated_candidates,
+            "pointerBasesExamined":relocated.get("pointerBasesExamined",0),
+            "glyphBasesExamined":relocated.get("glyphBasesExamined",0),
+            "validated":False,
+            "executionConfirmed":False,
         },
         "mipsNameTableEvidence":{
             "nameCandidates":name_candidates,
