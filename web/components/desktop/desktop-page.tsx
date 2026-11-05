@@ -479,6 +479,7 @@ function Mods({mods,sha,onRefresh,configured}:{
                 <span className="block truncate font-semibold text-white">{mod.name}</span>
                 <span className="mt-0.5 block text-xs text-muted">
                   {active&&mod.level==="desconhecido"?"Modo básico":
+                    active&&mod.requiresReview?"Ativo · compatibilidade parcial":
                     active?"Pronto para jogar":
                     mod.requiresReview?"Compatibilidade limitada":"Disponível"}
                 </span>
