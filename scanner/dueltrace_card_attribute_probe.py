@@ -224,10 +224,22 @@ def discover_card_attribute_layout(
     if not packed or not details:
         report["state"]="atributos_nao_identificados"
         return report
+    # A leitura dentro da tabela compactada pode, acidentalmente, parecer
+    # uma tabela de bytes de detalhes. As duas tabelas FM são separadas.
+    # Filtramos candidatos fracos comparados à melhor fronteira observada,
+    # mas preservamos múltiplas hipóteses fortes sem escolher um vencedor.
+    strongest_packed=packed[0]["score"]
+    strongest_detail=details[0]["score"]
+    packed=[x for x in packed if x["score"]>=strongest_packed-14]
+    details=[x for x in details if x["score"]>=strongest_detail-14]
+    report["packedCandidates"]=packed
+    report["detailCandidates"]=details
     # Bases das duas tabelas podem mudar independentemente. Preferir
     # deslocamentos iguais apenas para ORDENAR hipóteses, nunca para validar.
     combinations=sorted(
-        ((a,b) for a in packed for b in details),
+        ((a,b) for a in packed for b in details
+         if (a["offset"]+CARD_COUNT*4<=b["offset"] or
+             b["offset"]+CARD_COUNT<=a["offset"])),
         key=lambda pair:(pair[0]["shift"]!=pair[1]["shift"],
                          -(pair[0]["score"]+pair[1]["score"]),
                          abs(pair[0]["shift"]-pair[1]["shift"]))
