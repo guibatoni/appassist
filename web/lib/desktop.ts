@@ -143,6 +143,8 @@ export type ModScanDiagnostic = {
 
 export type DeepScanResult = {
   sha256: string
+  cardCount?: number
+  candidateCardCount?: number
   artCount: number
   thumbnailCount: number
   framedCards: number
@@ -213,6 +215,9 @@ export type LocalMod = {
   name: string
   level: string
   cards: number
+  candidateCards?: number
+  cardEvidence?: string
+  nameDiscoveryStatus?: string
   fusions: number
   effects: number
   descriptions?: number
