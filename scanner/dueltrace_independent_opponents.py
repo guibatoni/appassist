@@ -58,6 +58,9 @@ def discover_independent_opponents(
         "exeSha256": sha256(exe).hexdigest() if isinstance(exe, bytes) else None,
         "searchedIndices": [MIN_INDEX, MAX_INDEX + OPP_COUNT - 1],
         "candidates": [], "selected": None,
+        # Only in the local quarantined file. Compact reports deliberately
+        # omit candidate names, ROM paths and extracted source bytes.
+        "quarantinedRecords": [],
         "candidateCount": 0, "candidateOpponentCount": 0,
         "validated": False, "inGameVerified": False,
         "rankVerified": False, "dropsVerified": False,
@@ -149,6 +152,18 @@ def discover_independent_opponents(
         if len(compact) >= MAX_CANDIDATES:
             break
     output["candidates"] = compact
+    # Keep complete per-ID observations for investigation. These data are
+    # NEVER imported into the public library from this file.
+    output["quarantinedRecords"] = [
+        {"startIndex": row["startIndex"],
+         "records": [
+             {"id": i + 1, "name": readable.get(row["startIndex"] + i, ""),
+              "recordStatus": records[row["startIndex"] + i].get("recordStatus"),
+              "firstInvalidHex": records[row["startIndex"] + i].get("firstInvalidHex"),
+              "firstInvalidOffset": records[row["startIndex"] + i].get("firstInvalidOffset")}
+             for i in range(OPP_COUNT)],
+         "validated": False, "inGameVerified": False}
+        for row in compact[:3]]
     output["candidateCount"] = len(compact)
     output["candidateOpponentCount"] = max(
         (max(x["recognized"], x["readablePrefixes"]) for x in hypotheses), default=0)
@@ -173,10 +188,57 @@ def discover_independent_opponents(
     return output
 
 
+
+def explain_opponent_blocker(report: dict) -> dict:
+    """Explain rejection with evidence, never assert a specific encoding.
+
+    This is safe for the UI: no ROM paths, actual opponent names, raw bytes,
+    full hashes or executable names. A uniform invalid byte does NOT by
+    itself prove that the mod uses an alternative string terminator.
+    """
+    state = report.get("state", "nao_localizado")
+    candidates = report.get("candidates") or []
+    best = candidates[0] if candidates and isinstance(candidates[0], dict) else {}
+    if state == "layout_independente_unico_estrutural":
+        return {"code": "nomes_estruturais", "reason":
+                "39 nomes encontrados estruturalmente; ordem e IDs ainda dependem de prova em jogo."}
+    if state == "layouts_completos_ambiguos":
+        return {"code": "multiplos_blocos", "reason":
+                "Mais de uma sequência completa de 39 nomes; não há base para escolher os IDs automaticamente."}
+    if state == "hipotese_terminador_alternativo":
+        terminator = next((x.get("possibleDifferentTerminator") for x in candidates
+                           if isinstance(x, dict) and x.get("possibleDifferentTerminator")), None)
+        suffix = f" (byte observado {terminator})" if terminator else ""
+        return {"code": "terminador_incompativel", "reason":
+                "Há nomes legíveis, mas o terminador padrão 0xFF não foi comprovado"
+                + suffix + ". É necessária análise da fronteira física dos registros."}
+    if best and best.get("recognized") == OPP_COUNT and not best.get("isolated"):
+        return {"code": "bloco_nao_isolado", "reason":
+                "39 nomes terminados foram lidos, mas a sequência não possui limites independentes comprovados."}
+    if best and best.get("distinctPointers", 0) < OPP_COUNT:
+        return {"code": "ponteiros_repetidos", "reason":
+                "Há ponteiros compartilhados entre os candidatos; a correspondência de IDs ainda é ambígua."}
+    if best and best.get("recognized", 0) == OPP_COUNT and best.get("distinctNames", 0) < 37:
+        return {"code": "nomes_repetidos", "reason":
+                "O conjunto tem nomes repetidos demais para garantir uma lista distinta de adversários."}
+    if best:
+        return {"code": "nomes_parciais", "reason":
+                "Foram encontrados nomes candidatos, mas não 39 registros completos e independentes."}
+    if state in ("executavel_ou_parametros_incompativeis",
+                 "ponteiros_ou_glifos_incompativeis"):
+        return {"code": "layout_incompativel", "reason":
+                "O layout de ponteiros, texto ou glifos não pôde ser lido com segurança."}
+    return {"code": "nenhuma_tabela_conclusiva", "reason":
+            "A busca limitada não encontrou uma sequência de 39 nomes estruturalmente suficiente."}
+
+
 def compact_opponent_evidence(report: dict) -> dict:
     """Preserve bounded metadata without copying 39 names into relatorio.json."""
+    explanation = explain_opponent_blocker(report)
     return {
-        "schema": 1, "state": report.get("state", "nao_localizado"),
+        "schema": 2, "state": report.get("state", "nao_localizado"),
+        "reasonCode": explanation["code"],
+        "reason": explanation["reason"],
         "candidateCount": report.get("candidateCount", 0),
         "candidateOpponentCount": report.get("candidateOpponentCount", 0),
         "candidates": [
