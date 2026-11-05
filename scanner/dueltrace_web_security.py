@@ -54,9 +54,13 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_rank_diagnostic()
 
-    def calculate_spoils(self, credential, counters, victory):
+    def calculate_spoils(self, credential, counters, victory, reference="classic"):
         self._authorize(credential)
-        return self._bridge.calculate_spoils(counters,victory)
+        return self._bridge.calculate_spoils(counters,victory,reference)
+
+    def set_rank_experimental(self, credential, enabled):
+        self._authorize(credential)
+        return self._bridge.set_rank_experimental(enabled)
 
     def get_rank(self, credential):
         self._authorize(credential)

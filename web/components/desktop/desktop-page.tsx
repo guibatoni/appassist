@@ -69,6 +69,7 @@ function ManualRankCalculator({sha}:{sha:string|null}) {
     fusions:"0",equips:"0",
   })
   const [victory,setVictory]=useState<"lp"|"deckout"|"exodia">("lp")
+  const [manualRef,setManualRef]=useState<"classic"|"x15">("classic")
   const [result,setResult]=useState<SpoilsResult|null>(null)
   const [error,setError]=useState<string|null>(null)
   const [busy,setBusy]=useState(false)
@@ -76,8 +77,8 @@ function ManualRankCalculator({sha}:{sha:string|null}) {
   const calculate=async()=>{
     if(busy)return
     const api=desktopApi()
-    if(!api||!sha){
-      setError("Selecione uma ISO na Biblioteca de Mods antes de calcular.")
+    if(!api){
+      setError("Abra o DUELTRACE Windows para usar a calculadora.")
       return
     }
     const counters={} as SpoilsCounters
@@ -95,7 +96,7 @@ function ManualRankCalculator({sha}:{sha:string|null}) {
     setError(null)
     setResult(null)
     try{
-      setResult(await api.calculate_spoils(counters,victory))
+      setResult(await api.calculate_spoils(counters,victory,manualRef))
     }catch(e){
       setError(e instanceof Error?e.message:"Não foi possível calcular o RANK.")
     }finally{setBusy(false)}
@@ -145,17 +146,28 @@ function ManualRankCalculator({sha}:{sha:string|null}) {
           <option value="exodia">Exodia</option>
         </select>
       </label>
+      {!sha&&<label className="text-xs text-muted">
+        <span className="mb-1 block">Sistema de RANK (referência)</span>
+        <select value={manualRef} className="field rounded-md px-2 py-2 text-sm"
+          onChange={e=>{
+            setManualRef(e.target.value as "classic"|"x15")
+            setResult(null)
+          }}>
+          <option value="classic">Original (10 classificações)</option>
+          <option value="x15">Remaster X15 (3 classificações)</option>
+        </select>
+      </label>}
       <button type="button" className="btn-gold rounded-md px-4 py-2 text-sm disabled:opacity-40"
-        disabled={busy||!sha} onClick={()=>void calculate()}>
+        disabled={busy} onClick={()=>void calculate()}>
         {busy?"Calculando…":"Calcular RANK"}
       </button>
-      {!sha&&<p className="text-xs text-gold">Selecione uma ISO para começar.</p>}
+      {!sha&&<p className="text-xs text-gold">Sem ISO: cálculo de referência, não identifica o mod.</p>}
     </div>
     {error&&<p className="mt-3 text-sm text-gold" role="alert">{error}</p>}
     {result&&<div className="mt-4 rounded-lg border border-primary/30 bg-background/60 p-4" role="status">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-xs text-muted">Projeção da ISO selecionada</p>
+          <p className="text-xs text-muted">{result.referenceOnly?"Projeção de referência (sem ISO)":"Projeção da ISO selecionada"}</p>
           <p className="font-display text-2xl font-bold text-gold">{result.category}</p>
         </div>
         <p className="font-display text-3xl font-bold tabular-nums text-primary">
@@ -190,6 +202,8 @@ function RankPanel({sha}:{sha:string|null}) {
   const [reanalysing,setReanalysing]=useState(false)
   const [feedback,setFeedback]=useState<string|null>(null)
   const [captured,setCaptured]=useState<string|null>(null)
+  const [experimentBusy,setExperimentBusy]=useState(false)
+  const [experimentFeedback,setExperimentFeedback]=useState<string|null>(null)
 
   useEffect(()=>{
     let mounted=true,reading=false
@@ -197,6 +211,7 @@ function RankPanel({sha}:{sha:string|null}) {
     setDiagnostic(null)
     setFeedback(null)
     setCaptured(null)
+    setExperimentFeedback(null)
     setLp(null)
     const read=async()=>{
       const api=desktopApi()
@@ -271,6 +286,21 @@ function RankPanel({sha}:{sha:string|null}) {
     finally{setBusy(false)}
   }
 
+  const toggleExperiment=async(enabled:boolean)=>{
+    const api=desktopApi()
+    if(!api||!sha||experimentBusy)return
+    setExperimentBusy(true)
+    setExperimentFeedback(null)
+    try{
+      const status=await api.set_rank_experimental(enabled)
+      setExperimentFeedback(status.status)
+      setLp(null)
+      setRank(await api.get_rank())
+    }catch(e){
+      setExperimentFeedback(e instanceof Error?e.message:"Não foi possível alterar a leitura experimental.")
+    }finally{setExperimentBusy(false)}
+  }
+
   const ready=rank?.ready===true
   const needsLp=rank?.state==="needs_lp_confirmation"||rank?.state==="lp_mismatch"
   const pending=rank?.state==="unsupported"
@@ -337,6 +367,18 @@ function RankPanel({sha}:{sha:string|null}) {
       <p className="mt-3 text-xs text-muted">
         {rank?.status??"Conectando ao ePSXe…"}
       </p>}
+    {sha&&(pending||experimental)&&<div className="mt-3 rounded-lg border border-gold/30 p-3">
+      <p className="text-xs text-muted">
+        Esta ISO ainda não possui mapeamento RAM confirmado. O teste usa o endereço legado
+        do ePSXe como hipótese: compare os LP com a tela do jogo e faça duas ações reais.
+        Nenhuma estimativa experimental comprova a compatibilidade deste mod.
+      </p>
+      <button type="button" className="btn-ghost mt-2 rounded-md px-3 py-2 text-xs disabled:opacity-40"
+        disabled={experimentBusy} onClick={()=>void toggleExperiment(!experimental)}>
+        {experimentBusy?"Verificando…":experimental?"Desativar teste RAM":"Testar RANK ao vivo (experimental)"}
+      </button>
+      {experimentFeedback&&<p className="mt-2 text-xs text-gold" role="status">{experimentFeedback}</p>}
+    </div>}
     <details className="mt-3 border-t border-line/60 pt-2 text-xs text-muted">
       <summary className="cursor-pointer select-none py-1 text-primary">
         Diagnóstico e ferramentas

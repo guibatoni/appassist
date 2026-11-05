@@ -455,6 +455,7 @@ export type SpoilsResult = {
   source: string
   verifiedInEmulator: false
   note: string
+  referenceOnly?: boolean
 }
 
 export type RankState = {
@@ -462,7 +463,7 @@ export type RankState = {
   state: "unsupported" | "unavailable" | "needs_lp_confirmation" | "needs_ram_validation" | "lp_mismatch" | "provisional"
   status: string
   diagnosticCode?: string
-  sourceMode?: "verified" | "experimental"
+  sourceMode?: "verified" | "experimental" | "unsupported"
   validationProgress?: number
   validationRequired?: number
   candidateLp?: number
@@ -542,7 +543,8 @@ export interface DesktopAPI {
   get_state(): Promise<DesktopState>
   get_hand(): Promise<HandState>
   get_rank(): Promise<RankState>
-  calculate_spoils(counters: SpoilsCounters, victory: "lp"|"deckout"|"exodia"): Promise<SpoilsResult>
+  calculate_spoils(counters: SpoilsCounters, victory: "lp"|"deckout"|"exodia", reference?: "classic"|"x15"): Promise<SpoilsResult>
+  set_rank_experimental(enabled: boolean): Promise<{enabled:boolean; status:string}>
   get_rank_diagnostic(): Promise<RankDiagnostic>
   confirm_rank_lp(lifePoints: number): Promise<RankState>
   capture_rank_prediction(): Promise<RankCapture>
@@ -575,7 +577,8 @@ interface ProtectedNativeAPI {
   get_state(token: string): Promise<DesktopState>
   get_hand(token: string): Promise<HandState>
   get_rank(token: string): Promise<RankState>
-  calculate_spoils(token: string, counters: SpoilsCounters, victory: "lp"|"deckout"|"exodia"): Promise<SpoilsResult>
+  calculate_spoils(token: string, counters: SpoilsCounters, victory: "lp"|"deckout"|"exodia", reference?: "classic"|"x15"): Promise<SpoilsResult>
+  set_rank_experimental(token: string, enabled: boolean): Promise<{enabled:boolean; status:string}>
   get_rank_diagnostic(token: string): Promise<RankDiagnostic>
   confirm_rank_lp(token: string, lifePoints: number): Promise<RankState>
   capture_rank_prediction(token: string): Promise<RankCapture>
@@ -623,7 +626,8 @@ export function desktopApi(): DesktopAPI | null {
     get_state: () => native.get_state(token),
     get_hand: () => native.get_hand(token),
     get_rank: () => native.get_rank(token),
-    calculate_spoils: (counters,victory) => native.calculate_spoils(token,counters,victory),
+    calculate_spoils: (counters,victory,reference) => native.calculate_spoils(token,counters,victory,reference??"classic"),
+    set_rank_experimental: (enabled) => native.set_rank_experimental(token,enabled),
     get_rank_diagnostic: () => native.get_rank_diagnostic(token),
     confirm_rank_lp: (lifePoints) => native.confirm_rank_lp(token, lifePoints),
     capture_rank_prediction: () => native.capture_rank_prediction(token),

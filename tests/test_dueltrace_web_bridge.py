@@ -206,6 +206,72 @@ class BridgeTests(unittest.TestCase):
         self.bridge._rank_reader.assert_not_called()
         self.bridge._rank_mod_reader.assert_not_called()
 
+    def test_manual_rank_without_active_iso_uses_explicit_reference_not_a_fake_mod(self):
+        counters={
+            "turns":5,"effective_attacks":1,"defense_wins":0,
+            "face_down":3,"spells":0,"traps":0,"cards_used":13,
+            "remaining_lp":9500,"fusions":3,"equips":0,
+        }
+        self.catalog.active_file.unlink()
+        self.bridge._rank_reader=Mock(side_effect=AssertionError("RAM não deve ser lida"))
+        classic=self.bridge.calculate_spoils(counters,"lp","classic")
+        x15=self.bridge.calculate_spoils(counters,"lp","x15")
+        self.assertEqual((classic["score"],classic["category"]),(76,"B-POW"))
+        self.assertEqual((x15["score"],x15["category"]),(76,"S-POW"))
+        self.assertTrue(classic["referenceOnly"])
+        self.assertTrue(x15["referenceOnly"])
+        self.assertIn("sem ISO",classic["note"])
+        with self.assertRaises(ValueError):
+            self.bridge.calculate_spoils(counters,"lp","invalid")
+        self.bridge._rank_reader.assert_not_called()
+
+    def test_unverified_iso_requires_explicit_opt_in_and_two_real_ram_transitions(self):
+        counters={
+            "turns":1,"effective_attacks":0,"defense_wins":0,
+            "face_down":0,"spells":0,"traps":0,"cards_used":0,
+            "remaining_lp":8000,"fusions":0,"equips":0,
+        }
+        self.bridge._rank_reader=Mock(return_value={
+            "ready":True,"status":"Candidato antigo legível",
+            "pid":4321,"counters":counters})
+        self.assertEqual(self.bridge.get_rank()["state"],"unsupported")
+        self.bridge._rank_reader.assert_not_called()
+        protected=ProtectedDesktopApi(self.bridge,"x"*64)
+        with self.assertRaises(PermissionError):
+            protected.set_rank_experimental("invalid",True)
+        with self.assertRaises(ValueError):
+            protected.set_rank_experimental("x"*64,"sim")
+        self.assertTrue(protected.set_rank_experimental("x"*64,True)["enabled"])
+        first=protected.get_rank("x"*64)
+        self.assertEqual(first["state"],"needs_lp_confirmation")
+        self.assertIsNone(first["score"])
+        self.assertEqual(first["sourceMode"],"experimental")
+        confirmed=protected.confirm_rank_lp("x"*64,8000)
+        self.assertEqual(confirmed["state"],"needs_ram_validation")
+        self.assertEqual(confirmed["validationProgress"],0)
+        counters["effective_attacks"]=1
+        progress=protected.get_rank("x"*64)
+        self.assertEqual(progress["state"],"needs_ram_validation")
+        self.assertEqual(progress["validationProgress"],1)
+        counters["turns"]=2
+        calculated=protected.get_rank("x"*64)
+        self.assertTrue(calculated["ready"])
+        self.assertEqual(calculated["sourceMode"],"experimental")
+        self.assertEqual(calculated["rankSystem"],"classic")
+        self.assertIsInstance(calculated["score"],int)
+        self.assertIsNone(self.bridge._rank_last_snapshot)
+        with self.assertRaises(ValueError):
+            self.bridge.capture_rank_prediction()
+        self.assertFalse(protected.set_rank_experimental("x"*64,False)["enabled"])
+        self.assertEqual(protected.get_rank("x"*64)["state"],"unsupported")
+
+    def test_experimental_rank_cannot_survive_mod_activation(self):
+        self.assertTrue(self.bridge.set_rank_experimental(True)["enabled"])
+        self.assertEqual(self.bridge._rank_experimental_sha,self.sha)
+        self.bridge.activate_mod(self.sha,False)
+        self.assertIsNone(self.bridge._rank_experimental_sha)
+        self.assertEqual(self.bridge.get_rank()["state"],"unsupported")
+
     def test_unmapped_rank_never_reads_presumed_legacy_address(self):
         reader=Mock(return_value={"ready":True,"pid":1234,
                                   "counters":{"remaining_lp":8000}})

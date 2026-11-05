@@ -41,6 +41,7 @@ from dueltrace_rank_duel_verification import compare_rank_observations
 from dueltrace_rank_diagnostic import diagnose_rank_profile
 from dueltrace_rank_legacy_probe import start_legacy_trial, update_legacy_trial
 from dueltrace_spoils_manual import calculate_manual_spoils
+from scanner_multiiso import X15_SHA
 from dueltrace_library_sort import validate_sort,matches_type,sort_key
 from dueltrace_update_checker import (
     check_for_updates, open_official_releases, fetch_stable_release, CURRENT_VERSION
@@ -71,6 +72,8 @@ class DueltraceWebBridge:
         self._rank_last_turns = None
         self._rank_last_snapshot = None
         self._rank_pending_capture = None
+        # Opt-in temporário: nunca comprova compatibilidade nem persiste entre sessões.
+        self._rank_experimental_sha = None
         self._process = None
         self._lock = threading.RLock()
         self._fusion_cache_key = None
@@ -345,16 +348,17 @@ class DueltraceWebBridge:
         # Conferir LP ou observar alterações plausíveis não prova a identidade
         # do registro RAM. O endereço legado nunca é presumido para outro mod,
         # nem quando apenas o executável e a tabela estática coincidem.
+        experimental=(binding is None and not model_available(sha)
+                      and self._rank_experimental_sha==sha)
         if (profile.get("rom_sha256") != sha or
-                (binding is None and not model_available(sha))):
+                (binding is None and not model_available(sha) and not experimental)):
             self._reset_rank_read_state()
             return None,sha,{"state":"unsupported","ready":False,
-                "status":"RANK ao vivo bloqueado: esta ISO não possui um "
-                         "mapeamento RAM validado para seus hashes. "
-                         "A calculadora manual continua disponível.",
+                "status":"RANK automático não validado para esta ISO. "
+                         "Para investigar a RAM antiga, ative o teste experimental "
+                         "e confira os LP; ou use o cálculo manual.",
                 "sourceMode":"unsupported","rankSystem":rank_system(sha),
                 "score":None,"category":None,"counters":None}
-        experimental=False
         preferred=(self._process.pid if self._process is not None and
                    self._process.poll() is None else None)
         try:
@@ -405,15 +409,56 @@ class DueltraceWebBridge:
         sample["experimental"]=experimental
         return sample,sha,None
 
-    def calculate_spoils(self, counters, victory):
-        """Calculadora de spoils por entrada manual, sem leituras RAM nem bindings."""
+    def set_rank_experimental(self, enabled):
+        """Habilita a leitura antiga somente após opt-in explícito nesta sessão/ISO.
+
+        Não cria binding validado e nunca utiliza a hipótese como evidência.
+        """
+        if type(enabled) is not bool:
+            raise ValueError("Opção de leitura experimental inválida.")
         with self._lock:
-            active,_entry,_profile=self._active()
+            active,_entry,profile=self._active()
             sha=active.get("sha256")
-            # Só apresenta classificação por ISO realmente selecionada.
-            if type(sha) is not str or not re.fullmatch(r"[0-9a-f]{64}",sha):
-                raise ValueError("Selecione uma ISO antes de calcular o RANK.")
-            return calculate_manual_spoils(counters,victory,sha)
+            if enabled:
+                if (type(sha) is not str or
+                        not re.fullmatch(r"[0-9a-f]{64}",sha) or
+                        not isinstance(profile,dict) or
+                        profile.get("rom_sha256")!=sha):
+                    raise ValueError("Selecione uma ISO com perfil local para testar a RAM.")
+                if model_available(sha) or validate_live_rank_binding(profile) is not None:
+                    return {"enabled":False, "status":
+                            "Esta ISO já possui um leitor específico de RANK; use a leitura normal."}
+                self._rank_experimental_sha=sha
+            else:
+                self._rank_experimental_sha=None
+            self._reset_rank_read_state()
+            return {"enabled":bool(enabled),
+                    "status":("Leitura experimental habilitada apenas para esta ISO. "
+                              "Abra um duelo, confira os LP e faça duas ações. "
+                              "Resultado provisório, nunca validado automaticamente."
+                              if enabled else "Leitura experimental desativada.")}
+
+    def calculate_spoils(self, counters, victory, reference="classic"):
+        """Calculadora manual funciona mesmo sem perfil ativo; nunca lê RAM."""
+        if reference not in ("classic","x15") or type(reference) is not str:
+            raise ValueError("Sistema de RANK de referência inválido.")
+        with self._lock:
+            active,_entry,profile=self._active()
+            sha=active.get("sha256")
+            if (isinstance(profile,dict) and type(sha) is str
+                    and re.fullmatch(r"[0-9a-f]{64}",sha)
+                    and profile.get("rom_sha256")==sha):
+                # Uma ISO realmente selecionada sempre define a classificação.
+                return calculate_manual_spoils(counters,victory,sha)
+            # Sem ISO: exemplo de referência declarado, sem atribuir o resultado a um mod.
+            ref_sha=X15_SHA if reference=="x15" else "0"*64
+            result=calculate_manual_spoils(counters,victory,ref_sha)
+            result["referenceOnly"]=True
+            result["note"]=("Estimativa de referência sem ISO selecionada, "
+                            "sem leitura do ePSXe e sem validação neste mod. "
+                            + result["note"])
+            return result
+
 
     def get_rank(self):
         """Sem pontuação até o usuário validar os LP do duelo atual."""
@@ -627,6 +672,8 @@ class DueltraceWebBridge:
                 self._rank_last_snapshot=None
                 self._rank_pending_capture=None
                 return {"ready":False,"state":"lp_mismatch",
+                    "sourceMode":"experimental" if sample.get("experimental") else "verified",
+                    "rankSystem":rank_system(sha),
                     "status":"LP do jogo divergentes do candidato RAM. Contador não habilitado.",
                     "candidateLp":sample["counters"][lp_key],
                     "score":None,"category":None,"counters":None}
@@ -1027,6 +1074,7 @@ class DueltraceWebBridge:
         self._rank_last_turns=None
         self._rank_last_snapshot=None
         self._rank_pending_capture=None
+        self._rank_experimental_sha=None
         return self.get_state()
 
     def get_mod_scan_diagnostic(self, sha, with_ollama=False):

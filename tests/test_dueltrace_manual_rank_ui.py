@@ -14,8 +14,11 @@ class ManualRankUiContractTests(unittest.TestCase):
         page=(ROOT/"web/components/desktop/desktop-page.tsx").read_text(encoding="utf-8")
         self.assertIn("function ManualRankCalculator({sha}",page)
         self.assertIn('<ManualRankCalculator key={sha??"sem-iso"} sha={sha}/>',page)
-        self.assertIn("api.calculate_spoils(counters,victory)",page)
-        self.assertIn("Selecione uma ISO na Biblioteca de Mods antes de calcular.",page)
+        self.assertIn("api.calculate_spoils(counters,victory,manualRef)",page)
+        self.assertIn("Sem ISO: cálculo de referência, não identifica o mod.",page)
+        self.assertIn('disabled={busy} onClick={()=>void calculate()}',page)
+        self.assertIn("Testar RANK ao vivo (experimental)",page)
+        self.assertIn("api.set_rank_experimental(enabled)",page)
         self.assertIn("rank?.status??\"Conectando ao ePSXe…\"",page)
         self.assertIn("Estimativa manual, não é um RANK confirmado",page)
 
@@ -37,7 +40,8 @@ class ManualRankUiContractTests(unittest.TestCase):
         bridge=(ROOT/"scanner/dueltrace_web_bridge.py").read_text(encoding="utf-8")
         adapter=(ROOT/"scanner/dueltrace_web_security.py").read_text(encoding="utf-8")
         self.assertIn("return calculate_manual_spoils(counters,victory,sha)",bridge)
-        self.assertIn("return self._bridge.calculate_spoils(counters,victory)",adapter)
+        self.assertIn("return self._bridge.calculate_spoils(counters,victory,reference)",adapter)
+        self.assertIn("return self._bridge.set_rank_experimental(enabled)",adapter)
 
 
 if __name__=="__main__":
