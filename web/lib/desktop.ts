@@ -151,6 +151,7 @@ export type DeepScanResult = {
   frameStyles: number
   opponentCount: number
   opponentCandidateCount?: number
+  opponentDiagnosticReason?: string
   dropEntries: number
   descriptionCount: number
   effectTexts: number
@@ -227,6 +228,8 @@ export type LocalMod = {
   opponents?: number
   opponentCandidateCount?: number
   opponentDiscoveryState?: string
+  opponentDiagnosticCode?: string
+  opponentDiagnosticReason?: string
   opponentEvidence?: string
   dropEntries?: number
   dropTables?: number
