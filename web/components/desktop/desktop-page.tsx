@@ -1050,6 +1050,6 @@ export function DesktopPage({page}:{page:Page}) {
     {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>}
     {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="fusoes"&&<Fusions sha={state?.activeSha??null} cards={state?.cards??[]}/>}
-    {page==="drops"&&<DropsPage sha={state?.activeSha??null}/>}
+    {page==="drops"&&<DropsPage sha={state?.activeSha??null} cards={state?.cards??[]}/>}
   </div>
 }

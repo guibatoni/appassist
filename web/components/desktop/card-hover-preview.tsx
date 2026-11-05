@@ -126,6 +126,10 @@ export function CardHoverPreview({selection,sha,onClose}:{
   const dropRows=rows.length?rows.slice(0,4):
     !result&&!error&&activeSelection.fallbackDrop?[activeSelection.fallbackDrop]:[]
   const more=Math.max(0,rows.length-dropRows.length)
+  // Apenas textos com procedência no perfil selecionado são apresentados.
+  const description=card.descriptionSource&&card.description?.trim()?card.description.trim():null
+  const effect=card.effectSource&&card.effect?.trim()?card.effect.trim():null
+  const duplicateText=Boolean(description&&effect&&description===effect)
 
   return createPortal(<>
     <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-[90] bg-[#020713]/75 backdrop-blur-[2px]"/>
@@ -146,8 +150,21 @@ export function CardHoverPreview({selection,sha,onClose}:{
           {card.category==="Monstros"&&<p className="mt-3 text-sm font-semibold tabular-nums text-primary">
             ATK {card.atk??"—"} · DEF {card.def??"—"}
           </p>}
-          {card.effect&&<p className="mt-3 line-clamp-4 text-xs text-muted">{card.effect}</p>}
         </div>
+      </div>
+      <div className="mt-3 border-t border-line/70 pt-3">
+        {description||effect?<div className="space-y-2">
+          {description&&<div>
+            <h4 className="mb-1 text-xs font-semibold text-gold">
+              {duplicateText?"Descrição / efeito":"Descrição"}
+            </h4>
+            <p className="whitespace-pre-line break-words line-clamp-4 text-xs leading-relaxed text-foreground/85">{description}</p>
+          </div>}
+          {effect&&!duplicateText&&<div>
+            <h4 className="mb-1 text-xs font-semibold text-gold">Efeito</h4>
+            <p className="whitespace-pre-line break-words line-clamp-4 text-xs leading-relaxed text-foreground/85">{effect}</p>
+          </div>}
+        </div>:<p className="text-xs text-muted">Descrição e efeito não disponíveis para esta carta.</p>}
       </div>
       <div className="mt-3 border-t border-line/70 pt-3">
         <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">Onde conseguir</h4>

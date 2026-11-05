@@ -40,6 +40,28 @@ class SharedCardPreviewTests(unittest.TestCase):
         for page in (self.fusions,self.drops):
             self.assertIn('<CardHoverPreview selection={preview} sha={sha}',page)
 
+    def test_drops_preview_uses_full_card_details_from_active_iso(self):
+        # Mesma coleção utilizada na Biblioteca de Cartas e nas Fusões.
+        self.assertIn('<DropsPage sha={state?.activeSha??null} cards={state?.cards??[]}/>',self.fusions)
+        self.assertIn("export function DropsPage({sha,cards}:",self.drops)
+        self.assertIn("new Map(cards.map(card=>[card.id,card]))",self.drops)
+        self.assertIn("cardsById.get(row.cardId)??null",self.drops)
+        self.assertIn("cardDetails?.id===row.cardId?cardDetails",self.drops)
+
+    def test_shows_verified_description_and_effect_without_exposing_file_paths(self):
+        source=self.overlay
+        self.assertIn("card.descriptionSource&&card.description?.trim()",source)
+        self.assertIn("card.effectSource&&card.effect?.trim()",source)
+        self.assertIn('duplicateText?"Descrição / efeito":"Descrição"',source)
+        self.assertIn('>Efeito</h4>',source)
+        self.assertIn('duplicateText',source)
+        self.assertIn('Descrição e efeito não disponíveis para esta carta.',source)
+        self.assertIn('whitespace-pre-line break-words',source)
+        self.assertNotIn('{card.descriptionSource}',source)
+        self.assertNotIn('{card.effectSource}',source)
+        self.assertIn("CARD_PREVIEW_DELAY_MS=1000",source)
+        self.assertIn("Onde conseguir",source)
+
     def test_overlay_centers_on_selected_card_not_corner(self):
         source=self.overlay
         self.assertIn("createPortal(<>",source)

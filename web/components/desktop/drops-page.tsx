@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import {useEffect, useState} from "react"
+import {useEffect, useMemo, useState} from "react"
 import {ChevronLeft, ChevronRight, Database, RefreshCcw, Search, ShieldCheck} from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi} from "@/lib/desktop"
 import {CardHoverPreview} from "./card-hover-preview"
@@ -20,8 +20,13 @@ function DropArtwork({sha,id,name}:{sha:string|null;id:number;name:string}) {
   </div>
 }
 
-function DropCard({row,sha,onPreview}:{row:DropRow;sha:string|null;onPreview:(selection:CardPreviewSelection|null)=>void}) {
-  const card:LocalCard={
+function DropCard({row,sha,cardDetails,onPreview}:{
+  row:DropRow;sha:string|null;cardDetails:LocalCard|null;
+  onPreview:(selection:CardPreviewSelection|null)=>void
+}) {
+  // O mesmo ID da Biblioteca (perfil da ISO ativa) fornece descrição e efeito.
+  // Dados não disponíveis não recebem textos inventados ou de outro mod.
+  const card:LocalCard=cardDetails?.id===row.cardId?cardDetails:{
     id:row.cardId,name:row.cardName,type:row.cardType,
     category:row.category,attribute:"",atk:row.atk,def:row.def,
     effect:null,effectSource:null,
@@ -46,7 +51,7 @@ function DropCard({row,sha,onPreview}:{row:DropRow;sha:string|null;onPreview:(se
   </button>
 }
 
-export function DropsPage({sha}:{sha:string|null}) {
+export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [opponent,setOpponent]=useState(0)
   const [rankFilter,setRankFilter]=useState("")
   const [query,setQuery]=useState("")
@@ -58,6 +63,7 @@ export function DropsPage({sha}:{sha:string|null}) {
   const [loading,setLoading]=useState(false)
   const [error,setError]=useState<string|null>(null)
   const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
+  const cardsById=useMemo(()=>new Map(cards.map(card=>[card.id,card])),[cards])
   const pageSize=36
 
   // Nunca reutilizar filtros de um mod em outro perfil SHA.
@@ -160,7 +166,7 @@ export function DropsPage({sha}:{sha:string|null}) {
         </p>
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
           {result.rows.map(row=><DropCard key={row.opponentId+"-"+row.group+"-"+row.cardId}
-            row={row} sha={sha} onPreview={setPreview}/>)}
+            row={row} sha={sha} cardDetails={cardsById.get(row.cardId)??null} onPreview={setPreview}/>)}
         </div>
         {!result.rows.length&&<p className="py-8 text-center text-sm text-muted">Nenhuma carta para os filtros selecionados.</p>}
         <div className="mt-4 flex items-center justify-between gap-2">
