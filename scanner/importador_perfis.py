@@ -60,8 +60,11 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     ) and len(drops) > 0)
     association_validation = validate_drop_associations(
         checks, drops, rom_sha256=result["sha256"])
+    # A coerência de pesos e IDs não identifica qual dos três grupos físicos
+    # é POW/TEC. Não liberar drops publicamente sem rótulos comprovados.
+    rank_group_unknown = result.get("drop_group_mapping_status") == "grupos_nao_identificados"
     weights_ok = (weights_structural_ok and card_ok and opponent_ok
-                  and not opponent_structural
+                  and not opponent_structural and not rank_group_unknown
                   and association_validation["valid"])
 
     # Códigos de tipo extraídos do executável; não inferimos por nome.
