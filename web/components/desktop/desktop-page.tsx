@@ -504,9 +504,6 @@ function Mods({mods,sha,onRefresh,configured}:{
               {!mod.opponents&&(mod.opponentCandidateCount??0)>0&&<p className="mt-3 text-xs text-muted">
                 Até {mod.opponentCandidateCount} nomes de adversários candidatos detectados (não verificados). A análise continua sem copiar dados de outro mod.
               </p>}
-              {!mod.dropEntries&&(mod.dropCandidateEntries??0)>0&&<p className="mt-3 text-xs text-muted">
-                {mod.dropCandidateEntries?.toLocaleString("pt-BR")} entradas de drops candidatas, sem associação confirmada com IDs e grupos RANK desta ISO.
-              </p>}
               {!mod.cards&&(mod.candidateCards??0)>0&&<p className="mt-3 text-xs text-gold">
                 ${mod.candidateCards?.toLocaleString("pt-BR")} cartas candidatas em análise. Elas ainda não aparecem na Biblioteca para evitar dados incorretos.
               </p>}
