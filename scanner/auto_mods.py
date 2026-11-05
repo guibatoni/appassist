@@ -248,15 +248,28 @@ class ModCatalog:
                 raise ValueError("Perfil inexistente ou incompatível")
             if entry["level"] != "conhecido_validado" and not acknowledge_uncertainty:
                 raise PermissionError("Confirme que o mod desconhecido foi revisado antes de ativar")
-            if entry["level"] == "desconhecido":
-                raise PermissionError("Estrutura não identificada: usar somente IDs/LP, sem catálogo")
+            profile=self.profile_for(entry)
+            if entry["level"] == "desconhecido" and profile.get("scanner_error"):
+                # Imagem ilegível/corrompida não é um mod apenas desconhecido.
+                raise PermissionError(
+                    "A ISO não pôde ser analisada com segurança; reimporte o arquivo.")
+            # Sem catálogo, permitir jogar em modo básico com confirmação,
+            # MAS nunca reutilizar flags de cartas/ranks de outro perfil.
+            limited=entry["level"]=="desconhecido"
+            features=(
+                {"ids_e_lp":True,"nomes_cartas":False,"artes":False,
+                 "oponentes":False,"drops_brutos":False,"rank":False,
+                 "pontuacao":False,"fusoes":False,"categorias":False,
+                 "efeitos":False}
+                if limited else entry["features"])
             entry["approved"] = True
             atomic_json(self.registry_file, {"schema": 1, "entries": entries})
             active = {
                 "sha256": entry["sha256"],
                 "profile_path": entry["profile_path"],
-                "features": entry["features"],
+                "features": features,
                 "level": entry["level"],
+                "compatibility_mode":"basic" if limited else "recognized",
                 "activated_at": datetime.now(timezone.utc).isoformat(),
             }
             atomic_json(self.active_file, active)

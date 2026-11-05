@@ -7,13 +7,14 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scanner"))
 
 from auto_mods import ModCatalog, report_level, supported_for_runtime, atomic_json
 from integracao_overlay import overlay_snapshot
+from epsxe_launcher import launch_epsxe
 from scanner_multiiso import X15_SHA
 
 
@@ -96,7 +97,67 @@ class ProfileTests(unittest.TestCase):
             with patch("auto_mods.import_rom", return_value=(profile, path)):
                 catalog.analyse(rom)
             with self.assertRaises(PermissionError):
-                catalog.activate(sha, acknowledge_uncertainty=True)
+                catalog.activate(sha)
+            active=catalog.activate(sha, acknowledge_uncertainty=True)
+            self.assertEqual(active["sha256"],sha)
+            self.assertEqual(active["compatibility_mode"],"basic")
+            self.assertFalse(active["features"]["nomes_cartas"])
+            self.assertFalse(active["features"]["rank"])
+            self.assertFalse(active["features"]["fusoes"])
+            self.assertTrue(active["features"]["ids_e_lp"])
+            snapshot=overlay_snapshot(catalog)
+            self.assertTrue(snapshot["ready"])
+            self.assertEqual(snapshot["cards"],{})
+            self.assertEqual(snapshot["drops"],[])
+            self.assertEqual(snapshot["recipes"],[])
+            self.assertIsNone(snapshot["rank_labels"])
+
+    def test_basic_mode_can_launch_selected_iso_with_no_unverified_catalog(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            rom=root/"unknown_mod.bin"
+            rom.write_bytes(b"b"*110_000)
+            exe=root/"ePSXe.exe"
+            exe.write_bytes(b"test launcher")
+            sha=hashlib.sha256(rom.read_bytes()).hexdigest()
+            catalog=ModCatalog(root/"settings")
+            profile=example_profile(sha)
+            profile["verified"]={"cartas":"pendente","oponentes":"pendente"}
+            profile["supported_features"]={
+                k:False for k in profile["supported_features"]}
+            path=catalog.home/"profiles"/sha[:16]/"profile.json"
+            atomic_json(path,profile)
+            with patch("auto_mods.import_rom",return_value=(profile,path)):
+                catalog.analyse(rom)
+            catalog.activate(sha,acknowledge_uncertainty=True)
+            process=Mock()
+            process.return_value=object()
+            launch_epsxe(catalog,exe,sha,popen=process,platform="win32")
+            self.assertEqual(process.call_count,1)
+            args=process.call_args.args[0]
+            self.assertEqual(args[-1],str(rom))
+            self.assertIn("-loadiso",args)
+            self.assertIs(process.call_args.kwargs["shell"],False)
+
+    def test_corrupt_image_is_not_activated_even_in_basic_mode(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            rom=root/"bad_image.bin"
+            rom.write_bytes(b"x"*110_000)
+            sha=hashlib.sha256(rom.read_bytes()).hexdigest()
+            catalog=ModCatalog(root/"settings")
+            profile=example_profile(sha)
+            profile["scanner_error"]="Sem diretório ISO9660 coerente"
+            profile["verified"]={"cartas":"pendente","oponentes":"pendente",
+                                 "tabelas_drops":"pendente"}
+            profile["supported_features"]={
+                k:False for k in profile["supported_features"]}
+            path=catalog.home/"profiles"/sha[:16]/"profile.json"
+            atomic_json(path,profile)
+            with patch("auto_mods.import_rom",return_value=(profile,path)):
+                catalog.analyse(rom)
+            with self.assertRaises(PermissionError):
+                catalog.activate(sha,acknowledge_uncertainty=True)
             self.assertFalse(overlay_snapshot(catalog)["ready"])
 
 

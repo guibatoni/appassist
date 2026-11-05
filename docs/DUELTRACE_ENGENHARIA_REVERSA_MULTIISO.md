@@ -192,6 +192,22 @@ Tudo acontece localmente. Cache e perfil separados por SHA-256 da imagem.
   todas as funcionalidades funcionem para aquele mod. Falhas de parsing
   são preservadas como diagnóstico, sem criar dados de outros mods.
 
+## Etapa 2F — modo básico para mods sem catálogo
+
+- ISOs com índice de disco legível e análise parcial podem ser ativadas
+  **mediante confirmação do jogador** mesmo sem 722 cartas reconhecidas.
+- A ativação estabelece `compatibility_mode=basic`; mantém somente
+  IDs e LP condicionados a uma leitura RAM real, e bloqueia nomes, artes,
+  drops, RANK, pontuação e fusões inexistentes.
+- ISOs corrompidas ou com `scanner_error` não podem usar o modo básico.
+  Mesmo nos demais casos, iniciar o jogo depende do ePSXe instalado,
+  arquivo original intacto e confirmação do usuário na interface.
+- O botão para ativar usa o texto simples `Modo básico` quando necessário.
+  O app não afirma que o mod é totalmente compatível nem que uma sessão
+  do ePSXe corresponde automaticamente à ISO ativa no DUELTRACE.
+- Testes verificam ausência de vazamentos de dados entre ISOs e comando
+  de inicialização do ePSXe limitado ao arquivo ativo.
+
 ## Etapa 3 — parser de mod sem layout conhecido
 
 - Inferir deslocamentos com referências cruzadas MIPS, estrutura de ponteiros,

@@ -474,7 +474,9 @@ function Mods({mods,sha,onRefresh,configured}:{
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-semibold text-white">{mod.name}</span>
                 <span className="mt-0.5 block text-xs text-muted">
-                  {active?"Pronto para jogar":mod.requiresReview?"Compatibilidade limitada":"Disponível"}
+                  {active&&mod.level==="desconhecido"?"Modo básico":
+                    active?"Pronto para jogar":
+                    mod.requiresReview?"Compatibilidade limitada":"Disponível"}
                 </span>
               </span>
               {active&&<span className="rounded-md bg-primary/15 px-2 py-1 text-xs font-semibold text-primary">Ativo</span>}
@@ -495,7 +497,10 @@ function Mods({mods,sha,onRefresh,configured}:{
               <div className="mt-3 flex flex-wrap gap-2">
                 <button type="button" disabled={busy||!desktopApi()||active}
                   className="btn-gold flex-1 disabled:opacity-40" onClick={()=>{
-                    const ok=!mod.requiresReview||window.confirm("Este mod tem compatibilidade parcial. Ativar os recursos disponíveis?")
+                    const question=mod.level==="desconhecido"
+                      ?"As informações deste mod ainda não foram identificadas. Ativar em modo básico para jogar?"
+                      :"Este mod tem compatibilidade parcial. Ativar os recursos disponíveis?"
+                    const ok=!mod.requiresReview||window.confirm(question)
                     if(ok)void run(()=>desktopApi()!.activate_mod(mod.sha256,mod.requiresReview),"Mod ativado.")
                   }}>{active?"Mod ativo":"Ativar mod"}</button>
                 <button type="button" className="btn-ghost flex-1 disabled:opacity-40"
