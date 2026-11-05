@@ -62,6 +62,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.set_rank_experimental(enabled)
 
+    def calibrate_rank(self, credential):
+        self._authorize(credential)
+        return self._bridge.calibrate_rank()
+
     def get_rank(self, credential):
         self._authorize(credential)
         return self._bridge.get_rank()

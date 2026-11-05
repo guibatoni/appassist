@@ -6,11 +6,11 @@ import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FilePlus2, Gamepad2,
   GitMerge, Layers, Play, RefreshCcw, Search, Shield, Swords, Upload,
 } from "lucide-react"
-import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
+import {cardArt, cardWithFrame, desktopApi, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, SpoilsCounters, SpoilsResult} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -51,169 +51,16 @@ function Empty({children}:{children:React.ReactNode}) {
   return <p className="rounded-lg border border-line/60 bg-[#06152c]/70 px-4 py-6 text-center text-sm text-muted">{children}</p>
 }
 
-const manualRankMetrics: Array<{key:keyof SpoilsCounters; label:string}> = [
-  {key:"turns",label:"Turnos"},
-  {key:"effective_attacks",label:"Ataques efetivos"},
-  {key:"defense_wins",label:"Vitórias na defesa"},
-  {key:"face_down",label:"Cartas viradas para baixo"},
-  {key:"spells",label:"Magias puras"},
-  {key:"traps",label:"Armadilhas"},
-  {key:"cards_used",label:"Cartas utilizadas"},
-  {key:"remaining_lp",label:"LP restantes"},
-  {key:"fusions",label:"Fusões"},
-  {key:"equips",label:"Equipamentos"},
-]
-
-function ManualRankCalculator({sha}:{sha:string|null}) {
-  // Os valores são campos editáveis de exemplo, nunca dados lidos da RAM.
-  const [values,setValues]=useState<Record<keyof SpoilsCounters,string>>({
-    turns:"0",effective_attacks:"0",defense_wins:"0",face_down:"0",
-    spells:"0",traps:"0",cards_used:"0",remaining_lp:"8000",
-    fusions:"0",equips:"0",
-  })
-  const [victory,setVictory]=useState<"lp"|"deckout"|"exodia">("lp")
-  const [manualRef,setManualRef]=useState<"classic"|"x15">("classic")
-  const [result,setResult]=useState<SpoilsResult|null>(null)
-  const [error,setError]=useState<string|null>(null)
-  const [busy,setBusy]=useState(false)
-
-  const calculate=async()=>{
-    if(busy)return
-    const api=desktopApi()
-    if(!api){
-      setError("Abra o DUELTRACE Windows para usar a calculadora.")
-      return
-    }
-    const counters={} as SpoilsCounters
-    for(const metric of manualRankMetrics){
-      const raw=values[metric.key]
-      const max=metric.key==="remaining_lp"?32766:255
-      if(!/^\d{1,5}$/.test(raw) || Number(raw)>max){
-        setError(`Informe ${metric.label.toLowerCase()} entre 0 e ${max}.`)
-        setResult(null)
-        return
-      }
-      counters[metric.key]=Number(raw)
-    }
-    setBusy(true)
-    setError(null)
-    setResult(null)
-    try{
-      setResult(await api.calculate_spoils(counters,victory,manualRef))
-    }catch(e){
-      setError(e instanceof Error?e.message:"Não foi possível calcular o RANK.")
-    }finally{setBusy(false)}
-  }
-
-  return <section className="panel rounded-xl p-4" aria-label="Calculadora manual de RANK">
-    <div className="flex flex-wrap items-start justify-between gap-2">
-      <div>
-        <h2 className="font-display text-lg font-semibold text-gold">Calculadora manual de RANK</h2>
-        <p className="mt-1 text-xs text-muted">
-          Funciona sem leitura da RAM. Informe os números reais do duelo para calcular os pontos.
-        </p>
-      </div>
-      <span className="rounded-md border border-gold/40 px-2 py-1 text-xs text-gold">
-        Fórmula SPOILS · 10 critérios
-      </span>
-    </div>
-    <p className="mt-2 text-xs text-gold">
-      Os valores iniciais são apenas exemplos, não são detectados automaticamente.
-      Para mods sem fórmula validada, a estimativa usa as regras conhecidas do Remaster X15
-      e apresenta o RANK no formato da ISO selecionada.
-    </p>
-    <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-      {manualRankMetrics.map(metric=><label key={metric.key} className="text-xs text-muted">
-        <span className="mb-1 block">{metric.label}</span>
-        <input type="number" inputMode="numeric" min={0}
-          max={metric.key==="remaining_lp"?32766:255} step={1}
-          aria-label={metric.label} className="field w-full rounded-md px-2 py-2 text-sm"
-          value={values[metric.key]}
-          onChange={e=>{
-            setValues(previous=>({...previous,[metric.key]:e.target.value}))
-            setResult(null)
-            setError(null)
-          }}/>
-      </label>)}
-    </div>
-    <div className="mt-3 flex flex-wrap items-end gap-3">
-      <label className="text-xs text-muted">
-        <span className="mb-1 block">Resultado do duelo</span>
-        <select className="field rounded-md px-2 py-2 text-sm"
-          value={victory} onChange={e=>{
-            setVictory(e.target.value as "lp"|"deckout"|"exodia")
-            setResult(null)
-          }}>
-          <option value="lp">Vitória por LP</option>
-          <option value="deckout">Deck-out</option>
-          <option value="exodia">Exodia</option>
-        </select>
-      </label>
-      {!sha&&<label className="text-xs text-muted">
-        <span className="mb-1 block">Sistema de RANK (referência)</span>
-        <select value={manualRef} className="field rounded-md px-2 py-2 text-sm"
-          onChange={e=>{
-            setManualRef(e.target.value as "classic"|"x15")
-            setResult(null)
-          }}>
-          <option value="classic">Original (10 classificações)</option>
-          <option value="x15">Remaster X15 (3 classificações)</option>
-        </select>
-      </label>}
-      <button type="button" className="btn-gold rounded-md px-4 py-2 text-sm disabled:opacity-40"
-        disabled={busy} onClick={()=>void calculate()}>
-        {busy?"Calculando…":"Calcular RANK"}
-      </button>
-      {!sha&&<p className="text-xs text-gold">Sem ISO: cálculo de referência, não identifica o mod.</p>}
-    </div>
-    {error&&<p className="mt-3 text-sm text-gold" role="alert">{error}</p>}
-    {result&&<div className="mt-4 rounded-lg border border-primary/30 bg-background/60 p-4" role="status">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-xs text-muted">{result.referenceOnly?"Projeção de referência (sem ISO)":"Projeção da ISO selecionada"}</p>
-          <p className="font-display text-2xl font-bold text-gold">{result.category}</p>
-        </div>
-        <p className="font-display text-3xl font-bold tabular-nums text-primary">
-          {result.score} <span className="text-sm text-muted">pontos</span>
-        </p>
-      </div>
-      <p className="mt-2 text-xs text-muted">
-        Base {result.basePoints} + vitória {result.victoryBonus>=0?"+":""}{result.victoryBonus}
-        + critérios: {manualRankMetrics.map(metric=>result.breakdown[metric.key]).reduce((sum,value)=>sum+value,0)}.
-      </p>
-      <details className="mt-2 text-xs text-muted">
-        <summary className="cursor-pointer text-primary">Ver pontos por critério</summary>
-        <div className="mt-2 grid grid-cols-2 gap-1 sm:grid-cols-5">
-          {manualRankMetrics.map(metric=><p key={metric.key}>
-            {metric.label}: <strong>{result.breakdown[metric.key]>=0?"+":""}{result.breakdown[metric.key]}</strong>
-          </p>)}
-        </div>
-      </details>
-      <p className="mt-2 text-xs text-gold">
-        Estimativa manual, não é um RANK confirmado pelo jogo. {result.note}
-      </p>
-    </div>}
-  </section>
-}
-
 function RankPanel({sha}:{sha:string|null}) {
   const [rank,setRank]=useState<RankState|null>(null)
-  const [busy,setBusy]=useState(false)
-  const [diagnostic,setDiagnostic]=useState<RankDiagnostic|null>(null)
-  const [diagnosing,setDiagnosing]=useState(false)
-  const [reanalysing,setReanalysing]=useState(false)
-  const [feedback,setFeedback]=useState<string|null>(null)
-  const [captured,setCaptured]=useState<string|null>(null)
-  const [experimentBusy,setExperimentBusy]=useState(false)
-  const [experimentFeedback,setExperimentFeedback]=useState<string|null>(null)
+  const [calibrating,setCalibrating]=useState(false)
+  const [calibrationError,setCalibrationError]=useState(false)
 
+  // Leitura automática continua ativa mesmo sem intervenção do usuário.
   useEffect(()=>{
     let mounted=true,reading=false
     setRank(null)
-    setDiagnostic(null)
-    setFeedback(null)
-    setCaptured(null)
-    setExperimentFeedback(null)
+    setCalibrationError(false)
     const read=async()=>{
       const api=desktopApi()
       if(!api||reading)return
@@ -222,8 +69,7 @@ function RankPanel({sha}:{sha:string|null}) {
         const value=await api.get_rank_auto()
         if(mounted)setRank(value)
       }catch{
-        if(mounted)setRank({ready:false,state:"unavailable",
-          status:"Não foi possível comunicar com o leitor de RANK.",
+        if(mounted)setRank({ready:false,state:"unavailable",status:"",
           score:null,category:null,counters:null})
       }finally{reading=false}
     }
@@ -232,150 +78,43 @@ function RankPanel({sha}:{sha:string|null}) {
     return()=>{mounted=false;window.clearInterval(interval)}
   },[sha])
 
-  const investigate=async()=>{
+  const calibrate=async()=>{
     const api=desktopApi()
-    if(!api)return
-    setDiagnosing(true)
-    setFeedback(null)
-    try{setDiagnostic(await api.get_rank_diagnostic())}
-    catch(e){setFeedback(e instanceof Error?e.message:"Diagnóstico indisponível.")}
-    finally{setDiagnosing(false)}
-  }
-  const reanalyse=async()=>{
-    const api=desktopApi()
-    if(!api||!sha)return
-    setReanalysing(true)
-    setFeedback(null)
+    if(!api||!sha||calibrating)return
+    setCalibrating(true)
+    setCalibrationError(false)
     try{
-      await api.scan_sources(sha)
-      const [state,details]=await Promise.all([api.get_rank_auto(),api.get_rank_diagnostic()])
-      setRank(state)
-      setDiagnostic(details)
-      setFeedback(details.readyForLiveRead
-        ?"Perfil atualizado. Abra o duelo; o RANK será calculado automaticamente."
-        :"Perfil relido. O mapeamento RAM desta ISO ainda precisa ser validado.")
-    }catch(e){setFeedback(e instanceof Error?e.message:"Não foi possível reanalisar a ISO.")}
-    finally{setReanalysing(false)}
-  }
-  const capture=async()=>{
-    const api=desktopApi()
-    if(!api)return
-    setBusy(true)
-    setFeedback(null)
-    try{const result=await api.capture_rank_prediction();setCaptured(
-      result.ready?`${result.score??"—"} pontos · ${result.category??"—"}`:"Captura indisponível.")}
-    catch(e){setFeedback(e instanceof Error?e.message:"Falha na captura.")}
-    finally{setBusy(false)}
-  }
-
-  const toggleExperiment=async(enabled:boolean)=>{
-    const api=desktopApi()
-    if(!api||!sha||experimentBusy)return
-    setExperimentBusy(true)
-    setExperimentFeedback(null)
-    try{
-      const status=await api.set_rank_experimental(enabled)
-      setExperimentFeedback(status.status)
+      await api.calibrate_rank()
       setRank(await api.get_rank_auto())
-    }catch(e){
-      setExperimentFeedback(e instanceof Error?e.message:"Não foi possível alterar a leitura experimental.")
-    }finally{setExperimentBusy(false)}
+    }catch{
+      setCalibrationError(true)
+    }finally{setCalibrating(false)}
   }
 
   const ready=rank?.ready===true
-  const autoChecking=rank?.state==="auto_calibrating"||rank?.state==="needs_lp_confirmation"||rank?.state==="lp_mismatch"
-  const pending=rank?.state==="unsupported"
-  const observing=rank?.state==="needs_ram_validation"
-  const experimental=rank?.sourceMode==="experimental"
-  const status=ready?(experimental?"Automático (experimental)":"Cálculo automático ativo"):
-    autoChecking?"Conferindo RAM":observing?"Testando RAM":
-    pending?(sha?"RAM não validada":"Sem ISO"):"Aguardando leitura"
-  const rankSystem=rank?.rankSystem==="x15"?"Remaster X15":
-    rank?.rankSystem==="classic"?"RANK original":"RANK por ISO"
-  const details=rank?.victorySource==="ram_deckout"?"Marcador X15: deck-out":
-    rank?.victorySource==="ram_lp"?"Marcador X15: vitória por LP":
-    "Projeção se vencer por LP"
   return <section className="panel rounded-xl p-4" aria-label="RANK ao vivo">
     <div className="flex items-center justify-between gap-2">
-      <h2 className="font-display text-lg font-semibold text-gold">RANK ao vivo · automático</h2>
-      <span className={"text-xs font-medium "+(ready?(experimental?"text-gold":"text-success"):"text-muted")} role="status">
-        {ready?"●":"○"} {status}
+      <h2 className="font-display text-lg font-semibold text-gold">RANK ao vivo</h2>
+      <span className={"text-xs font-medium "+(ready?"text-success":"text-muted")}>
+        {ready?"● Em tempo real":"○ Aguardando duelo"}
       </span>
     </div>
-    <div className="mt-4 rounded-lg border border-primary/20 bg-background/60 px-4 py-4 text-center">
-      <p className="text-xs text-muted">{ready?(experimental?"Projeção experimental · vitória por LP":details):"Aguardando leitura confiável"}</p>
-      <p className="mt-1 font-display text-4xl font-bold tabular-nums text-primary">
+    <div className="mt-4 rounded-lg border border-primary/20 bg-background/60 px-4 py-5 text-center">
+      <p className="font-display text-4xl font-bold tabular-nums text-primary">
         {ready?rank.score:"—"} <span className="text-sm font-normal text-muted">pts</span>
       </p>
-      <p className="mt-1 font-display text-xl font-bold text-gold">
-        {ready?rank.category:autoChecking?"Calibrando automaticamente":observing?"Validando contadores":"RANK indisponível"}
-      </p>
-      <p className="mt-1 text-[11px] text-muted">
-        {rankSystem} · {ready?(experimental?"RAM antiga em teste; não validada":"Estimativa, não resultado oficial"):"Sem projeção confiável"}
+      <p className="mt-2 font-display text-xl font-bold text-gold">
+        {ready?rank.category:"—"}
       </p>
     </div>
-    {ready&&rank.counters&&
-      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
-        <span>Turnos <strong className="text-white">{rank.counters.turns??"—"}</strong></span>
-        <span>LP <strong className="text-white">{rank.counters.remaining_lp??"—"}</strong></span>
-        <span>Fusões <strong className="text-white">{rank.counters.fusions??"—"}</strong></span>
-      </div>}
-    {autoChecking&&<p className="mt-3 text-xs text-primary" role="status">
-      {rank?.status??"Verificando o ePSXe automaticamente."}
-      {" "}Nenhuma confirmação de LP é necessária.
+    <button type="button" className="btn-ghost mt-4 w-full justify-center disabled:opacity-40"
+      disabled={!sha||calibrating||!desktopApi()} onClick={()=>void calibrate()}>
+      <RefreshCcw className={"size-4 "+(calibrating?"animate-spin":"")}/>
+      {calibrating?"Calibrando…":"Calibrar calculadora"}
+    </button>
+    {calibrationError&&<p role="alert" className="mt-2 text-center text-xs text-gold">
+      Não foi possível calibrar. Confira o mod selecionado.
     </p>}
-    {observing&&
-      <p className="mt-3 text-xs text-gold" role="status">
-        LP detectados automaticamente. Faça duas ações normais no duelo para verificar a RAM antiga
-        ({rank?.validationProgress??0}/{rank?.validationRequired??2} mudanças identificadas).
-      </p>}
-    {ready&&experimental&&
-      <p className="mt-3 text-xs text-gold">
-        Leitura experimental: os pontos são estimados com a fórmula antiga,
-        mas a estrutura RAM desta ISO ainda não foi comprovada em duelos reais.
-      </p>}
-    {!ready&&!autoChecking&&!observing&&
-      <p className="mt-3 text-xs text-muted">
-        {rank?.status??"Conectando ao ePSXe…"}
-      </p>}
-    {sha&&(pending||experimental)&&<div className="mt-3 rounded-lg border border-gold/30 p-3">
-      <p className="text-xs text-muted">
-        Esta ISO ainda não possui mapeamento RAM confirmado. O teste usa o endereço legado
-        do ePSXe como hipótese: os LP são lidos automaticamente, mas confira os números exibidos no jogo.
-        Nenhuma estimativa experimental comprova a compatibilidade deste mod.
-      </p>
-      <button type="button" className="btn-ghost mt-2 rounded-md px-3 py-2 text-xs disabled:opacity-40"
-        disabled={experimentBusy} onClick={()=>void toggleExperiment(!experimental)}>
-        {experimentBusy?"Verificando…":experimental?"Desativar teste RAM":"Testar RANK ao vivo (experimental)"}
-      </button>
-      {experimentFeedback&&<p className="mt-2 text-xs text-gold" role="status">{experimentFeedback}</p>}
-    </div>}
-    <details className="mt-3 border-t border-line/60 pt-2 text-xs text-muted">
-      <summary className="cursor-pointer select-none py-1 text-primary">
-        Diagnóstico e ferramentas
-      </summary>
-      <p className="mt-2">{rank?.status??"Aguardando dados do emulador."}</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <button type="button" className="btn-ghost disabled:opacity-40"
-          disabled={!sha||diagnosing||reanalysing} onClick={()=>void investigate()}>
-          {diagnosing?"Analisando…":"Diagnosticar ISO"}
-        </button>
-        {rank?.diagnosticCode==="rank_table_missing"&&
-          <button type="button" className="btn-ghost disabled:opacity-40"
-            disabled={!sha||reanalysing||diagnosing} onClick={()=>void reanalyse()}>
-            {reanalysing?"Relendo ISO…":"Reanalisar perfil"}
-          </button>}
-        {ready&&!experimental&&<button type="button" className="btn-ghost disabled:opacity-40"
-          disabled={busy} onClick={()=>void capture()}>Capturar previsão</button>}
-      </div>
-      {diagnostic&&<p className="mt-2">
-        {diagnostic.reason} {diagnostic.nextStep}
-        {" "}RAM validada: {diagnostic.ramBindingVerified?"sim":"não"}.
-        {diagnostic.legacyProbeAvailable&&" Leitura do Assistente antigo disponível em modo experimental."}
-      </p>}
-      {captured&&<p className="mt-2 text-success">Capturado: {captured}</p>}
-      {feedback&&<p className="mt-2 text-gold" role="status">{feedback}</p>}
-    </details>
   </section>
 }
 
@@ -438,7 +177,6 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       </section>
       <RankPanel sha={sha}/>
     </div>
-    <ManualRankCalculator key={sha??"sem-iso"} sha={sha}/>
     <section className="panel rounded-xl p-4" aria-label="Dicas de fusões">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -461,7 +199,6 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
                 <p className="text-xs text-primary">Posições {item.slot_a} + {item.slot_b}</p>
                 <p className="mt-1 font-semibold text-white">{item.result_name} #{item.result}</p>
                 <MonsterStats card={cardsById.get(item.result)??null} className="mt-1"/>
-                <p className="mt-1 text-xs text-muted">{sourceLabel(item.validation)}</p>
               </div>)}
           </div>:<div className="grid gap-2 md:grid-cols-2">
             {hand.chains.slice(0,showAll?undefined:6).map((item,i)=>

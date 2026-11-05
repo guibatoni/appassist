@@ -1,53 +1,64 @@
-"""Regressão da interface da calculadora de RANK no desktop Windows.
-
-Não precisa de ISO, emulador nem dados pessoais. A fórmula é testada no
-test_dueltrace_spoils_manual.py; aqui conferimos o caminho UI -> API existente.
-"""
+"""Contrato da tela Início: mão, fusões e RANK automático, sem UI de diagnóstico."""
 from pathlib import Path
 import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
+PAGE=ROOT/"web/components/desktop/desktop-page.tsx"
 
 
-class ManualRankUiContractTests(unittest.TestCase):
-    def test_manual_rank_is_available_on_home_without_ram_binding(self):
-        page=(ROOT/"web/components/desktop/desktop-page.tsx").read_text(encoding="utf-8")
-        self.assertIn("function ManualRankCalculator({sha}",page)
-        self.assertIn('<ManualRankCalculator key={sha??"sem-iso"} sha={sha}/>',page)
-        self.assertIn("api.calculate_spoils(counters,victory,manualRef)",page)
-        self.assertIn("Sem ISO: cálculo de referência, não identifica o mod.",page)
-        self.assertIn('disabled={busy} onClick={()=>void calculate()}',page)
-        self.assertIn("Testar RANK ao vivo (experimental)",page)
-        self.assertIn("api.set_rank_experimental(enabled)",page)
-        self.assertIn("api.get_rank_auto()",page)
-        self.assertIn("Calibrando automaticamente",page)
-        self.assertIn("Nenhuma confirmação de LP é necessária.",page)
-        self.assertNotIn("const confirmLp=async",page)
-        self.assertNotIn("onClick={()=>void confirmLp()}",page)
-        self.assertIn("rank?.status??\"Conectando ao ePSXe…\"",page)
-        self.assertIn("Estimativa manual, não é um RANK confirmado",page)
+class CleanHomeRankUiTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.page=PAGE.read_text(encoding="utf-8")
+        cls.home=cls.page.split("function Home({sha,cards}:",1)[1].split(
+            "function CardMatchPanel(",1)[0]
+        cls.rank=cls.page.split("function RankPanel({sha}:",1)[1].split(
+            "function Home({sha,cards}:",1)[0]
 
-    def test_ten_spoils_fields_and_three_victories_are_present(self):
-        page=(ROOT/"web/components/desktop/desktop-page.tsx").read_text(encoding="utf-8")
-        fields=(
-            "turns","effective_attacks","defense_wins","face_down",
-            "spells","traps","cards_used","remaining_lp","fusions","equips",
-        )
-        for field in fields:
-            with self.subTest(field=field):
-                self.assertIn('key:"'+field+'"',page)
-        for victory in ("lp","deckout","exodia"):
-            with self.subTest(victory=victory):
-                self.assertIn('<option value="'+victory+'">',page)
-        self.assertIn(r"/^\d{1,5}$/.test(raw)",page)
+    def test_home_contains_only_hand_rank_and_fusions(self):
+        self.assertIn('aria-label="Cartas na mão"',self.home)
+        self.assertIn('<RankPanel sha={sha}/>',self.home)
+        self.assertIn('aria-label="Dicas de fusões"',self.home)
+        self.assertNotIn("ManualRankCalculator",self.page)
+        self.assertNotIn("Calculadora manual de RANK",self.page)
+        self.assertNotIn("manualRankMetrics",self.page)
+        self.assertNotIn("sourceLabel(",self.home)
 
-    def test_manual_engine_and_api_still_use_verified_formula(self):
+    def test_rank_is_continuously_automatic_with_single_calibration_button(self):
+        self.assertIn("api.get_rank_auto()",self.rank)
+        self.assertIn("window.setInterval(()=>void read(),850)",self.rank)
+        self.assertIn("api.calibrate_rank()",self.rank)
+        self.assertIn("Calibrar calculadora",self.rank)
+        self.assertIn("disabled={!sha||calibrating||!desktopApi()}",self.rank)
+        self.assertIn("rank.score",self.rank)
+        self.assertIn("rank.category",self.rank)
+        self.assertNotIn("api.calculate_spoils",self.rank)
+        self.assertNotIn("set_rank_experimental",self.rank)
+
+    def test_home_hides_all_developer_diagnostics_and_raw_rank_status(self):
+        for forbidden in (
+            "Diagnóstico e ferramentas", "Diagnosticar ISO", "Reanalisar perfil",
+            "Testar RANK ao vivo (experimental)", "Desativar teste RAM",
+            "RANK automático não validado", "RAM antiga em teste",
+            "mapeamento RAM", "rank?.status", "get_rank_diagnostic()",
+            "capture_rank_prediction()", "rankMipsCandidates",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden,self.rank)
+        self.assertNotIn("Nenhuma confirmação de LP",self.rank)
+        self.assertNotIn("diagnostic",self.rank.lower())
+        self.assertNotIn('result.note',self.rank)
+        self.assertNotIn('sourceLabel(',self.home)
+
+    def test_backend_calculator_and_diagnostics_remain_available_for_developers(self):
         bridge=(ROOT/"scanner/dueltrace_web_bridge.py").read_text(encoding="utf-8")
-        adapter=(ROOT/"scanner/dueltrace_web_security.py").read_text(encoding="utf-8")
-        self.assertIn("return calculate_manual_spoils(counters,victory,sha)",bridge)
-        self.assertIn("return self._bridge.calculate_spoils(counters,victory,reference)",adapter)
-        self.assertIn("return self._bridge.set_rank_experimental(enabled)",adapter)
-        self.assertIn("return self._bridge.get_rank_auto()",adapter)
+        protected=(ROOT/"scanner/dueltrace_web_security.py").read_text(encoding="utf-8")
+        self.assertIn("def calculate_spoils(",bridge)
+        self.assertIn("def get_rank_diagnostic(",bridge)
+        self.assertIn("def calibrate_rank(self):",bridge)
+        self.assertIn("self.set_rank_experimental(True)",bridge)
+        self.assertIn("return self._bridge.calibrate_rank()",protected)
+        self.assertIn("return self._bridge.get_rank_auto()",protected)
 
 
 if __name__=="__main__":

@@ -440,6 +440,28 @@ class DueltraceWebBridge:
                               "Resultado provisório, nunca validado automaticamente."
                               if enabled else "Leitura experimental desativada.")}
 
+    def calibrate_rank(self):
+        """Reinicia a calibração automática usando o leitor da ISO ativa.
+
+        Para ISO sem binding validado, o clique autoriza apenas a leitura
+        experimental desta sessão, com as verificações de LP e de mudanças
+        coerentes já existentes. Não valida o modelo nem altera os RANKs.
+        """
+        with self._lock:
+            active,_entry,profile=self._active()
+            sha=active.get("sha256")
+            if (type(sha) is not str or not re.fullmatch(r"[0-9a-f]{64}",sha)
+                    or not isinstance(profile,dict)
+                    or profile.get("rom_sha256")!=sha):
+                raise ValueError("Selecione uma ISO com perfil antes de calibrar.")
+            if model_available(sha) or validate_live_rank_binding(profile) is not None:
+                self._rank_experimental_sha=None
+                self._reset_rank_read_state()
+            else:
+                # Reutiliza o consentimento e o leitor já implementados.
+                self.set_rank_experimental(True)
+            return {"started":True,"status":"Calibração iniciada."}
+
     def calculate_spoils(self, counters, victory, reference="classic"):
         """Calculadora manual funciona mesmo sem perfil ativo; nunca lê RAM."""
         if reference not in ("classic","x15") or type(reference) is not str:

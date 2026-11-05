@@ -138,6 +138,59 @@ class AutomaticRankTests(unittest.TestCase):
         self.bridge.set_rank_experimental(False)
         self.assertEqual(self.bridge.get_rank_auto()["state"],"unsupported")
 
+    def test_calibration_button_restarts_known_iso_without_changing_formula(self):
+        self.bridge.get_rank_auto()
+        self.assertTrue(self.bridge.get_rank_auto()["ready"])
+        self.assertEqual(self.bridge.get_rank_auto()["score"],101)
+        result=self.bridge.calibrate_rank()
+        self.assertTrue(result["started"])
+        self.assertIsNone(self.bridge._rank_calibration)
+        self.assertIsNone(self.bridge._rank_auto_probe)
+        self.assertIsNone(self.bridge._rank_experimental_sha)
+        first=self.bridge.get_rank_auto()
+        self.assertEqual(first["state"],"auto_calibrating")
+        self.assertIsNone(first["score"])
+        second=self.bridge.get_rank_auto()
+        self.assertTrue(second["ready"])
+        self.assertEqual((second["score"],second["category"]),(101,"Z-POW"))
+
+    def test_calibration_uses_existing_opt_in_for_unmapped_iso(self):
+        unknown="b"*64
+        foreign=fake_profile(unknown)
+        profile_file=self.catalog.home/"profiles"/unknown[:16]/"profile.json"
+        atomic_json(profile_file,foreign)
+        entry={**self.entry,"sha256":unknown,"profile_path":str(profile_file)}
+        atomic_json(self.catalog.registry_file,{"schema":1,"entries":[self.entry,entry]})
+        atomic_json(self.catalog.active_file,{"sha256":unknown})
+        self.reader.reset_mock()
+        self.assertEqual(self.bridge.get_rank_auto()["state"],"unsupported")
+        self.reader.assert_not_called()
+        result=self.bridge.calibrate_rank()
+        self.assertTrue(result["started"])
+        self.assertEqual(self.bridge._rank_experimental_sha,unknown)
+        self.assertEqual(self.bridge.get_rank_auto()["state"],"auto_calibrating")
+        observing=self.bridge.get_rank_auto()
+        self.assertEqual(observing["state"],"needs_ram_validation")
+        self.assertEqual(observing["validationProgress"],0)
+        self.counters["effective_attacks"]=1
+        self.assertEqual(self.bridge.get_rank_auto()["validationProgress"],1)
+        self.counters["turns"]=2
+        visible=self.bridge.get_rank_auto()
+        self.assertTrue(visible["ready"])
+        self.assertEqual(visible["sourceMode"],"experimental")
+        self.assertEqual(visible["rankSystem"],"classic")
+        self.assertIsNone(self.bridge._rank_last_snapshot)
+
+    def test_calibration_is_protected_and_rejects_missing_active_iso(self):
+        api=ProtectedDesktopApi(self.bridge,"v"*64)
+        with self.assertRaises(PermissionError):
+            api.calibrate_rank("invalid")
+        self.assertTrue(api.calibrate_rank("v"*64)["started"])
+        self.catalog.active_file.unlink()
+        with self.assertRaises(ValueError):
+            api.calibrate_rank("v"*64)
+        self.assertIsNone(self.bridge._rank_experimental_sha)
+
     def test_auto_endpoint_requires_local_token_and_manual_remains_compatible(self):
         api=ProtectedDesktopApi(self.bridge,"v"*64)
         with self.assertRaises(PermissionError):

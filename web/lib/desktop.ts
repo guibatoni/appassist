@@ -546,6 +546,7 @@ export interface DesktopAPI {
   get_hand(): Promise<HandState>
   get_rank(): Promise<RankState>
   get_rank_auto(): Promise<RankState>
+  calibrate_rank(): Promise<{started:boolean; status:string}>
   calculate_spoils(counters: SpoilsCounters, victory: "lp"|"deckout"|"exodia", reference?: "classic"|"x15"): Promise<SpoilsResult>
   set_rank_experimental(enabled: boolean): Promise<{enabled:boolean; status:string}>
   get_rank_diagnostic(): Promise<RankDiagnostic>
@@ -581,6 +582,7 @@ interface ProtectedNativeAPI {
   get_hand(token: string): Promise<HandState>
   get_rank(token: string): Promise<RankState>
   get_rank_auto(token: string): Promise<RankState>
+  calibrate_rank(token: string): Promise<{started:boolean; status:string}>
   calculate_spoils(token: string, counters: SpoilsCounters, victory: "lp"|"deckout"|"exodia", reference?: "classic"|"x15"): Promise<SpoilsResult>
   set_rank_experimental(token: string, enabled: boolean): Promise<{enabled:boolean; status:string}>
   get_rank_diagnostic(token: string): Promise<RankDiagnostic>
@@ -631,6 +633,7 @@ export function desktopApi(): DesktopAPI | null {
     get_hand: () => native.get_hand(token),
     get_rank: () => native.get_rank(token),
     get_rank_auto: () => native.get_rank_auto(token),
+    calibrate_rank: () => native.calibrate_rank(token),
     calculate_spoils: (counters,victory,reference) => native.calculate_spoils(token,counters,victory,reference??"classic"),
     set_rank_experimental: (enabled) => native.set_rank_experimental(token,enabled),
     get_rank_diagnostic: () => native.get_rank_diagnostic(token),
