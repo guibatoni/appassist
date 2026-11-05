@@ -152,6 +152,12 @@ class DueltraceWebBridge:
             "opponentDiscoveryState":(
                 (profile or {}).get("opponent_layout_discovery",{})
                 .get("state","nao_analisado")),
+            "opponentDiagnosticCode":(
+                (profile or {}).get("opponent_layout_discovery",{})
+                .get("reasonCode","nao_analisado")),
+            "opponentDiagnosticReason":(
+                str((profile or {}).get("opponent_layout_discovery",{})
+                    .get("reason",""))[:220]),
             "opponentEvidence":(
                 (profile or {}).get("verified",{}).get("oponentes","pendente")),
             "dropEntries":len((profile or {}).get("drops",[]))
@@ -1303,6 +1309,9 @@ class DueltraceWebBridge:
                 "opponentCandidateCount":(
                     (profile or {}).get("opponent_layout_discovery",{})
                     .get("candidateOpponentCount",0)),
+                "opponentDiagnosticReason":str(
+                    (profile or {}).get("opponent_layout_discovery",{})
+                    .get("reason",""))[:220],
                 "dropEntries":len((profile or {}).get("drops",[]))
                     if (profile or {}).get("supported_features",{}).get("drops") else 0,
                 "frameStyles":graphic.get("frames",0),
