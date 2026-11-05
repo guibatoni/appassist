@@ -66,6 +66,49 @@ Tudo acontece localmente. Cache e perfil separados por SHA-256 da imagem.
   truncado, orçamento de busca e ausência de glifos. Para promover dados à
   biblioteca será exigida evidência independente de identidade dos IDs.
 
+## Etapa 2B — Capstone + evidência cruzada com MIPS (implementada)
+
+- `scanner/dueltrace_mips_reference_probe.py` procura pares estruturais
+  `LUI` + `ORI/ADDIU` ou instruções de carga MIPS que referenciem
+  os primeiros 32 bytes de tabelas candidatas.
+- O endereço é transformado usando somente o cabeçalho PS-X EXE do mesmo
+  arquivo, com aliases de RAM KSEG0/KSEG1. A janela de análise fica limitada
+  a 2 MiB e até 16 referências. Não emula nem executa código.
+- Capstone está fixado em `5.0.9` para o build Windows; se indisponível, o
+  reconhecedor estrutural continua funcionando. A desmontagem Capstone
+  enriquece o relatório, **não** aumenta a confiança automaticamente.
+- Os resultados `mips_name_pointer_evidence` ficam no relatório interno e
+  chegam ao Ollama apenas como metadados compactos, com SHA-256 do exe.
+  O usuário final não vê offsets ou avisos experimentais.
+- `validated=false`, `executionConfirmed=false` em toda referência.
+  Mesmo um PC encontrado não comprova que o jogo realmente acessa aquela
+  tabela ou que os IDs correspondem aos textos apresentados.
+
+### Ghidra opcional para desenvolvimento
+
+- Exportador `tools/reverse_engineering/DueltraceXrefs.java`: script de
+  **Ghidra Headless** que coleta referências estáticas a endereços selecionados.
+- Rodar apenas pelo desenvolvedor, com Ghidra instalado separadamente,
+  executável importado com mapeamento MIPS correto e projeto temporário.
+  Exemplo conceitual da CLI, a adaptar ao diretório local:
+
+  ```powershell
+  & "C:\Ghidra\support\analyzeHeadless.bat" "C:\DUELTRACE-Work" "Analisador" -import "C:\mods\GAME.EXE" -scriptPath "C:\appassist\tools\reverse_engineering" -postScript DueltraceXrefs.java "C:\DUELTRACE-Work\evidencias.json" 80012000 -readOnly
+  ```
+
+- A importação correta do PS-X EXE e os endereços carregados pelo Ghidra
+  precisam ser conferidos antes de interpretar o relatório.
+- O executável Ghidra **não é enviado** junto com o DUELTRACE e não é iniciado
+  automaticamente, evitando downloads, Java e custo de manutenção para
+  o jogador. Os resultados Ghidra são pistas e nunca promovidos a perfil.
+
+### IA local
+
+- Ollama e `qwen2.5:3b` já fazem parte do fluxo de investigação opcional.
+  Não instala, baixa nem executa automaticamente outro modelo.
+- A IA só recebe resumos e evidências; não recebe ISO, ROM, SLUS ou arquivos
+  de memória completos, não edita offsets e não aprova catálogos/drops/RANK.
+
 ## Etapa 3 — parser de mod sem layout conhecido
 
 - Inferir deslocamentos com referências cruzadas MIPS, estrutura de ponteiros,

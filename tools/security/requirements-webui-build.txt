@@ -3,3 +3,5 @@
 pywebview==6.2.1
 pyinstaller==6.22.3
 pillow==13.0.0
+# MIPS R3000: biblioteca BSD opcional para desmontagem de evidências locais
+capstone==5.0.9

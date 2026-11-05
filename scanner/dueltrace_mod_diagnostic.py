@@ -175,6 +175,33 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
                        candidate.get("samples",[])[:5] if isinstance(x,str)],
             "validated":False,
         })
+    # Evidências internas do scanner, vinculadas apenas à ISO deste perfil.
+    # Nunca são identidade de carta/oponente confirmada.
+    name_evidence=report.get("name_pointer_discovery")
+    if not isinstance(name_evidence,dict):
+        name_evidence={}
+    mips_evidence=report.get("mips_name_pointer_evidence")
+    if not isinstance(mips_evidence,dict):
+        mips_evidence={}
+    name_candidates=[]
+    for row in name_evidence.get("candidates",[])[:4]:
+        if not isinstance(row,dict):continue
+        name_candidates.append({
+            "offset":row.get("pointerBase") if type(row.get("pointerBase")) is int else None,
+            "cardNamesTerminated":row.get("cardNamesTerminated",0),
+            "opponentNamesTerminated":row.get("opponentNamesTerminated",0),
+            "validated":False,
+        })
+    mips_refs=[]
+    for row in mips_evidence.get("references",[])[:12]:
+        if not isinstance(row,dict):continue
+        mips_refs.append({
+            "pc":str(row.get("pc") or "")[:14],
+            "tableFileOffset":row.get("tableFileOffset"),
+            "deltaBytes":row.get("deltaBytes"),
+            "matchType":str(row.get("matchType") or "")[:20],
+            "validated":False,
+        })
     flags=profile.get("supported_features") or {}
     if status.startswith("incerto") or status.startswith("erro"):
         level="estrutura_desconhecida"
@@ -279,6 +306,16 @@ def diagnose_layout(report: dict, profile: dict | None = None) -> dict:
             "state":str(pointer_report.get("state") or "não pesquisado")[:85],
             "candidates":pointer_candidates,
             "verified":False,
+        },
+        "mipsNameTableEvidence":{
+            "nameCandidates":name_candidates,
+            "mipsReferences":mips_refs,
+            "candidateState":str(name_evidence.get("state") or "não pesquisado")[:70],
+            "mipsState":str(mips_evidence.get("state") or "não pesquisado")[:70],
+            "exeSha256":str(mips_evidence.get("exeSha256") or "")[:64] or None,
+            "capstoneAvailable":mips_evidence.get("capstoneAvailable") is True,
+            "verified":False,
+            "executionConfirmed":False,
         },
         "nameLayoutProbe":{
             "state":str(name_probe.get("state") or "não investigado")[:60],

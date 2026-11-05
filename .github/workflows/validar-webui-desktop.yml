@@ -58,7 +58,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Preparar Pillow para testes de extração de arte PS1
-        run: python -m pip install pillow==13.0.0
+        run: python -m pip install pillow==13.0.0 capstone==5.0.9
       - name: Executar toda a suíte Python (inclui extração WA/SLUS)
         run: python -m unittest discover -s tests -p "test_*.py" -v
       - name: Instalar dependências Next.js
