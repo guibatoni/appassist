@@ -183,6 +183,29 @@ class BridgeTests(unittest.TestCase):
             self.bridge.get_hand()
             self.assertEqual(planner.call_count,2)
 
+    def test_manual_rank_available_when_ram_is_unverified(self):
+        """O painel manual não exige RAM nem aceita score de ISO trocada."""
+        from dueltrace_spoils_manual import calculate_manual_spoils
+        counters={
+            "turns":5,"effective_attacks":1,"defense_wins":0,
+            "face_down":3,"spells":0,"traps":0,"cards_used":13,
+            "remaining_lp":9500,"fusions":3,"equips":0,
+        }
+        self.bridge._rank_reader=Mock(side_effect=AssertionError("RAM não deve ser lida"))
+        self.bridge._rank_mod_reader=Mock(side_effect=AssertionError("RAM não deve ser lida"))
+        observed=self.bridge.calculate_spoils(counters,"lp")
+        self.assertEqual(observed["score"],76)
+        self.assertEqual(observed["category"],"B-POW")
+        self.assertEqual(observed["rankSystem"],"classic")
+        self.assertFalse(observed["verifiedInEmulator"])
+        self.assertEqual(observed,calculate_manual_spoils(counters,"lp",self.sha))
+        protected=ProtectedDesktopApi(self.bridge,"x"*64)
+        with self.assertRaises(PermissionError):
+            protected.calculate_spoils("invalid",counters,"lp")
+        self.assertEqual(protected.calculate_spoils("x"*64,counters,"lp"),observed)
+        self.bridge._rank_reader.assert_not_called()
+        self.bridge._rank_mod_reader.assert_not_called()
+
     def test_unmapped_rank_never_reads_presumed_legacy_address(self):
         reader=Mock(return_value={"ready":True,"pid":1234,
                                   "counters":{"remaining_lp":8000}})

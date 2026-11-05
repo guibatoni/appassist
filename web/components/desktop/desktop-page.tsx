@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, sourceLabel, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, RankDiagnostic, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, SpoilsCounters, SpoilsResult} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -46,6 +46,139 @@ function MonsterStats({card,className=""}:{card:LocalCard|null;className?:string
 
 function Empty({children}:{children:React.ReactNode}) {
   return <p className="rounded-lg border border-line/60 bg-[#06152c]/70 px-4 py-6 text-center text-sm text-muted">{children}</p>
+}
+
+const manualRankMetrics: Array<{key:keyof SpoilsCounters; label:string}> = [
+  {key:"turns",label:"Turnos"},
+  {key:"effective_attacks",label:"Ataques efetivos"},
+  {key:"defense_wins",label:"Vitórias na defesa"},
+  {key:"face_down",label:"Cartas viradas para baixo"},
+  {key:"spells",label:"Magias puras"},
+  {key:"traps",label:"Armadilhas"},
+  {key:"cards_used",label:"Cartas utilizadas"},
+  {key:"remaining_lp",label:"LP restantes"},
+  {key:"fusions",label:"Fusões"},
+  {key:"equips",label:"Equipamentos"},
+]
+
+function ManualRankCalculator({sha}:{sha:string|null}) {
+  // Os valores são campos editáveis de exemplo, nunca dados lidos da RAM.
+  const [values,setValues]=useState<Record<keyof SpoilsCounters,string>>({
+    turns:"0",effective_attacks:"0",defense_wins:"0",face_down:"0",
+    spells:"0",traps:"0",cards_used:"0",remaining_lp:"8000",
+    fusions:"0",equips:"0",
+  })
+  const [victory,setVictory]=useState<"lp"|"deckout"|"exodia">("lp")
+  const [result,setResult]=useState<SpoilsResult|null>(null)
+  const [error,setError]=useState<string|null>(null)
+  const [busy,setBusy]=useState(false)
+
+  const calculate=async()=>{
+    if(busy)return
+    const api=desktopApi()
+    if(!api||!sha){
+      setError("Selecione uma ISO na Biblioteca de Mods antes de calcular.")
+      return
+    }
+    const counters={} as SpoilsCounters
+    for(const metric of manualRankMetrics){
+      const raw=values[metric.key]
+      const max=metric.key==="remaining_lp"?32766:255
+      if(!/^\d{1,5}$/.test(raw) || Number(raw)>max){
+        setError(`Informe ${metric.label.toLowerCase()} entre 0 e ${max}.`)
+        setResult(null)
+        return
+      }
+      counters[metric.key]=Number(raw)
+    }
+    setBusy(true)
+    setError(null)
+    setResult(null)
+    try{
+      setResult(await api.calculate_spoils(counters,victory))
+    }catch(e){
+      setError(e instanceof Error?e.message:"Não foi possível calcular o RANK.")
+    }finally{setBusy(false)}
+  }
+
+  return <section className="panel rounded-xl p-4" aria-label="Calculadora manual de RANK">
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <div>
+        <h2 className="font-display text-lg font-semibold text-gold">Calculadora manual de RANK</h2>
+        <p className="mt-1 text-xs text-muted">
+          Funciona sem leitura da RAM. Informe os números reais do duelo para calcular os pontos.
+        </p>
+      </div>
+      <span className="rounded-md border border-gold/40 px-2 py-1 text-xs text-gold">
+        Fórmula SPOILS · 10 critérios
+      </span>
+    </div>
+    <p className="mt-2 text-xs text-gold">
+      Os valores iniciais são apenas exemplos, não são detectados automaticamente.
+      Para mods sem fórmula validada, a estimativa usa as regras conhecidas do Remaster X15
+      e apresenta o RANK no formato da ISO selecionada.
+    </p>
+    <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      {manualRankMetrics.map(metric=><label key={metric.key} className="text-xs text-muted">
+        <span className="mb-1 block">{metric.label}</span>
+        <input type="number" inputMode="numeric" min={0}
+          max={metric.key==="remaining_lp"?32766:255} step={1}
+          aria-label={metric.label} className="field w-full rounded-md px-2 py-2 text-sm"
+          value={values[metric.key]}
+          onChange={e=>{
+            setValues(previous=>({...previous,[metric.key]:e.target.value}))
+            setResult(null)
+            setError(null)
+          }}/>
+      </label>)}
+    </div>
+    <div className="mt-3 flex flex-wrap items-end gap-3">
+      <label className="text-xs text-muted">
+        <span className="mb-1 block">Resultado do duelo</span>
+        <select className="field rounded-md px-2 py-2 text-sm"
+          value={victory} onChange={e=>{
+            setVictory(e.target.value as "lp"|"deckout"|"exodia")
+            setResult(null)
+          }}>
+          <option value="lp">Vitória por LP</option>
+          <option value="deckout">Deck-out</option>
+          <option value="exodia">Exodia</option>
+        </select>
+      </label>
+      <button type="button" className="btn-gold rounded-md px-4 py-2 text-sm disabled:opacity-40"
+        disabled={busy||!sha} onClick={()=>void calculate()}>
+        {busy?"Calculando…":"Calcular RANK"}
+      </button>
+      {!sha&&<p className="text-xs text-gold">Selecione uma ISO para começar.</p>}
+    </div>
+    {error&&<p className="mt-3 text-sm text-gold" role="alert">{error}</p>}
+    {result&&<div className="mt-4 rounded-lg border border-primary/30 bg-background/60 p-4" role="status">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs text-muted">Projeção da ISO selecionada</p>
+          <p className="font-display text-2xl font-bold text-gold">{result.category}</p>
+        </div>
+        <p className="font-display text-3xl font-bold tabular-nums text-primary">
+          {result.score} <span className="text-sm text-muted">pontos</span>
+        </p>
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        Base {result.basePoints} + vitória {result.victoryBonus>=0?"+":""}{result.victoryBonus}
+        + critérios: {manualRankMetrics.map(metric=>result.breakdown[metric.key]).reduce((sum,value)=>sum+value,0)}.
+      </p>
+      <details className="mt-2 text-xs text-muted">
+        <summary className="cursor-pointer text-primary">Ver pontos por critério</summary>
+        <div className="mt-2 grid grid-cols-2 gap-1 sm:grid-cols-5">
+          {manualRankMetrics.map(metric=><p key={metric.key}>
+            {metric.label}: <strong>{result.breakdown[metric.key]>=0?"+":""}{result.breakdown[metric.key]}</strong>
+          </p>)}
+        </div>
+      </details>
+      <p className="mt-2 text-xs text-gold">
+        Estimativa manual, não é um RANK confirmado pelo jogo. {result.note}
+      </p>
+    </div>}
+  </section>
 }
 
 function RankPanel({sha}:{sha:string|null}) {
@@ -145,7 +278,7 @@ function RankPanel({sha}:{sha:string|null}) {
   const experimental=rank?.sourceMode==="experimental"
   const status=ready?(experimental?"Em teste":"Leitura ativa"):
     needsLp?"Confirme seus LP":observing?"Testando RAM":
-    pending?"Sem perfil":"Aguardando leitura"
+    pending?(sha?"RAM não validada":"Sem ISO"):"Aguardando leitura"
   const rankSystem=rank?.rankSystem==="x15"?"Remaster X15":
     rank?.rankSystem==="classic"?"RANK original":"RANK por ISO"
   const details=rank?.victorySource==="ram_deckout"?"Marcador X15: deck-out":
@@ -202,8 +335,7 @@ function RankPanel({sha}:{sha:string|null}) {
       </p>}
     {!ready&&!needsLp&&!observing&&
       <p className="mt-3 text-xs text-muted">
-        {pending?"Selecione uma ISO para iniciar a leitura de RAM.":
-          rank?.status??"Conectando ao ePSXe…"}
+        {rank?.status??"Conectando ao ePSXe…"}
       </p>}
     <details className="mt-3 border-t border-line/60 pt-2 text-xs text-muted">
       <summary className="cursor-pointer select-none py-1 text-primary">
@@ -293,6 +425,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       </section>
       <RankPanel sha={sha}/>
     </div>
+    <ManualRankCalculator key={sha??"sem-iso"} sha={sha}/>
     <section className="panel rounded-xl p-4" aria-label="Dicas de fusões">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
