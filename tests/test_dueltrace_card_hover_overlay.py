@@ -15,6 +15,31 @@ class SharedCardPreviewTests(unittest.TestCase):
         cls.fusions=FUSION.read_text(encoding="utf-8")
         cls.drops=DROPS.read_text(encoding="utf-8")
 
+    def test_preview_waits_one_second_for_hover_or_selection(self):
+        source=self.overlay
+        self.assertIn("const CARD_PREVIEW_DELAY_MS=1000",source)
+        self.assertIn("window.setTimeout(()=>{",source)
+        self.assertIn("},CARD_PREVIEW_DELAY_MS)",source)
+        self.assertIn("return()=>window.clearTimeout(timer)",source)
+        self.assertIn("setRevealed(null)",source)
+        self.assertIn("if(!selection)return",source)
+        self.assertIn("if(selection.anchor.isConnected)setRevealed(selection)",source)
+        self.assertIn("revealed===selection?revealed:null",source)
+        self.assertIn("if(!mounted||!activeSelection||!card)return null",source)
+
+    def test_background_and_lookup_start_only_when_preview_is_visible(self):
+        source=self.overlay
+        self.assertIn("const card=activeSelection?.card??null",source)
+        self.assertIn("const cardId=card?.id??null",source)
+        self.assertIn("if(!sha||cardId===null)return",source)
+        self.assertIn("if(!mounted||!activeSelection||!card)return null",source)
+        self.assertIn("const anchor=activeSelection.anchor",source)
+        self.assertIn("setPosition(null)",source)
+        self.assertIn('event.key==="Escape"',source)
+        # Este componente é chamado em Fusões e Drops; não há tempos diferentes.
+        for page in (self.fusions,self.drops):
+            self.assertIn('<CardHoverPreview selection={preview} sha={sha}',page)
+
     def test_overlay_centers_on_selected_card_not_corner(self):
         source=self.overlay
         self.assertIn("createPortal(<>",source)

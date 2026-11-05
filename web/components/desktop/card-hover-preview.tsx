@@ -13,6 +13,9 @@ export type CardPreviewSelection = {
   fallbackDrop?:DropRow
 }
 
+// A prévia e o fundo escurecido só aparecem após um segundo de permanência.
+const CARD_PREVIEW_DELAY_MS=1000
+
 function EnlargedArtwork({card,sha}:{card:LocalCard;sha:string|null}) {
   const [source,setSource]=useState<"frame"|"art"|"none">("frame")
   useEffect(()=>setSource("frame"),[sha,card.id])
@@ -36,10 +39,24 @@ export function CardHoverPreview({selection,sha,onClose}:{
 }) {
   const panelRef=useRef<HTMLDivElement|null>(null)
   const [mounted,setMounted]=useState(false)
+  const [revealed,setRevealed]=useState<CardPreviewSelection|null>(null)
   const [position,setPosition]=useState<{left:number;top:number}|null>(null)
   const [result,setResult]=useState<CardDropSources|null>(null)
   const [error,setError]=useState(false)
-  const card=selection?.card??null
+  // Um novo hover/foco inicia a contagem; sair da carta cancela o timer.
+  // A identidade da seleção impede que uma prévia anterior pisque na tela.
+  useEffect(()=>{
+    setRevealed(null)
+    setPosition(null)
+    if(!selection)return
+    const timer=window.setTimeout(()=>{
+      if(selection.anchor.isConnected)setRevealed(selection)
+    },CARD_PREVIEW_DELAY_MS)
+    return()=>window.clearTimeout(timer)
+  },[selection])
+
+  const activeSelection=selection&&revealed===selection?revealed:null
+  const card=activeSelection?.card??null
   const cardId=card?.id??null
 
   useEffect(()=>setMounted(true),[])
@@ -63,12 +80,12 @@ export function CardHoverPreview({selection,sha,onClose}:{
 
   // Painel ancorado no CENTRO do item; adapta-se ao espaço disponível.
   useEffect(()=>{
-    if(!selection||!mounted){
+    if(!activeSelection||!mounted){
       setPosition(null)
       return
     }
     const place=()=>{
-      const anchor=selection.anchor
+      const anchor=activeSelection.anchor
       const panel=panelRef.current
       if(!anchor.isConnected||!panel)return
       const rect=anchor.getBoundingClientRect()
@@ -92,7 +109,7 @@ export function CardHoverPreview({selection,sha,onClose}:{
       window.removeEventListener("scroll",place,true)
       observer?.disconnect()
     }
-  },[selection,mounted,result,error])
+  },[activeSelection,mounted,result,error])
 
   useEffect(()=>{
     if(!selection)return
@@ -103,11 +120,11 @@ export function CardHoverPreview({selection,sha,onClose}:{
     return()=>document.removeEventListener("keydown",escape)
   },[selection,onClose])
 
-  if(!mounted||!selection||!card)return null
+  if(!mounted||!activeSelection||!card)return null
   const matched=result?.romSha===sha&&result.cardId===card.id
   const rows=matched&&result.available?result.rows:[]
   const dropRows=rows.length?rows.slice(0,4):
-    !result&&!error&&selection.fallbackDrop?[selection.fallbackDrop]:[]
+    !result&&!error&&activeSelection.fallbackDrop?[activeSelection.fallbackDrop]:[]
   const more=Math.max(0,rows.length-dropRows.length)
 
   return createPortal(<>
