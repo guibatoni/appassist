@@ -428,7 +428,9 @@ function Mods({mods,sha,onRefresh,configured}:{
       const result=await api.scan_sources(mod.sha256)
       await onRefresh()
       setMessage((result.cardCount??0)>0
-        ?`${result.cardCount} cartas identificadas; ${result.opponentCount??0} adversários disponíveis.`
+        ?`${result.cardCount} cartas extraídas; ${result.opponentCount??0} adversários disponíveis.`
+          +(result.opponentCount===0&&result.opponentDiagnosticReason
+            ?" Motivo: "+result.opponentDiagnosticReason:"")
         :(result.candidateCardCount??0)>0
           ?`${result.candidateCardCount} cartas candidatas encontradas, aguardando validação.`
           :"Análise concluída, mas as cartas continuam não identificadas. O scanner preservou as evidências para investigação.")
@@ -503,7 +505,10 @@ function Mods({mods,sha,onRefresh,configured}:{
                 {mod.opponents} adversários recuperados do executável. IDs ainda não confirmados em jogo; drops e RANK não são liberados por essa hipótese.
               </p>}
               {!mod.opponents&&(mod.opponentCandidateCount??0)>0&&<p className="mt-3 text-xs text-muted">
-                Até {mod.opponentCandidateCount} nomes de adversários candidatos detectados (não verificados). A análise continua sem copiar dados de outro mod.
+                Até {mod.opponentCandidateCount} nomes de adversários candidatos detectados (não verificados).
+                {mod.opponentDiagnosticReason&&<span className="mt-1 block text-gold">
+                  Motivo: {mod.opponentDiagnosticReason}
+                </span>}
               </p>}
               {!mod.cards&&(mod.candidateCards??0)>0&&<p className="mt-3 text-xs text-gold">
                 ${mod.candidateCards?.toLocaleString("pt-BR")} cartas candidatas em análise. Elas ainda não aparecem na Biblioteca para evitar dados incorretos.

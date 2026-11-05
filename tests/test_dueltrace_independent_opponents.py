@@ -19,7 +19,8 @@ from scanner_multiiso import (
     SLUS_PTR_BASE, SLUS_TEXT_BASE, SLUS_GLYPHS, decode_names,
     SCAN_PARSER_REVISION)
 from dueltrace_independent_opponents import (
-    discover_independent_opponents, compact_opponent_evidence)
+    discover_independent_opponents, compact_opponent_evidence,
+    explain_opponent_blocker)
 from test_dueltrace_independent_cards import make_known_layout
 from importador_perfis import analyse
 from auto_mods import report_level, supported_for_runtime
@@ -179,6 +180,63 @@ class IndependentOpponentTests(unittest.TestCase):
             self.assertEqual(profile["drop_group_labels"],[])
             self.assertEqual(profile["drops"],[])
             self.assertEqual(profile["drops_provenance"]["candidate_table_count"],117)
+
+    def test_real_reason_explains_39_readable_without_ff(self):
+        report=probe(relocated_opponents(terminator=0xfe))
+        reason=explain_opponent_blocker(report)
+        self.assertEqual(reason["code"],"terminador_incompativel")
+        self.assertIn("0xFE",reason["reason"])
+        compact=compact_opponent_evidence(report)
+        self.assertEqual(compact["reasonCode"],"terminador_incompativel")
+        self.assertEqual(compact["candidateOpponentCount"],39)
+        self.assertFalse(compact["inGameVerified"])
+
+    def test_ambiguous_table_reason_never_chooses_arbitrary_index(self):
+        report=probe(relocated_opponents(starts=(0x360,0x3b0)))
+        reason=explain_opponent_blocker(report)
+        self.assertEqual(reason["code"],"multiplos_blocos")
+        self.assertIsNone(report["selected"])
+
+    def test_quarantined_full_names_not_exposed_in_compact_report(self):
+        report=probe(relocated_opponents())
+        self.assertGreaterEqual(len(report["quarantinedRecords"]),1)
+        self.assertEqual(len(report["quarantinedRecords"][0]["records"]),39)
+        self.assertIn("OPP01",str(report["quarantinedRecords"]))
+        compact=compact_opponent_evidence(report)
+        self.assertNotIn("quarantinedRecords",compact)
+        self.assertNotIn("OPP01",str(compact))
+        self.assertEqual(compact["reasonCode"],"nomes_estruturais")
+
+    def test_failure_reasons_include_missing_isolation_and_duplicates(self):
+        samples=[
+            ({"state":"tabelas_parciais_nao_verificadas",
+              "candidates":[{"recognized":39,"readablePrefixes":39,
+                              "distinctPointers":39,"distinctNames":39,
+                              "isolated":False}]},
+              "bloco_nao_isolado"),
+            ({"state":"tabelas_parciais_nao_verificadas",
+              "candidates":[{"recognized":35,"readablePrefixes":39,
+                              "distinctPointers":35,"distinctNames":35,
+                              "isolated":True}]},
+              "ponteiros_repetidos"),
+            ({"state":"tabelas_parciais_nao_verificadas",
+              "candidates":[{"recognized":39,"readablePrefixes":39,
+                              "distinctPointers":39,"distinctNames":28,
+                              "isolated":True}]},
+              "nomes_repetidos")
+        ]
+        for source, expected in samples:
+            with self.subTest(reason=expected):
+                self.assertEqual(explain_opponent_blocker(source)["code"],expected)
+
+    def test_public_ui_shows_reason_without_raw_evidence_or_rom(self):
+        ui=(ROOT/"web/components/desktop/desktop-page.tsx").read_text(encoding="utf8")
+        bridge=(ROOT/"scanner/dueltrace_web_bridge.py").read_text(encoding="utf8")
+        self.assertIn("Motivo: {mod.opponentDiagnosticReason}",ui)
+        self.assertIn('"opponentDiagnosticReason"',bridge)
+        self.assertNotIn("quarantinedRecords",ui)
+        self.assertNotIn("get_mod_scan_diagnostic",ui.split("function Mods(",1)[1].split(
+            "function CardDropSourcesPanel(",1)[0])
 
     def test_revision_and_no_cross_mod_publish(self):
         self.assertGreaterEqual(SCAN_PARSER_REVISION,18)
