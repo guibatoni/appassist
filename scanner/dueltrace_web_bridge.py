@@ -133,6 +133,8 @@ class DueltraceWebBridge:
             "sha256":entry.get("sha256",""),
             "name":entry.get("file_name") or summary.get("name") or "Mod local",
             "level":entry.get("level","desconhecido"),
+            "scanParserRevision":entry.get("scan_parser_revision") if
+                type(entry.get("scan_parser_revision")) is int else None,
             "cards":summary.get("cards_total",0),
             "candidateCards":max(0,min(722,int((profile or {}).get("candidate_catalogue",{}).get("cards",0))))
                 if isinstance((profile or {}).get("candidate_catalogue"),dict) else 0,
