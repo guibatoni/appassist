@@ -178,7 +178,38 @@ jobs:
           test "$(stat -c%s "$file")" -gt 1000000
           sha256sum "$file"
           tag="preview-v${version}-r${GITHUB_RUN_ID}"
-          gh release create "$tag" "$file" \
+          expected="sha256:$(sha256sum "$file" | cut -d' ' -f1)"
+          expected_size="$(stat -c%s "$file")"
+          asset_name="DUELTRACE-WebUI-Windows-Preview.zip"
+          # GitHub pode registrar ZIP e manter draft se a API falhar durante
+          # publicação. Em retry, conferir COMMIT, tamanho e hash do ativo antes
+          # de liberar a release, sem reenviar um pacote diferente.
+          recover_existing_release() {
+            local metadata="" attempt=""
+            for attempt in 1 2 3; do
+              if metadata="$(gh api "repos/${GH_REPO}/releases/tags/${tag}")"; then break; fi
+              sleep 2
+            done
+            test -n "$metadata" || { echo "Release não consultável: sem publicação."; return 1; }
+            local actual_sha count actual_digest actual_size
+            actual_sha="$(jq -r '.target_commitish // ""' <<<"$metadata")"
+            count="$(jq --arg name "$asset_name" '[.assets[] | select(.name == $name)] | length' <<<"$metadata")"
+            actual_digest="$(jq -r --arg name "$asset_name" '[.assets[] | select(.name == $name)][0].digest // ""' <<<"$metadata")"
+            actual_size="$(jq -r --arg name "$asset_name" '[.assets[] | select(.name == $name)][0].size // 0' <<<"$metadata")"
+            if [[ "$actual_sha" != "$GITHUB_SHA" || "$count" != "1" ||
+                  "$actual_digest" != "$expected" || "$actual_size" != "$expected_size" ]]; then
+              echo "Rascunho não corresponde ao build validado: publicação bloqueada."
+              return 1
+            fi
+            if jq -e '.draft == true' <<<"$metadata" >/dev/null; then
+              gh release edit "$tag" --draft=false --prerelease --latest=false
+            fi
+          }
+          if gh api "repos/${GH_REPO}/releases/tags/${tag}" >/dev/null 2>&1; then
+            recover_existing_release
+          elif ! gh release create "$tag" "$file" \
             --title "DUELTRACE Preview v${version} · build #${GITHUB_RUN_ID}" \
             --notes "Prévia experimental Windows sem assinatura digital. Build ${GITHUB_SHA}, Actions #${GITHUB_RUN_ID}. Artefato aprovado pela CI, auditoria SHA-256 e Microsoft Defender. Não contém ISOs, saves ou ROMs. Para atualizações dentro do app, compare o hash publicado e aceite conscientemente o pacote de testes." \
-            --target "$GITHUB_SHA" --prerelease --latest=false
+            --target "$GITHUB_SHA" --prerelease --latest=false; then
+            recover_existing_release
+          fi
