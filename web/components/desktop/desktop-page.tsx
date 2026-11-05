@@ -195,7 +195,6 @@ function ManualRankCalculator({sha}:{sha:string|null}) {
 
 function RankPanel({sha}:{sha:string|null}) {
   const [rank,setRank]=useState<RankState|null>(null)
-  const [lp,setLp]=useState<string|null>(null)
   const [busy,setBusy]=useState(false)
   const [diagnostic,setDiagnostic]=useState<RankDiagnostic|null>(null)
   const [diagnosing,setDiagnosing]=useState(false)
@@ -212,13 +211,12 @@ function RankPanel({sha}:{sha:string|null}) {
     setFeedback(null)
     setCaptured(null)
     setExperimentFeedback(null)
-    setLp(null)
     const read=async()=>{
       const api=desktopApi()
       if(!api||reading)return
       reading=true
       try{
-        const value=await api.get_rank()
+        const value=await api.get_rank_auto()
         if(mounted)setRank(value)
       }catch{
         if(mounted)setRank({ready:false,state:"unavailable",
@@ -231,25 +229,6 @@ function RankPanel({sha}:{sha:string|null}) {
     return()=>{mounted=false;window.clearInterval(interval)}
   },[sha])
 
-  // O LP lido da RAM já é o valor inicial do campo. Na v0.9.0 ele
-  // era só placeholder e o botão ficava desativado, mesmo com 10000.
-  // O usuário continua comparando o valor com o HUD antes de confirmar.
-  const effectiveLp=lp??(typeof rank?.candidateLp==="number"?String(rank.candidateLp):"")
-  const confirmLp=async()=>{
-    const numeric=Number(effectiveLp)
-    if(!/^\d{1,5}$/.test(effectiveLp)||!Number.isInteger(numeric)||numeric<0||numeric>32766)return
-    const api=desktopApi()
-    if(!api)return
-    setBusy(true)
-    setFeedback(null)
-    try{
-      const confirmed=await api.confirm_rank_lp(numeric)
-      setRank(confirmed)
-      if(confirmed.state==="lp_mismatch")setLp(null)
-    }
-    catch(e){setFeedback(e instanceof Error?e.message:"Falha ao confirmar LP.")}
-    finally{setBusy(false)}
-  }
   const investigate=async()=>{
     const api=desktopApi()
     if(!api)return
@@ -266,11 +245,11 @@ function RankPanel({sha}:{sha:string|null}) {
     setFeedback(null)
     try{
       await api.scan_sources(sha)
-      const [state,details]=await Promise.all([api.get_rank(),api.get_rank_diagnostic()])
+      const [state,details]=await Promise.all([api.get_rank_auto(),api.get_rank_diagnostic()])
       setRank(state)
       setDiagnostic(details)
       setFeedback(details.readyForLiveRead
-        ?"Perfil atualizado. Inicie um duelo e confirme os LP, se solicitado."
+        ?"Perfil atualizado. Abra o duelo; o RANK será calculado automaticamente."
         :"Perfil relido. O mapeamento RAM desta ISO ainda precisa ser validado.")
     }catch(e){setFeedback(e instanceof Error?e.message:"Não foi possível reanalisar a ISO.")}
     finally{setReanalysing(false)}
@@ -294,20 +273,19 @@ function RankPanel({sha}:{sha:string|null}) {
     try{
       const status=await api.set_rank_experimental(enabled)
       setExperimentFeedback(status.status)
-      setLp(null)
-      setRank(await api.get_rank())
+      setRank(await api.get_rank_auto())
     }catch(e){
       setExperimentFeedback(e instanceof Error?e.message:"Não foi possível alterar a leitura experimental.")
     }finally{setExperimentBusy(false)}
   }
 
   const ready=rank?.ready===true
-  const needsLp=rank?.state==="needs_lp_confirmation"||rank?.state==="lp_mismatch"
+  const autoChecking=rank?.state==="auto_calibrating"||rank?.state==="needs_lp_confirmation"||rank?.state==="lp_mismatch"
   const pending=rank?.state==="unsupported"
   const observing=rank?.state==="needs_ram_validation"
   const experimental=rank?.sourceMode==="experimental"
-  const status=ready?(experimental?"Em teste":"Leitura ativa"):
-    needsLp?"Confirme seus LP":observing?"Testando RAM":
+  const status=ready?(experimental?"Automático (experimental)":"Cálculo automático ativo"):
+    autoChecking?"Conferindo RAM":observing?"Testando RAM":
     pending?(sha?"RAM não validada":"Sem ISO"):"Aguardando leitura"
   const rankSystem=rank?.rankSystem==="x15"?"Remaster X15":
     rank?.rankSystem==="classic"?"RANK original":"RANK por ISO"
@@ -316,7 +294,7 @@ function RankPanel({sha}:{sha:string|null}) {
     "Projeção se vencer por LP"
   return <section className="panel rounded-xl p-4" aria-label="RANK ao vivo">
     <div className="flex items-center justify-between gap-2">
-      <h2 className="font-display text-lg font-semibold text-gold">RANK ao vivo</h2>
+      <h2 className="font-display text-lg font-semibold text-gold">RANK ao vivo · automático</h2>
       <span className={"text-xs font-medium "+(ready?(experimental?"text-gold":"text-success"):"text-muted")} role="status">
         {ready?"●":"○"} {status}
       </span>
@@ -327,7 +305,7 @@ function RankPanel({sha}:{sha:string|null}) {
         {ready?rank.score:"—"} <span className="text-sm font-normal text-muted">pts</span>
       </p>
       <p className="mt-1 font-display text-xl font-bold text-gold">
-        {ready?rank.category:needsLp?"Confirme os LP":observing?"Validando contadores":"RANK indisponível"}
+        {ready?rank.category:autoChecking?"Calibrando automaticamente":observing?"Validando contadores":"RANK indisponível"}
       </p>
       <p className="mt-1 text-[11px] text-muted">
         {rankSystem} · {ready?(experimental?"RAM antiga em teste; não validada":"Estimativa, não resultado oficial"):"Sem projeção confiável"}
@@ -339,23 +317,13 @@ function RankPanel({sha}:{sha:string|null}) {
         <span>LP <strong className="text-white">{rank.counters.remaining_lp??"—"}</strong></span>
         <span>Fusões <strong className="text-white">{rank.counters.fusions??"—"}</strong></span>
       </div>}
-    {needsLp&&<div className="mt-3 space-y-2">
-      <p className="text-xs text-muted">
-        Confira se o valor detectado corresponde aos LP exibidos no ePSXe.
-        Se estiver correto, clique em Confirmar. As próximas ações serão lidas automaticamente.
-      </p>
-      <div className="flex gap-2">
-        <input aria-label="LP exibidos no jogo" type="number" min={0} max={32766}
-          placeholder="LP do jogo" value={effectiveLp}
-          onChange={e=>setLp(e.target.value)}
-          className="field w-full min-w-0 rounded-md px-2 py-2 text-sm"/>
-        <button type="button" className="btn-gold shrink-0 disabled:opacity-40"
-          disabled={!/^\d{1,5}$/.test(effectiveLp)||busy} onClick={()=>void confirmLp()}>Confirmar LP</button>
-      </div>
-    </div>}
+    {autoChecking&&<p className="mt-3 text-xs text-primary" role="status">
+      {rank?.status??"Verificando o ePSXe automaticamente."}
+      {" "}Nenhuma confirmação de LP é necessária.
+    </p>}
     {observing&&
       <p className="mt-3 text-xs text-gold" role="status">
-        LP confirmados. Faça duas ações normais no duelo para testar a leitura antiga
+        LP detectados automaticamente. Faça duas ações normais no duelo para verificar a RAM antiga
         ({rank?.validationProgress??0}/{rank?.validationRequired??2} mudanças identificadas).
       </p>}
     {ready&&experimental&&
@@ -363,14 +331,14 @@ function RankPanel({sha}:{sha:string|null}) {
         Leitura experimental: os pontos são estimados com a fórmula antiga,
         mas a estrutura RAM desta ISO ainda não foi comprovada em duelos reais.
       </p>}
-    {!ready&&!needsLp&&!observing&&
+    {!ready&&!autoChecking&&!observing&&
       <p className="mt-3 text-xs text-muted">
         {rank?.status??"Conectando ao ePSXe…"}
       </p>}
     {sha&&(pending||experimental)&&<div className="mt-3 rounded-lg border border-gold/30 p-3">
       <p className="text-xs text-muted">
         Esta ISO ainda não possui mapeamento RAM confirmado. O teste usa o endereço legado
-        do ePSXe como hipótese: compare os LP com a tela do jogo e faça duas ações reais.
+        do ePSXe como hipótese: os LP são lidos automaticamente, mas confira os números exibidos no jogo.
         Nenhuma estimativa experimental comprova a compatibilidade deste mod.
       </p>
       <button type="button" className="btn-ghost mt-2 rounded-md px-3 py-2 text-xs disabled:opacity-40"

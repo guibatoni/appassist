@@ -66,6 +66,7 @@ class DueltraceWebBridge:
         self._rank_reader = rank_reader or read_rank_candidate
         self._rank_mod_reader = rank_mod_reader or read_rank_from_verified_binding
         self._rank_calibration = None
+        self._rank_auto_probe = None
         self._rank_legacy_trial = None
         self._rank_gap_started = None
         self._rank_lp_session = None
@@ -327,6 +328,7 @@ class DueltraceWebBridge:
     def _reset_rank_read_state(self):
         """Não reaproveitar calibração/captura quando a autorização mudou."""
         self._rank_calibration=None
+        self._rank_auto_probe=None
         self._rank_legacy_trial=None
         self._rank_gap_started=None
         self._rank_lp_session=None
@@ -614,6 +616,72 @@ class DueltraceWebBridge:
                         binding["victory_bonuses"]["lp"] if binding else 2),
                     "final":False}
 
+
+    def get_rank_auto(self):
+        """Projeta automaticamente por ISO e PID, preservando a fórmula SPOILS.
+
+        Requer duas consultas separadas com LP idênticos; o leitor de RAM
+        faz duas leituras internas estáveis em cada consulta. Sem binding
+        validado, a leitura depende de opt-in e de duas ações reais no jogo.
+        Esse consenso é provisório, NÃO prova que a ISO aberta no ePSXe
+        corresponde à ISO selecionada no DUELTRACE.
+        """
+        with self._lock:
+            state=self.get_rank()
+            if state.get("ready") is True:
+                self._rank_auto_probe=None
+                if (isinstance(self._rank_calibration,dict)
+                        and self._rank_calibration.get("automatic") is True):
+                    return {**state,"autoCalibrated":True,
+                            "calibrationMode":"automatic_provisional"}
+                return state
+            if state.get("state") != "needs_lp_confirmation":
+                self._rank_auto_probe=None
+                return state
+            sha=(self._active()[0] or {}).get("sha256")
+            lp=state.get("candidateLp")
+            process=self._rank_last_turns
+            if (type(sha) is not str or not re.fullmatch(r"[0-9a-f]{64}",sha)
+                    or type(lp) is not int or not 0<lp<=32766
+                    or not isinstance(process,tuple) or len(process)!=2
+                    or not isinstance(process[0],tuple) or process[0][0]!=sha
+                    or type(process[0][1]) is not int
+                    or type(process[1]) is not int or process[1]<1):
+                self._rank_auto_probe=None
+                return {**state,"state":"auto_calibrating",
+                        "status":"Aguardando duelo ativo e LP legíveis na RAM.",
+                        "autoCalibrated":False}
+            pid=process[0][1]
+            # Mudanças de LP, ISO, processo ou tipo de leitura zeram a série.
+            key=(sha,pid,lp,state.get("sourceMode"))
+            previous=self._rank_auto_probe
+            count=(min(2,previous["count"]+1)
+                   if isinstance(previous,dict) and previous.get("key")==key
+                   else 1)
+            self._rank_auto_probe={"key":key,"count":count}
+            if count<2:
+                return {**state,"state":"auto_calibrating",
+                        "status":"Conferindo LP automaticamente no ePSXe (1/2). "
+                                 "Projeção liberada após leituras coerentes.",
+                        "autoCalibrated":False,
+                        "validationProgress":count,"validationRequired":2}
+            self._rank_auto_probe=None
+            verified=self.confirm_rank_lp(lp)
+            # A confirmação relê a RAM; não autorizar a troca silenciosa de PID.
+            calibration=self._rank_calibration
+            if (not isinstance(calibration,dict)
+                    or calibration.get("sha")!=sha or calibration.get("pid")!=pid):
+                self._reset_rank_read_state()
+                return {**state,"ready":False,"state":"auto_calibrating",
+                        "score":None,"category":None,"counters":None,
+                        "status":"ePSXe ou duelo mudou durante a conferência. "
+                                 "Aguardando uma nova leitura estável.",
+                        "autoCalibrated":False}
+            calibration["automatic"]=True
+            if verified.get("ready") is True:
+                return {**verified,"autoCalibrated":True,
+                        "calibrationMode":"automatic_provisional"}
+            return {**verified,"autoCalibrated":False}
 
     def capture_rank_prediction(self):
         """Congela uma previsão de vitória LP com clique explícito no duelo.
@@ -1068,6 +1136,7 @@ class DueltraceWebBridge:
         self._hand_suggestions_key=None
         self._hand_suggestions=None
         self._rank_calibration=None
+        self._rank_auto_probe=None
         self._rank_legacy_trial=None
         self._rank_gap_started=None
         self._rank_lp_session=None

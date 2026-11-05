@@ -460,10 +460,12 @@ export type SpoilsResult = {
 
 export type RankState = {
   ready: boolean
-  state: "unsupported" | "unavailable" | "needs_lp_confirmation" | "needs_ram_validation" | "lp_mismatch" | "provisional"
+  state: "unsupported" | "unavailable" | "needs_lp_confirmation" | "auto_calibrating" | "needs_ram_validation" | "lp_mismatch" | "provisional"
   status: string
   diagnosticCode?: string
   sourceMode?: "verified" | "experimental" | "unsupported"
+  autoCalibrated?: boolean
+  calibrationMode?: "automatic_provisional"
   validationProgress?: number
   validationRequired?: number
   candidateLp?: number
@@ -543,6 +545,7 @@ export interface DesktopAPI {
   get_state(): Promise<DesktopState>
   get_hand(): Promise<HandState>
   get_rank(): Promise<RankState>
+  get_rank_auto(): Promise<RankState>
   calculate_spoils(counters: SpoilsCounters, victory: "lp"|"deckout"|"exodia", reference?: "classic"|"x15"): Promise<SpoilsResult>
   set_rank_experimental(enabled: boolean): Promise<{enabled:boolean; status:string}>
   get_rank_diagnostic(): Promise<RankDiagnostic>
@@ -577,6 +580,7 @@ interface ProtectedNativeAPI {
   get_state(token: string): Promise<DesktopState>
   get_hand(token: string): Promise<HandState>
   get_rank(token: string): Promise<RankState>
+  get_rank_auto(token: string): Promise<RankState>
   calculate_spoils(token: string, counters: SpoilsCounters, victory: "lp"|"deckout"|"exodia", reference?: "classic"|"x15"): Promise<SpoilsResult>
   set_rank_experimental(token: string, enabled: boolean): Promise<{enabled:boolean; status:string}>
   get_rank_diagnostic(token: string): Promise<RankDiagnostic>
@@ -626,6 +630,7 @@ export function desktopApi(): DesktopAPI | null {
     get_state: () => native.get_state(token),
     get_hand: () => native.get_hand(token),
     get_rank: () => native.get_rank(token),
+    get_rank_auto: () => native.get_rank_auto(token),
     calculate_spoils: (counters,victory,reference) => native.calculate_spoils(token,counters,victory,reference??"classic"),
     set_rank_experimental: (enabled) => native.set_rank_experimental(token,enabled),
     get_rank_diagnostic: () => native.get_rank_diagnostic(token),

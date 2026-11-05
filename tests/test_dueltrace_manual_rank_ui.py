@@ -19,6 +19,11 @@ class ManualRankUiContractTests(unittest.TestCase):
         self.assertIn('disabled={busy} onClick={()=>void calculate()}',page)
         self.assertIn("Testar RANK ao vivo (experimental)",page)
         self.assertIn("api.set_rank_experimental(enabled)",page)
+        self.assertIn("api.get_rank_auto()",page)
+        self.assertIn("Calibrando automaticamente",page)
+        self.assertIn("Nenhuma confirmação de LP é necessária.",page)
+        self.assertNotIn("const confirmLp=async",page)
+        self.assertNotIn("onClick={()=>void confirmLp()}",page)
         self.assertIn("rank?.status??\"Conectando ao ePSXe…\"",page)
         self.assertIn("Estimativa manual, não é um RANK confirmado",page)
 
@@ -42,6 +47,7 @@ class ManualRankUiContractTests(unittest.TestCase):
         self.assertIn("return calculate_manual_spoils(counters,victory,sha)",bridge)
         self.assertIn("return self._bridge.calculate_spoils(counters,victory,reference)",adapter)
         self.assertIn("return self._bridge.set_rank_experimental(enabled)",adapter)
+        self.assertIn("return self._bridge.get_rank_auto()",adapter)
 
 
 if __name__=="__main__":

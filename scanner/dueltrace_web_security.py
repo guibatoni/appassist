@@ -66,6 +66,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_rank()
 
+    def get_rank_auto(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_rank_auto()
+
     def confirm_rank_lp(self, credential, life_points):
         self._authorize(credential)
         return self._bridge.confirm_rank_lp(life_points)
