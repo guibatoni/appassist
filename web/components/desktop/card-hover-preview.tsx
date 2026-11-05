@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import {createPortal} from "react-dom"
-import {useEffect,useRef,useState} from "react"
+import {useEffect,useState} from "react"
 import {Layers} from "lucide-react"
 import {cardArt,cardWithFrame,desktopApi} from "@/lib/desktop"
 import type {CardDropSources,DropRow,LocalCard} from "@/lib/desktop"
@@ -30,24 +30,21 @@ function EnlargedArtwork({card,sha}:{card:LocalCard;sha:string|null}) {
 }
 
 /**
- * Prévia única de Fusões e Drops. O painel fica CENTRALIZADO sobre a carta
- * de origem, com limites da viewport. O escurecimento não intercepta o mouse:
- * um hover sobre o botão original permanece estável, sem piscadas.
+ * Prévia única de Fusões e Drops. O painel fica CENTRALIZADO NA JANELA.
+ * O escurecimento e a janela não interceptam o mouse, preservando o hover
+ * sobre a carta original e o atraso de um segundo sem piscadas.
  */
 export function CardHoverPreview({selection,sha,onClose}:{
   selection:CardPreviewSelection|null;sha:string|null;onClose:()=>void
 }) {
-  const panelRef=useRef<HTMLDivElement|null>(null)
   const [mounted,setMounted]=useState(false)
   const [revealed,setRevealed]=useState<CardPreviewSelection|null>(null)
-  const [position,setPosition]=useState<{left:number;top:number}|null>(null)
   const [result,setResult]=useState<CardDropSources|null>(null)
   const [error,setError]=useState(false)
   // Um novo hover/foco inicia a contagem; sair da carta cancela o timer.
   // A identidade da seleção impede que uma prévia anterior pisque na tela.
   useEffect(()=>{
     setRevealed(null)
-    setPosition(null)
     if(!selection)return
     const timer=window.setTimeout(()=>{
       if(selection.anchor.isConnected)setRevealed(selection)
@@ -78,39 +75,6 @@ export function CardHoverPreview({selection,sha,onClose}:{
     return()=>{active=false;window.clearTimeout(timer)}
   },[sha,cardId])
 
-  // Painel ancorado no CENTRO do item; adapta-se ao espaço disponível.
-  useEffect(()=>{
-    if(!activeSelection||!mounted){
-      setPosition(null)
-      return
-    }
-    const place=()=>{
-      const anchor=activeSelection.anchor
-      const panel=panelRef.current
-      if(!anchor.isConnected||!panel)return
-      const rect=anchor.getBoundingClientRect()
-      const width=panel.offsetWidth
-      const height=panel.offsetHeight
-      const margin=12
-      const centerX=rect.left+rect.width/2
-      const centerY=rect.top+rect.height/2
-      const left=Math.max(margin,Math.min(centerX-width/2,window.innerWidth-width-margin))
-      const top=Math.max(margin,Math.min(centerY-height/2,window.innerHeight-height-margin))
-      setPosition({left,top})
-    }
-    const frame=window.requestAnimationFrame(place)
-    window.addEventListener("resize",place)
-    window.addEventListener("scroll",place,true)
-    const observer=typeof ResizeObserver==="undefined"?null:new ResizeObserver(place)
-    if(panelRef.current)observer?.observe(panelRef.current)
-    return()=>{
-      window.cancelAnimationFrame(frame)
-      window.removeEventListener("resize",place)
-      window.removeEventListener("scroll",place,true)
-      observer?.disconnect()
-    }
-  },[activeSelection,mounted,result,error])
-
   useEffect(()=>{
     if(!selection)return
     const escape=(event:KeyboardEvent)=>{
@@ -133,10 +97,9 @@ export function CardHoverPreview({selection,sha,onClose}:{
 
   return createPortal(<>
     <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-[90] bg-[#020713]/75 backdrop-blur-[2px]"/>
-    <div ref={panelRef} role="tooltip" id={"card-preview-"+card.id}
-      style={position??{left:0,top:0}}
-      className={"pointer-events-none fixed z-[100] max-h-[calc(100vh-24px)] w-[min(94vw,500px)] overflow-hidden rounded-2xl border border-gold/55 bg-[#08172e]/98 p-4 shadow-[0_25px_85px_rgb(0_0_0/0.85)] backdrop-blur-xl transition-[opacity,transform] duration-200 "+
-        (position?"scale-100 opacity-100":"scale-95 opacity-0")}>
+    <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center p-3">
+      <div role="tooltip" id={"card-preview-"+card.id}
+        className="pointer-events-none max-h-[calc(100dvh-24px)] w-[min(94vw,500px)] overflow-y-auto rounded-2xl border border-gold/55 bg-[#08172e]/98 p-4 shadow-[0_25px_85px_rgb(0_0_0/0.85)] backdrop-blur-xl transition-[opacity,transform] duration-200 scale-100 opacity-100">
       <div className="flex items-start gap-4">
         <div className="w-40 shrink-0 sm:w-48">
           <EnlargedArtwork card={card} sha={sha}/>
@@ -188,6 +151,7 @@ export function CardHoverPreview({selection,sha,onClose}:{
         </p>}
       </div>
       <p className="mt-3 text-[11px] text-muted">Afaste o mouse ou pressione Esc para fechar.</p>
+      </div>
     </div>
   </>,document.body)
 }

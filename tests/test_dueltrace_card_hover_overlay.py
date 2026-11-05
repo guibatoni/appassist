@@ -33,8 +33,8 @@ class SharedCardPreviewTests(unittest.TestCase):
         self.assertIn("const cardId=card?.id??null",source)
         self.assertIn("if(!sha||cardId===null)return",source)
         self.assertIn("if(!mounted||!activeSelection||!card)return null",source)
-        self.assertIn("const anchor=activeSelection.anchor",source)
-        self.assertIn("setPosition(null)",source)
+        self.assertIn("if(selection.anchor.isConnected)setRevealed(selection)",source)
+        self.assertNotIn("setPosition(",source)
         self.assertIn('event.key==="Escape"',source)
         # Este componente é chamado em Fusões e Drops; não há tempos diferentes.
         for page in (self.fusions,self.drops):
@@ -62,25 +62,26 @@ class SharedCardPreviewTests(unittest.TestCase):
         self.assertIn("CARD_PREVIEW_DELAY_MS=1000",source)
         self.assertIn("Onde conseguir",source)
 
-    def test_overlay_centers_on_selected_card_not_corner(self):
+    def test_overlay_centers_in_viewport_instead_of_on_selected_card(self):
         source=self.overlay
         self.assertIn("createPortal(<>",source)
         self.assertIn("document.body",source)
-        self.assertIn("selection.anchor",source)
-        self.assertIn("anchor.getBoundingClientRect()",source)
-        self.assertIn("const centerX=rect.left+rect.width/2",source)
-        self.assertIn("const centerY=rect.top+rect.height/2",source)
-        self.assertIn("centerX-width/2",source)
-        self.assertIn("centerY-height/2",source)
-        self.assertIn("window.innerWidth-width-margin",source)
-        self.assertIn("window.innerHeight-height-margin",source)
+        self.assertIn('fixed inset-0 z-[100] flex items-center justify-center',source)
+        self.assertIn('max-h-[calc(100dvh-24px)]',source)
+        self.assertIn('overflow-y-auto',source)
+        self.assertIn('w-[min(94vw,500px)]',source)
+        self.assertNotIn("getBoundingClientRect()",source)
+        self.assertNotIn("window.innerWidth-width-margin",source)
+        self.assertNotIn("style={position",source)
         self.assertNotIn("bottom-4 right-4",source)
-        self.assertIn("ResizeObserver(place)",source)
+        # Este layout responsivo não depende das dimensões da carta selecionada.
+        self.assertNotIn("ResizeObserver",source)
 
     def test_background_darkens_without_blocking_mouse(self):
         source=self.overlay
         self.assertIn('fixed inset-0 z-[90] bg-[#020713]/75',source)
-        self.assertIn('pointer-events-none fixed z-[100]',source)
+        self.assertIn('pointer-events-none fixed inset-0 z-[100]',source)
+        self.assertIn('pointer-events-none max-h-[calc(100dvh-24px)]',source)
         self.assertIn('role="tooltip"',source)
         self.assertIn('event.key==="Escape"',source)
         self.assertIn('onClose()',source)
