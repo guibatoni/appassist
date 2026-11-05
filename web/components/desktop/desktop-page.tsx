@@ -425,9 +425,13 @@ function Mods({mods,sha,onRefresh,configured}:{
     if(!api)return
     setBusy(true);setMessage(null)
     try{
-      await api.scan_sources(mod.sha256)
+      const result=await api.scan_sources(mod.sha256)
       await onRefresh()
-      setMessage("Dados do mod atualizados.")
+      setMessage((result.cardCount??0)>0
+        ?`${result.cardCount} cartas identificadas. Confira as informações do mod.`
+        :(result.candidateCardCount??0)>0
+          ?`${result.candidateCardCount} cartas candidatas encontradas, aguardando validação.`
+          :"Análise concluída, mas as cartas continuam não identificadas. O scanner preservou as evidências para investigação.")
     }catch{
       setMessage("Não foi possível atualizar este mod. Verifique a ISO e tente novamente.")
     }finally{setBusy(false)}
@@ -491,6 +495,15 @@ function Mods({mods,sha,onRefresh,configured}:{
                     <p className="text-xs text-muted">{label}</p>
                   </div>)}
               </div>
+              {mod.cardEvidence==="extraidas_estruturalmente"&&<p className="mt-3 text-xs text-gold">
+                Cartas extraídas do próprio executável, mas a identidade dos IDs ainda não foi confirmada em jogo. Oponentes e drops permanecem separados.
+              </p>}
+              {!mod.cards&&(mod.candidateCards??0)>0&&<p className="mt-3 text-xs text-gold">
+                ${mod.candidateCards?.toLocaleString("pt-BR")} cartas candidatas em análise. Elas ainda não aparecem na Biblioteca para evitar dados incorretos.
+              </p>}
+              {!mod.cards&&!(mod.candidateCards??0)&&<p className="mt-3 text-xs text-muted">
+                O leitor ainda não localizou uma tabela confiável de cartas neste mod. Atualizar dados executa uma nova investigação da ISO.
+              </p>}
               {mod.requiresReview&&<p className="mt-3 text-xs text-muted">
                 Alguns recursos deste mod podem não estar disponíveis.
               </p>}
