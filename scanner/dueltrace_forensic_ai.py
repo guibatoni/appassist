@@ -78,6 +78,39 @@ def _safe_window(row):
         data[name] = allowed
     return data
 
+CONTROL_COUNTS = (
+    "recordsExamined", "distinctPointers", "ffPresent", "fdPresent",
+    "fdBeforeFf", "fdWithoutFf", "fdFollowedByGlyph",
+    "fdFollowedByZero", "fdFollowedByControl", "fdAtRecordEnd",
+    "fdWithGlyphBeforeFf", "nonZeroAfterFf", "nonZeroAfterFd",
+    "ffAfterFirstInvalid", "interleavedOrTruncated",
+)
+CONTROL_STATES = frozenset({
+    "entrada_invalida", "layout_nao_acessivel",
+    "ponteiros_ou_registros_invalidos", "registros_parciais",
+    "controles_mistos_necessitam_validacao", "fd_sem_terminador_comprovado",
+    "ff_observado_nao_comprova_ids", "terminadores_desconhecidos",
+})
+
+
+def _safe_control_window(source):
+    if not isinstance(source,dict):
+        return None
+    state=source.get("state")
+    safe={"state":state if type(state) is str and state in CONTROL_STATES
+          else "entrada_invalida"}
+    for field in CONTROL_COUNTS:
+        safe[field]=_bounded_int(source.get(field),0,39)
+    hist=source.get("nonFfControlHistogram")
+    safe["nonFfControlHistogram"]={
+        name:count for name,count in (hist or {}).items()
+        if (type(name) is str
+            and re.fullmatch(r"0xF[0-9A-E]",name)
+            and (count:=_bounded_int(count,0,5000)) is not None)
+    } if isinstance(hist,dict) else {}
+    return safe
+
+
 def numeric_evidence(report: dict) -> dict:
     root = report.get("independent_opponent_discovery",{}) if isinstance(report,dict) else {}
     root = root if isinstance(root,dict) else {}
@@ -86,7 +119,10 @@ def numeric_evidence(report: dict) -> dict:
     rows = forensic.get("windows",[])
     rows = rows if isinstance(rows,list) else []
     output = [w for w in (_safe_window(r) for r in rows[:5]) if w]
-    return {"schema": 1, "windows": output,
+    control_rows = forensic.get("controlWindows",[])
+    control_rows = control_rows if isinstance(control_rows,list) else []
+    control = [w for w in (_safe_control_window(r) for r in control_rows[:5]) if w]
+    return {"schema": 2, "windows": output, "controlWindows": control,
             "scope": "hipoteses_nao_validadas",
             "mayActivate": False}
 
