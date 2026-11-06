@@ -8,6 +8,7 @@ Estado: Preview experimental, sem merge na main. Não modifica ISO, save, Memory
 - Usa o catálogo de 722 cartas do próprio mod para nomes, ATK e DEF e calcula a fração peso/2048, sem assumir rótulos de RANK.
 - Quando há só um bloco candidato nas evidências locais, sugere-o automaticamente, ainda sem promoção.
 - Ficha ativa consulta automaticamente o ID de adversário candidato no ePSXe por RAM PS1, exigindo LP, mão e histórico de compras coerentes.
+- Se o ePSXe foi iniciado pelo próprio DUELTRACE para a ISO atualmente selecionada, mudanças do ID de RAM candidato são registradas automaticamente em arquivo local separado por SHA da ISO. O log é provisório e nunca desbloqueia drops nem prova a ISO em execução.
 - APIs com token de sessão; leitura de processo somente com privilégios QUERY e VM_READ.
 
 ## Documentação de formato PS1 original
