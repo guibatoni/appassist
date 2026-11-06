@@ -152,6 +152,60 @@ class IntelligenceTests(unittest.TestCase):
             self.assertEqual(second["fusions"]["count"],0)
             self.assertFalse((home/"investigacoes"/(sha+".fusoes.json")).exists())
 
+    def test_seven_consistent_banks_with_conflicts_are_preserved_only_locally(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home=Path(tmp)
+            image=home/"rising.iso"
+            image.write_bytes(b"synthetic")
+            sha="e"*64
+            profile_path=home/"profiles"/"synthetic"/"profile.json"
+            atomic_json(profile_path,{
+                "rom_sha256":sha,"cards":[{"id":i} for i in range(1,723)],
+                "verified":{"cartas":"verificado"},
+                "supported_features":{"cards":True,"fusions":False},
+            })
+            st=image.stat()
+            catalog=ModCatalog(home)
+            atomic_json(catalog.registry_file,{"schema":1,"entries":[{
+                "sha256":sha,"file_name":image.name,
+                "source_path":str(image.resolve()),
+                "profile_path":str(profile_path),
+                "size":st.st_size,"mtime_ns":st.st_mtime_ns,
+            }]})
+            fake={
+                "valid_banks":7,"matching_banks":7,
+                "divergent_banks":False,"bank_conflicts":6,
+                "candidate_count":5555,
+                "unique_unordered_pairs_without_conflict":5549,
+                "unordered_pairs_with_conflicting_results":3,
+                "candidates":[{"a":62,"b":66,"result":68},
+                              {"a":66,"b":62,"result":69}],
+                "banks":[{"status":"decodificado"} for _ in range(7)],
+            }
+            with (patch("dueltrace_intelligence.investigate",return_value={
+                    "file":image.name,"hash_rom":sha,"features":{},
+                    "candidates":{},"uncertainties":[],"evidence":[]}),
+                  patch("dueltrace_intelligence.audit_effect_sources",
+                        return_value={"status":"sem_prova","candidate_files":[]}),
+                  patch("extrator_fusoes.analyze_fusion_banks",
+                        return_value=fake) as probe,
+                  patch("dueltrace_intelligence.import_structural_fusions") as importer):
+                engine=MultiModIntelligence(catalog)
+                first=engine.inspect(image,use_ollama=False)
+                second=engine.inspect(image,use_ollama=False)
+            self.assertEqual(first["fusions"]["status"],"conflitos_em_quarentena")
+            self.assertEqual(first["fusions"]["unambiguousPairs"],5549)
+            self.assertEqual(first["fusions"]["conflictingPairs"],3)
+            self.assertFalse(first["fusions"]["mayActivate"])
+            self.assertEqual(second["fusions"]["status"],"conflitos_em_quarentena")
+            probe.assert_called_once()
+            importer.assert_not_called()
+            saved=home/"investigacoes"/(sha+".fusoes.json")
+            self.assertTrue(saved.exists())
+            self.assertEqual(json.loads(saved.read_text())["rom_sha256"],sha)
+            self.assertFalse(catalog.profile_for(catalog.list()[0])[
+                "supported_features"]["fusions"])
+
     def test_cache_report_bounded_and_ai_disabled_is_safe(self):
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp)
