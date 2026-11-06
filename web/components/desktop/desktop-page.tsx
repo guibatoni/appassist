@@ -435,6 +435,9 @@ function LiveOpponentPanel() {
         {" "}LP lidos: {sample.playerLP} / {sample.opponentLP}.
         {" "}Leitura validada por outras estruturas de RAM, mas o ID ainda não
         foi relacionado ao nome da ISO nem ao bloco de drops.
+        {(sample.localRuntimeIdEvents??0)>0?
+          ` ${sample.localRuntimeIdEvents} mudança(s) de ID registrada(s) automaticamente
+          nesta sessão iniciada pelo DUELTRACE (evidência provisória).`:""}
       </p>:
       <p className="mt-2 text-xs text-muted">
         {sample?.status==="no_epsxe"?"ePSXe não encontrado. A leitura começa automaticamente quando houver um duelo.":
