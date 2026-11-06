@@ -34,6 +34,12 @@ export type LayoutFileCandidate = {
 
 export type ModScanDiagnostic = {
   romSha?: string
+  opponentForensics?: {
+    schema: number
+    scope: string
+    mayActivate: false
+    windows: Array<Record<string, unknown>>
+  }
   state: string
   status: string
   issues: string[]

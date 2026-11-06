@@ -3,11 +3,12 @@
 import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
 import {
-  AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FilePlus2, Gamepad2,
+  AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardCopy, FilePlus2, Gamepad2,
   GitMerge, Layers, Play, RefreshCcw, Search, Shield, Swords, Upload,
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
+import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
 import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources} from "@/lib/desktop"
@@ -420,6 +421,17 @@ function Mods({mods,sha,onRefresh,configured}:{
       setMessage("Não foi possível concluir a operação. Confira o arquivo e tente novamente.")
     }finally{setBusy(false)}
   }
+  const copyDiagnostics=async(mod:LocalMod)=>{
+    setBusy(true);setMessage(null)
+    try {
+      const windows=await copyOpponentReport(mod)
+      setMessage("Diagnóstico técnico copiado ("+windows+
+        " janelas, somente contagens). Cole o texto na conversa para análise.")
+    } catch(err) {
+      setMessage(err instanceof Error ? err.message :
+        "Não foi possível copiar o diagnóstico do mod.")
+    } finally {setBusy(false)}
+  }
   const rescan=async(mod:LocalMod)=>{
     const api=desktopApi()
     if(!api)return
@@ -542,6 +554,12 @@ function Mods({mods,sha,onRefresh,configured}:{
                   <RefreshCcw className="size-4"/> Atualizar dados
                 </button>
               </div>
+              {!mod.opponents&&(mod.opponentCandidateCount??0)>0&&<button
+                type="button" disabled={busy||!desktopApi()}
+                className="mt-3 inline-flex items-center gap-2 rounded-md border border-line/70 px-3 py-2 text-xs text-muted transition-colors hover:border-primary/60 hover:text-white disabled:opacity-40"
+                onClick={()=>void copyDiagnostics(mod)}>
+                <ClipboardCopy className="size-4"/> Copiar diagnóstico técnico
+              </button>}
             </div>}
           </article>
         })}
