@@ -88,6 +88,57 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(snapshot["cards"][1]["effectSource"],"ROM-offset-auditado")
         self.assertNotIn("source_path",str(snapshot))
 
+    def test_family_summary_exposes_only_structural_counts(self):
+        # A 40-block family has two possible 39-opponent windows, NOT
+        # verified 40 opponents or unlocked drop tables.
+        meta = {
+            "scan_parser_revision":29,
+            "mod_family_evidence":{
+                "state":"single_family_unmapped_windows",
+                "candidateCount":2, "scanComplete":True,
+                "ambiguous39BlockWindows":True,
+                "clusters":[{
+                    "consecutiveBlockCount":40,
+                    "possible39BlockWindows":2,
+                    "resource":"/private/rom.bin",
+                    "rawBytes":"NEVER_EXPOSE_BIN",
+                }],
+                "privateFile":"PRIVATE_ISO_NAME",
+            },
+        }
+        atomic_json(self.analysis/"relatorio.json",meta)
+        mod = self.bridge.get_state()["mods"][0]
+        family = mod["modFamilyEvidence"]
+        self.assertEqual(family["scanRevision"],29)
+        self.assertEqual(family["consecutiveBlocks"],40)
+        self.assertEqual(family["structuralMatrices"],160)
+        self.assertEqual(family["possible39Windows"],2)
+        self.assertTrue(family["ambiguous"])
+        self.assertFalse(family["inGameVerified"])
+        self.assertFalse(family["mayActivateDrops"])
+        self.assertFalse(family["mayActivateRank"])
+        self.assertNotIn("NEVER_EXPOSE_BIN",str(mod))
+        self.assertNotIn("PRIVATE_ISO_NAME",str(mod))
+        self.assertNotIn("/private/rom.bin",str(mod))
+        self.assertEqual(mod["dropEntries"],0)
+
+    def test_family_summary_rejects_old_revision_and_outside_folder(self):
+        meta = {"scan_parser_revision":28,"mod_family_evidence":{
+            "state":"unique_structural_candidate","candidateCount":1,
+            "clusters":[{"consecutiveBlockCount":39,"possible39BlockWindows":1}]}}
+        atomic_json(self.analysis/"relatorio.json",meta)
+        self.assertIsNone(self.bridge.get_state()["mods"][0]["modFamilyEvidence"])
+        meta["scan_parser_revision"]=29
+        atomic_json(self.analysis/"relatorio.json",meta)
+        self.assertEqual(
+            self.bridge.get_state()["mods"][0]["modFamilyEvidence"]["consecutiveBlocks"],39)
+        outside=self.home/"private"/"analysis"
+        outside.mkdir(parents=True)
+        atomic_json(outside/"relatorio.json",meta)
+        self.profile["scan_result_dir"]=str(outside)
+        atomic_json(self.profile_path,self.profile)
+        self.assertIsNone(self.bridge.get_state()["mods"][0]["modFamilyEvidence"])
+
     def test_drops_from_active_iso_are_paged_and_authenticated(self):
         groups=["TABELA_1_RANK_DESCONHECIDO","TABELA_2_RANK_DESCONHECIDO",
                 "TABELA_3_RANK_DESCONHECIDO"]
