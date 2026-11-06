@@ -427,6 +427,20 @@ export type MipsTraceResult = {
   last?: MipsTraceResult | null
 }
 
+export type LiveOpponentProbe = {
+  ready:boolean
+  status:string
+  runtimeOpponentId:number|null
+  playerLP?:number
+  opponentLP?:number
+  mappingValidatedByIndependentFields?:boolean
+  runtimeIdVerifiedForMod:boolean
+  romIdentityVerified:boolean
+  opponentNameVerified:boolean
+  mayActivateDrops:boolean
+  mayActivateRank:boolean
+}
+
 export type CandidateMatrixPage = {
   available: boolean
   status: string
@@ -702,6 +716,7 @@ export interface DesktopAPI {
   import_rank_trace(duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(): Promise<RankAuditExport>
   get_duel_evidence(): Promise<DuelEvidence>
+  get_live_opponent(): Promise<LiveOpponentProbe>
   get_candidate_matrix(sha: string, block?: number, group?: number, query?: string, offset?: number, limit?: number): Promise<CandidateMatrixPage>
   get_window_observations(sha: string): Promise<WindowObservationResult>
   undo_last_window_observation(sha: string): Promise<WindowObservationResult>
@@ -743,6 +758,7 @@ interface ProtectedNativeAPI {
   import_rank_trace(token: string, duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(token: string): Promise<RankAuditExport>
   get_duel_evidence(token: string): Promise<DuelEvidence>
+  get_live_opponent(token: string): Promise<LiveOpponentProbe>
   get_candidate_matrix(token: string, sha: string, block?: number, group?: number, query?: string, offset?: number, limit?: number): Promise<CandidateMatrixPage>
   get_window_observations(token: string, sha: string): Promise<WindowObservationResult>
   undo_last_window_observation(token: string, sha: string): Promise<WindowObservationResult>
@@ -799,6 +815,7 @@ export function desktopApi(): DesktopAPI | null {
     import_rank_trace: (duelId) => native.import_rank_trace(token, duelId),
     export_rank_audit: () => native.export_rank_audit(token),
     get_duel_evidence: () => native.get_duel_evidence(token),
+    get_live_opponent: () => native.get_live_opponent(token),
     get_candidate_matrix: (sha,block=-1,group=1,query="",offset=0,limit=30) =>
       native.get_candidate_matrix(token,sha,block,group,query,offset,limit),
     get_window_observations: (sha) => native.get_window_observations(token, sha),
