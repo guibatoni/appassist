@@ -50,6 +50,7 @@ class DiagnosticsTests(unittest.TestCase):
                        "0xDEADBEEF", "RAW_RAM_SECRET", "SUPER_SECRET"):
             self.assertNotIn(secret, payload)
         self.assertFalse(sample["rank"]["modelVerified"])
+        self.assertFalse(sample["opponent"]["handAnchorValidated"])
 
     def test_sanitized_hand_anchor_diagnostics_do_not_claim_verified_id(self):
         sample = sanitise_sample(
@@ -69,6 +70,7 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(
             sample["opponent"]["hintRejectionCounts"]["implausibleLifePoints"], 1)
         self.assertFalse(sample["opponent"]["ready"])
+        self.assertFalse(sample["opponent"]["handAnchorValidated"])
         self.assertIsNone(sample["opponent"]["candidateId"])
         dumped = json.dumps(sample)
         self.assertNotIn("hostRAMAddress", dumped)
@@ -85,12 +87,44 @@ class DiagnosticsTests(unittest.TestCase):
             self.assertTrue(rec.observe(hand(),opponent(oid=11),{},SHA))
             self.assertEqual(rec.report()["changeCount"],2)
             self.assertEqual(rec.report()["opponentStatuses"],{"ram_mapping_not_validated":2})
+            self.assertEqual(rec.report()["candidateEvents"],1)
+            self.assertEqual(rec.report()["candidateIdsObserved"],[11])
+            self.assertFalse(rec.report()["candidateIdStableAcrossReadableChanges"])
             self.assertEqual(len(list(Path(tmp).glob(SHA+"_*.json"))),1)
             report=json.loads(rec.export_json())
             self.assertFalse(report["networkTransmission"])
             self.assertFalse(report["mayActivateDrops"])
             self.assertFalse(report["mayActivateRank"])
             self.assertNotIn(SHA,rec.export_json())
+
+    def test_provisional_id_stability_across_hand_and_lp_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rec = LiveDiagnosticsRecorder(Path(tmp), SHA)
+            def stable(id_value, lp):
+                return {
+                    "ready": True, "status": "runtime_id_candidate",
+                    "runtimeOpponentId": id_value,
+                    "validationMethod": "known_hand_anchor",
+                    "knownHandAnchorAtHint": True,
+                    "playerLP": lp, "opponentLP": 8000,
+                }
+            rec.observe(hand(),stable(5,5408),{},SHA)
+            rec.observe(hand((426,58,533,281,450)),stable(5,5408),{},SHA)
+            rec.observe(hand((426,58,533,281,450)),stable(5,3879),{},SHA)
+            report = rec.report()
+            self.assertEqual(report["candidateEvents"],3)
+            self.assertEqual(report["candidateIdsObserved"],[5])
+            self.assertTrue(report["candidateIdStableAcrossReadableChanges"])
+            self.assertEqual(report["handAnchorValidatedChanges"],3)
+            self.assertEqual(report["distinctLpPairsInReadableChanges"],2)
+            self.assertTrue(report["events"][0]["data"]["opponent"]["handAnchorValidated"])
+            self.assertFalse(report["verifiedOpponentMapping"])
+            self.assertFalse(report["mayActivateDrops"])
+            rec.observe(hand(),stable(6,3879),{},SHA)
+            report = rec.report()
+            self.assertFalse(report["candidateIdStableAcrossReadableChanges"])
+            self.assertEqual(report["candidateIdsObserved"],[5,6])
+            self.assertFalse(report["verifiedOpponentMapping"])
 
     def test_change_of_iso_stops_local_diagnostics_without_cross_mod_data(self):
         with tempfile.TemporaryDirectory() as tmp:
