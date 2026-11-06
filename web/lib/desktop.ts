@@ -41,6 +41,7 @@ export type ModScanDiagnostic = {
     windows: Array<Record<string, unknown>>
     controlWindows?: Array<Record<string, unknown>>
     fdJumpWindows?: Array<Record<string, unknown>>
+    fdFlowWindows?: Array<Record<string, unknown>>
   }
   opponentLayoutSearch?: {
     schema: number
@@ -56,6 +57,16 @@ export type ModScanDiagnostic = {
         magicPresent: boolean
         fileHasPayloadRegion: boolean
         mappingCoherent: boolean
+        payloadDeclaredBytes?: number | null
+        payloadAvailableBytes?: number | null
+        payloadOverhangBytes?: number | null
+        payloadSizeZero?: boolean
+        payloadAligned4?: boolean
+        payloadAligned2048?: boolean
+        payloadFitsFile?: boolean
+        loadAddressInRAM?: boolean
+        payloadFitsRAM?: boolean
+        entryWithinLoadedRange?: boolean
         validated: false
       }
     }>

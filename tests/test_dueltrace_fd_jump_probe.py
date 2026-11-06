@@ -73,7 +73,7 @@ class FDJumpTests(unittest.TestCase):
         self.assertEqual(len(windows),5)
         self.assertEqual(windows[0]["jumpTargetInBank"],1)
         safe=numeric_evidence({"independent_opponent_discovery":compact})
-        self.assertEqual(safe["schema"],3)
+        self.assertEqual(safe["schema"],4)
         self.assertEqual(safe["fdJumpWindows"][0]["jumpTargetInBank"],1)
         self.assertNotIn("OPP",json.dumps(safe))
         self.assertNotIn("target",str(safe["fdJumpWindows"][0]).lower().replace("jumptarget",""))
@@ -118,7 +118,7 @@ class FDJumpTests(unittest.TestCase):
         self.assertIn("HEADER_STATES.has(raw.state)",js)
         self.assertNotIn("targetOffset:",js)
         self.assertNotIn("rawBytes:",js)
-        self.assertGreaterEqual(SCAN_PARSER_REVISION,26)
+        self.assertGreaterEqual(SCAN_PARSER_REVISION,27)
 
 
 if __name__=="__main__":
