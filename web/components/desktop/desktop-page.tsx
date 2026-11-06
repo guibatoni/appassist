@@ -407,22 +407,28 @@ function StructuralMatrixExplorer({mod}:{mod:LocalMod}) {
   const [block,setBlock]=useState(-1)
   const [group,setGroup]=useState(1)
   const [query,setQuery]=useState("")
+  const [debouncedQuery,setDebouncedQuery]=useState("")
   const [offset,setOffset]=useState(0)
   const [result,setResult]=useState<CandidateMatrixPage|null>(null)
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState<string|null>(null)
 
   useEffect(()=>{
+    const id=window.setTimeout(()=>setDebouncedQuery(query),350)
+    return ()=>window.clearTimeout(id)
+  },[query])
+
+  useEffect(()=>{
     let active=true
     const api=desktopApi()
     if(!api)return
     setBusy(true);setError(null)
-    void api.get_candidate_matrix(mod.sha256,block,group,query,offset,15).then(
+    void api.get_candidate_matrix(mod.sha256,block,group,debouncedQuery,offset,15).then(
       next=>{if(active){setResult(next);setBusy(false)}},
       reason=>{if(active){setError(reason instanceof Error?reason.message:"Matriz indisponível.");setBusy(false)}},
     )
     return ()=>{active=false}
-  },[mod.sha256,block,group,query,offset])
+  },[mod.sha256,block,group,debouncedQuery,offset])
 
   const chooseBlock=(value:number)=>{
     setBlock(value);setOffset(0)
