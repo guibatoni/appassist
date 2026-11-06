@@ -245,6 +245,13 @@ class BridgeTests(unittest.TestCase):
                 protected.record_window_observation(
                     "x"*64,self.sha,1,"B-POW",38,[1])
             self.assertFalse(obs_path.exists())
+            direct_meta["hash_wa"]=hashlib.sha256(blob).hexdigest()
+            direct_meta["wa_resource_selection"]["source"]="G0SD/OTHER.BIN"
+            atomic_json(self.analysis/"relatorio.json",direct_meta)
+            with self.assertRaisesRegex(ValueError,"Contêiner original não encontrado"):
+                protected.record_window_observation(
+                    "x"*64,self.sha,1,"B-POW",38,[1])
+            self.assertFalse(obs_path.exists())
         # Never leak names from unrelated mods or arbitrary profile IDs.
         self.profile["opponents"][0]["id"]=999
         atomic_json(self.profile_path,self.profile)
