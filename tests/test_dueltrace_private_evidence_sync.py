@@ -15,6 +15,7 @@ from dueltrace_live_diagnostics import LiveDiagnosticsRecorder
 from dueltrace_private_evidence_sync import (
     EvidenceSyncError, GitHubPrivateRepositorySink, PrivateEvidenceSync,
     WindowsTokenStore, validate_private_repository, validate_sanitized_report,
+    validate_iso_forensic_report,
 )
 
 
@@ -60,6 +61,57 @@ class FakeSink:
         self.calls.append(("upload", repo, token, session_id, report))
         validate_sanitized_report(report)
         return {"synced":True}
+    def upload_iso_forensic(self,repo,token,report):
+        validate_iso_forensic_report(report)
+        self.calls.append(("iso",repo,token,report))
+        return {"synced":True,"fingerprint":report["romFingerprint"]}
+
+
+def example_iso_report():
+    return {
+        "schema":1,"subject":"DUELTRACE ISO Forensic Lab",
+        "inspectedAtUTC":"2026-11-06T23:32:10+00:00",
+        "romFingerprint":"a"*12,"exactSha256Matched":True,
+        "fileSizeBytes":115_212_720,
+        "disc":{"sectorBytes":2352,"indexedFiles":9,
+                "resourceSelection":"unique_canonical_resource",
+                "resourceBytesRead":38_148_608},
+        "executable":{"state":"structural_psx_exe",
+                      "coherent":True,
+                      "physicalPaddingVerified":False,
+                      "candidatesTried":1},
+        "cards":{"state":"complete_722","count":722},
+        "opponents":{"state":"independent_structural_39",
+                     "count":39,"namesStructural":39,
+                     "affineLengthException":False,
+                     "inGameIdentityVerified":False},
+        "rank":{"state":"structural_only","staticCandidates":5,
+                "executionConfirmed":False},
+        "drops":{"state":"117_structural_unlabeled",
+                 "validatedStructuralMatrices":117,
+                 "labelsVerified":False,"opponentMappingVerified":False},
+        "weightFamily":{"state":"unique_structural_candidate",
+                        "matrixCount":156,"distinct39Windows":1,
+                        "ambiguous":False,
+                        "base":0x2421800,"opponentStep":0x1800,
+                        "matrixStride":0x5b4,
+                        "distributionEncoding":"plain_deck_masked_drops",
+                        "opponentMappingVerified":False,
+                        "rankGroupLabelsVerified":False,
+                        "mayActivateDrops":False},
+        "fusions":{"state":"seven_consistent_conflicts_quarantined",
+                   "validBanks":7,"matchingBanks":7,
+                   "recipes":5555,"conflictingPairs":3,
+                   "unambiguousPairs":5549,
+                   "resourceMethod":"canonical",
+                   "mayActivate":False},
+        "images":{"state":"complete","large":722,"thumbnails":722,
+                  "duplicateDifferences":56,"checked":722},
+        "verifiedInGame":False,"mayActivateDrops":False,
+        "mayActivateRank":False,"mayActivateFusions":False,
+        "networkTransmission":False,
+        "note":"A leitura estrutural da ISO nao confirma IDs ou grupos RANK no jogo.",
+    }
 
 
 class FakeResponse:
@@ -153,6 +205,68 @@ class PrivateEvidenceTests(unittest.TestCase):
             self.assertEqual(remote["subject"],"DUELTRACE Private Evidence Sync")
             self.assertEqual(remote["diagnostics"]["networkTransmission"],False)
             self.assertFalse(remote["diagnostics"]["verifiedOpponentMapping"])
+
+    def test_iso_forensic_send_is_separate_explicit_and_private(self):
+        report=example_iso_report()
+        sink=FakeSink()
+        creds=FakeTokenStore()
+        with tempfile.TemporaryDirectory() as tmp:
+            sync=PrivateEvidenceSync(Path(tmp),sink=sink,token_store=creds)
+            with self.assertRaises(EvidenceSyncError):
+                sync.upload_forensic(report)
+            self.assertFalse(sink.calls)
+            sync.configure("tester/private-evidence","secret",True)
+            self.assertEqual(len(sink.calls),1)  # verification only
+            result=sync.upload_forensic(report)
+            self.assertTrue(result["synced"])
+            self.assertEqual(sink.calls[-1][0],"iso")
+            sync.disable()
+            with self.assertRaises(EvidenceSyncError):
+                sync.upload_forensic(report)
+            self.assertIsNone(creds.value)
+
+    def test_iso_forensic_endpoint_is_explicit_and_no_content_leaks(self):
+        report=example_iso_report()
+        token="github_pat_"+"x"*45
+        opener=FakeOpener()
+        sink=GitHubPrivateRepositorySink(opener)
+        result=sink.upload_iso_forensic("tester/private-evidence",token,report)
+        self.assertTrue(result["synced"])
+        self.assertEqual(len(opener.calls),3)
+        put=opener.calls[-1]
+        self.assertEqual(put.method,"PUT")
+        self.assertTrue(put.full_url.endswith(
+            "/contents/reports/iso-forensics/aaaaaaaaaaaa.json"))
+        envelope=json.loads(base64.b64decode(
+            json.loads(put.data)["content"]))
+        self.assertEqual(envelope["subject"],"DUELTRACE Private ISO Forensic Sync")
+        self.assertEqual(envelope["diagnostics"]["fusions"]["conflictingPairs"],3)
+        self.assertFalse(envelope["diagnostics"]["networkTransmission"])
+        self.assertNotIn(token,json.dumps(envelope))
+        self.assertNotIn("source_path",json.dumps(envelope))
+        self.assertNotIn(".iso",json.dumps(envelope))
+        with self.assertRaises(EvidenceSyncError):
+            GitHubPrivateRepositorySink(FakeOpener(private=False)).upload_iso_forensic(
+                "tester/private-evidence",token,report)
+
+    def test_forensic_schema_rejects_raw_names_paths_and_promotion(self):
+        report=example_iso_report()
+        self.assertEqual(validate_iso_forensic_report(report),report)
+        report["rawRomBytes"]="SECRET"
+        with self.assertRaises(EvidenceSyncError):
+            validate_iso_forensic_report(report)
+        report.pop("rawRomBytes")
+        report["images"]["localPath"]="C:/USERS/private"
+        with self.assertRaises(EvidenceSyncError):
+            validate_iso_forensic_report(report)
+        report["images"].pop("localPath")
+        report["mayActivateFusions"]=True
+        with self.assertRaises(EvidenceSyncError):
+            validate_iso_forensic_report(report)
+        report["mayActivateFusions"]=False
+        report["fusions"]["resourceMethod"]="C:/secrets"
+        with self.assertRaises(EvidenceSyncError):
+            validate_iso_forensic_report(report)
 
     @unittest.skipUnless(sys.platform == "win32", "Windows DPAPI only")
     def test_windows_user_scoped_dpapi_credential_roundtrip(self):
