@@ -79,9 +79,26 @@ export async function copyOpponentReport(mod: LocalMod): Promise<number> {
   // Explicitly disable optional Ollama: this is a deterministic, read-only export.
   const diagnosis = await api.get_mod_scan_diagnostic(mod.sha256, false)
   const data = safeOpponentReport(mod, diagnosis)
-  if (!navigator.clipboard?.writeText) {
-    throw new Error("Área de transferência indisponível nesta instalação.")
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable")
+    await navigator.clipboard.writeText(data)
+  } catch {
+    // Compatibility fallback for older WebView2. Never render private
+    // diagnostic content as part of the page, even on clipboard failure.
+    const field = document.createElement("textarea")
+    field.value = data
+    field.readOnly = true
+    field.setAttribute("aria-hidden", "true")
+    field.style.position = "fixed"
+    field.style.left = "-10000px"
+    document.body.appendChild(field)
+    field.focus()
+    field.select()
+    let success = false
+    try { success = document.execCommand("copy") }
+    finally { field.remove() }
+    if (!success) throw new Error(
+      "Não foi possível copiar. Use o relatorio.json da pasta de análises.")
   }
-  await navigator.clipboard.writeText(data)
   return diagnosis.opponentForensics?.windows.length ?? 0
 }
