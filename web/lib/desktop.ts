@@ -836,6 +836,7 @@ export interface DesktopAPI {
   get_mod_scan_diagnostic(sha: string, withOllama?: boolean): Promise<ModScanDiagnostic>
   compare_mod_layouts(sha: string): Promise<IsoLayoutComparison>
   audit_mod_iso(sha: string): Promise<IsoForensicAudit>
+  upload_iso_forensic(sha: string): Promise<{synced:boolean;fingerprint:string;kind:string}>
   import_iso(): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(): Promise<{started: boolean; status: string}>
@@ -887,6 +888,7 @@ interface ProtectedNativeAPI {
   get_mod_scan_diagnostic(token: string, sha: string, withOllama?: boolean): Promise<ModScanDiagnostic>
   compare_mod_layouts(token: string, sha: string): Promise<IsoLayoutComparison>
   audit_mod_iso(token: string, sha: string): Promise<IsoForensicAudit>
+  upload_iso_forensic(token: string, sha: string): Promise<{synced:boolean;fingerprint:string;kind:string}>
   import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(token: string): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(token: string): Promise<{started: boolean; status: string}>
@@ -957,6 +959,7 @@ export function desktopApi(): DesktopAPI | null {
     get_mod_scan_diagnostic: (sha,withOllama) => native.get_mod_scan_diagnostic(token,sha,withOllama),
     compare_mod_layouts: (sha) => native.compare_mod_layouts(token,sha),
     audit_mod_iso: (sha) => native.audit_mod_iso(token,sha),
+    upload_iso_forensic: (sha) => native.upload_iso_forensic(token,sha),
     import_iso: () => native.import_iso(token),
     configure_epsxe: () => native.configure_epsxe(token),
     start_game: () => native.start_game(token),
