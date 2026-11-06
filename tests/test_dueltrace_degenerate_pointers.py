@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT/"tests"))
 from scanner_multiiso import SLUS_PTR_BASE, SCAN_PARSER_REVISION
 from dueltrace_independent_opponents import (
     compact_opponent_evidence, explain_opponent_blocker)
+from dueltrace_opponent_forensics import summarize_alternative_layouts
 from test_dueltrace_independent_opponents import probe, relocated_opponents
 
 
@@ -66,6 +67,26 @@ class DegeneratePointerTests(unittest.TestCase):
         self.assertEqual(len(result["selected"]["opponents"]), 39)
         self.assertEqual(result["candidateOpponentCount"], 39)
         self.assertFalse(result["inGameVerified"])
+
+    def test_other_layout_probes_are_aggregated_without_names_or_offsets(self):
+        meta = {
+            "name_pointer_discovery": {
+                "state": "tabela_candidata_localizada",
+                "candidates": [{"name": "PRIVATE_NAME", "pointerBase": 999}]},
+            "relocated_name_layouts": {
+                "state": "hipoteses_ambiguas",
+                "candidates": [{"name": "SECRET", "offset": 123}, {"name": "SECRET2"}]},
+            "mips_name_pointer_evidence": {
+                "state": "referencias_mips_candidatas",
+                "references": [{"address": 987654, "path": "C:/SECRET"}]},
+        }
+        summary = summarize_alternative_layouts(meta)
+        self.assertEqual(summary["probes"]["namePointer"]["candidateCount"], 1)
+        self.assertEqual(summary["probes"]["relocatedNames"]["candidateCount"], 2)
+        self.assertEqual(summary["probes"]["mipsStaticReferences"]["candidateCount"], 1)
+        self.assertNotIn("SECRET", str(summary))
+        self.assertNotIn("pointerBase", str(summary))
+        self.assertFalse(summary["mayPromote"])
 
     def test_ui_explains_no_candidates_and_can_export_diagnostic(self):
         source = (ROOT/"web/components/desktop/desktop-page.tsx").read_text(
