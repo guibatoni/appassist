@@ -342,6 +342,9 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
                 "validationMethod":"known_hand_anchor",
                 "mappingValidatedByIndependentFields":True,
                 "memoryScanSkippedByKnownHand":True,
+                # This was previously omitted in the successful hint path,
+                # misleadingly exported as False by the sanitizer.
+                "knownHandAnchorAtHint":True,
             }
         bases, scan_diagnostic = _candidate_bases(kernel,handle)
         failure_counts = {}
