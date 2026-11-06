@@ -436,6 +436,20 @@ export type LiveOpponentProbe = {
   autoLogged?:boolean
   localRuntimeIdEvents?:number
   mappingValidatedByIndependentFields?:boolean
+  memoryRegionsExamined?:number
+  readableLargeRegions?:number
+  candidateBasesExamined?:number
+  scanReachedLimit?:boolean
+  searchedHighMemory?:boolean
+  validationBreakdown?:{
+    unreadableFields?:number
+    opponentIdOutOfRange?:number
+    implausibleLifePoints?:number
+    implausibleHandIndices?:number
+    implausibleDrawHistory?:number
+    unstableSamples?:number
+    validatedSamples?:number
+  }
   runtimeIdVerifiedForMod:boolean
   romIdentityVerified:boolean
   opponentNameVerified:boolean

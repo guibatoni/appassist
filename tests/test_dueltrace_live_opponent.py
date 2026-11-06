@@ -9,6 +9,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 from dueltrace_live_opponent import (
     OPPONENT_OFFSET,LP_BASE_OFFSET,DRAW_HISTORY_OFFSET,
     DRAW_SAMPLE_SIZE,probe_live_opponent,_valid_psx_sample,
+    _select_region_candidates, MEMORY_BASIC_INFORMATION, MIN_REQUIRED_SPAN,
 )
 
 
@@ -78,6 +79,52 @@ class RuntimeOpponentTests(unittest.TestCase):
         self.assertIsNone(_valid_psx_sample(incomplete,base))
         bad=probe_live_opponent(read_at=incomplete,candidate_bases=[base])
         self.assertFalse(bad["ready"])
+
+    def test_find_high_win64_ram_base_even_after_large_low_mapping(self):
+        high = 0x1422E800000
+        low, read_low = memory_snapshot(oid=14, lp1=9000, lp2=9000)
+        def read_high(address, size):
+            return read_low(address - (high-low), size)
+        bases = _select_region_candidates([
+            (0x200000, 0x5000000),
+            (high, 0x200000),
+        ],hint=0xB15000,max_candidates=8)
+        self.assertIn(high, bases)
+        self.assertEqual(bases[0],0xB15000)
+        result=probe_live_opponent(read_at=read_high,candidate_bases=[high])
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["runtimeOpponentId"],14)
+        self.assertEqual(result["playerLP"],9000)
+        self.assertFalse(result["opponentNameVerified"])
+
+    def test_support_partially_partitioned_psx_region(self):
+        high=0x14400000000
+        candidates=_select_region_candidates([
+            (high,MIN_REQUIRED_SPAN+0x1000),
+        ],hint=0xB15000)
+        self.assertIn(high,candidates)
+
+    def test_rejection_stages_distinguish_history_lp_and_opponent(self):
+        base, read=memory_snapshot(invalid_history=True)
+        stats={}
+        self.assertIsNone(_valid_psx_sample(read,base,stats))
+        self.assertEqual(stats.get("implausibleDrawHistory"),1)
+        self.assertEqual(stats.get("implausibleLifePoints",0),0)
+        base,read=memory_snapshot(lp1=0)
+        stats={}
+        self.assertIsNone(_valid_psx_sample(read,base,stats))
+        self.assertEqual(stats.get("implausibleLifePoints"),1)
+        base,read=memory_snapshot(oid=255)
+        stats={}
+        self.assertIsNone(_valid_psx_sample(read,base,stats))
+        self.assertEqual(stats.get("opponentIdOutOfRange"),1)
+
+    def test_virtualquery_struct_matches_current_python_bitness(self):
+        import ctypes
+        fields={field[0] for field in MEMORY_BASIC_INFORMATION._fields_}
+        self.assertEqual("PartitionId" in fields,
+                         ctypes.sizeof(ctypes.c_void_p)==8)
+        self.assertIn("RegionSize",fields)
 
     def test_reject_unbounded_candidates(self):
         r=probe_live_opponent(read_at=lambda a,n:None,

@@ -442,9 +442,30 @@ function LiveOpponentPanel() {
       <p className="mt-2 text-xs text-muted">
         {sample?.status==="no_epsxe"?"ePSXe não encontrado. A leitura começa automaticamente quando houver um duelo.":
          sample?.status==="multiple_epsxe_processes"?"Mais de um processo ePSXe detectado; não é seguro escolher um.":
-         sample?.status==="ram_mapping_not_validated"?"Aguardando um duelo ativo com RAM do PS1 identificável. Nenhum ID será adivinhado.":
+         sample?.status==="ram_mapping_not_validated"?"O ePSXe foi encontrado e o duelo está em análise, mas nenhum mapeamento de RAM passou nas verificações. Isso não significa que você precisa iniciar outro duelo.":
          "Buscando adversário no ePSXe sem alterar a memória do jogo."}
       </p>}
+    {sample?.status==="ram_mapping_not_validated"&&
+      <div className="mt-2 rounded-md border border-line/60 p-2 text-xs text-muted">
+        <p>Diagnóstico de RAM: {sample.memoryRegionsExamined??0} regiões consultadas;
+          {" "}{sample.readableLargeRegions??0} regiões grandes legíveis;
+          {" "}{sample.candidateBasesExamined??0} bases examinadas.
+          {sample.searchedHighMemory?" Busca em memória alta do Windows habilitada.":""}
+        </p>
+        <p className="mt-1">
+          Candidatos rejeitados:{" "}
+          {sample.validationBreakdown?.unreadableFields??0} por dados não legíveis;
+          {" "}{sample.validationBreakdown?.opponentIdOutOfRange??0} por ID fora da faixa;
+          {" "}{sample.validationBreakdown?.implausibleLifePoints??0} por LP;
+          {" "}{sample.validationBreakdown?.implausibleHandIndices??0} por índices da mão;
+          {" "}{sample.validationBreakdown?.implausibleDrawHistory??0} por histórico;
+          {" "}{sample.validationBreakdown?.unstableSamples??0} por instabilidade.
+        </p>
+        <p className="mt-1 text-gold">
+          O painel não expõe endereços, conteúdo da RAM ou outros processos.
+          Nenhum ID foi confirmado e não é necessário registrar outro duelo.
+        </p>
+      </div>}
     <p className="mt-1 text-xs text-gold">
       O endereço do ID é conhecido no jogo original, mas o GOG MOD 2.2 pode
       usar outra estrutura. A leitura é somente observacional e não ativa drops.
