@@ -51,6 +51,30 @@ class DiagnosticsTests(unittest.TestCase):
             self.assertNotIn(secret, payload)
         self.assertFalse(sample["rank"]["modelVerified"])
 
+    def test_sanitized_hand_anchor_diagnostics_do_not_claim_verified_id(self):
+        sample = sanitise_sample(
+            hand(),
+            {
+                "ready": False, "status": "ram_mapping_not_validated",
+                "knownHandAnchorAtHint": True,
+                "hintValidationBreakdown": {
+                    "validatedHandAnchors": 1, "implausibleLifePoints": 1,
+                    "secret": "C:\\\\private\\\\sample.bin",
+                },
+                "hostRAMAddress": "0xDEADBEEF",
+            }, {})
+        self.assertTrue(sample["opponent"]["knownHandAnchorAtHint"])
+        self.assertEqual(
+            sample["opponent"]["hintRejectionCounts"]["validatedHandAnchors"], 1)
+        self.assertEqual(
+            sample["opponent"]["hintRejectionCounts"]["implausibleLifePoints"], 1)
+        self.assertFalse(sample["opponent"]["ready"])
+        self.assertIsNone(sample["opponent"]["candidateId"])
+        dumped = json.dumps(sample)
+        self.assertNotIn("hostRAMAddress", dumped)
+        self.assertNotIn("0xDEADBEEF", dumped)
+        self.assertNotIn("secret", dumped)
+
     def test_record_changes_and_deduplicate_identical_samples(self):
         with tempfile.TemporaryDirectory() as tmp:
             rec = LiveDiagnosticsRecorder(Path(tmp),SHA)
