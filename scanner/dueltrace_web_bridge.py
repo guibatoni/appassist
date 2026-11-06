@@ -1229,10 +1229,9 @@ class DueltraceWebBridge:
             "inGameVerified": False,
         }
 
-    def _evaluate_window_records(self, sha, entry, profile, records):
-        """Re-evaluate after a save or undo; never promotes inferred IDs."""
+    def _load_structural_family(self, sha, entry, profile):
+        """Read original ISO for this SHA; no cached or foreign ROM arrays."""
         from scanner_multiiso import Disc, sha256 as hash_image
-        from dueltrace_window_observation import correlate_observed_duels
         source = Path(entry.get("source_path") or "").resolve(strict=True)
         if source.suffix.lower() not in (".iso", ".bin") or not source.is_file():
             raise ValueError("Imagem de jogo indisponível")
@@ -1300,14 +1299,77 @@ class DueltraceWebBridge:
             if (isinstance(selected_hash, str) and len(selected_hash) == 64
                     and hashlib.sha256(blob).hexdigest() != selected_hash):
                 raise ValueError("Contêiner mudou desde a análise. Reanalise o mod.")
-            report = correlate_observed_duels(
-                blob, family, records)
+            return blob, family
         finally:
             disc.close()
+
+    def _evaluate_window_records(self, sha, entry, profile, records):
+        """Re-evaluate after a save or undo; never promotes inferred IDs."""
+        from dueltrace_window_observation import correlate_observed_duels
+        blob, family = self._load_structural_family(sha, entry, profile)
+        report = correlate_observed_duels(blob, family, records)
         if report["status"] in ("invalid_input", "invalid_observation",
                                 "unusable_family_layout"):
             raise ValueError("Evidências inconsistentes; nenhuma alteração salva")
         return report
+
+    def get_candidate_matrix(self, sha, physical_block_index=-1,
+                             matrix_group=1, query="", offset=0, limit=30):
+        """Zero-manual-data candidate browser, based on local ISO bytes.
+
+        -1 automatically selects a single physical-block hypothesis already
+        derived from observations when available, otherwise explores block 0.
+        Neither selection is an opponent ID or proof of a RANK group.
+        """
+        from dueltrace_candidate_matrix_browser import browse_candidate_matrices
+        if type(sha) is not str or not re.fullmatch(r"[a-f0-9]{64}", sha):
+            raise ValueError("SHA da ISO inválido")
+        if type(physical_block_index) is not int or not -1 <= physical_block_index <= 127:
+            raise ValueError("Bloco físico inválido")
+        with self._lock:
+            entry = next((e for e in self.catalog.list()
+                          if e.get("sha256") == sha), None)
+            profile = self.catalog.profile_for(entry) if entry else None
+            if not profile or not profile.get("supported_features", {}).get("cards"):
+                raise ValueError("Catálogo de cartas validado não disponível")
+            if len(profile.get("cards", [])) != 722:
+                raise ValueError("Catálogo de 722 cartas incompleto")
+            selection = "explicit_physical_block_not_opponent"
+            chosen = physical_block_index
+            if chosen == -1:
+                selection = "first_unmapped_block_unverified"
+                chosen = 0
+                path = self._window_observation_path(sha)
+                if path.is_file() and path.stat().st_size <= 128 * 1024:
+                    saved = load_json(path, {})
+                    analysis = saved.get("last_analysis") if isinstance(saved, dict) and saved.get("rom_sha256") == sha else None
+                    scan = analysis.get("unmappedPhysicalBlocks") if isinstance(analysis, dict) else None
+                    slots = scan.get("slots") if isinstance(scan, dict) else None
+                    if (isinstance(slots, list) and len(slots) == 1
+                            and isinstance(slots[0], dict)
+                            and slots[0].get("possiblePhysicalBlocks") == 1
+                            and isinstance(slots[0].get("candidateSamples"), list)
+                            and len(slots[0]["candidateSamples"]) == 1):
+                        candidate = slots[0]["candidateSamples"][0]
+                        if (isinstance(candidate, dict)
+                                and candidate.get("clusterIndex") == 0
+                                and type(candidate.get("physicalBlockIndex")) is int
+                                and 0 <= candidate["physicalBlockIndex"] < 128):
+                            chosen = candidate["physicalBlockIndex"]
+                            selection = "single_hypothesis_from_saved_observation"
+            blob, family = self._load_structural_family(sha, entry, profile)
+            cards = self._cards(profile)
+            result = browse_candidate_matrices(
+                blob, family, cards,
+                physical_block_index=chosen, matrix_group=matrix_group,
+                query=query, offset=offset, limit=limit)
+            return {**result,
+                    "autoSelected": physical_block_index == -1,
+                    "selectionReason": selection,
+                    "opponentIdsVerified": False,
+                    "rankGroupLabelsVerified": False,
+                    "mayActivateDrops": False,
+                    "mayActivateRank": False}
 
     def undo_last_window_observation(self, sha):
         """Undo the latest manually entered observation and recompute windows."""
