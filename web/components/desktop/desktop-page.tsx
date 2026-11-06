@@ -1074,7 +1074,7 @@ function Mods({mods,sha,onRefresh,configured}:{
             .catch(()=>setMessage("Não foi possível copiar automaticamente. Confira a permissão da área de transferência."))}>
           <ClipboardCopy className="size-4"/> Copiar resumo estrutural
         </button>
-      </div>
+      </div>}
       <div className="mt-4 space-y-2">
         {mods.map(mod=>{
           const active=sha===mod.sha256
