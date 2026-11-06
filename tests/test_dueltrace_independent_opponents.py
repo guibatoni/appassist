@@ -274,15 +274,40 @@ class IndependentOpponentTests(unittest.TestCase):
         self.assertEqual(result["boundaryTerminatorEvidence"]["candidateCount"],2)
         self.assertIsNone(result["selected"])
 
-    def test_nonmonotonic_pointers_do_not_verify_physical_boundaries(self):
+    def test_out_of_order_pointers_keep_original_id_to_name_mapping(self):
         exe=bytearray(relocated_opponents(terminator=0xfe))
         a=SLUS_PTR_BASE+0x360*2
-        b=a+2
         first,second=struct.unpack_from("<HH",exe,a)
         struct.pack_into("<HH",exe,a,second,first)
         result=probe(bytes(exe))
-        self.assertIsNone(result["selected"])
-        self.assertEqual(result["boundaryTerminatorEvidence"]["candidateCount"],0)
+        self.assertEqual(result["state"],"layout_terminador_alternativo_estrutural")
+        selected=result["selected"]
+        self.assertEqual(len(selected["opponents"]),39)
+        self.assertEqual(selected["opponents"][0],{"id":1,"nome":"OPP02"})
+        self.assertEqual(selected["opponents"][1],{"id":2,"nome":"OPP01"})
+        self.assertEqual(selected["opponents"][-1],{"id":39,"nome":"OPP39"})
+        table=result["boundaryTerminatorEvidence"]
+        self.assertEqual(table["candidateCount"],1)
+        self.assertTrue(table["candidates"][0]["physicalOrderRemapped"])
+        self.assertGreater(table["candidates"][0]["ordinalPointerInversions"],0)
+        self.assertFalse(result["inGameVerified"])
+        self.assertFalse(result["dropsVerified"])
+
+    def test_all_39_unique_pointers_can_be_reversed_without_relabeling(self):
+        exe=bytearray(relocated_opponents(terminator=0xfe))
+        base=SLUS_PTR_BASE+0x360*2
+        values=struct.unpack_from("<"+"H"*39,exe,base)
+        struct.pack_into("<"+"H"*39,exe,base,*reversed(values))
+        result=probe(bytes(exe))
+        self.assertEqual(result["state"],"layout_terminador_alternativo_estrutural")
+        selected=result["selected"]
+        self.assertEqual(selected["opponents"][0]["nome"],"OPP39")
+        self.assertEqual(selected["opponents"][-1]["nome"],"OPP01")
+        self.assertEqual(result["boundaryTerminatorEvidence"]["candidates"][0]
+                         ["ordinalPointerInversions"],38)
+        self.assertEqual(result["boundaryTerminatorEvidence"]["candidates"][0]
+                         ["verifiedBoundaries"],38)
+        self.assertFalse(result["inGameVerified"])
 
     def test_duplicate_physical_pointers_do_not_select_ids(self):
         exe=bytearray(relocated_opponents(terminator=0xfe))
@@ -291,6 +316,12 @@ class IndependentOpponentTests(unittest.TestCase):
         result=probe(bytes(exe))
         self.assertIsNone(result["selected"])
         self.assertEqual(result["boundaryTerminatorEvidence"]["candidateCount"],0)
+        compact=compact_opponent_evidence(result)
+        self.assertEqual(compact["forensicEvidence"]["windows"][0]
+                         ["boundaryDecision"],"ponteiros_repetidos")
+        self.assertEqual(compact["forensicEvidence"]["windows"][0]
+                         ["pointerAliasCount"],1)
+        self.assertFalse(compact["mayActivate"] if "mayActivate" in compact else False)
 
     def test_alternative_terminator_in_profile_preserves_drop_and_rank_gate(self):
         exe=relocated_opponents(terminator=0xfe)
