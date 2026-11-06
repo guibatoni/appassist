@@ -126,6 +126,85 @@ class DueltraceWebBridge:
             })
         return sorted(prepared,key=lambda x:x["id"])
 
+    def _mod_family_summary(self, profile):
+        """Expose only bounded structural counters from THIS mod's cached scan.
+
+        No ROM bytes, filenames, paths, SHA values, card identifiers or
+        speculative RANK labels enter the UI. These counters never unlock
+        game features. Check the canonical local analysis directory first.
+        """
+        if not isinstance(profile, dict):
+            return None
+        scan_dir = profile.get("scan_result_dir")
+        if not isinstance(scan_dir, str) or not scan_dir:
+            return None
+        try:
+            root = (self.catalog.home / "analises").resolve()
+            folder = Path(scan_dir).resolve()
+            report_file = (folder / "relatorio.json").resolve()
+            if (not folder.is_relative_to(root)
+                    or not report_file.is_relative_to(root)
+                    or not report_file.is_file()
+                    or report_file.stat().st_size > 8 * 1024 * 1024):
+                return None
+            meta = load_json(report_file, {})
+        except (OSError, ValueError, TypeError):
+            return None
+        if not isinstance(meta, dict):
+            return None
+        revision = meta.get("scan_parser_revision")
+        if type(revision) is not int or revision < 29:
+            return None
+        evidence = meta.get("mod_family_evidence")
+        if not isinstance(evidence, dict):
+            audit = meta.get("mod_family_audit")
+            scanned = audit.get("resourcesScanned", []) if isinstance(audit, dict) else []
+            if not isinstance(scanned, list):
+                return None
+            families = [row.get("weightFamily") for row in scanned[:4]
+                        if isinstance(row, dict)
+                        and isinstance(row.get("weightFamily"), dict)
+                        and type(row["weightFamily"].get("candidateCount")) is int
+                        and row["weightFamily"]["candidateCount"] > 0]
+            if len(families) != 1:
+                return None
+            evidence = families[0]
+        valid_states = {
+            "unique_structural_candidate", "single_family_unmapped_windows",
+            "ambiguous_candidates", "incomplete_or_ambiguous_scan",
+            "not_found",
+        }
+        state = evidence.get("state")
+        if state not in valid_states:
+            return None
+        clusters = evidence.get("clusters", [])
+        if not isinstance(clusters, list):
+            return None
+        runs = [row for row in clusters[:8] if isinstance(row, dict)
+                and type(row.get("consecutiveBlockCount")) is int
+                and 39 <= row["consecutiveBlockCount"] <= 128]
+        blocks = max((row["consecutiveBlockCount"] for row in runs), default=0)
+        windows = max((row.get("possible39BlockWindows", 0) for row in runs
+                       if type(row.get("possible39BlockWindows")) is int
+                       and 0 <= row["possible39BlockWindows"] <= 128), default=0)
+        count = evidence.get("candidateCount")
+        count = count if type(count) is int and 0 <= count <= 8 else 0
+        return {
+            "state": state,
+            "scanRevision": revision,
+            "candidateCount": count,
+            "consecutiveBlocks": blocks,
+            "structuralMatrices": blocks * 4,
+            "possible39Windows": windows,
+            "ambiguous": bool(evidence.get("ambiguous39BlockWindows") is True
+                              or windows > 1 or state in
+                              {"ambiguous_candidates", "incomplete_or_ambiguous_scan"}),
+            "scanComplete": evidence.get("scanComplete") is True,
+            "inGameVerified": False,
+            "mayActivateDrops": False,
+            "mayActivateRank": False,
+        }
+
     def _mod(self, entry):
         profile = self.catalog.profile_for(entry)
         summary = profile_summary(entry, profile)
@@ -135,6 +214,7 @@ class DueltraceWebBridge:
             "level":entry.get("level","desconhecido"),
             "scanParserRevision":entry.get("scan_parser_revision") if
                 type(entry.get("scan_parser_revision")) is int else None,
+            "modFamilyEvidence":self._mod_family_summary(profile),
             "cards":summary.get("cards_total",0),
             "candidateCards":max(0,min(722,int((profile or {}).get("candidate_catalogue",{}).get("cards",0))))
                 if isinstance((profile or {}).get("candidate_catalogue"),dict) else 0,
