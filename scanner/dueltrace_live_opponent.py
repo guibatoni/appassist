@@ -157,6 +157,7 @@ def _candidate_bases(kernel, handle) -> tuple[list[int], dict]:
         else 0x7FFEFFFF)
     address = 0x10000
     queries = 0
+    consecutive_query_failures = 0
     readable = []
     while address <= maximum_address and queries < MAX_REGIONS:
         mbi = MEMORY_BASIC_INFORMATION()
@@ -165,9 +166,12 @@ def _candidate_bases(kernel, handle) -> tuple[list[int], dict]:
             ctypes.byref(mbi), ctypes.sizeof(mbi))
         queries += 1
         if not returned:
-            # Invalid range or inaccessible query: advance one page.
+            consecutive_query_failures += 1
+            if consecutive_query_failures >= 32:
+                break
             address += 0x10000
             continue
+        consecutive_query_failures = 0
         base = int(mbi.BaseAddress or 0)
         size = int(mbi.RegionSize)
         next_address = max(address + 0x1000, base + max(size, 0x1000))
