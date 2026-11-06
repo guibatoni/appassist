@@ -433,8 +433,10 @@ function LiveOpponentPanel() {
         ID de adversário candidato na RAM PS1:{" "}
         <strong className="text-primary">#{sample.runtimeOpponentId}</strong>.
         {" "}LP lidos: {sample.playerLP} / {sample.opponentLP}.
-        {" "}Leitura validada por outras estruturas de RAM, mas o ID ainda não
-        foi relacionado ao nome da ISO nem ao bloco de drops.
+        {" "}{sample.validationMethod==="known_hand_anchor"
+          ?"Mapeamento cruzado com as cinco cartas da mão já lidas pelo DUELTRACE."
+          :"Mapeamento cruzado com estruturas históricas do jogo original."}
+        {" "}O ID ainda não foi relacionado ao nome da ISO nem ao bloco de drops.
         {(sample.localRuntimeIdEvents??0)>0?
           ` ${sample.localRuntimeIdEvents} mudança(s) de ID registrada(s) automaticamente
           nesta sessão iniciada pelo DUELTRACE (evidência provisória).`:""}

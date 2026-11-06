@@ -435,6 +435,7 @@ export type LiveOpponentProbe = {
   opponentLP?:number
   autoLogged?:boolean
   localRuntimeIdEvents?:number
+  validationMethod?:"known_hand_anchor"|"legacy_draw_history"
   mappingValidatedByIndependentFields?:boolean
   memoryRegionsExamined?:number
   readableLargeRegions?:number
