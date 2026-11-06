@@ -15,6 +15,7 @@ from dueltrace_card_attribute_probe import discover_card_attribute_layout
 from dueltrace_mips_reference_probe import inspect_mips_table_references
 from dueltrace_resource_selection import inspect_resource_candidates
 from dueltrace_drop_layout_discovery import discover_relocated_drops
+from dueltrace_mod_family_probe import discover_weight_families
 from dueltrace_candidate_catalog import build_quarantined_catalog
 from dueltrace_name_layout_probe import find_opponent_pointer_candidates
 from dueltrace_name_boundaries import inspect_opponent_name_boundaries, read_name_table
@@ -630,6 +631,29 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['hash_wa_prefix']=wa_sha
         info['hash_wa']=wa_sha if len(wa)==wa_size and wa else None
         info['wa_lido_integralmente']=bool(wa and len(wa)==wa_size)
+        # Etapa 15: diagnostico de FAMILIA, nao um importador de RANK/drops.
+        # A busca pelo conteudo identifica inclusive janelas deslocadas, e
+        # preserva a ambiguidade de recursos com mais de 39 blocos inteiros.
+        # Nao altera os CSVs/perfis nem os dados validados pelo pipeline atual.
+        try:
+            if wa and len(wa) == wa_size:
+                family = discover_weight_families(wa)
+                info['mod_family_evidence'] = family
+                info['mod_family_scan_source'] = 'recurso_selecionado'
+            elif not wa:
+                # Desconhecidos podem ter contêiner renomeado ou layout
+                # fora da janela antiga. Sem escolher perfil pela extensao.
+                from dueltrace_mod_probe_cli import audit_disc
+                family_audit = audit_disc(disc)
+                info['mod_family_audit'] = family_audit
+                info['mod_family_scan_source'] = 'recursos_indexados'
+            else:
+                info['mod_family_scan_source'] = 'recurso_incompleto'
+        except (OSError, ValueError, TypeError, struct.error) as exc:
+            # Falha em uma sonda complementar nao pode apagar as 722
+            # cartas nem impedir o scan de outras fontes independentes.
+            info['mod_family_scan_source'] = 'sonda_indisponivel'
+            info['mod_family_error'] = type(exc).__name__
         if info['wa_nome_alternativo_nao_validado']:
             info['wa_identificacao_obs']=(
                 "Contêiner sem nome WA_MRG selecionado por tamanho ou "
