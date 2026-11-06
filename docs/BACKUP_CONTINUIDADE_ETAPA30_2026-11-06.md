@@ -37,3 +37,7 @@
 - Validar exportação Galaxy positiva, Rising e Enhance no Windows com novas versões sem apagar perfis anteriores.
 - Resolver slot→ID de adversário, RANK efetivo, recebimento de drops e fusões conflitantes por trilha MIPS / execução no ePSXe. Não inferir identidade a partir de candidateId=5 de logs antigos.
 - Não enviar ISO/BIN ao GitHub, nem dados de RAM bruta ou artes, nem ativar automaticamente drops/ranks por semelhança.
+
+## Complemento de auditoria (artes e rescan)
+
+Testadas todas as 722 artes grandes 102x96 e 722 miniaturas 40x32 de Rising e Enhance segundo os critérios estruturais do decodificador: ambos têm 722/722 em cada categoria; Galaxy controle também. Divergências entre miniatura primária e duplicada: Rising 56, Enhance 7, Galaxy 6, sem acusar corrupção. Nenhum PNG/game raw foi publicado. `SCAN_PARSER_REVISION=30` e indicador na Biblioteca `<30` foram atualizados para solicitar rescan dos perfis antigos; preservar perfil e arquivos de arte que já funcionam.
