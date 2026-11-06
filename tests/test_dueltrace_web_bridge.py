@@ -139,6 +139,79 @@ class BridgeTests(unittest.TestCase):
         atomic_json(self.profile_path,self.profile)
         self.assertIsNone(self.bridge.get_state()["mods"][0]["modFamilyEvidence"])
 
+    def test_window_duel_evidence_can_be_recorded_without_activating_drops(self):
+        import struct
+        from dueltrace_mod_family_probe import MATRIX_BYTES
+        from unittest.mock import patch
+        base, step, stride = 0x2000, 0x1800, 0x5b4
+        data = bytearray(base + 40*step)
+        for i in range(40):
+            offset=base+i*step
+            for g in range(4):
+                arr=[0]*722
+                a=(i*19+g*37)%722
+                arr[a] = 100
+                arr[(a+210)%722]=300
+                arr[(a+410)%722]=1648
+                struct.pack_into("<722H",data,offset+g*stride,*arr)
+            data[offset+4*stride:offset+4*stride+200]=b"\xA5"*200
+            data[offset+4*stride+200:offset+step]=b"\xff"*104
+        blob=bytes(data)
+        family={
+            "state":"single_family_unmapped_windows",
+            "candidateCount":2,"scanComplete":True,
+            "clusters":[{
+                "firstBlockOffset":base,
+                "consecutiveBlockCount":40,
+                "opponentStep":step,"matrixStride":stride,
+                "encoding":"plain",
+            }],
+        }
+        atomic_json(self.analysis/"relatorio.json",{
+            "sha256":self.sha,"scan_parser_revision":29,
+            "mod_family_audit":{"resourcesScanned":[{
+                "resource":"G0SD/MOD_DATA.BIN", "weightFamily":family,
+            }]},
+        })
+        source=self.home/"rom.iso"
+        source.write_bytes(b"synthetic ISO data for mocked Disc")
+        class Disc:
+            def __init__(self,path):
+                self.files={"G0SD/MOD_DATA.BIN":(4,len(blob))}
+            def get(self,name):
+                if name != "G0SD/MOD_DATA.BIN":
+                    raise AssertionError("Unexpected resource")
+                return blob
+            def close(self):pass
+        protected=ProtectedDesktopApi(self.bridge,"x"*64)
+        with self.assertRaises(PermissionError):
+            protected.record_window_observation("wrong",self.sha,1,"S-POW",38,[1])
+        with patch("scanner_multiiso.sha256",return_value=self.sha), patch(
+                "scanner_multiiso.Disc",Disc):
+            result=protected.record_window_observation(
+                "x"*64,self.sha,1,"S-POW",38,[1])
+            self.assertEqual(result["observationCount"],1)
+            self.assertEqual(result["analysis"]["candidateWindowHint"],0)
+            self.assertEqual(result["analysis"]["compatibleWindowCount"],1)
+            self.assertFalse(result["mayActivateDrops"])
+            self.assertFalse(result["mayActivateRank"])
+            self.assertFalse(result["inGameVerified"])
+            self.assertEqual(
+                protected.get_window_observations("x"*64,self.sha)
+                ["observationCount"],1)
+            with self.assertRaises(ValueError):
+                protected.record_window_observation(
+                    "x"*64,self.sha,0,"S-POW",38,[1])
+            with self.assertRaises(ValueError):
+                protected.record_window_observation(
+                    "x"*64,self.sha,1,"S-POW",38,[1,1])
+        self.assertFalse(self.catalog.profile_for(self.entry)
+                         .get("supported_features",{}).get("drops",False))
+        self.assertNotIn("rom.iso",str(result))
+        self.assertNotIn("MOD_DATA.BIN",str(result))
+        self.assertNotIn("source_path",str(result))
+        self.assertFalse((self.home/"rank_observations"/(self.sha+".json")).exists())
+
     def test_drops_from_active_iso_are_paged_and_authenticated(self):
         groups=["TABELA_1_RANK_DESCONHECIDO","TABELA_2_RANK_DESCONHECIDO",
                 "TABELA_3_RANK_DESCONHECIDO"]
