@@ -171,6 +171,10 @@ class BridgeTests(unittest.TestCase):
         self.profile["verified"]["oponentes"]="extraidos_estruturalmente"
         self.profile["opponents"]=[{"id":i, "name":f"Adversário {i}"}
                                    for i in range(1,40)]
+        present = {row["id"] for row in self.profile["cards"]}
+        self.profile["cards"].extend(
+            {"id": i, "name":f"Carta validada {i}", "atk":i*2,"def":i*3}
+            for i in range(1,723) if i not in present)
         atomic_json(self.profile_path,self.profile)
         choices=self.bridge.get_state()["mods"][0]["structuralOpponentChoices"]
         self.assertEqual(len(choices),39)
@@ -196,6 +200,19 @@ class BridgeTests(unittest.TestCase):
             protected.record_window_observation("wrong",self.sha,1,"S-POW",38,[1])
         with patch("scanner_multiiso.sha256",return_value=self.sha), patch(
                 "scanner_multiiso.Disc",Disc):
+            with self.assertRaises(PermissionError):
+                protected.get_candidate_matrix("wrong",self.sha,0,1,"38",0,10)
+            preview=protected.get_candidate_matrix(
+                "x"*64,self.sha,0,1,"38",0,10)
+            self.assertTrue(preview["available"])
+            self.assertEqual(preview["blockCount"],40)
+            self.assertEqual(preview["rows"][0]["id"],38)
+            self.assertEqual(preview["rows"][0]["weight"],100)
+            self.assertFalse(preview["mayActivateDrops"])
+            self.assertFalse(preview["rankGroupLabelsVerified"])
+            suggested=protected.get_candidate_matrix("x"*64,self.sha,-1,1)
+            self.assertTrue(suggested["available"])
+            self.assertTrue(suggested["autoSelected"])
             result=protected.record_window_observation(
                 "x"*64,self.sha,1,"S-POW",38,[1])
             self.assertEqual(result["observationCount"],1)
