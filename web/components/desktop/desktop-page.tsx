@@ -516,8 +516,10 @@ function Mods({mods,sha,onRefresh,configured}:{
               {mod.opponentEvidence==="extraidos_estruturalmente"&&<p className="mt-3 text-xs text-gold">
                 {mod.opponents} adversários recuperados do executável. IDs ainda não confirmados em jogo; drops e RANK não são liberados por essa hipótese.
               </p>}
-              {!mod.opponents&&(mod.opponentCandidateCount??0)>0&&<p className="mt-3 text-xs text-muted">
-                Até {mod.opponentCandidateCount} nomes de adversários candidatos detectados (não verificados).
+              {!mod.opponents&&((mod.opponentCandidateCount??0)>0||Boolean(mod.opponentDiagnosticReason))&&<p className="mt-3 text-xs text-muted">
+                {(mod.opponentCandidateCount??0)>0
+                  ?`Até ${mod.opponentCandidateCount} nomes independentes candidatos detectados (não verificados).`
+                  :"Nenhuma sequência independente de adversários encontrada nesta região."}
                 {mod.opponentDiagnosticReason
                   ?<span className="mt-1 block text-gold">
                     Motivo: {mod.opponentDiagnosticReason}
@@ -554,7 +556,7 @@ function Mods({mods,sha,onRefresh,configured}:{
                   <RefreshCcw className="size-4"/> Atualizar dados
                 </button>
               </div>
-              {!mod.opponents&&(mod.opponentCandidateCount??0)>0&&<button
+              {!mod.opponents&&((mod.opponentCandidateCount??0)>0||Boolean(mod.opponentDiagnosticReason))&&<button
                 type="button" disabled={busy||!desktopApi()}
                 className="mt-3 inline-flex items-center gap-2 rounded-md border border-line/70 px-3 py-2 text-xs text-muted transition-colors hover:border-primary/60 hover:text-white disabled:opacity-40"
                 onClick={()=>void copyDiagnostics(mod)}>
