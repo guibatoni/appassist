@@ -207,6 +207,32 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(
                 protected.get_window_observations("x"*64,self.sha)
                 ["observationCount"],1)
+            saved=protected.get_window_observations("x"*64,self.sha)
+            self.assertEqual(saved["entries"],[{
+                "index":1,"opponentSlot":1,"rank":"S-POW",
+                "rewardCardId":38,"playedCardIds":[1],
+            }])
+            self.assertEqual(saved["analysis"]["windows"][1]["deckContradictions"],1)
+            # A second record must be visible; undo only removes the last,
+            # then recomputes the original single-duel correlation.
+            duplicate=protected.record_window_observation(
+                "x"*64,self.sha,1,"S-POW",38,[1])
+            self.assertEqual(duplicate["observationCount"],2)
+            with self.assertRaises(PermissionError):
+                protected.undo_last_window_observation("wrong",self.sha)
+            undone=protected.undo_last_window_observation("x"*64,self.sha)
+            self.assertEqual(undone["observationCount"],1)
+            self.assertEqual(undone["analysis"]["candidateWindowHint"],0)
+            self.assertEqual(undone["entries"],saved["entries"])
+            undone_empty=protected.undo_last_window_observation("x"*64,self.sha)
+            self.assertEqual(undone_empty["observationCount"],0)
+            self.assertEqual(undone_empty["analysis"]["windowCount"],2)
+            self.assertEqual(undone_empty["analysis"]["status"],"awaiting_independent_duels")
+            with self.assertRaises(ValueError):
+                protected.undo_last_window_observation("x"*64,self.sha)
+            restored=protected.record_window_observation(
+                "x"*64,self.sha,1,"S-POW",38,[1])
+            self.assertEqual(restored["observationCount"],1)
             with self.assertRaises(ValueError):
                 protected.record_window_observation(
                     "x"*64,self.sha,0,"S-POW",38,[1])

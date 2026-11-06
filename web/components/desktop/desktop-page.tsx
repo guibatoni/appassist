@@ -11,7 +11,7 @@ import {DropsPage} from "./drops-page"
 import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -411,10 +411,7 @@ function WindowEvidenceForm({mod}:{mod:LocalMod}) {
   const [played,setPlayed]=useState("")
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState<string|null>(null)
-  const [summary,setSummary]=useState<{
-    observationCount: number
-    analysis: {status?:string;windowCount?:number;compatibleWindowCount?:number;candidateWindowHint?:number|null}
-  }|null>(null)
+  const [summary,setSummary]=useState<WindowObservationResult|null>(null)
 
   useEffect(()=>{
     const api=desktopApi()
@@ -453,12 +450,24 @@ function WindowEvidenceForm({mod}:{mod:LocalMod}) {
       setError(e instanceof Error?e.message:"Falha ao gravar observação do duelo.")
     }finally{setBusy(false)}
   }
+  const undoLast=async()=>{
+    if(busy||!summary?.observationCount)return
+    if(!window.confirm("Desfazer apenas a última observação? As demais serão preservadas e analisadas novamente."))return
+    const api=desktopApi()
+    if(!api){setError("Abra o aplicativo para Windows.");return}
+    setBusy(true);setError(null)
+    try{
+      setSummary(await api.undo_last_window_observation(mod.sha256))
+    }catch(e){
+      setError(e instanceof Error?e.message:"Não foi possível desfazer o registro.")
+    }finally{setBusy(false)}
+  }
   const status=summary?.analysis?.status??"awaiting_independent_duels"
   const label:Record<string,string>={
     awaiting_independent_duels:"Aguardando observações.",
     single_window_suggested_not_verified:"Uma janela é compatível com os relatos, ainda sem comprovação em jogo.",
     multiple_windows_still_possible:"As duas janelas continuam possíveis.",
-    observations_conflict_with_all_windows:"Os relatos contradizem as janelas candidatas; confira o índice e os IDs observados.",
+    observations_conflict_with_all_windows:"Nenhuma janela explica todos os registros sob a hipótese de que posição estrutural = ID de tabela. Verifique as observações abaixo; isso não invalida a ISO.",
     resource_ambiguous_or_missing:"Recurso ainda não identificado de forma única.",
   }
   return <details className="mt-3 rounded-lg border border-line/60 bg-background/30 px-3 py-3">
@@ -516,6 +525,44 @@ function WindowEvidenceForm({mod}:{mod:LocalMod}) {
         {summary?.analysis?.compatibleWindowCount??0}.
         {" "}Identidade do adversário e grupos de RANK não verificados.
       </p>}
+      {(summary?.analysis?.windows?.length??0)>0&&<div className="md:col-span-2 mt-2 rounded-md border border-line/50 p-3">
+        <p className="text-xs font-semibold text-primary">Motivos das incompatibilidades (hipóteses, não erros da ISO)</p>
+        <ul className="mt-2 space-y-1 text-xs text-muted">
+          {(summary?.analysis?.windows??[]).map(w=><li key={w.index}>
+            Janela {w.index+1}: {w.deckContradictions} cartas vistas ausentes do deck candidato,
+            {" "}{w.rewardContradictions} recompensas ausentes das três tabelas e
+            {" "}{w.sameRankGroupConflicts} conflitos entre grupos de um mesmo RANK.
+            {" "}{w.compatibleUnderHypothesis?"Compatível sob hipótese.":"Não explica todos os registros."}
+          </li>)}
+        </ul>
+        <p className="mt-2 text-xs text-gold">
+          As posições dos 39 nomes não foram comprovadas como IDs de jogo.
+          Uma incompatibilidade pode indicar ordem diferente ou mapeamento de RANK desconhecido.
+        </p>
+      </div>}
+      {(summary?.entries?.length??0)>0&&<div className="md:col-span-2 mt-2 rounded-md border border-line/50 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-semibold text-primary">
+            Duelos registrados nesta ISO ({summary?.observationCount??0})
+          </p>
+          <button type="button" onClick={()=>void undoLast()}
+            disabled={busy||!desktopApi()} className="btn-ghost text-xs disabled:opacity-40">
+            Desfazer último registro
+          </button>
+        </div>
+        <ol className="mt-2 space-y-1 text-xs text-muted">
+          {(summary?.entries??[]).slice(-8).map(item=><li key={item.index}>
+            #{item.index}: {opponentChoices.find(o=>o.slot===item.opponentSlot)?.name??
+              `Posição estrutural ${item.opponentSlot}`} · {item.rank} ·
+            carta recebida #{item.rewardCardId}
+            {item.playedCardIds.length>0?
+              ` · cartas vistas: ${item.playedCardIds.join(", ")}`:""}
+          </li>)}
+        </ol>
+        {(summary?.observationCount??0)>8&&<p className="mt-1 text-xs text-muted">
+          Exibindo os oito registros mais recentes.
+        </p>}
+      </div>}
     </form>
   </details>
 }

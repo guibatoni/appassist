@@ -169,6 +169,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.import_rank_trace(duel_id)
 
+    def undo_last_window_observation(self, credential, sha):
+        self._authorize(credential)
+        return self._bridge.undo_last_window_observation(sha)
+
     def get_window_observations(self, credential, sha):
         self._authorize(credential)
         return self._bridge.get_window_observations(sha)
