@@ -36,11 +36,14 @@ _PID_BASE_CACHE: dict[int,int] = {}
 
 
 class MEMORY_BASIC_INFORMATION(ctypes.Structure):
+    # Win32 MEMORY_BASIC_INFORMATION does not contain PartitionId.
+    # Using the 64-bit layout in a 32-bit app corrupts RegionSize and
+    # prevents the scanner from discovering any readable PS1 RAM.
     _fields_ = [
         ("BaseAddress", ctypes.c_void_p),
         ("AllocationBase", ctypes.c_void_p),
         ("AllocationProtect", wintypes.DWORD),
-        ("PartitionId", wintypes.WORD),
+    ] + ([("PartitionId", wintypes.WORD)] if ctypes.sizeof(ctypes.c_void_p) == 8 else []) + [
         ("RegionSize", ctypes.c_size_t),
         ("State", wintypes.DWORD),
         ("Protect", wintypes.DWORD),
@@ -48,13 +51,19 @@ class MEMORY_BASIC_INFORMATION(ctypes.Structure):
     ]
 
 
-def _valid_psx_sample(read_at, base: int) -> dict | None:
+def _note_validation(stats, reason):
+    if isinstance(stats, dict):
+        stats[reason] = stats.get(reason, 0) + 1
+
+
+def _valid_psx_sample(read_at, base: int, stats=None) -> dict | None:
     """Validate a candidate host mapping without identifying the ISO.
 
     read_at(address,size) returns bytes or None. Strictly disallows
     partial reads, ambiguous IDs and implausible game-state structures.
     """
     if type(base) is not int or base < 0x10000 or base > 0x7FFF00000000:
+        _note_validation(stats, "invalidCandidateBase")
         return None
     opponent = read_at(base + OPPONENT_OFFSET, 1)
     duel = read_at(base + LP_BASE_OFFSET, 0x30)
@@ -62,16 +71,21 @@ def _valid_psx_sample(read_at, base: int) -> dict | None:
     if (not isinstance(opponent, bytes) or len(opponent) != 1
             or not isinstance(duel, bytes) or len(duel) != 0x30
             or not isinstance(draw, bytes) or len(draw) != DRAW_SAMPLE_SIZE):
+        _note_validation(stats, "unreadableFields")
         return None
     oid = opponent[0]
     if oid > 39:
+        _note_validation(stats, "opponentIdOutOfRange")
         return None
     p1 = int.from_bytes(duel[4:6], "little")
     p2 = int.from_bytes(duel[0x24:0x26], "little")
     hand_indices = duel[0x0A:0x0F]
-    if not (0 < p1 <= 32767 and 0 < p2 <= 32767
-            and len(set(hand_indices)) >= 3
+    if not (0 < p1 <= 32767 and 0 < p2 <= 32767):
+        _note_validation(stats, "implausibleLifePoints")
+        return None
+    if not (len(set(hand_indices)) >= 3
             and all(x < 60 for x in hand_indices)):
+        _note_validation(stats, "implausibleHandIndices")
         return None
     # Distinct validated first draws support that this is a PS1 memory
     # mapping, rather than coincidental low numbers in an arbitrary region.
@@ -83,7 +97,9 @@ def _valid_psx_sample(read_at, base: int) -> dict | None:
         if 1 <= card <= 722 and idx_a == idx_b and idx_a < 60:
             draws.append((card, idx_a))
     if len(draws) < 3 or len(set(i for _, i in draws)) < 3:
+        _note_validation(stats, "implausibleDrawHistory")
         return None
+    _note_validation(stats, "validatedSamples")
     return {
         "runtimeOpponentId": oid,
         "playerLP": p1,
@@ -172,15 +188,16 @@ def _candidate_bases(kernel, handle) -> tuple[list[int], dict]:
     }
 
 
-def _read_sample_twice(read_at, base):
-    first = _valid_psx_sample(read_at, base)
+def _read_sample_twice(read_at, base, stats=None):
+    first = _valid_psx_sample(read_at, base, stats)
     if first is None:
         return None
-    second = _valid_psx_sample(read_at, base)
+    second = _valid_psx_sample(read_at, base, stats)
     if (second is None
             or first["runtimeOpponentId"] != second["runtimeOpponentId"]
             or first["playerLP"] != second["playerLP"]
             or first["opponentLP"] != second["opponentLP"]):
+        _note_validation(stats, "unstableSamples")
         return None
     return first
 
@@ -269,15 +286,18 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
                 }
             _PID_BASE_CACHE.pop(pid,None)
         bases, scan_diagnostic = _candidate_bases(kernel,handle)
+        failure_counts = {}
         found = []
         for base in bases:
-            item = _read_sample_twice(read_at_native,base)
+            item = _read_sample_twice(read_at_native,base,failure_counts)
             if item:
                 found.append(item)
                 if len(found) > 1:
                     break
         if len(found) != 1:
-            return {**fail, **scan_diagnostic, "status": (
+            # No raw RAM or host addresses are returned to the interface.
+            return {**fail, **scan_diagnostic,
+                    "validationBreakdown":failure_counts, "status": (
                 "ambiguous_ram_mapping" if found else "ram_mapping_not_validated")}
         if len(_PID_BASE_CACHE) > 16:
             _PID_BASE_CACHE.clear()
