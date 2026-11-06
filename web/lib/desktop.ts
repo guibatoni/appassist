@@ -427,6 +427,17 @@ export type MipsTraceResult = {
   last?: MipsTraceResult | null
 }
 
+export type LiveDiagnosticsStatus = {
+  running: boolean
+  romFingerprint?: string
+  sampleCount: number
+  changeCount: number
+  lastObservedAtUTC: string|null
+  opponentStatuses: Record<string,number>
+  readyToCopy: boolean
+  networkTransmission: false
+}
+
 export type LiveOpponentProbe = {
   ready:boolean
   status:string
@@ -733,6 +744,10 @@ export interface DesktopAPI {
   import_rank_trace(duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(): Promise<RankAuditExport>
   get_duel_evidence(): Promise<DuelEvidence>
+  start_live_diagnostics(): Promise<LiveDiagnosticsStatus>
+  stop_live_diagnostics(): Promise<LiveDiagnosticsStatus>
+  get_live_diagnostics_status(): Promise<LiveDiagnosticsStatus>
+  export_live_diagnostics(): Promise<string>
   get_live_opponent(): Promise<LiveOpponentProbe>
   get_candidate_matrix(sha: string, block?: number, group?: number, query?: string, offset?: number, limit?: number): Promise<CandidateMatrixPage>
   get_window_observations(sha: string): Promise<WindowObservationResult>
@@ -775,6 +790,10 @@ interface ProtectedNativeAPI {
   import_rank_trace(token: string, duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(token: string): Promise<RankAuditExport>
   get_duel_evidence(token: string): Promise<DuelEvidence>
+  start_live_diagnostics(token: string): Promise<LiveDiagnosticsStatus>
+  stop_live_diagnostics(token: string): Promise<LiveDiagnosticsStatus>
+  get_live_diagnostics_status(token: string): Promise<LiveDiagnosticsStatus>
+  export_live_diagnostics(token: string): Promise<string>
   get_live_opponent(token: string): Promise<LiveOpponentProbe>
   get_candidate_matrix(token: string, sha: string, block?: number, group?: number, query?: string, offset?: number, limit?: number): Promise<CandidateMatrixPage>
   get_window_observations(token: string, sha: string): Promise<WindowObservationResult>
@@ -832,6 +851,10 @@ export function desktopApi(): DesktopAPI | null {
     import_rank_trace: (duelId) => native.import_rank_trace(token, duelId),
     export_rank_audit: () => native.export_rank_audit(token),
     get_duel_evidence: () => native.get_duel_evidence(token),
+    start_live_diagnostics: () => native.start_live_diagnostics(token),
+    stop_live_diagnostics: () => native.stop_live_diagnostics(token),
+    get_live_diagnostics_status: () => native.get_live_diagnostics_status(token),
+    export_live_diagnostics: () => native.export_live_diagnostics(token),
     get_live_opponent: () => native.get_live_opponent(token),
     get_candidate_matrix: (sha,block=-1,group=1,query="",offset=0,limit=30) =>
       native.get_candidate_matrix(token,sha,block,group,query,offset,limit),

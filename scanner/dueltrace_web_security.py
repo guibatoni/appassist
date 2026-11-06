@@ -173,6 +173,22 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.undo_last_window_observation(sha)
 
+    def start_live_diagnostics(self, credential):
+        self._authorize(credential)
+        return self._bridge.start_live_diagnostics()
+
+    def stop_live_diagnostics(self, credential):
+        self._authorize(credential)
+        return self._bridge.stop_live_diagnostics()
+
+    def get_live_diagnostics_status(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_live_diagnostics_status()
+
+    def export_live_diagnostics(self, credential):
+        self._authorize(credential)
+        return self._bridge.export_live_diagnostics()
+
     def get_live_opponent(self, credential):
         self._authorize(credential)
         return self._bridge.get_live_opponent()

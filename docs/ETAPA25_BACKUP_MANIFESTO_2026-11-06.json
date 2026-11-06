@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "project": "DUELTRACE",
+  "backup_date": "2026-11-06",
+  "timezone": "America/Sao_Paulo",
+  "stage": 25,
+  "repository": "https://github.com/guibatoni/appassist",
+  "working_branch": "feature/dueltrace-v097-live-diagnostics-v25",
+  "pr_number": 73,
+  "pr_url": "https://github.com/guibatoni/appassist/pull/73",
+  "pr_draft_open_unmerged_as_of_backup": true,
+  "tested_source_commit": "089d6773e3d7be92afbd7b6442b814f2d8b611a7",
+  "source_snapshot": "https://github.com/guibatoni/appassist/archive/089d6773e3d7be92afbd7b6442b814f2d8b611a7.zip",
+  "windows_preview": {
+    "release": "https://github.com/guibatoni/appassist/releases/tag/preview-v0.9.7-r42283346075",
+    "file": "https://github.com/guibatoni/appassist/releases/download/preview-v0.9.7-r42283346075/DUELTRACE-WebUI-Windows-Preview.zip",
+    "sha256": "096ed9075808ae26a05c85e94c88eddce3e9819055bb73a458eb02ec8e1d1fb9",
+    "ci_run_id": 42283346075,
+    "python_tests": 754,
+    "windows": "success",
+    "publishing": "success"
+  },
+  "library_target": "/DUELTRACE - Desenvolvimento/PROJETO_ATUAL/",
+  "documentation": "docs/BACKUP_CONTINUIDADE_ETAPA25_2026-11-06.md",
+  "stage25_doc": "docs/DUELTRACE_PHASE25_LIVE_DIAGNOSTICS.md",
+  "current_confirmations": {
+    "cards_count": 722,
+    "cards_names_attributes_game_checked": true,
+    "images_downloaded_and_displayed": true,
+    "live_hand_reading_working": true,
+    "opponent_names_structural": 39,
+    "opponents_internal_ids_verified": false,
+    "physical_blocks": 40,
+    "matrices": 160,
+    "matrix_weights_total": 2048,
+    "rank_binding_gog_verified": false,
+    "drops_association_verified": false,
+    "live_diagnostics_implemented": true,
+    "live_diagnostics_tested_in_real_epsxe": false,
+    "remote_chatgpt_streaming_available": false
+  },
+  "stage25_features": [
+    "opt-in local 3-second sampling",
+    "start/stop",
+    "5 hand IDs",
+    "opponent probe status and rejection counts",
+    "last observed RANK provisional",
+    "local session per SHA",
+    "redacted bounded JSON",
+    "copy for ChatGPT"
+  ],
+  "privacy": [
+    "no ISO or protected binaries in repository backup",
+    "no raw RAM/art/host paths/PID/token in diagnostic export",
+    "no background remote sending",
+    "only read-only PS1 memory"
+  ],
+  "unresolved": [
+    "verify live logger in ePSXe real session",
+    "map opponent runtime ID to named opponent and physical block via MIPS",
+    "map 3 reward matrices to RANK groups",
+    "verify drops via actual game",
+    "implement additional ISO format adapters",
+    "validate fusion and effect extraction",
+    "repair updater as needed"
+  ],
+  "source_pr_chain": [
+    61,
+    62,
+    63,
+    64,
+    65,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73
+  ]
+}
