@@ -146,15 +146,20 @@ class RuntimeOpponentTests(unittest.TestCase):
         _PID_BASE_CACHE.pop(49876,None)
         try:
             result = probe_live_opponent(kernel=kernel,pids=[49876])
+            cached_result = probe_live_opponent(kernel=kernel,pids=[49876])
         finally:
             _PID_BASE_CACHE.pop(49876,None)
         self.assertTrue(result["ready"])
+        self.assertTrue(cached_result["ready"])
+        self.assertTrue(cached_result["knownHandAnchorAtHint"])
+        self.assertEqual(cached_result["validationMethod"], "known_hand_anchor")
+        self.assertFalse(cached_result["runtimeIdVerifiedForMod"])
         self.assertEqual(result["runtimeOpponentId"],5)
         self.assertTrue(result["knownHandAnchorAtHint"])
         self.assertTrue(result["memoryScanSkippedByKnownHand"])
         self.assertEqual(result["validationMethod"],"known_hand_anchor")
         self.assertFalse(result["runtimeIdVerifiedForMod"])
-        kernel.CloseHandle.assert_called_once()
+        self.assertEqual(kernel.CloseHandle.call_count, 2)
 
     def test_known_hand_anchor_rejects_unverified_hand_layout(self):
         base,old=memory_snapshot(invalid_history=True)
