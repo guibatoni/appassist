@@ -11,7 +11,7 @@ import {DropsPage} from "./drops-page"
 import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -400,6 +400,52 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
         </p>
       </>}
     </>}
+  </section>
+}
+
+function LiveOpponentPanel() {
+  const [sample,setSample]=useState<LiveOpponentProbe|null>(null)
+  useEffect(()=>{
+    let active=true
+    let fetching=false
+    const read=async()=>{
+      if(fetching)return
+      const api=desktopApi()
+      if(!api)return
+      fetching=true
+      try{
+        const next=await api.get_live_opponent()
+        if(active)setSample(next)
+      }catch{
+        if(active)setSample(null)
+      }finally{fetching=false}
+    }
+    void read()
+    const timer=window.setInterval(()=>void read(),2500)
+    return ()=>{active=false;window.clearInterval(timer)}
+  },[])
+  return <section className="mt-3 rounded-lg border border-primary/40 bg-background/30 px-3 py-3">
+    <p className="text-sm font-semibold text-primary">
+      Leitura automática do adversário no emulador (experimental)
+    </p>
+    {sample?.ready&&Number.isInteger(sample.runtimeOpponentId)?
+      <p className="mt-2 text-xs text-muted">
+        ID de adversário candidato na RAM PS1:{" "}
+        <strong className="text-primary">#{sample.runtimeOpponentId}</strong>.
+        {" "}LP lidos: {sample.playerLP} / {sample.opponentLP}.
+        {" "}Leitura validada por outras estruturas de RAM, mas o ID ainda não
+        foi relacionado ao nome da ISO nem ao bloco de drops.
+      </p>:
+      <p className="mt-2 text-xs text-muted">
+        {sample?.status==="no_epsxe"?"ePSXe não encontrado. A leitura começa automaticamente quando houver um duelo.":
+         sample?.status==="multiple_epsxe_processes"?"Mais de um processo ePSXe detectado; não é seguro escolher um.":
+         sample?.status==="ram_mapping_not_validated"?"Aguardando um duelo ativo com RAM do PS1 identificável. Nenhum ID será adivinhado.":
+         "Buscando adversário no ePSXe sem alterar a memória do jogo."}
+      </p>}
+    <p className="mt-1 text-xs text-gold">
+      O endereço do ID é conhecido no jogo original, mas o GOG MOD 2.2 pode
+      usar outra estrutura. A leitura é somente observacional e não ativa drops.
+    </p>
   </section>
 }
 
@@ -874,6 +920,7 @@ function Mods({mods,sha,onRefresh,configured}:{
                 </button>
               </div>
               {(mod.modFamilyEvidence?.possible39Windows??0)>1&&<WindowEvidenceForm mod={mod}/>}
+              {active&&<LiveOpponentPanel/>}
               {(mod.modFamilyEvidence?.consecutiveBlocks??0)>=39&&
                 <StructuralMatrixExplorer mod={mod}/>}
               {!mod.opponents&&((mod.opponentCandidateCount??0)>0||Boolean(mod.opponentDiagnosticReason))&&<button
