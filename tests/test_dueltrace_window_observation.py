@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import struct
+import hashlib
+import json
+import tempfile
+from unittest.mock import patch
 import sys
 import unittest
 from pathlib import Path
@@ -118,6 +122,42 @@ class WindowEvidenceTests(unittest.TestCase):
                 report = correlate_observed_duels(self.blob, self.family, [item])
                 self.assertEqual(report["status"], "invalid_observation")
                 self.assertEqual(report["windows"], [])
+
+    def test_cli_correlates_only_sha_matching_iso(self):
+        from dueltrace_mod_probe_cli import correlate_iso_duels
+        class DiscFixture:
+            def __init__(self, _path):
+                self.files = {"G0SD/RESOURCE.BIN": (5, len(blob))}
+            def get(self, name):
+                self_name = "G0SD/RESOURCE.BIN"
+                if name != self_name:
+                    raise AssertionError("unexpected resource")
+                return blob
+            def close(self):
+                return None
+        blob = self.blob
+        with tempfile.TemporaryDirectory() as d:
+            image = Path(d) / "local.iso"
+            image.write_bytes(b"offline synthetic image")
+            observations = Path(d) / "observations.json"
+            manifest = {
+                "schema": 1,
+                "rom_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
+                "observations": [observed()],
+            }
+            observations.write_text(json.dumps(manifest), encoding="utf-8")
+            audit = {"resourcesScanned": [{
+                "resource": "G0SD/RESOURCE.BIN",
+                "weightFamily": self.family,
+            }]}
+            with patch("scanner_multiiso.Disc", DiscFixture):
+                report = correlate_iso_duels(image, observations, audit)
+            self.assertEqual(report["candidateWindowHint"], 0)
+            self.assertFalse(report["mayActivateDrops"])
+            manifest["rom_sha256"] = "0" * 64
+            observations.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "outra ISO"):
+                correlate_iso_duels(image, observations, audit)
 
     def test_reject_stale_or_truncated_family_input(self):
         altered = dict(self.family, scanComplete=False)
