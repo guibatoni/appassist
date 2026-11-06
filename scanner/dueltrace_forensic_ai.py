@@ -50,7 +50,7 @@ def _safe_window(row):
     if not isinstance(row, dict):
         return None
     code = row.get("boundaryDecision")
-    if code not in ALLOWED_CAUSES:
+    if not isinstance(code,str) or code not in ALLOWED_CAUSES:
         code = "incompleto"
     data = {"boundaryDecision": code}
     for key in KEYS:
