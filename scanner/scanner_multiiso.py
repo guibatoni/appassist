@@ -8,6 +8,7 @@ import argparse, csv, hashlib, json, re, struct, sys, unicodedata
 from pathlib import Path
 from dueltrace_layout_discovery import discover_disc_layout, candidate_files_for_decoder
 from dueltrace_cdrom_layout import detect_disc_geometry
+from dueltrace_iso_differential import fingerprint_scan
 from dueltrace_exe_sector_padding import load_executable_sector_padding
 from dueltrace_card_opponent_discovery import discover_relocated_name_table
 from dueltrace_relocated_names import discover_relocated_name_layout
@@ -862,6 +863,10 @@ def process(path,output,with_art=False,digest=None,progress=None):
         info['status']='erro/estrutura incompatível';info['problema']=str(e)
     finally:
         if disc:disc.close()
+    # Always append a safe, machine-comparable summary. This never changes
+    # any CSV, existing decoder, fusion validation or runtime feature flag.
+    # The local detailed report remains the evidence source for each stage.
+    info['comparative_family_fingerprint'] = fingerprint_scan(info)
     (dest/'relatorio.json').write_text(json.dumps(info,ensure_ascii=False,indent=2),encoding='utf8')
     if progress:progress("Análise concluída",1,1)
     return info
