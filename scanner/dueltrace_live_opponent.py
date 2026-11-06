@@ -324,6 +324,12 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
                     "opponentLP":observed["opponentLP"],
                     "validationMethod":observed["validationMethod"],
                     "mappingValidatedByIndependentFields":True,
+                    # Cached probes bypass the hint scan, but still validate
+                    # the known five-card hand on every sample.
+                    "knownHandAnchorAtHint": (
+                        cached_base == LEGACY_HOST_BASE_HINT
+                        and observed["validationMethod"] == "known_hand_anchor"
+                    ),
                 }
             _PID_BASE_CACHE.pop(pid,None)
         # Reuse the known working hand address before scanning thousands
