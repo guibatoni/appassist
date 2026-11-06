@@ -93,7 +93,7 @@ class MixedControlTests(unittest.TestCase):
         report["forensicEvidence"]["controlWindows"][0]["privateName"]="EXFILTRATE_ME"
         report["forensicEvidence"]["controlWindows"][0]["nonFfControlHistogram"]["PRIVATE"]=99
         output=numeric_evidence({"independent_opponent_discovery":report})
-        self.assertEqual(output["schema"],2)
+        self.assertEqual(output["schema"],3)
         self.assertEqual(output["controlWindows"][0]["fdPresent"],22)
         self.assertEqual(output["controlWindows"][0]["nonFfControlHistogram"],{"0xFD":22})
         self.assertNotIn("EXFILTRATE_ME",json.dumps(output))
