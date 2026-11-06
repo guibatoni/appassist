@@ -530,8 +530,10 @@ function WindowEvidenceForm({mod}:{mod:LocalMod}) {
         <ul className="mt-2 space-y-1 text-xs text-muted">
           {(summary?.analysis?.windows??[]).map(w=><li key={w.index}>
             Janela {w.index+1}: {w.deckContradictions} cartas vistas ausentes do deck candidato,
-            {" "}{w.rewardContradictions} recompensas ausentes das três tabelas e
-            {" "}{w.sameRankGroupConflicts} conflitos entre grupos de um mesmo RANK.
+            {" "}{w.rewardContradictions} recompensas ausentes das três tabelas;
+            {" "}{w.sameRankGroupConflicts} conflitos independentes entre grupos de um mesmo RANK.
+            {(w.rankGroupNotAssessable??0)>0?
+              " O grupo RANK não pode ser avaliado quando a recompensa está ausente.":""}
             {" "}{w.compatibleUnderHypothesis?"Compatível sob hipótese.":"Não explica todos os registros."}
           </li>)}
         </ul>
@@ -540,6 +542,25 @@ function WindowEvidenceForm({mod}:{mod:LocalMod}) {
           Uma incompatibilidade pode indicar ordem diferente ou mapeamento de RANK desconhecido.
         </p>
       </div>}
+      {(summary?.analysis?.unmappedPhysicalBlocks?.slots?.length??0)>0&&
+        <div className="md:col-span-2 mt-2 rounded-md border border-line/50 p-3">
+          <p className="text-xs font-semibold text-primary">
+            Investigação de blocos físicos sem pressupor a ordem dos adversários
+          </p>
+          {(summary?.analysis?.unmappedPhysicalBlocks?.slots??[]).map(slot=>
+            <p key={slot.structuralNamePosition} className="mt-2 text-xs text-muted">
+              Posição estrutural {slot.structuralNamePosition}:{" "}
+              {slot.physicalBlocksExamined} blocos examinados;{" "}
+              {slot.possiblePhysicalBlocks} blocos conseguem explicar os registros,
+              sob a hipótese de que as matrizes sejam decks/drops desta ISO.
+              {slot.candidateSamples.length>0?
+                ` Índices físicos candidatos (base zero): ${slot.candidateSamples.map(x=>x.physicalBlockIndex).join(", ")}.`:""}
+            </p>)}
+          <p className="mt-2 text-xs text-gold">
+            Estes blocos são hipóteses de pesquisa: não demonstram qual adversário
+            ou grupo RANK o jogo usa. Nenhum drop foi liberado.
+          </p>
+        </div>}
       {(summary?.entries?.length??0)>0&&<div className="md:col-span-2 mt-2 rounded-md border border-line/50 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-semibold text-primary">

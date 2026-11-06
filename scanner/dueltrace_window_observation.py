@@ -97,6 +97,98 @@ def _cluster_windows(blob: bytes, clusters: object) -> list[dict] | None:
     return windows
 
 
+def _explore_unmapped_physical_blocks(blob: bytes, clusters: list,
+                                      parsed: list[dict]) -> dict:
+    """Read-only exploration: independent of the 39-name pointer-table order.
+
+    A structural name position is *not* used to select physical block here.
+    Every valid physical block from the same recognised cluster is checked.
+    No candidate is labelled with an in-game opponent ID.
+    """
+    result = {
+        "status": "hypotheses_only",
+        "nameToBlockMappingVerified": False,
+        "rankGroupsVerified": False,
+        "mayActivateDrops": False,
+        "mayActivateRank": False,
+        "slots": [],
+    }
+    by_slot = defaultdict(list)
+    for row in parsed:
+        by_slot[row["slot"]].append(row)
+    if not by_slot:
+        return result
+
+    if not isinstance(clusters, list) or len(clusters) > 8:
+        result["status"] = "unusable_cluster_data"
+        return result
+
+    for slot in sorted(by_slot):
+        candidates = []
+        scanned = 0
+        for cluster_index, cluster in enumerate(clusters):
+            if not isinstance(cluster, dict):
+                result["status"] = "unusable_cluster_data"
+                return result
+            first = cluster.get("firstBlockOffset")
+            count = cluster.get("consecutiveBlockCount")
+            step = cluster.get("opponentStep")
+            stride = cluster.get("matrixStride")
+            codec = cluster.get("encoding")
+            if (not all(type(z) is int for z in (first, count, step, stride))
+                    or first < 0 or first % 2
+                    or not OPPONENT_COUNT <= count <= 128
+                    or step % 2 or stride % 2 or stride < MATRIX_BYTES
+                    or step < 3 * stride + MATRIX_BYTES
+                    or codec not in CODECS
+                    or first + (count - 1) * step + 3 * stride
+                    + MATRIX_BYTES > len(blob)):
+                result["status"] = "unusable_cluster_data"
+                return result
+            for physical_index in range(count):
+                scanned += 1
+                offset = first + physical_index * step
+                codec_for = lambda g: (
+                    "plain" if g == 0 else "x15_masked"
+                ) if codec == "plain_deck_masked_drops" else codec
+                deck = decode_matrix(blob, offset, codec_for(0))
+                groups = [
+                    decode_matrix(blob, offset + g * stride, codec_for(g))
+                    for g in range(1, 4)
+                ]
+                if deck is None or any(g is None for g in groups):
+                    continue
+                if any(deck[cid - 1] == 0
+                       for obs in by_slot[slot] for cid in obs["played"]):
+                    continue
+                masks_by_rank = defaultdict(lambda: 0b111)
+                matches = True
+                for obs in by_slot[slot]:
+                    mask = sum(1 << g for g, weights in enumerate(groups)
+                               if weights[obs["reward"] - 1] > 0)
+                    if mask == 0:
+                        matches = False
+                        break
+                    masks_by_rank[obs["rank"]] &= mask
+                    if masks_by_rank[obs["rank"]] == 0:
+                        matches = False
+                        break
+                if matches:
+                    candidates.append({
+                        "clusterIndex": cluster_index,
+                        "physicalBlockIndex": physical_index,
+                    })
+        result["slots"].append({
+            "structuralNamePosition": slot,
+            "physicalBlocksExamined": scanned,
+            "possiblePhysicalBlocks": len(candidates),
+            "candidateSamples": candidates[:12],
+            "mayActivateDrops": False,
+            "inGameIdVerified": False,
+        })
+    return result
+
+
 def correlate_observed_duels(blob: bytes, family: dict,
                             observations: list[dict]) -> dict:
     """Test candidate 39-block windows using real, user-reported duel evidence.
@@ -128,6 +220,9 @@ def correlate_observed_duels(blob: bytes, family: dict,
         result["status"] = "awaiting_independent_duels"
         return result
 
+    result["unmappedPhysicalBlocks"] = _explore_unmapped_physical_blocks(
+        blob, family.get("clusters"), parsed)
+
     for index, window in enumerate(windows):
         group_codec = lambda group: (
             "plain" if group == 0 else "x15_masked"
@@ -135,6 +230,7 @@ def correlate_observed_duels(blob: bytes, family: dict,
         deck_misses = 0
         reward_misses = 0
         masks_by_rank: dict[str, int] = defaultdict(lambda: 0b111)
+        unassessable_ranks = set()
         valid = True
         for row in parsed:
             offset = window["base"] + (row["slot"] - 1) * window["step"]
@@ -152,12 +248,19 @@ def correlate_observed_duels(blob: bytes, family: dict,
             )
             if possible == 0:
                 reward_misses += 1
-            masks_by_rank[row["rank"]] &= possible
+                unassessable_ranks.add(row["rank"])
+            else:
+                masks_by_rank[row["rank"]] &= possible
         if not valid:
             result["status"] = "unusable_family_layout"
             result["windows"] = []
             return result
-        conflicting_ranks = sum(mask == 0 for mask in masks_by_rank.values())
+        # A missing reward gives no evidence about WHICH RANK group it
+        # belongs to. Counting that as a second independent conflict was
+        # misleading in the GOG screenshot.
+        conflicting_ranks = sum(
+            mask == 0 for rank, mask in masks_by_rank.items()
+            if rank not in unassessable_ranks)
         compatible = (deck_misses == 0 and reward_misses == 0
                       and conflicting_ranks == 0)
         result["windows"].append({
@@ -166,9 +269,11 @@ def correlate_observed_duels(blob: bytes, family: dict,
             "deckContradictions": deck_misses,
             "rewardContradictions": reward_misses,
             "sameRankGroupConflicts": conflicting_ranks,
+            "rankGroupNotAssessable": len(unassessable_ranks),
             "compatibleUnderHypothesis": compatible,
             "candidateGroupsPerObservedRank": {
-                rank: [g + 1 for g in range(3) if mask & (1 << g)]
+                rank: ([] if rank in unassessable_ranks else
+                       [g + 1 for g in range(3) if mask & (1 << g)])
                 for rank, mask in sorted(masks_by_rank.items())
             },
             "inGameVerified": False,

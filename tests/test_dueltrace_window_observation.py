@@ -94,6 +94,39 @@ class WindowEvidenceTests(unittest.TestCase):
         self.assertEqual(report["compatibleWindowCount"], 0)
         self.assertIsNone(report["candidateWindowHint"])
 
+    def test_unmapped_physical_block_can_explain_rewards_without_assuming_name_order(self):
+        # Synthetic block index 4 has rewards #114 and #324 together in
+        # the same unknown group, but the historical 39-block windows
+        # assign the structural name position 1 to blocks 0 or 1.
+        records = [
+            observed(slot=1, reward=114, rank="B-POW", played=[]),
+            observed(slot=1, reward=114, rank="B-POW", played=[]),
+            observed(slot=1, reward=324, rank="B-POW", played=[]),
+        ]
+        report = correlate_observed_duels(self.blob, self.family, records)
+        self.assertEqual(report["compatibleWindowCount"], 0)
+        for window in report["windows"]:
+            self.assertEqual(window["rewardContradictions"], 3)
+            self.assertEqual(window["sameRankGroupConflicts"], 0)
+            self.assertEqual(window["rankGroupNotAssessable"], 1)
+        scan = report["unmappedPhysicalBlocks"]
+        self.assertEqual(scan["status"], "hypotheses_only")
+        self.assertEqual(scan["slots"][0]["physicalBlocksExamined"], 40)
+        self.assertTrue(any(
+            c["physicalBlockIndex"] == 4
+            for c in scan["slots"][0]["candidateSamples"]))
+        self.assertGreaterEqual(scan["slots"][0]["possiblePhysicalBlocks"], 1)
+        self.assertFalse(scan["nameToBlockMappingVerified"])
+        self.assertFalse(scan["mayActivateDrops"])
+        self.assertFalse(scan["rankGroupsVerified"])
+
+    def test_unmapped_physical_blocks_none_when_reward_not_in_any_block(self):
+        report = correlate_observed_duels(self.blob, self.family,
+            [observed(slot=1, reward=700, played=[])])
+        self.assertEqual(
+            report["unmappedPhysicalBlocks"]["slots"][0]["possiblePhysicalBlocks"],0)
+        self.assertFalse(report["mayActivateDrops"])
+
     def test_repeated_rank_does_not_force_unverified_group_label(self):
         # Each observation is only a possibility. Never assert exact RANK.
         report = correlate_observed_duels(self.blob, self.family, [
