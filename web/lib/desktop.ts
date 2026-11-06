@@ -435,7 +435,24 @@ export type PrivateEvidenceSyncStatus = {
   remoteIsChatGPTConnection:false
 }
 
+export type LiveForensicReview = {
+  available:boolean
+  eventCountExamined:number
+  distinctHands:number
+  distinctLegacyLpPairs:number
+  candidateIds:number[]
+  candidateObservedInEvents:number
+  candidateStableDespiteHandAndLpFieldChanges:boolean
+  rankSnapshotEvents:number
+  opponentIdentityVerified:false
+  legacyLpSemanticsVerified:false
+  dropMappingVerified:false
+  fusionRecipesVerified:false
+  status:string
+}
+
 export type LiveDiagnosticsStatus = {
+  forensicReview?:LiveForensicReview
   running: boolean
   romFingerprint?: string
   sampleCount: number
