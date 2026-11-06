@@ -146,6 +146,35 @@ class BridgeTests(unittest.TestCase):
             self.assertFalse(
                 self.bridge._collect_live_diagnostics_once(self.bridge._live_diagnostics))
 
+    def test_private_evidence_sync_requires_capability_and_explicit_consent(self):
+        from dueltrace_private_evidence_sync import EvidenceSyncError
+        protected=ProtectedDesktopApi(self.bridge,"x"*64)
+        fake=Mock()
+        fake.status.return_value={
+            "enabled":False,"repository":None,"lastSyncedAtUTC":None,
+            "lastError":None,"remoteIsChatGPTConnection":False}
+        fake.configure.return_value={
+            "enabled":True,"repository":"tester/private-evidence",
+            "lastSyncedAtUTC":None,"lastError":None,
+            "remoteIsChatGPTConnection":False}
+        fake.disable.return_value=fake.status.return_value
+        self.bridge._private_evidence_sync=fake
+        with self.assertRaises(PermissionError):
+            protected.configure_private_evidence_sync(
+                "wrong","tester/private-evidence","secret",True)
+        with self.assertRaises(PermissionError):
+            protected.disable_private_evidence_sync("wrong")
+        with self.assertRaises(PermissionError):
+            protected.get_private_evidence_sync_status("wrong")
+        self.assertFalse(protected.get_private_evidence_sync_status("x"*64)["enabled"])
+        configured=protected.configure_private_evidence_sync(
+            "x"*64,"tester/private-evidence","secret",True)
+        self.assertTrue(configured["enabled"])
+        fake.configure.assert_called_once_with(
+            "tester/private-evidence","secret",True)
+        self.assertNotIn("secret",str(configured))
+        self.assertFalse(protected.disable_private_evidence_sync("x"*64)["enabled"])
+
     def test_live_opponent_probe_requires_token_and_never_promotes(self):
         native={"ready":True,"status":"runtime_id_candidate",
                 "runtimeOpponentId":11,
