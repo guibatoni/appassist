@@ -199,13 +199,20 @@ def discover_independent_opponents(
             output["state"] = "layout_terminador_alternativo_estrutural"
             opponents = [{"id": i + 1, "nome": name}
                          for i, name in enumerate(boundary["names"])]
-            selected_evidence = "marcador_alternativo_e_38_fronteiras_fisicas"
+            selected_evidence = (
+                "marcador_alternativo_com_aliases_estruturais"
+                if boundary.get("aliasCount", 0)
+                else "marcador_alternativo_e_38_fronteiras_fisicas")
             start = boundary["startIndex"]
         # Structural only: this does not verify in-game opponent ID order,
         # drop weights, fusion mapping, MIPS behavior or rank labels.
         output["selected"] = {
             "startIndex": start, "opponents": opponents, "count": OPP_COUNT,
             "evidence": selected_evidence,
+            "aliasCount": (boundary["aliasCount"]
+                           if not isolated else 0),
+            "verifiedPhysicalBoundaries": (
+                boundary["verifiedBoundaries"] if not isolated else 38),
             "validated": False, "inGameVerified": False
         }
         return output

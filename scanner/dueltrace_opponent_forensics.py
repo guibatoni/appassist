@@ -69,6 +69,9 @@ def inspect_forensic_windows(
                  if type(row.get("firstInvalidOffset")) is int), default=None),
             "pointerCountDistinct": len(set(positions)),
             "pointerAliasCount": OPPONENTS - len(set(positions)),
+            "pointerAliasGroups": sum(count > 1
+                for count in Counter(positions).values()),
+            "maxAliasMultiplicity": max(Counter(positions).values(), default=0),
             "pointerNonIncreasingPairs": sum(delta <= 0 for delta in deltas),
             "physicalOrderRemapped": len(set(positions)) == OPPONENTS
                 and any(delta <= 0 for delta in deltas),
@@ -89,6 +92,10 @@ def inspect_forensic_windows(
     return out
 
 REJECTION_REASONS = {
+    "aliases_excessivos":
+        "Mais de dois índices compartilham endereços; a tabela permanece sem confirmação.",
+    "aliases_inconsistentes":
+        "Índices com o mesmo ponteiro apresentam registros incompatíveis.",
     "ponteiros_repetidos":
         "A tabela contém endereços repetidos; os possíveis aliases ficam em investigação.",
     "ponteiros_fora_do_arquivo":
