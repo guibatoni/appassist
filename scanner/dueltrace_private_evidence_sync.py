@@ -194,29 +194,42 @@ def validate_iso_forensic_report(report: dict) -> dict:
         "conflictingPairs":50000,"unambiguousPairs":50000,
         "large":722,"thumbnails":722,"duplicateDifferences":722,"checked":722,
     }
-    def walk(value):
-        if isinstance(value,dict):
-            for key,cell in value.items():
-                walk(cell)
-        elif isinstance(value,str):
-            if not re.fullmatch(r"[A-Za-z0-9_]{1,100}",value):
-                raise EvidenceSyncError("Relatório inclui texto não autorizado.")
-        elif value is None or type(value) in (int,bool):
-            return
-        else:
-            raise EvidenceSyncError("Campo forense não permitido.")
+    text_fields={"state","resourceSelection","distributionEncoding",
+                 "resourceMethod"}
+    boolean_fields={"coherent","physicalPaddingVerified",
+                    "affineLengthException","inGameIdentityVerified",
+                    "executionConfirmed","labelsVerified",
+                    "opponentMappingVerified","ambiguous",
+                    "rankGroupLabelsVerified","mayActivateDrops",
+                    "mayActivate"}
     for group, allowed in fields.items():
         obj=report.get(group)
         if not isinstance(obj,dict) or set(obj)-allowed:
             raise EvidenceSyncError("Campo forense fora da lista de permissões.")
-        if group=="disc" and obj.get("sectorBytes") not in (2048,2336,2352,2448):
+        if group=="disc" and obj.get("sectorBytes") not in (
+                2048,2336,2352,2448):
             raise EvidenceSyncError("Geometria de disco inválida.")
         for name,value in obj.items():
-            if name in maximums and value is not None:
+            if name=="sectorBytes":
+                if type(value) is not int:
+                    raise EvidenceSyncError("Geometria não inteira.")
+            elif name in maximums:
+                if value is None and name in ("base","opponentStep","matrixStride"):
+                    continue
                 if type(value) is not int or not 0<=value<=maximums[name]:
                     raise EvidenceSyncError("Contador forense inválido.")
+            elif name in text_fields:
+                if value is None and name in ("distributionEncoding",
+                                             "resourceMethod"):
+                    continue
+                if type(value) is not str or not re.fullmatch(
+                        r"[A-Za-z0-9_]{1,80}",value):
+                    raise EvidenceSyncError("Relatório inclui texto não autorizado.")
+            elif name in boolean_fields:
+                if type(value) is not bool:
+                    raise EvidenceSyncError("Flag forense inválida.")
             else:
-                walk(value)
+                raise EvidenceSyncError("Campo interno não autorizado.")
     for group,name in (
         ("opponents","inGameIdentityVerified"),("rank","executionConfirmed"),
         ("drops","labelsVerified"),("drops","opponentMappingVerified"),
