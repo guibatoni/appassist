@@ -501,7 +501,8 @@ def process(path,output,with_art=False,digest=None,progress=None):
     # Não reaproveitar CSVs desatualizados de uma tentativa anterior.
     for previous in ('cartas.csv','oponentes.csv','drops_por_oponente.csv',
                      'decks.csv','validacao_pesos.csv',
-                     'catalogo_candidato_nao_verificado.json'):
+                     'catalogo_candidato_nao_verificado.json',
+                     'oponentes_candidatos_nao_verificados.json'):
         (dest/previous).unlink(missing_ok=True)
     disc=None
     try:
