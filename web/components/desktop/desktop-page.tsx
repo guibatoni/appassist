@@ -404,7 +404,8 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
 }
 
 function WindowEvidenceForm({mod}:{mod:LocalMod}) {
-  const [slot,setSlot]=useState("1")
+  const opponentChoices=mod.structuralOpponentChoices??[]
+  const [slot,setSlot]=useState("")
   const [rank,setRank]=useState("")
   const [reward,setReward]=useState("")
   const [played,setPlayed]=useState("")
@@ -435,7 +436,8 @@ function WindowEvidenceForm({mod}:{mod:LocalMod}) {
     const tokens=played.trim()?played.trim().split(/[\s,;]+/):[]
     const cards=tokens.map(Number)
     const upper=rank.trim().toUpperCase()
-    if(!Number.isInteger(id)||id<1||id>39||!Number.isInteger(card)||
+    if(!Number.isInteger(id)||!opponentChoices.some(o=>o.slot===id)||
+       !Number.isInteger(card)||
        card<1||card>722||!/^[A-Z0-9_-]{1,24}$/.test(upper)||
        cards.length>24||cards.some(v=>!Number.isInteger(v)||v<1||v>722)||
        new Set(cards).size!==cards.length){
@@ -464,15 +466,20 @@ function WindowEvidenceForm({mod}:{mod:LocalMod}) {
       Registrar evidência de duelo (experimental)
     </summary>
     <p className="mt-2 text-xs text-gold">
-      Informe a posição do adversário na lista estrutural de 39 nomes, ainda não
-      validada como ID interno do jogo. Registre apenas duelos que observou.
-      Essas informações nunca desbloqueiam drops nem RANK.
+      Selecione o adversário pelo nome recuperado da ISO. A posição estrutural
+      será preenchida automaticamente, mas não é um ID confirmado pelo jogo.
+      Registre somente duelos observados: esses dados não liberam drops nem RANK.
     </p>
     <form onSubmit={e=>void submit(e)} className="mt-3 grid gap-2 md:grid-cols-2">
       <label className="flex flex-col gap-1 text-xs text-muted">
-        Posição estrutural (1–39)
-        <input className="field rounded-md px-3 py-2 text-sm" type="number" min={1} max={39}
-          value={slot} onChange={e=>setSlot(e.target.value)} required/>
+        Adversário extraído da ISO
+        <select className="field rounded-md px-3 py-2 text-sm" value={slot}
+          onChange={e=>setSlot(e.target.value)} required disabled={opponentChoices.length!==39}>
+          <option value="">Selecione o nome do adversário...</option>
+          {opponentChoices.map(o=><option key={o.slot} value={o.slot}>
+            {o.name} (posição estrutural {o.slot})
+          </option>)}
+        </select>
       </label>
       <label className="flex flex-col gap-1 text-xs text-muted">
         RANK exibido no fim do duelo
@@ -492,13 +499,17 @@ function WindowEvidenceForm({mod}:{mod:LocalMod}) {
           onChange={e=>setPlayed(e.target.value)}/>
       </label>
       <div className="md:col-span-2 flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={busy||!desktopApi()} className="btn-ghost disabled:opacity-40">
+        <button type="submit" disabled={busy||!desktopApi()||!slot||opponentChoices.length!==39} className="btn-ghost disabled:opacity-40">
           {busy?"Comparando...":"Salvar e comparar janelas"}
         </button>
         <span className="text-xs text-muted">
           {summary?.observationCount??0} observação(ões) locais · {label[status]??"Análise provisória disponível."}
         </span>
       </div>
+      {opponentChoices.length!==39&&<p className="md:col-span-2 text-xs text-gold">
+        Os 39 nomes ainda não estão disponíveis neste perfil. Clique em Atualizar dados
+        antes de registrar o duelo. Não atribua posições manualmente.
+      </p>}
       {error&&<p role="alert" className="md:col-span-2 text-xs text-danger">{error}</p>}
       {(summary?.analysis?.windowCount??0)>0&&<p className="md:col-span-2 text-xs text-muted">
         Janelas: {summary?.analysis?.windowCount} · Compatíveis sob hipótese:{" "}
