@@ -88,6 +88,64 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(snapshot["cards"][1]["effectSource"],"ROM-offset-auditado")
         self.assertNotIn("source_path",str(snapshot))
 
+    def test_opt_in_live_diagnostics_sampling_and_sanitized_export(self):
+        import json
+        from time import monotonic
+        protected=ProtectedDesktopApi(self.bridge,"x"*64)
+        with self.assertRaises(PermissionError):
+            protected.start_live_diagnostics("wrong")
+        with self.assertRaises(PermissionError):
+            protected.export_live_diagnostics("wrong")
+        self.assertFalse(protected.get_live_diagnostics_status("x"*64)["running"])
+        with patch("dueltrace_web_bridge.threading.Thread") as mock_thread:
+            started=protected.start_live_diagnostics("x"*64)
+            self.assertTrue(started["running"])
+            mock_thread.return_value.start.assert_called_once()
+            self.assertFalse(started["networkTransmission"])
+            with patch.object(self.bridge,"get_hand",return_value={
+                        "ready":True,"hand":[
+                            {"id":1,"name":"PRIVATE_ROM_NAME"},
+                            {"id":2},{"id":3},{"id":4},{"id":5}],
+                        "status":"PRIVATE_PATH",
+                    }), patch.object(self.bridge,"get_live_opponent",return_value={
+                        "ready":False,"status":"ram_mapping_not_validated",
+                        "memoryRegionsExamined":927,
+                        "validationBreakdown":{
+                            "implausibleDrawHistory":27,
+                            "rawBytes":"SECRET_RAM_DATA",
+                        },
+                        "privateHostAddress":"0xDEADBEEF",
+                    }):
+                self.bridge._rank_last_snapshot={
+                    "rom_sha256":self.sha,"monotonic_at":monotonic(),
+                    "score":86,"category":"A-POW",
+                    "rawData":"PRIVATE_RANK_DUMP",
+                }
+                self.assertTrue(self.bridge._collect_live_diagnostics_once(
+                    self.bridge._live_diagnostics))
+                self.assertTrue(self.bridge._collect_live_diagnostics_once(
+                    self.bridge._live_diagnostics))
+            status=protected.get_live_diagnostics_status("x"*64)
+            self.assertEqual(status["sampleCount"],2)
+            self.assertEqual(status["changeCount"],1)
+            exported=protected.export_live_diagnostics("x"*64)
+            data=json.loads(exported)
+            self.assertEqual(data["events"][0]["data"]["hand"]["ids"],[1,2,3,4,5])
+            self.assertEqual(data["events"][0]["data"]["rank"]["scoreCandidate"],86)
+            self.assertEqual(
+                data["events"][0]["data"]["opponent"]["rejectionCounts"]
+                ["implausibleDrawHistory"],27)
+            for forbidden in (
+                "PRIVATE_ROM_NAME","PRIVATE_PATH","PRIVATE_RANK_DUMP",
+                "SECRET_RAM_DATA","0xDEADBEEF","Local Test.iso"):
+                self.assertNotIn(forbidden,exported)
+            self.assertFalse(data["networkTransmission"])
+            self.assertFalse(data["mayActivateDrops"])
+            self.assertFalse(data["mayActivateRank"])
+            self.assertFalse(protected.stop_live_diagnostics("x"*64)["running"])
+            self.assertFalse(
+                self.bridge._collect_live_diagnostics_once(self.bridge._live_diagnostics))
+
     def test_live_opponent_probe_requires_token_and_never_promotes(self):
         native={"ready":True,"status":"runtime_id_candidate",
                 "runtimeOpponentId":11,
