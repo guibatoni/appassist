@@ -96,7 +96,9 @@ def _candidate_bases(kernel, handle) -> list[int]:
         wintypes.HANDLE, ctypes.c_void_p,
         ctypes.POINTER(MEMORY_BASIC_INFORMATION), ctypes.c_size_t]
     kernel.VirtualQueryEx.restype = ctypes.c_size_t
-    addresses = []
+    # Attempt the known ePSXe hand-mapping-derived base first, but it
+    # remains only a candidate and must pass all independent checks.
+    addresses = [LEGACY_HOST_BASE_HINT]
     address = 0x10000
     queries = 0
     while address < 0x80000000 and queries < MAX_REGIONS:
@@ -114,7 +116,7 @@ def _candidate_bases(kernel, handle) -> list[int]:
         flags = int(mbi.Protect)
         if (mbi.State == MEM_COMMIT and size >= RAM_LENGTH
                 and flags & (PAGE_GUARD | PAGE_NOACCESS) == 0
-                and flags & 0xFF in READABLE):
+                and (flags & 0xFF) in READABLE):
             # Search the first 16 aligned 64KB positions inside a large
             # mapping. No scan of arbitrary process bytes is returned.
             for delta in range(0, min(size-RAM_LENGTH+1, 0x100000), 0x10000):
@@ -124,8 +126,6 @@ def _candidate_bases(kernel, handle) -> list[int]:
                 if len(addresses) >= MAX_CANDIDATE_BASES:
                     return addresses
         address = next_address
-    if LEGACY_HOST_BASE_HINT not in addresses:
-        addresses.append(LEGACY_HOST_BASE_HINT)
     return addresses[:MAX_CANDIDATE_BASES]
 
 
