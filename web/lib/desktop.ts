@@ -40,6 +40,13 @@ export type ModScanDiagnostic = {
     mayActivate: false
     windows: Array<Record<string, unknown>>
   }
+  opponentLayoutSearch?: {
+    schema: number
+    validated: false
+    inGameVerified: false
+    mayPromote: false
+    probes: Record<string, {candidateCount: number; state: string; validated: false}>
+  }
   state: string
   status: string
   issues: string[]
