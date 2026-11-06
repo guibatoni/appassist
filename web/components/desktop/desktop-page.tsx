@@ -11,7 +11,7 @@ import {DropsPage} from "./drops-page"
 import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -977,6 +977,7 @@ function Mods({mods,sha,onRefresh,configured}:{
   const [expandedSha,setExpandedSha]=useState<string|null>(null)
   const [busy,setBusy]=useState(false)
   const [message,setMessage]=useState<string|null>(null)
+  const [comparison,setComparison]=useState<IsoLayoutComparison|null>(null)
 
   // A análise detalhada permanece disponível no motor, não nesta tela pública.
   const run=async(action:()=>Promise<unknown>,success:string)=>{
@@ -999,6 +1000,20 @@ function Mods({mods,sha,onRefresh,configured}:{
       setMessage(err instanceof Error ? err.message :
         "Não foi possível copiar o diagnóstico do mod.")
     } finally {setBusy(false)}
+  }
+  const compareIso=async(mod:LocalMod)=>{
+    const api=desktopApi()
+    if(!api||busy)return
+    setBusy(true);setMessage(null)
+    try{
+      const result=await api.compare_mod_layouts(mod.sha256)
+      setComparison(result)
+      setMessage(result.comparedProfiles>0
+        ?"Comparação estrutural concluída. Dados continuam provisórios."
+        :"Nenhuma outra ISO com relatório comparável. Atualize dados dos demais mods.")
+    }catch(err){
+      setMessage(err instanceof Error?err.message:"Não foi possível comparar as ISOs.")
+    }finally{setBusy(false)}
   }
   const rescan=async(mod:LocalMod)=>{
     const api=desktopApi()
@@ -1036,6 +1051,30 @@ function Mods({mods,sha,onRefresh,configured}:{
           <RefreshCcw className="size-4"/> Atualizar lista</button>
       </div>
       {message&&<p className="mt-3 text-sm text-gold" role="status">{message}</p>}
+      {comparison&&<div className="mt-3 rounded-lg border border-line/70 bg-background/50 p-3">
+        <p className="text-sm font-semibold text-primary">
+          Comparação: referência {comparison.positiveBaselineFingerprint}
+        </p>
+        <p className="mt-1 text-xs text-muted">
+          {comparison.comparedProfiles} mod(s) comparados; {comparison.skippedProfiles} sem análise disponível.
+          As diferenças não comprovam IDs, RANK, drops nem fusões.
+        </p>
+        <div className="mt-2 space-y-1">
+          {comparison.compared.map((entry,i)=><p key={entry.romFingerprint??String(i)}
+            className="text-xs text-muted">
+            <span className="font-semibold text-primary">{mods.find(m=>m.sha256.startsWith(entry.romFingerprint??"-"))?.name??entry.romFingerprint}</span>:
+            {" "}{entry.differences.length} diferenças
+            {entry.differences.length>0&&" ("+Array.from(new Set(entry.differences.map(d=>d.stage))).join(", ")+")"}.
+            Validação em jogo ainda necessária.
+          </p>)}
+        </div>
+        <button type="button" className="btn-ghost mt-3"
+          onClick={()=>void navigator.clipboard.writeText(JSON.stringify(comparison,null,2))
+            .then(()=>setMessage("Resumo estrutural copiado. Cole-o nesta conversa; não inclui ISO nem receitas."))
+            .catch(()=>setMessage("Não foi possível copiar automaticamente. Confira a permissão da área de transferência."))}>
+          <ClipboardCopy className="size-4"/> Copiar resumo estrutural
+        </button>
+      </div>}
       <div className="mt-4 space-y-2">
         {mods.map(mod=>{
           const active=sha===mod.sha256
@@ -1135,6 +1174,10 @@ function Mods({mods,sha,onRefresh,configured}:{
                   disabled={busy||!desktopApi()} onClick={()=>void rescan(mod)}>
                   <RefreshCcw className="size-4"/> Atualizar dados
                 </button>
+                {mods.length>1&&<button type="button" className="btn-ghost flex-1 disabled:opacity-40"
+                  disabled={busy||!desktopApi()} onClick={()=>void compareIso(mod)}>
+                  <Layers className="size-4"/> Comparar ISOs
+                </button>}
               </div>
               {(mod.modFamilyEvidence?.possible39Windows??0)>1&&<WindowEvidenceForm mod={mod}/>}
               {active&&<LiveOpponentPanel/>}

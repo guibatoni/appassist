@@ -69,6 +69,89 @@ class IntelligenceTests(unittest.TestCase):
             self.assertTrue(ollama_status()["available"])
             self.assertEqual(ollama_status("other:latest")["state"], "modelo_ausente")
 
+    def test_verified_iso_auto_probes_seven_fusions_once_per_file_version(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home=Path(temp)
+            image=home/"custom.iso"
+            image.write_bytes(b"safe synthetic data")
+            stat=image.stat()
+            sha="d"*64
+            profile_path=home/"profiles"/"custom"/"profile.json"
+            atomic_json(profile_path,{
+                "rom_sha256":sha,
+                "scan_result_dir":str(home/"analises"/"custom"),
+                "cards":[{"id":i,"name":str(i)} for i in range(1,723)],
+                "verified":{"cartas":"verificado"},
+                "supported_features":{"cards":True},
+            })
+            catalog=ModCatalog(home)
+            atomic_json(catalog.registry_file,{"schema":1,"entries":[{
+                "source_path":str(image.resolve()),
+                "file_name":"custom.iso","sha256":sha,
+                "profile_path":str(profile_path),
+                "size":stat.st_size,"mtime_ns":stat.st_mtime_ns,
+                "level":"parcial_revisar",
+            }]})
+            fake={"valid_banks":7,"matching_banks":7,
+                  "divergent_banks":False,"bank_conflicts":0,
+                  "candidates":[],"banks":[]}
+            with (patch("dueltrace_intelligence.investigate",return_value={
+                    "file":"custom.iso","hash_rom":sha,"features":{},
+                    "candidates":{},"uncertainties":[],"evidence":[]}),
+                  patch("dueltrace_intelligence.audit_effect_sources",
+                        return_value={"status":"sem_prova","candidate_files":[]}),
+                  patch("extrator_fusoes.analyze_fusion_banks",
+                        return_value=fake) as probe,
+                  patch("dueltrace_intelligence.import_structural_fusions",
+                        return_value={"status":"importadas","count":80}) as importer):
+                engine=MultiModIntelligence(catalog)
+                one=engine.inspect(image,use_ollama=False)
+                two=engine.inspect(image,use_ollama=False)
+            self.assertEqual(one["fusions"]["status"],"importadas")
+            self.assertEqual(two["state"],"cache")
+            probe.assert_called_once()
+            self.assertEqual(importer.call_count,2)
+            saved=home/"investigacoes"/(sha+".fusoes.json")
+            self.assertTrue(saved.exists())
+            self.assertEqual(json.loads(saved.read_text())["rom_sha256"],sha)
+            self.assertTrue((home/"investigacoes"/(sha+".fusoes-probe-status.json")).exists())
+
+    def test_unrecognized_fusion_format_is_negative_cached_not_promoted(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home=Path(temp)
+            image=home/"unsupported.iso"
+            image.write_bytes(b"synthetic")
+            stat=image.stat()
+            sha="c"*64
+            profile_path=home/"profiles"/"unknown"/"profile.json"
+            atomic_json(profile_path,{
+                "rom_sha256":sha,
+                "cards":[{"id":i,"name":str(i)} for i in range(1,723)],
+                "verified":{"cartas":"verificado"},
+                "supported_features":{"cards":True,"fusions":False},
+            })
+            catalog=ModCatalog(home)
+            atomic_json(catalog.registry_file,{"schema":1,"entries":[{
+                "source_path":str(image.resolve()),
+                "file_name":"unsupported.iso","sha256":sha,
+                "profile_path":str(profile_path),
+                "size":stat.st_size,"mtime_ns":stat.st_mtime_ns,
+            }]})
+            with (patch("dueltrace_intelligence.investigate",return_value={
+                    "file":"unsupported.iso","hash_rom":sha,"features":{},
+                    "candidates":{},"uncertainties":[],"evidence":[]}),
+                  patch("dueltrace_intelligence.audit_effect_sources",
+                        return_value={"status":"sem_prova","candidate_files":[]}),
+                  patch("extrator_fusoes.analyze_fusion_banks",
+                        side_effect=ValueError("formato não identificado")) as probe):
+                engine=MultiModIntelligence(catalog)
+                first=engine.inspect(image,use_ollama=False)
+                second=engine.inspect(image,use_ollama=False)
+            probe.assert_called_once()
+            self.assertEqual(first["fusions"]["count"],0)
+            self.assertEqual(second["fusions"]["count"],0)
+            self.assertFalse((home/"investigacoes"/(sha+".fusoes.json")).exists())
+
     def test_cache_report_bounded_and_ai_disabled_is_safe(self):
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp)

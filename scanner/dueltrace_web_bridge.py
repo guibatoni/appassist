@@ -1803,6 +1803,74 @@ class DueltraceWebBridge:
         self._rank_experimental_sha=None
         return self.get_state()
 
+    def compare_mod_layouts(self, baseline_sha):
+        """Compare already scanned ISOs, never reading ROM bytes or paths out."""
+        from dueltrace_iso_differential import (
+            compare_structures, _load, MAX_COMPARISONS)
+        if (type(baseline_sha) is not str or
+                not re.fullmatch(r"[a-f0-9]{64}", baseline_sha)):
+            raise ValueError("SHA da ISO de referência inválido.")
+        with self._lock:
+            entries = self.catalog.list()
+            baseline_entry = next(
+                (entry for entry in entries
+                 if entry.get("sha256") == baseline_sha), None)
+            if baseline_entry is None:
+                raise ValueError("ISO de referência não cadastrada.")
+            root = (self.catalog.home / "analises").resolve()
+
+            def local_report(entry):
+                profile = self.catalog.profile_for(entry)
+                if not isinstance(profile, dict):
+                    raise ValueError("Perfil ausente")
+                folder = profile.get("scan_result_dir")
+                if type(folder) is not str or not folder:
+                    raise ValueError("Relatório ausente")
+                resolved = Path(folder).resolve()
+                if not resolved.is_relative_to(root):
+                    raise ValueError("Caminho de relatório não autorizado")
+                report = _load(resolved / "relatorio.json")
+                if report.get("sha256") != entry.get("sha256"):
+                    raise ValueError("SHA do relatório não corresponde à ISO")
+                # Fusion evidence comes from a separate local extraction
+                # pipeline, not scanner_multiiso.process(). Export only
+                # counts and source kind; never actual recipes/card names.
+                recipes = profile.get("fusion_recipes")
+                recipes = recipes if isinstance(recipes, list) else []
+                rows = [r for r in recipes if isinstance(r, dict)]
+                review = profile.get("fusion_review")
+                review = review if isinstance(review, dict) else {}
+                report["fusion_profile_evidence"] = {
+                    "inspected": True,
+                    "count": min(len(rows), 100000),
+                    "sevenConsistentBanks": (
+                        review.get("matching_banks") == 7
+                        and review.get("divergent_banks") is False
+                        and review.get("bank_conflicts") == 0),
+                    "manuallyObserved": any(
+                        r.get("validation") == "observada_manualmente_no_jogo"
+                        for r in rows),
+                }
+                return report
+
+            baseline = local_report(baseline_entry)
+            others = []
+            skipped = 0
+            for entry in entries:
+                if entry.get("sha256") == baseline_sha:
+                    continue
+                if len(others) >= MAX_COMPARISONS:
+                    skipped += 1
+                    continue
+                try:
+                    others.append(local_report(entry))
+                except (OSError, ValueError, TypeError):
+                    skipped += 1
+            result = compare_structures(baseline, others)
+            result["comparedProfiles"] = len(others)
+            result["skippedProfiles"] = skipped
+            return result
+
     def get_mod_scan_diagnostic(self, sha, with_ollama=False):
         """Diagnóstico legível de uma ISO sem transmitir arquivos completos.
 

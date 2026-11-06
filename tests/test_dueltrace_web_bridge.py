@@ -88,6 +88,51 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(snapshot["cards"][1]["effectSource"],"ROM-offset-auditado")
         self.assertNotIn("source_path",str(snapshot))
 
+    def test_compare_registered_isos_is_local_authorized_and_read_only(self):
+        protected = ProtectedDesktopApi(self.bridge, "x"*64)
+        with self.assertRaises(PermissionError):
+            protected.compare_mod_layouts("bad-token", self.sha)
+        import json
+        self.analysis.joinpath("relatorio.json").write_text(json.dumps({
+            "sha256": self.sha, "cartas": 722, "oponentes": 39,
+            "tabelas_drops": 117, "opponent_identification": "verificado",
+            "tipo_setor": 2352, "arquivo": "PRIVATE_REFERENCE.iso",
+        }), encoding="utf-8")
+        other_sha = "b"*64
+        other_analysis = self.home/"analises"/"gog"
+        other_analysis.mkdir(parents=True)
+        other_profile_path = self.home/"profiles"/other_sha[:16]/"profile.json"
+        other_profile = {"rom_sha256":other_sha,
+                         "scan_result_dir":str(other_analysis),
+                         "supported_features":{}, "cards":[]}
+        atomic_json(other_profile_path,other_profile)
+        atomic_json(other_analysis/"relatorio.json",{
+            "sha256":other_sha,"cartas":722,"oponentes":39,
+            "tabelas_drops":117,"tipo_setor":2352,
+            "opponent_identification":"extraidos_estruturalmente",
+            "independent_opponent_discovery":{
+                "inlineFdEvidence":{"unique39RecordRun":True}},
+            "mod_family_evidence":{"clusters":[{
+                "consecutiveBlockCount":40,"possible39BlockWindows":2}]},
+            "arquivo":"PRIVATE_GOG_MOD.iso",
+        })
+        atomic_json(self.catalog.registry_file,{"schema":1,"entries":[
+            self.entry,{"sha256":other_sha,
+                        "profile_path":str(other_profile_path),"approved":False,
+                        "features":{},"level":"parcial_revisar"}]})
+        result=protected.compare_mod_layouts("x"*64,self.sha)
+        self.assertEqual(result["comparedProfiles"],1)
+        self.assertEqual(result["skippedProfiles"],0)
+        self.assertEqual(result["compared"][0]["romFingerprint"],"b"*12)
+        difference_stages={item["stage"] for item in result["compared"][0]["differences"]}
+        self.assertIn("opponents",difference_stages)
+        self.assertIn("resources",difference_stages)
+        serialized=json.dumps(result)
+        self.assertNotIn("PRIVATE_",serialized)
+        self.assertNotIn(str(self.home),serialized)
+        self.assertFalse(result["automaticallyActivatesFeatures"])
+        self.assertFalse(result["compared"][0]["inGameValidated"])
+
     def test_opt_in_live_diagnostics_sampling_and_sanitized_export(self):
         import json
         from time import monotonic
