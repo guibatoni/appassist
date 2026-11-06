@@ -2,7 +2,7 @@
 
 ## Escopo entregue
 
-O DUELTRACE agora tem um painel **Live Diagnostics** na Central de Duelo. A coleta é **opt-in**: o jogador clica em **Iniciar diagnóstico**, o motor monitora a sessão local com amostras aproximadamente a cada 3 segundos e o botão **Parar diagnóstico** interrompe a coleta. O painel exibe quantidade de amostras e mudanças relevantes e permite **Copiar relatório para o ChatGPT**.
+O DUELTRACE agora tem um painel **Live Diagnostics** na Biblioteca de Mods. A coleta é **opt-in**: o jogador clica em **Iniciar diagnóstico**, o motor monitora a sessão local com amostras aproximadamente a cada 3 segundos e o botão **Parar diagnóstico** interrompe a coleta. O painel exibe quantidade de amostras e mudanças relevantes e permite **Copiar relatório para o ChatGPT**.
 
 O gravador monitora o leitor de mão já funcional, os estados da sonda de ID de adversário e o resultado de RANK que a interface principal já observou. Não cria calibrações de RANK novas, não força win/deck-out, não define IDs de adversários e não habilita drops/fusões.
 
@@ -17,7 +17,7 @@ O gravador monitora o leitor de mão já funcional, os estados da sonda de ID de
 ## Teste prático
 
 1. Iniciar GOG MOD 2.2 com ePSXe e manter DUELTRACE aberto.
-2. Abrir **Início → DUELTRACE Live Diagnostics** e clicar em **Iniciar diagnóstico**.
+2. Abrir **Biblioteca de Mods → DUELTRACE Live Diagnostics** e clicar em **Iniciar diagnóstico**.
 3. Jogar normalmente. Não precisa informar cartas, RANK nem recompensa.
 4. Conferir que os contadores **Amostras / Mudanças relevantes** crescem. Em seguida, clicar em **Parar diagnóstico**.
 5. Clicar em **Copiar relatório para o ChatGPT** e colar o JSON nesta conversa para interpretar os estados de RAM e as mudanças.
