@@ -68,7 +68,10 @@ def inspect_forensic_windows(
                 (row["firstInvalidOffset"] for row in rows
                  if type(row.get("firstInvalidOffset")) is int), default=None),
             "pointerCountDistinct": len(set(positions)),
+            "pointerAliasCount": OPPONENTS - len(set(positions)),
             "pointerNonIncreasingPairs": sum(delta <= 0 for delta in deltas),
+            "physicalOrderRemapped": len(set(positions)) == OPPONENTS
+                and any(delta <= 0 for delta in deltas),
             "pointerSpanMin": min(deltas) if deltas else None,
             "pointerSpanMax": max(deltas) if deltas else None,
             "recordBoundaryKnown": sum(row.get("boundaryKnown") is True
@@ -86,10 +89,18 @@ def inspect_forensic_windows(
     return out
 
 REJECTION_REASONS = {
+    "ponteiros_repetidos":
+        "A tabela contém endereços repetidos; os possíveis aliases ficam em investigação.",
+    "ponteiros_fora_do_arquivo":
+        "Um ou mais ponteiros apontam para fora do executável.",
+    "ponteiro_intercalado":
+        "Outro registro começa entre os nomes candidatos; as fronteiras precisam de validação.",
+    "marcador_alem_da_fronteira":
+        "O possível terminador ultrapassa o início físico de outro registro.",
     "dados_apos_marcador":
         "Há dados não nulos após o possível marcador antes do próximo registro.",
     "ponteiros_repetidos_ou_fora_de_ordem":
-        "Os ponteiros são repetidos ou não seguem ordem física crescente.",
+        "Diagnóstico legado: distinguir aliases de ponteiros fora de ordem.",
     "fronteira_fisica_fora_do_limite":
         "O espaço entre os registros excede o limite conservador do parser.",
     "marcadores_inconsistentes":
