@@ -189,6 +189,18 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.export_live_diagnostics()
 
+    def configure_private_evidence_sync(self, credential, repository, token, consent):
+        self._authorize(credential)
+        return self._bridge.configure_private_evidence_sync(repository, token, consent)
+
+    def disable_private_evidence_sync(self, credential):
+        self._authorize(credential)
+        return self._bridge.disable_private_evidence_sync()
+
+    def get_private_evidence_sync_status(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_private_evidence_sync_status()
+
     def get_live_opponent(self, credential):
         self._authorize(credential)
         return self._bridge.get_live_opponent()
