@@ -1237,6 +1237,9 @@ class DueltraceWebBridge:
             profile = self.catalog.profile_for(entry) if entry else None
             if not profile:
                 raise ValueError("Perfil do mod não localizado")
+            choices = self._structural_opponent_choices(profile)
+            if not choices or opponent_slot not in {c["slot"] for c in choices}:
+                raise ValueError("Selecione um dos 39 nomes extraídos desta ISO")
             source = Path(entry.get("source_path") or "").resolve(strict=True)
             if source.suffix.lower() not in (".iso", ".bin") or not source.is_file():
                 raise ValueError("Imagem de jogo indisponível")
