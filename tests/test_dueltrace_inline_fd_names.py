@@ -42,7 +42,8 @@ def synthetic_fd_names(*, broken_index=None, second_run=False):
             position = SLUS_TEXT_BASE + pointer
             suffix_value = 0x3200 + len(glyph_bytes)
             raw = glyph_bytes + b"\xFD" + struct.pack("<H", suffix_value) + b"\xFF"
-            if broken_index == ordinal and base_index == FIRST:
+            if (broken_index == ordinal or
+                    isinstance(broken_index, tuple) and ordinal in broken_index) and base_index == FIRST:
                 raw = glyph_bytes + b"\xFD" + struct.pack("<H", suffix_value + 1) + b"\xFF"
             exe[position:position + len(raw)] = raw
             struct.pack_into("<H", exe, SLUS_PTR_BASE + 2 * (base_index + ordinal),
@@ -81,8 +82,22 @@ class InlineFdTests(unittest.TestCase):
         self.assertNotIn("TEST", str(compact))
         self.assertEqual(compact["inlineFdEvidence"]["candidateCount"], 1)
 
-    def test_mismatch_in_one_field_does_not_publish_any_opponents(self):
+    def test_single_plus_one_field_anomaly_keeps_all_39_names_structural(self):
         exe = synthetic_fd_names(broken_index=12)
+        direct = probe_inline_fd_names(
+            exe, pointer_base=SLUS_PTR_BASE,
+            text_base=SLUS_TEXT_BASE, glyph_base=SLUS_GLYPHS)
+        self.assertEqual(direct["candidateCount"], 1)
+        self.assertEqual(direct["candidates"][0]["anomalousOrdinals"], [13])
+        self.assertTrue(direct["selected"]["lengthFieldAnomaly"])
+        result = discover(exe)
+        self.assertEqual(result["candidateOpponentCount"], 39)
+        self.assertFalse(result["inGameVerified"])
+        self.assertFalse(result["rankVerified"])
+        self.assertFalse(result["dropsVerified"])
+
+    def test_two_field_anomalies_refuse_publication(self):
+        exe = synthetic_fd_names(broken_index=(12, 13))
         direct = probe_inline_fd_names(
             exe, pointer_base=SLUS_PTR_BASE,
             text_base=SLUS_TEXT_BASE, glyph_base=SLUS_GLYPHS)

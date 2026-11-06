@@ -185,7 +185,7 @@ class MultiModIntelligence:
                 and len(profile.get("cards",[]))==722
                 and type(entry.get("size")) is int
                 and type(entry.get("mtime_ns")) is int):
-            stamp={"schema":1,"revision":1,"sha256":sha,
+            stamp={"schema":1,"revision":2,"sha256":sha,
                    "size":entry["size"],"mtime_ns":entry["mtime_ns"]}
             cached_probe=load_json(probe_state,{})
             if any(cached_probe.get(k)!=v for k,v in stamp.items()):
@@ -198,11 +198,17 @@ class MultiModIntelligence:
                     if (found.get("valid_banks")==7
                             and found.get("matching_banks")==7
                             and found.get("divergent_banks") is False
-                            and found.get("bank_conflicts")==0):
+                            and type(found.get("bank_conflicts")) is int):
+                        # Keep all seven identical sources in local quarantine,
+                        # including contradictory A+B/B+A results. Never
+                        # activate a fusion catalog with those conflicts.
                         found["rom_sha256"]=sha
                         save_fusion_report(fusion_path,found)
                         atomic_json(probe_state,{
-                            **stamp,"status":"seven_mirrors_consistent"})
+                            **stamp,"status":(
+                                "conflicts_quarantined"
+                                if found["bank_conflicts"] else
+                                "seven_mirrors_consistent")})
                     else:
                         atomic_json(probe_state,{
                             **stamp,"status":"unsupported_or_divergent"})
@@ -211,12 +217,26 @@ class MultiModIntelligence:
                     atomic_json(probe_state,{
                         **stamp,"status":"unsupported_or_unknown"})
         if fusion_path.is_file():
-            try:
-                fusion_status=import_structural_fusions(self.catalog,sha)
-                profile=self.catalog.profile_for(entry) or profile
-            except (OSError, ValueError, RuntimeError) as exc:
-                fusion_status={"status":"revisao_necessaria","count":0,
-                               "reason":str(exc)[:200]}
+            pending=load_json(fusion_path,{})
+            if (pending.get("rom_sha256")==sha
+                    and type(pending.get("bank_conflicts")) is int
+                    and pending["bank_conflicts"]>0):
+                fusion_status={
+                    "status":"conflitos_em_quarentena",
+                    "count":pending.get("candidate_count",0),
+                    "unambiguousPairs":pending.get(
+                        "unique_unordered_pairs_without_conflict",0),
+                    "conflictingPairs":pending.get(
+                        "unordered_pairs_with_conflicting_results",0),
+                    "mayActivate":False,
+                }
+            else:
+                try:
+                    fusion_status=import_structural_fusions(self.catalog,sha)
+                    profile=self.catalog.profile_for(entry) or profile
+                except (OSError, ValueError, RuntimeError) as exc:
+                    fusion_status={"status":"revisao_necessaria","count":0,
+                                   "reason":str(exc)[:200]}
         audit_state={"status":"não_inspecionado","candidate_files":[]}
         if report_state!="cache" or not effects_path.is_file():
             try:

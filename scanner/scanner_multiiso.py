@@ -38,7 +38,7 @@ WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
-SCAN_PARSER_REVISION=29  # famílias MultiMod: força reanálise estrutural e invalida cache antigo
+SCAN_PARSER_REVISION=30  # Rising/Enhance: FD 38+1, WA distante e janelas 40x39
 
 
 def sha256(path:Path, progress=None):
@@ -805,6 +805,16 @@ def process(path,output,with_art=False,digest=None,progress=None):
             else:
                 relocated=discover_relocated_drops(
                     wa,known_base=WA_OPP_BASE,decode_at_layout=decode_at_layout)
+            # The legacy relocation probe is intentionally bounded to
+            # +/-128 KiB. A complete whole-resource 39x4 family can be
+            # farther away: use it only when unique and independently
+            # revalidated through the 117 drop-table decoder.
+            if relocated.get("selected") is None:
+                from dueltrace_full_resource_drop_bridge import use_unique_weight_family
+                whole=use_unique_weight_family(
+                    info.get("mod_family_evidence"),decode_at_layout)
+                if whole is not None:
+                    relocated=whole
             info["drop_layout_discovery"]=relocated
             chosen=relocated.get("selected")
             if chosen is not None:
@@ -814,6 +824,16 @@ def process(path,output,with_art=False,digest=None,progress=None):
                 if drops is not None:
                     info["drop_group_mapping_status"]="grupos_nao_identificados"
                     info["drop_layout_status"]="117_matrizes_estruturais_sem_rank_rotulado"
+        # Even when 117 matrices match at the legacy base, two distinct
+        # 39-opponent windows inside a 40-block run forbid automatic mapping
+        # to game opponent IDs. Preserve the structural tables separately.
+        family=info.get("mod_family_evidence")
+        if (isinstance(family,dict)
+                and family.get("ambiguous39BlockWindows") is True):
+            info["drop_window_ambiguous"]=True
+            if info['sha256']!=X15_SHA:
+                info["drop_group_mapping_status"]="grupos_nao_identificados"
+                info["drop_layout_status"]="janelas_39_ambiguas_sem_mapeamento"
         info['rank_display_model']=(
             'x15_sha_verificado' if info['sha256']==X15_SHA
             else 'padrao_original_presumido')
