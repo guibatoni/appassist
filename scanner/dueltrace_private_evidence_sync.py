@@ -163,7 +163,7 @@ def validate_iso_forensic_report(report: dict) -> dict:
             or type(report.get("fileSizeBytes")) is not int
             or not 2048<=report["fileSizeBytes"]<=2*1024*1024*1024
             or not isinstance(report.get("inspectedAtUTC"),str)
-            or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\+00:00",
+            or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+]00:00",
                                  report["inspectedAtUTC"])):
         raise EvidenceSyncError("Relatório forense sem provas mínimas.")
     fields={
