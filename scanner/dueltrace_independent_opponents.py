@@ -18,6 +18,7 @@ from dueltrace_opponent_boundary_probe import (find_boundary_candidates,
 from dueltrace_opponent_forensics import (
     inspect_forensic_windows, explain_forensic_failure)
 from dueltrace_opponent_control_probe import inspect_control_windows
+from dueltrace_fd_jump_probe import inspect_fd_jump_windows
 
 OPP_COUNT = 39
 MIN_INDEX = 723
@@ -231,6 +232,11 @@ def discover_independent_opponents(
         text_base=text_base, glyph_base=glyph_base)
     output["forensicEvidence"]["controlWindows"] = control["windows"]
     output["forensicEvidence"]["controlScanState"] = control["state"]
+    jumps = inspect_fd_jump_windows(
+        exe, hypotheses=forensic_hypotheses, records=records,
+        pointers=pointers, text_base=text_base)
+    output["forensicEvidence"]["fdJumpWindows"] = jumps["windows"]
+    output["forensicEvidence"]["fdJumpScanState"] = jumps["state"]
     if len(isolated) + len(boundary_candidates) == 1:
         if isolated:
             row, opponents = isolated[0]
