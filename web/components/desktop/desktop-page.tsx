@@ -119,108 +119,6 @@ function RankPanel({sha}:{sha:string|null}) {
   </section>
 }
 
-function LiveDiagnosticsPanel({sha}:{sha:string|null}) {
-  const [status,setStatus]=useState<LiveDiagnosticsStatus|null>(null)
-  const [busy,setBusy]=useState(false)
-  const [error,setError]=useState<string|null>(null)
-  const [report,setReport]=useState("")
-  const [message,setMessage]=useState("")
-
-  useEffect(()=>{
-    let active=true
-    let querying=false
-    const refresh=async()=>{
-      const api=desktopApi()
-      if(!api||querying)return
-      querying=true
-      try{
-        const next=await api.get_live_diagnostics_status()
-        if(active)setStatus(next)
-      }catch{
-        if(active)setStatus(null)
-      }finally{querying=false}
-    }
-    void refresh()
-    const interval=window.setInterval(()=>void refresh(),3000)
-    return ()=>{active=false;window.clearInterval(interval)}
-  },[sha])
-
-  const toggle=async()=>{
-    const api=desktopApi()
-    if(!api||busy||!sha)return
-    setError(null);setBusy(true);setReport("");setMessage("")
-    try {
-      const next=status?.running
-        ? await api.stop_live_diagnostics()
-        : await api.start_live_diagnostics()
-      setStatus(next)
-    }catch(e){
-      setError(e instanceof Error?e.message:"Falha ao controlar o diagnóstico.")
-    }finally{setBusy(false)}
-  }
-
-  const copyReport=async()=>{
-    const api=desktopApi()
-    if(!api||busy)return
-    setBusy(true);setError(null);setMessage("")
-    try{
-      const text=await api.export_live_diagnostics()
-      setReport(text)
-      try{
-        await navigator.clipboard.writeText(text)
-        setMessage("Relatório copiado. Cole-o nesta conversa para análise.")
-      }catch{
-        setMessage("O relatório está no campo abaixo. Selecione e copie para enviar.")
-      }
-    }catch(e){setError(e instanceof Error?e.message:"Falha ao preparar relatório.")}
-    finally{setBusy(false)}
-  }
-
-  return <section className="panel rounded-xl border-primary/40 p-4">
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div>
-        <h2 className="font-display text-lg font-semibold text-primary">
-          DUELTRACE Live Diagnostics
-        </h2>
-        <p className="mt-1 text-xs text-muted">
-          Monitor local e opcional: registra mudanças na mão, falhas da RAM,
-          identificador candidato do adversário e projeções já observadas de RANK.
-        </p>
-      </div>
-      <span className={"text-xs "+(status?.running?"text-success":"text-muted")}>
-        {status?.running?"● Capturando localmente":"○ Desligado"}
-      </span>
-    </div>
-    <div className="mt-3 flex flex-wrap gap-2">
-      <button className={status?.running?"btn-ghost":"btn-gold"}
-        type="button" onClick={()=>void toggle()}
-        disabled={busy||!sha||!desktopApi()}>
-        {status?.running?"Parar diagnóstico":"Iniciar diagnóstico"}
-      </button>
-      <button className="btn-ghost" type="button" onClick={()=>void copyReport()}
-        disabled={busy||!status?.readyToCopy}>
-        Copiar relatório para o ChatGPT
-      </button>
-    </div>
-    <p className="mt-2 text-xs text-muted">
-      Amostras: {status?.sampleCount??0} · Mudanças relevantes: {status?.changeCount??0}
-      {" "}· Última leitura: {status?.lastObservedAtUTC?
-        new Date(status.lastObservedAtUTC).toLocaleTimeString("pt-BR"):"—"}
-    </p>
-    <p className="mt-1 text-xs text-gold">
-      Os dados permanecem somente no PC até você copiar o relatório.
-      Não existe conexão automática com esta conversa, nem envio de ISO,
-      RAM bruta, tokens ou imagens. IDs e RANKs detectados não são confirmações.
-    </p>
-    {error&&<p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
-    {message&&<p role="status" className="mt-2 text-xs text-primary">{message}</p>}
-    {report&&<textarea readOnly value={report}
-      aria-label="Relatório técnico sanitizado do DUELTRACE"
-      className="field mt-2 max-h-44 w-full resize-y p-2 font-mono text-xs"
-      rows={5} onFocus={e=>e.currentTarget.select()}/>}
-  </section>
-}
-
 function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const cardsById=useMemo(()=>new Map(cards.map(c=>[c.id,c])),[cards])
   const [hand,setHand]=useState<HandState|null>(null)
@@ -245,7 +143,6 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const combinations=mode==="pairs"?hand?.pairs??[]:hand?.chains??[]
   const visibleCombinations=showAll?combinations:combinations.slice(0,6)
   return <div className="space-y-4">
-    <LiveDiagnosticsPanel sha={sha}/>
     <div className="flex flex-wrap items-center justify-between gap-2 px-1">
       <div>
         <h1 className="font-display text-2xl font-bold text-gold">Central de Duelo</h1>
@@ -575,6 +472,108 @@ function LiveOpponentPanel() {
       O endereço do ID é conhecido no jogo original, mas o GOG MOD 2.2 pode
       usar outra estrutura. A leitura é somente observacional e não ativa drops.
     </p>
+  </section>
+}
+
+function LiveDiagnosticsPanel({sha}:{sha:string|null}) {
+  const [status,setStatus]=useState<LiveDiagnosticsStatus|null>(null)
+  const [busy,setBusy]=useState(false)
+  const [error,setError]=useState<string|null>(null)
+  const [report,setReport]=useState("")
+  const [message,setMessage]=useState("")
+
+  useEffect(()=>{
+    let active=true
+    let querying=false
+    const refresh=async()=>{
+      const api=desktopApi()
+      if(!api||querying)return
+      querying=true
+      try{
+        const next=await api.get_live_diagnostics_status()
+        if(active)setStatus(next)
+      }catch{
+        if(active)setStatus(null)
+      }finally{querying=false}
+    }
+    void refresh()
+    const interval=window.setInterval(()=>void refresh(),3000)
+    return ()=>{active=false;window.clearInterval(interval)}
+  },[sha])
+
+  const toggle=async()=>{
+    const api=desktopApi()
+    if(!api||busy||!sha)return
+    setError(null);setBusy(true);setReport("");setMessage("")
+    try {
+      const next=status?.running
+        ? await api.stop_live_diagnostics()
+        : await api.start_live_diagnostics()
+      setStatus(next)
+    }catch(e){
+      setError(e instanceof Error?e.message:"Falha ao controlar o diagnóstico.")
+    }finally{setBusy(false)}
+  }
+
+  const copyReport=async()=>{
+    const api=desktopApi()
+    if(!api||busy)return
+    setBusy(true);setError(null);setMessage("")
+    try{
+      const text=await api.export_live_diagnostics()
+      setReport(text)
+      try{
+        await navigator.clipboard.writeText(text)
+        setMessage("Relatório copiado. Cole-o nesta conversa para análise.")
+      }catch{
+        setMessage("O relatório está no campo abaixo. Selecione e copie para enviar.")
+      }
+    }catch(e){setError(e instanceof Error?e.message:"Falha ao preparar relatório.")}
+    finally{setBusy(false)}
+  }
+
+  return <section className="panel rounded-xl border-primary/40 p-4">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <h2 className="font-display text-lg font-semibold text-primary">
+          DUELTRACE Live Diagnostics
+        </h2>
+        <p className="mt-1 text-xs text-muted">
+          Monitor local e opcional: registra mudanças na mão, falhas da RAM,
+          identificador candidato do adversário e projeções já observadas de RANK.
+        </p>
+      </div>
+      <span className={"text-xs "+(status?.running?"text-success":"text-muted")}>
+        {status?.running?"● Capturando localmente":"○ Desligado"}
+      </span>
+    </div>
+    <div className="mt-3 flex flex-wrap gap-2">
+      <button className={status?.running?"btn-ghost":"btn-gold"}
+        type="button" onClick={()=>void toggle()}
+        disabled={busy||!sha||!desktopApi()}>
+        {status?.running?"Parar diagnóstico":"Iniciar diagnóstico"}
+      </button>
+      <button className="btn-ghost" type="button" onClick={()=>void copyReport()}
+        disabled={busy||!status?.readyToCopy}>
+        Copiar relatório para o ChatGPT
+      </button>
+    </div>
+    <p className="mt-2 text-xs text-muted">
+      Amostras: {status?.sampleCount??0} · Mudanças relevantes: {status?.changeCount??0}
+      {" "}· Última leitura: {status?.lastObservedAtUTC?
+        new Date(status.lastObservedAtUTC).toLocaleTimeString("pt-BR"):"—"}
+    </p>
+    <p className="mt-1 text-xs text-gold">
+      Os dados permanecem somente no PC até você copiar o relatório.
+      Não existe conexão automática com esta conversa, nem envio de ISO,
+      RAM bruta, tokens ou imagens. IDs e RANKs detectados não são confirmações.
+    </p>
+    {error&&<p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
+    {message&&<p role="status" className="mt-2 text-xs text-primary">{message}</p>}
+    {report&&<textarea readOnly value={report}
+      aria-label="Relatório técnico sanitizado do DUELTRACE"
+      className="field mt-2 max-h-44 w-full resize-y p-2 font-mono text-xs"
+      rows={5} onFocus={e=>e.currentTarget.select()}/>}
   </section>
 }
 
@@ -1339,7 +1338,10 @@ export function DesktopPage({page}:{page:Page}) {
     {error&&<p className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm text-gold" role="status">{error}</p>}
     {loading&&<p className="text-sm text-muted">Carregando dados locais...</p>}
     {page==="inicio"&&<Home sha={state?.activeSha??null} cards={state?.cards??[]}/>}
-    {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>}
+    {page==="mods"&&<>
+      <LiveDiagnosticsPanel sha={state?.activeSha??null}/>
+      <Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>
+    </>}
     {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="fusoes"&&<Fusions sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="drops"&&<DropsPage sha={state?.activeSha??null} cards={state?.cards??[]}/>}
