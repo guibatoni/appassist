@@ -1833,6 +1833,32 @@ class DueltraceWebBridge:
         atomic_json(target,report)
         return report
 
+    def upload_iso_forensic(self, sha):
+        """A separate explicit user action, not an extension of Live Diagnostics."""
+        if type(sha) is not str or not re.fullmatch(r"[a-f0-9]{64}",sha):
+            raise ValueError("SHA de ISO inválido.")
+        with self._lock:
+            entry=next((e for e in self.catalog.list()
+                        if e.get("sha256")==sha),None)
+            if entry is None:
+                raise ValueError("ISO não cadastrada.")
+            path=Path(entry.get("source_path") or "").resolve(strict=True)
+            if path.suffix.lower() not in (".iso",".bin"):
+                raise ValueError("Fonte não é uma ISO/BIN cadastrada.")
+            from scanner_multiiso import sha256 as actual_sha256
+            if actual_sha256(path)!=sha:
+                raise ValueError("Imagem alterada. Audite novamente antes do envio.")
+            report_file=self.catalog.home/"iso_forensics"/(sha+".json")
+            report=load_json(report_file,{})
+            if (not isinstance(report,dict)
+                    or report.get("romFingerprint")!=sha[:12]
+                    or report.get("exactSha256Matched") is not True
+                    or report.get("fileSizeBytes")!=path.stat().st_size):
+                raise ValueError("Relatório forense ausente ou incompatível.")
+        # Only the sanitized report goes to the explicitly selected private
+        # GitHub destination. Never transmit ROM, paths, art or recipes.
+        return self._private_evidence_sync.upload_forensic(report)
+
     def compare_mod_layouts(self, baseline_sha):
         """Compare already scanned ISOs, never reading ROM bytes or paths out."""
         from dueltrace_iso_differential import (
