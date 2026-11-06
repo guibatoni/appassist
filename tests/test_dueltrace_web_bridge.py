@@ -167,6 +167,14 @@ class BridgeTests(unittest.TestCase):
                 "encoding":"plain",
             }],
         }
+        self.profile["supported_features"]["opponents"]=True
+        self.profile["verified"]["oponentes"]="extraidos_estruturalmente"
+        self.profile["opponents"]=[{"id":i, "name":f"Adversário {i}"}
+                                   for i in range(1,40)]
+        atomic_json(self.profile_path,self.profile)
+        choices=self.bridge.get_state()["mods"][0]["structuralOpponentChoices"]
+        self.assertEqual(len(choices),39)
+        self.assertEqual(choices[0],{"slot":1,"name":"Adversário 1"})
         atomic_json(self.analysis/"relatorio.json",{
             "sha256":self.sha,"scan_parser_revision":29,
             "mod_family_audit":{"resourcesScanned":[{
@@ -211,6 +219,37 @@ class BridgeTests(unittest.TestCase):
         self.assertNotIn("MOD_DATA.BIN",str(result))
         self.assertNotIn("source_path",str(result))
         self.assertFalse((self.home/"rank_observations"/(self.sha+".json")).exists())
+        # Regression for the REAL GOG scan path: scanner revision 29
+        # stores mod_family_evidence on selected WA resources, NOT audit.
+        import hashlib
+        obs_path=self.home/"window_observations"/(self.sha+".json")
+        obs_path.unlink()
+        direct_meta={
+            "sha256":self.sha, "scan_parser_revision":29,
+            "mod_family_evidence":family,
+            "wa_resource_selection":{"source":"G0SD/MOD_DATA.BIN"},
+            "hash_wa":hashlib.sha256(blob).hexdigest(),
+        }
+        atomic_json(self.analysis/"relatorio.json",direct_meta)
+        with patch("scanner_multiiso.sha256",return_value=self.sha),patch(
+                "scanner_multiiso.Disc",Disc):
+            second=protected.record_window_observation(
+                "x"*64,self.sha,1,"B-POW",38,[1])
+            self.assertEqual(second["observationCount"],1)
+            self.assertEqual(second["analysis"]["windowCount"],2)
+            self.assertFalse(second["mayActivateDrops"])
+            obs_path.unlink()
+            direct_meta["hash_wa"]="0"*64
+            atomic_json(self.analysis/"relatorio.json",direct_meta)
+            with self.assertRaisesRegex(ValueError,"Contêiner mudou"):
+                protected.record_window_observation(
+                    "x"*64,self.sha,1,"B-POW",38,[1])
+            self.assertFalse(obs_path.exists())
+        # Never leak names from unrelated mods or arbitrary profile IDs.
+        self.profile["opponents"][0]["id"]=999
+        atomic_json(self.profile_path,self.profile)
+        self.assertEqual(self.bridge.get_state()["mods"][0]["structuralOpponentChoices"],[])
+
 
     def test_drops_from_active_iso_are_paged_and_authenticated(self):
         groups=["TABELA_1_RANK_DESCONHECIDO","TABELA_2_RANK_DESCONHECIDO",
