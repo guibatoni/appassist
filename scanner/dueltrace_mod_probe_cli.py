@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from dueltrace_window_observation import correlate_observed_duels
 
 from dueltrace_mod_family_probe import (
     MAX_BLOB_BYTES, DEFAULT_LAYOUTS, discover_weight_families,
@@ -121,12 +122,52 @@ def atomic_write_json(path: Path, report: dict) -> None:
             os.unlink(tmp)
 
 
+
+def correlate_iso_duels(image: Path, duel_file: Path, audit: dict) -> dict:
+    """Correlate private SHA-bound observations; export summary counters only."""
+    duel_file = Path(duel_file)
+    if (duel_file.is_symlink() or not duel_file.is_file()
+            or duel_file.stat().st_size > 64 * 1024):
+        raise ValueError("Observacoes ausentes, link ou arquivo acima do limite")
+    observations = json.loads(duel_file.read_text(encoding="utf-8"))
+    if (not isinstance(observations, dict)
+            or observations.get("schema") != 1
+            or not isinstance(observations.get("observations"), list)):
+        raise ValueError("Manifesto de observacoes invalido")
+    digest = hashlib.sha256()
+    with Path(image).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
+            digest.update(chunk)
+    if observations.get("rom_sha256") != digest.hexdigest():
+        raise ValueError("Observacoes pertencem a outra ISO")
+    candidates = [row for row in audit.get("resourcesScanned", [])
+                  if isinstance(row, dict)
+                  and isinstance(row.get("weightFamily"), dict)
+                  and row["weightFamily"].get("candidateCount", 0) > 0]
+    if len(candidates) != 1:
+        return {"status": "resource_ambiguous_or_missing",
+                "mayActivateDrops": False, "mayActivateRank": False}
+    from scanner_multiiso import Disc
+    disc = Disc(Path(image))
+    try:
+        name = candidates[0]["resource"]
+        if name not in disc.files:
+            raise ValueError("Recurso nao identificado nesta ISO")
+        return correlate_observed_duels(
+            disc.get(name), candidates[0]["weightFamily"],
+            observations["observations"])
+    finally:
+        disc.close()
+
+
 def main(argv=None) -> int:
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--iso',type=Path,required=True,
                         help='Imagem ISO/BIN local, apenas leitura')
     parser.add_argument('--output',type=Path,
                         help='Salva diagnóstico JSON sanitizado')
+    parser.add_argument('--duel-observations',type=Path,
+                        help='Observacoes independentes em JSON, atreladas ao SHA da ISO')
     parser.add_argument('--opponent-step',type=lambda x:int(x,0),
                         help='Hipótese adicional de passo entre blocos')
     parser.add_argument('--matrix-stride',type=lambda x:int(x,0),
@@ -136,10 +177,16 @@ def main(argv=None) -> int:
         parser.error('Use --opponent-step junto com --matrix-stride')
     if args.output and args.iso.resolve()==args.output.resolve():
         parser.error('A saída não pode substituir a ISO')
+    if (args.output and args.duel_observations and
+            args.output.resolve()==args.duel_observations.resolve()):
+        parser.error('A saida nao pode substituir o arquivo de observacoes')
     layouts=tuple(DEFAULT_LAYOUTS)
     if args.opponent_step is not None:
         layouts=layouts+((args.opponent_step,args.matrix_stride),)
     result=audit_iso(args.iso,layouts=layouts)
+    if args.duel_observations:
+        result['duelWindowCorrelation'] = correlate_iso_duels(
+            args.iso,args.duel_observations,result)
     if args.output:
         atomic_write_json(args.output,result)
         print('Diagnóstico estrutural salvo:',args.output)
