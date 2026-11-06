@@ -52,6 +52,14 @@ class OpponentReportCopyTests(unittest.TestCase):
         self.assertIn('"windows": output',ai)
         self.assertIn('"scope": "hipoteses_nao_validadas"',ai)
         self.assertIn('"mayActivate": False',ai)
+        self.assertIn('diagnosis["opponentLayoutSearch"]=summarize_alternative_layouts(meta)',src)
+
+    def test_report_has_only_aggregated_alternative_layout_counts(self):
+        ui=(ROOT/"web/lib/opponent-report.ts").read_text(encoding="utf8")
+        self.assertIn("alternativeLayoutSearch: searches",ui)
+        self.assertIn("candidateCount: count(source?.candidateCount)",ui)
+        self.assertNotIn("JSON.stringify(diagnosis.opponentLayoutSearch)",ui)
+        self.assertNotIn("source?.pointerBase",ui)
 
 
 if __name__ == "__main__":
