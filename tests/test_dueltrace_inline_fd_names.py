@@ -17,7 +17,8 @@ sys.path.insert(0, str(ROOT / "tests"))
 from scanner_multiiso import (
     SLUS_PTR_BASE, SLUS_TEXT_BASE, SLUS_GLYPHS,
     SCAN_PARSER_REVISION, decode_names)
-from test_dueltrace_card_opponent_discovery import synthetic_executable, CODES
+from test_dueltrace_card_opponent_discovery import CODES
+from test_dueltrace_independent_cards import make_known_layout
 from dueltrace_inline_fd_names import probe_inline_fd_names
 from dueltrace_independent_opponents import (
     discover_independent_opponents, compact_opponent_evidence)
@@ -27,7 +28,7 @@ SHA = "a" * 64
 
 
 def synthetic_fd_names(*, broken_index=None, second_run=False):
-    exe = bytearray(synthetic_executable(shift=0))
+    exe = bytearray(make_known_layout(opponents=False))
     last = SLUS_TEXT_BASE + 0xC000
     if len(exe) < last:
         exe.extend(b"\x00" * (last - len(exe)))
