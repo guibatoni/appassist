@@ -20,6 +20,7 @@ import urllib.error
 import urllib.request
 
 from auto_mods import atomic_json
+from dueltrace_live_diagnostics import OPPONENT_STATES, RANK_STATES, MEMORY_FAILURES
 
 PRIVATE_REPO = re.compile(r"^[A-Za-z0-9_.-]{1,39}/[A-Za-z0-9_.-]{1,100}$")
 FINGERPRINT = re.compile(r"^[a-f0-9]{12}$")
@@ -81,6 +82,16 @@ def validate_sanitized_report(raw: str) -> dict:
             or not isinstance(data.get("romFingerprint"), str)
             or not FINGERPRINT.fullmatch(data["romFingerprint"])):
         raise EvidenceSyncError("Relatório fora da lista de campos permitidos.")
+    if (data.get("note") != (
+            "All RAM IDs, RANK labels and weights are provisional. "
+            "Observations alone do not associate ROM blocks with opponents.")
+            or data.get("verifiedRankGroups") is not False):
+        raise EvidenceSyncError("Condições de segurança do relatório inválidas.")
+    statuses = data.get("opponentStatuses")
+    if (not isinstance(statuses, dict)
+            or any(k not in OPPONENT_STATES or type(v) is not int
+                   or v < 0 or v > 360 for k, v in statuses.items())):
+        raise EvidenceSyncError("Estados do adversário inválidos.")
     events = data.get("events")
     if not isinstance(events, list) or len(events) > 360:
         raise EvidenceSyncError("Lista de eventos inválida.")
@@ -97,6 +108,15 @@ def validate_sanitized_report(raw: str) -> dict:
             if not isinstance(row, dict) or set(row) - allowed:
                 raise EvidenceSyncError("Campo interno não permitido.")
         hand = obj["hand"]
+        opponent = obj["opponent"]
+        rank = obj["rank"]
+        if (opponent.get("status") not in OPPONENT_STATES
+                or rank.get("state") not in RANK_STATES
+                or rank.get("modelVerified") is not False
+                or type(opponent.get("ready")) is not bool
+                or type(hand.get("ready")) is not bool
+                or type(rank.get("ready")) is not bool):
+            raise EvidenceSyncError("Estados internos não permitidos.")
         if (not isinstance(hand.get("ids"), list)
                 or len(hand["ids"]) not in (0, 5)
                 or any(type(v) is not int or v < 1 or v > 722 for v in hand["ids"])):
@@ -106,8 +126,7 @@ def validate_sanitized_report(raw: str) -> dict:
             if (not isinstance(counts, dict)
                     or any(type(v) is not int or v < 0 or v > 100000
                            for v in counts.values())
-                    or any(not isinstance(k, str) or not re.fullmatch(
-                           r"[A-Za-z]{1,40}", k) for k in counts)):
+                    or any(k not in MEMORY_FAILURES for k in counts)):
                 raise EvidenceSyncError("Contadores inválidos.")
     return data
 
