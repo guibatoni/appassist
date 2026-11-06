@@ -135,3 +135,36 @@ def explain_forensic_failure(summary: dict) -> dict:
     code = row.get("boundaryDecision", "incompleto")
     return {"code": code, "reason": REJECTION_REASONS.get(
         code, "A estrutura de nomes permanece ambígua e não será publicada.")}
+
+
+def summarize_alternative_layouts(report: dict) -> dict:
+    """Count existing independent layout probes without exposing ROM strings.
+
+    These probes are already run by scanner_multiiso when opponents are
+    unavailable. Counts are clues, not confirmed opponent IDs or MIPS usage.
+    """
+    report = report if isinstance(report, dict) else {}
+    sources = (
+        ("namePointer", report.get("name_pointer_discovery")),
+        ("relocatedNames", report.get("relocated_name_layouts")),
+        ("mipsStaticReferences", report.get("mips_name_pointer_evidence")),
+    )
+    allowed_states = {
+        "nao_encontrado", "tabela_candidata_localizada", "layout_candidato_localizado",
+        "hipoteses_ambiguas", "referencias_mips_candidatas", "sem_evidencia",
+    }
+    output = {"schema": 1, "validated": False, "inGameVerified": False,
+              "mayPromote": False, "probes": {}}
+    for label, raw in sources:
+        raw = raw if isinstance(raw, dict) else {}
+        rows = raw.get("references") if label == "mipsStaticReferences" else raw.get("candidates")
+        if not isinstance(rows, list):
+            rows = []
+        state = raw.get("state")
+        output["probes"][label] = {
+            "candidateCount": min(len(rows), 1000),
+            "state": state if isinstance(state, str) and state in allowed_states
+                     else "indisponivel",
+            "validated": False,
+        }
+    return output
