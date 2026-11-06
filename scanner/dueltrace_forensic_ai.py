@@ -137,6 +137,29 @@ def _safe_fd_jump(source):
     return data
 
 
+FD_FLOW_COUNTS = (
+    "recordsExamined","ffReached","ffReachedAfterFd",
+    "fdRoutes","fdRoutesWithGlyphs","cycleCount",
+    "unknownControlCount","f8ControlCount","boundaryStopCount",
+    "truncatedArgumentCount","hopLimitCount","stepLimitCount","maxHopDepth",
+)
+FD_FLOW_STATES = frozenset({
+    "entrada_invalida","layout_indisponivel","ponteiros_invalidos",
+    "sem_registros","fluxos_auditados_sem_validacao",
+})
+
+
+def _safe_fd_flow(source):
+    if not isinstance(source,dict):
+        return None
+    state=source.get("state")
+    safe={"state":state if isinstance(state,str) and state in FD_FLOW_STATES
+          else "entrada_invalida"}
+    for name in FD_FLOW_COUNTS:
+        safe[name]=_bounded_int(source.get(name),0,39)
+    return safe
+
+
 def numeric_evidence(report: dict) -> dict:
     root = report.get("independent_opponent_discovery",{}) if isinstance(report,dict) else {}
     root = root if isinstance(root,dict) else {}
@@ -151,8 +174,11 @@ def numeric_evidence(report: dict) -> dict:
     jump_rows=forensic.get("fdJumpWindows",[])
     jump_rows=jump_rows if isinstance(jump_rows,list) else []
     jumps=[w for w in (_safe_fd_jump(r) for r in jump_rows[:5]) if w]
-    return {"schema": 3, "windows": output, "controlWindows": control,
-            "fdJumpWindows": jumps,
+    flow_rows=forensic.get("fdFlowWindows",[])
+    flow_rows=flow_rows if isinstance(flow_rows,list) else []
+    flows=[row for row in (_safe_fd_flow(x) for x in flow_rows[:5]) if row]
+    return {"schema": 4, "windows": output, "controlWindows": control,
+            "fdJumpWindows": jumps, "fdFlowWindows": flows,
             "scope": "hipoteses_nao_validadas",
             "mayActivate": False}
 
