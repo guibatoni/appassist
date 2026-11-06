@@ -163,10 +163,29 @@ def summarize_alternative_layouts(report: dict) -> dict:
         if not isinstance(rows, list):
             rows = []
         state = raw.get("state")
-        output["probes"][label] = {
+        entry = {
             "candidateCount": min(len(rows), 1000),
             "state": state if isinstance(state, str) and state in allowed_states
                      else "indisponivel",
             "validated": False,
         }
+        if label == "mipsStaticReferences":
+            header=raw.get("headerEvidence")
+            if isinstance(header,dict):
+                allowed_header_states={
+                    "cabecalho_invalido","cabecalho_truncado",
+                    "payload_truncado_ou_invalido","destino_ram_invalido",
+                    "entrada_fora_do_payload","cabecalho_coerente_nao_validado",
+                }
+                header_state=header.get("state")
+                entry["headerEvidence"]={
+                    "state":header_state if isinstance(header_state,str)
+                             and header_state in allowed_header_states
+                             else "indisponivel",
+                    "magicPresent":header.get("magicPresent") is True,
+                    "fileHasPayloadRegion":header.get("fileHasPayloadRegion") is True,
+                    "mappingCoherent":header.get("mappingCoherent") is True,
+                    "validated":False,
+                }
+        output["probes"][label] = entry
     return output
