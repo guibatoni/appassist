@@ -22,7 +22,7 @@ LP_BASE_OFFSET = 0xEA000
 DRAW_HISTORY_OFFSET = 0x1A7E20
 DRAW_SAMPLE_SIZE = 6 * 8
 RAM_LENGTH = 0x200000
-MAX_REGIONS = 8192
+MAX_REGIONS = 32768
 MAX_CANDIDATE_BASES = 128
 MEM_COMMIT = 0x1000
 PAGE_GUARD = 0x100
@@ -93,42 +93,83 @@ def _valid_psx_sample(read_at, base: int) -> dict | None:
     }
 
 
-def _candidate_bases(kernel, handle) -> list[int]:
+def _select_region_candidates(regions, *, hint=LEGACY_HOST_BASE_HINT,
+                              max_candidates=MAX_CANDIDATE_BASES):
+    """Prefer PSX-sized readable mappings in low *or* high host memory.
+
+    Regions are untrusted kernel metadata. We rank the full list before
+    applying the cap so an early 2GB scan cannot starve higher mappings.
+    Returned offsets are only probe candidates, not proof of RAM location.
+    """
+    candidates = [hint] if type(hint) is int and hint >= 0x10000 else []
+    ordered = []
+    for base, size in regions:
+        if (type(base) is not int or type(size) is not int
+                or base < 0x10000 or size < RAM_LENGTH):
+            continue
+        # A 2MB PSX mapping may be part of a larger committed reservation.
+        # Probe multiple 64KB subpages in the first 1MB, within bounds.
+        for delta in range(0, min(size-RAM_LENGTH+1, 0x100000), 0x10000):
+            candidate = base + delta
+            # Exact-size regions precede unrelated large allocations.
+            ordered.append((0 if size == RAM_LENGTH else 1,
+                            abs(size-RAM_LENGTH), candidate))
+    ordered.sort()
+    seen = set(candidates)
+    for _, _, base in ordered:
+        if base in seen:
+            continue
+        seen.add(base)
+        candidates.append(base)
+        if len(candidates) >= max_candidates:
+            break
+    return candidates[:max_candidates]
+
+
+def _candidate_bases(kernel, handle) -> tuple[list[int], dict]:
+    """Inspect all readable committed regions, including Win64 high memory.
+
+    The old 0x80000000 bound omitted high host addresses entirely.
+    The legacy low-address guess remains a candidate, never a proof.
+    """
     kernel.VirtualQueryEx.argtypes = [
         wintypes.HANDLE, ctypes.c_void_p,
         ctypes.POINTER(MEMORY_BASIC_INFORMATION), ctypes.c_size_t]
     kernel.VirtualQueryEx.restype = ctypes.c_size_t
-    # Attempt the known ePSXe hand-mapping-derived base first, but it
-    # remains only a candidate and must pass all independent checks.
-    addresses = [LEGACY_HOST_BASE_HINT]
+    maximum_address = (
+        0x7FFFFFFEFFFF if ctypes.sizeof(ctypes.c_void_p) == 8
+        else 0x7FFEFFFF)
     address = 0x10000
     queries = 0
-    while address < 0x80000000 and queries < MAX_REGIONS:
+    readable = []
+    while address <= maximum_address and queries < MAX_REGIONS:
         mbi = MEMORY_BASIC_INFORMATION()
         returned = kernel.VirtualQueryEx(
             handle, ctypes.c_void_p(address),
             ctypes.byref(mbi), ctypes.sizeof(mbi))
         queries += 1
         if not returned:
+            # Invalid range or inaccessible query: advance one page.
             address += 0x10000
             continue
         base = int(mbi.BaseAddress or 0)
         size = int(mbi.RegionSize)
         next_address = max(address + 0x1000, base + max(size, 0x1000))
         flags = int(mbi.Protect)
-        if (mbi.State == MEM_COMMIT and size >= RAM_LENGTH
-                and flags & (PAGE_GUARD | PAGE_NOACCESS) == 0
+        if (mbi.State == MEM_COMMIT
+                and size >= RAM_LENGTH
+                and not (flags & (PAGE_GUARD | PAGE_NOACCESS))
                 and (flags & 0xFF) in READABLE):
-            # Search the first 16 aligned 64KB positions inside a large
-            # mapping. No scan of arbitrary process bytes is returned.
-            for delta in range(0, min(size-RAM_LENGTH+1, 0x100000), 0x10000):
-                candidate = base + delta
-                if candidate not in addresses:
-                    addresses.append(candidate)
-                if len(addresses) >= MAX_CANDIDATE_BASES:
-                    return addresses
+            readable.append((base, size))
         address = next_address
-    return addresses[:MAX_CANDIDATE_BASES]
+    bases = _select_region_candidates(readable)
+    return bases, {
+        "memoryRegionsExamined": queries,
+        "readableLargeRegions": len(readable),
+        "candidateBasesExamined": len(bases),
+        "scanReachedLimit": queries >= MAX_REGIONS,
+        "searchedHighMemory": ctypes.sizeof(ctypes.c_void_p) == 8,
+    }
 
 
 def _read_sample_twice(read_at, base):
@@ -227,7 +268,7 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
                     "mappingValidatedByIndependentFields":True,
                 }
             _PID_BASE_CACHE.pop(pid,None)
-        bases = _candidate_bases(kernel,handle)
+        bases, scan_diagnostic = _candidate_bases(kernel,handle)
         found = []
         for base in bases:
             item = _read_sample_twice(read_at_native,base)
@@ -236,13 +277,13 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
                 if len(found) > 1:
                     break
         if len(found) != 1:
-            return {**fail, "status": (
+            return {**fail, **scan_diagnostic, "status": (
                 "ambiguous_ram_mapping" if found else "ram_mapping_not_validated")}
         if len(_PID_BASE_CACHE) > 16:
             _PID_BASE_CACHE.clear()
         _PID_BASE_CACHE[pid] = found[0]["base"]
         return {
-            **fail,"ready":True,"status":"runtime_id_candidate",
+            **fail,**scan_diagnostic,"ready":True,"status":"runtime_id_candidate",
             "runtimeOpponentId":found[0]["runtimeOpponentId"],
             "playerLP":found[0]["playerLP"],
             "opponentLP":found[0]["opponentLP"],
