@@ -104,6 +104,56 @@ def decode_bank(block: bytes, *, num_cards: int = NUM_CARDS) -> dict:
     }
 
 
+def select_fusion_resource(disc) -> tuple[str, str]:
+    """Keep canonical WA unchanged; accept renamed resources only with seven mirrors.
+
+    Seven identical conflict-free banks are strong STRUCTURAL evidence, not
+    proof that a particular fusion executes in the selected mod.
+    """
+    named = [n for n in disc.files if n.upper().endswith("WA_MRG.MRG")]
+    if len(named) == 1:
+        return named[0], "canonical_name"
+    if len(named) > 1:
+        raise FusionFormatError("WA_MRG.MRG ambíguo")
+    max_end = max(FUSION_BANK_OFFSETS) + BLOCK_SIZE
+    candidates = [
+        name for name, entry in disc.files.items()
+        if isinstance(name, str) and isinstance(entry, tuple)
+        and len(entry) == 2 and type(entry[1]) is int
+        and max_end <= entry[1] <= 96 * 1024 * 1024
+    ]
+    if not candidates:
+        raise FusionFormatError("Contêiner de fusões não localizado")
+    if len(candidates) > 8:
+        raise FusionFormatError("Contêineres demais: limite da sonda")
+    strong = []
+    for name in sorted(candidates):
+        try:
+            raw = disc.get(name, limit_bytes=max_end)
+            if len(raw) != max_end:
+                continue
+            hashes = set()
+            valid = True
+            for off in FUSION_BANK_OFFSETS:
+                bank = decode_bank(raw[off:off+BLOCK_SIZE])
+                if bank["conflict_count"]:
+                    valid = False
+                    break
+                hashes.add(bank["recipelist_sha256"])
+                if len(hashes) > 1:
+                    valid = False
+                    break
+            if valid and len(hashes) == 1:
+                strong.append(name)
+        except (FusionFormatError, ValueError, OSError, KeyError, MemoryError,
+                OverflowError, struct.error):
+            continue
+    if len(strong) != 1:
+        raise FusionFormatError(
+            "Formato de fusões não identificado unicamente em sete bancos")
+    return strong[0], "seven_identical_banks_in_renamed_resource"
+
+
 def analyze_fusion_banks(rom_path: Path, *, expected_size=None,
                          expected_mtime_ns=None, progress=None) -> dict:
     """Varre as 7 cópias de fusões do disco, valida formato e cruza assinaturas."""
@@ -118,10 +168,7 @@ def analyze_fusion_banks(rom_path: Path, *, expected_size=None,
     all_recipes={}
     try:
         disc=Disc(rom)
-        matching=[name for name in disc.files if name.upper().endswith("WA_MRG.MRG")]
-        if len(matching)!=1:
-            raise FusionFormatError("Arquivo WA_MRG.MRG ausente ou ambíguo na ISO")
-        wa_name=matching[0]
+        wa_name, resource_method = select_fusion_resource(disc)
         # Lê prefixo limitado (sem carregar os ~38 MB de WA nem os ~518 MB da ISO).
         max_end=max(FUSION_BANK_OFFSETS)+BLOCK_SIZE
         wa=disc.get(wa_name,limit_bytes=max_end)
@@ -158,6 +205,7 @@ def analyze_fusion_banks(rom_path: Path, *, expected_size=None,
                             if r["recipelist_sha256"]==winner),0)
     return {
         "schema":1,"rom_file":rom.name,
+        "resource_selection_method":resource_method,
         "fusion_layout":"WA_MRG 7 bancos de 0x10000, ponteiros uint16, compactação 10-bit",
         "banks":reports,"valid_banks":len(valid),"matching_banks":mirrors,
         "divergent_banks":conflicting_banks,
