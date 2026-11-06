@@ -516,6 +516,18 @@ function Mods({mods,sha,onRefresh,configured}:{
               {mod.opponentEvidence==="extraidos_estruturalmente"&&<p className="mt-3 text-xs text-gold">
                 {mod.opponents} adversários recuperados do executável. IDs ainda não confirmados em jogo; drops e RANK não são liberados por essa hipótese.
               </p>}
+              {(mod.modFamilyEvidence?.consecutiveBlocks??0)>0&&<p className="mt-3 text-xs text-muted">
+                <span className="font-semibold text-primary">Detecção MultiMod (scanner rev. {mod.modFamilyEvidence!.scanRevision}):</span>{" "}
+                {mod.modFamilyEvidence!.consecutiveBlocks} blocos consecutivos e{" "}
+                {mod.modFamilyEvidence!.structuralMatrices} matrizes estruturais de pesos.{" "}
+                {mod.modFamilyEvidence!.possible39Windows>1
+                  ?`${mod.modFamilyEvidence!.possible39Windows} possíveis janelas de 39 adversários; a correspondência permanece ambígua.`
+                  :"Associação aos IDs de adversários ainda não verificada."}
+                {" "}Nenhum drop ou grupo RANK foi ativado a partir dessas evidências.
+              </p>}
+              {typeof mod.scanParserRevision==="number"&&mod.scanParserRevision<29&&<p className="mt-3 text-xs text-gold">
+                Este perfil foi analisado antes da revisão 29. Clique em Atualizar dados para identificar famílias de tabelas.
+              </p>}
               {!mod.opponents&&((mod.opponentCandidateCount??0)>0||Boolean(mod.opponentDiagnosticReason))&&<p className="mt-3 text-xs text-muted">
                 {(mod.opponentCandidateCount??0)>0
                   ?`Até ${mod.opponentCandidateCount} nomes independentes candidatos detectados (não verificados).`

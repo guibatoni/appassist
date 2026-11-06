@@ -254,6 +254,19 @@ export type LocalMod = {
   name: string
   level: string
   scanParserRevision?: number | null
+  modFamilyEvidence?: {
+    state: string
+    scanRevision: number
+    candidateCount: number
+    consecutiveBlocks: number
+    structuralMatrices: number
+    possible39Windows: number
+    ambiguous: boolean
+    scanComplete: boolean
+    inGameVerified: false
+    mayActivateDrops: false
+    mayActivateRank: false
+  } | null
   cards: number
   candidateCards?: number
   cardEvidence?: string
