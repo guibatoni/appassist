@@ -103,10 +103,10 @@ def _safe_control_window(source):
         safe[field]=_bounded_int(source.get(field),0,39)
     hist=source.get("nonFfControlHistogram")
     safe["nonFfControlHistogram"]={
-        name:count for name,count in (hist or {}).items()
+        name:safe_count for name,value in (hist or {}).items()
         if (type(name) is str
             and re.fullmatch(r"0xF[0-9A-E]",name)
-            and (count:=_bounded_int(count,0,5000)) is not None)
+            and (safe_count:=_bounded_int(value,0,5000)) is not None)
     } if isinstance(hist,dict) else {}
     return safe
 
