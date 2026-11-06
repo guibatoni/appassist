@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import threading
 import json
+import hashlib
 import re
 from uuid import uuid4
 from datetime import datetime, timezone
@@ -1228,15 +1229,38 @@ class DueltraceWebBridge:
                     or type(meta.get("scan_parser_revision")) is not int
                     or meta["scan_parser_revision"] < 29):
                 raise ValueError("Reanalise o mod com o scanner revisão 29")
-            audit = meta.get("mod_family_audit")
-            resources = audit.get("resourcesScanned", []) if isinstance(audit, dict) else []
-            candidates = [item for item in resources
-                          if isinstance(item, dict)
-                          and isinstance(item.get("weightFamily"), dict)
-                          and item["weightFamily"].get("candidateCount", 0) > 0]
-            if len(candidates) != 1:
-                raise ValueError("A ISO precisa de uma única família de matrizes identificada")
-            candidate = candidates[0]
+            # O scanner usa DOIS formatos de evidência: quando localiza um
+            # recurso WA único, grava mod_family_evidence; para mídias em
+            # que WA não foi selecionado, grava mod_family_audit. Antes este
+            # método aceitava apenas o segundo formato e recusava o GOG
+            # mesmo com seus 40 blocos comprovados no próprio relatório.
+            family = meta.get("mod_family_evidence")
+            selected_resource = meta.get("wa_resource_selection")
+            resource_name = (selected_resource.get("source")
+                             if isinstance(selected_resource, dict) else None)
+            if (not isinstance(family, dict)
+                    or not isinstance(resource_name, str)
+                    or not resource_name):
+                audit = meta.get("mod_family_audit")
+                resources = (audit.get("resourcesScanned", [])
+                             if isinstance(audit, dict) else [])
+                candidates = [item for item in resources
+                              if isinstance(item, dict)
+                              and isinstance(item.get("weightFamily"), dict)
+                              and type(item["weightFamily"].get("candidateCount")) is int
+                              and item["weightFamily"]["candidateCount"] > 0
+                              and isinstance(item.get("resource"), str)
+                              and item["resource"]]
+                if len(candidates) != 1:
+                    raise ValueError(
+                        "Uma família de matrizes foi exibida, mas sua fonte "
+                        "não pôde ser determinada. Reanalise a ISO.")
+                family = candidates[0]["weightFamily"]
+                resource_name = candidates[0]["resource"]
+            if (type(family.get("candidateCount")) is not int
+                    or family["candidateCount"] < 1
+                    or family.get("scanComplete") is not True):
+                raise ValueError("Família de matrizes incompleta; reanalise a ISO.")
             if hash_image(source) != sha:
                 raise ValueError("A ISO mudou desde a análise. Perfil preservado")
             path = self._window_observation_path(sha)
@@ -1254,12 +1278,18 @@ class DueltraceWebBridge:
             # data cannot substitute for this independent local read.
             disc = Disc(source)
             try:
-                resource = candidate.get("resource")
-                if not isinstance(resource, str) or resource not in disc.files:
+                if resource_name not in disc.files:
                     raise ValueError("Contêiner original não encontrado")
-                blob = disc.get(resource)
+                blob = disc.get(resource_name)
+                # Evita reutilizar evidência de um recurso trocado depois da
+                # análise, inclusive quando o SHA total da ISO foi informado
+                # por um catálogo local incorreto.
+                selected_hash = meta.get("hash_wa")
+                if (isinstance(selected_hash, str) and len(selected_hash) == 64
+                        and hashlib.sha256(blob).hexdigest() != selected_hash):
+                    raise ValueError("Contêiner mudou desde a análise. Reanalise o mod.")
                 report = correlate_observed_duels(
-                    blob, candidate["weightFamily"], records + [row])
+                    blob, family, records + [row])
             finally:
                 disc.close()
             if report["status"] in ("invalid_input", "invalid_observation",
