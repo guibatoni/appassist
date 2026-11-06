@@ -427,6 +427,35 @@ export type MipsTraceResult = {
   last?: MipsTraceResult | null
 }
 
+export type CandidateMatrixPage = {
+  available: boolean
+  status: string
+  physicalBlockIndex?: number
+  blockCount?: number
+  matrixGroup?: number
+  matrixKind?: string
+  totalWeight?: number
+  nonzeroCards?: number
+  total?: number
+  offset?: number
+  autoSelected?: boolean
+  selectionReason?: string
+  opponentIdsVerified: false
+  rankGroupLabelsVerified: false
+  mayActivateDrops: false
+  mayActivateRank: false
+  rows: Array<{
+    id:number
+    name:string
+    atk:number|null
+    def:number|null
+    type:string
+    weight:number
+    weightDenominator:number
+    chancePercent:number
+  }>
+}
+
 export type WindowObservationResult = {
   observationCount: number
   entries: Array<{
@@ -673,6 +702,7 @@ export interface DesktopAPI {
   import_rank_trace(duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(): Promise<RankAuditExport>
   get_duel_evidence(): Promise<DuelEvidence>
+  get_candidate_matrix(sha: string, block?: number, group?: number, query?: string, offset?: number, limit?: number): Promise<CandidateMatrixPage>
   get_window_observations(sha: string): Promise<WindowObservationResult>
   undo_last_window_observation(sha: string): Promise<WindowObservationResult>
   record_window_observation(sha: string, slot: number, rank: string, rewardId: number, playedIds: number[]): Promise<WindowObservationResult>
@@ -713,6 +743,7 @@ interface ProtectedNativeAPI {
   import_rank_trace(token: string, duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(token: string): Promise<RankAuditExport>
   get_duel_evidence(token: string): Promise<DuelEvidence>
+  get_candidate_matrix(token: string, sha: string, block?: number, group?: number, query?: string, offset?: number, limit?: number): Promise<CandidateMatrixPage>
   get_window_observations(token: string, sha: string): Promise<WindowObservationResult>
   undo_last_window_observation(token: string, sha: string): Promise<WindowObservationResult>
   record_window_observation(token: string, sha: string, slot: number, rank: string, rewardId: number, playedIds: number[]): Promise<WindowObservationResult>
@@ -768,6 +799,8 @@ export function desktopApi(): DesktopAPI | null {
     import_rank_trace: (duelId) => native.import_rank_trace(token, duelId),
     export_rank_audit: () => native.export_rank_audit(token),
     get_duel_evidence: () => native.get_duel_evidence(token),
+    get_candidate_matrix: (sha,block=-1,group=1,query="",offset=0,limit=30) =>
+      native.get_candidate_matrix(token,sha,block,group,query,offset,limit),
     get_window_observations: (sha) => native.get_window_observations(token, sha),
     undo_last_window_observation: (sha) => native.undo_last_window_observation(token, sha),
     record_window_observation: (sha,slot,rank,rewardId,playedIds) =>
