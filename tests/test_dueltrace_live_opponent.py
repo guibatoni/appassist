@@ -11,6 +11,7 @@ from dueltrace_live_opponent import (
     OPPONENT_OFFSET,LP_BASE_OFFSET,DRAW_HISTORY_OFFSET,
     DRAW_SAMPLE_SIZE,probe_live_opponent,_valid_psx_sample,
     _select_region_candidates, MEMORY_BASIC_INFORMATION, MIN_REQUIRED_SPAN,
+    MAX_LIVE_READ_BYTES,
 )
 
 
@@ -80,6 +81,11 @@ class RuntimeOpponentTests(unittest.TestCase):
         self.assertIsNone(_valid_psx_sample(incomplete,base))
         bad=probe_live_opponent(read_at=incomplete,candidate_bases=[base])
         self.assertFalse(bad["ready"])
+
+    def test_native_reader_can_accept_full_proven_hand_bytes(self):
+        from dueltrace_live_hand import HAND_BYTES
+        self.assertEqual(HAND_BYTES,140)
+        self.assertGreaterEqual(MAX_LIVE_READ_BYTES,HAND_BYTES)
 
     def test_working_five_card_hand_overrides_unverified_draw_format(self):
         # GOG field evidence: the existing DUELTRACE hand is working,
