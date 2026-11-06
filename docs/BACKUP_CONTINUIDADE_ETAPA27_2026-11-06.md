@@ -40,3 +40,7 @@ Solicitou conexão remota para coletar diagnósticos automaticamente e facilitar
 ## Política de privacidade
 
 A autorização para **desenvolver** o recurso não habilita nenhuma transmissão. A ativação exige opt-in e credencial criados diretamente pelo usuário no aplicativo. Relatórios antigos/atuais permanecem privados na Biblioteca ChatGPT; não os publicar no repositório público `appassist`.
+
+## Complemento de segurança — envelope remoto
+
+Após auditoria do transporte, foi definido envelope remoto explícito `subject=DUELTRACE Private Evidence Sync` com `transport=github_private_repository`, `syncedAtUTC` e `diagnostics` contendo o JSON original sanitizado. O sinal `diagnostics.networkTransmission=false` refere-se somente ao gravador; o envelope indica upload real. A comparação de adversários, drops e fusões continua não confirmada. A validação CI deve se referir à HEAD atual, não a commits anteriores.
