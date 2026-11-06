@@ -79,6 +79,9 @@ class DueltraceWebBridge:
         self._process = None
         self._launched_rom_sha = None
         self._lock = threading.RLock()
+        self._live_diagnostics = None
+        self._live_diagnostics_stop = None
+        self._live_diagnostics_thread = None
         self._fusion_cache_key = None
         self._fusion_cache = {}
         self._hand_suggestions_key = None
@@ -1313,6 +1316,111 @@ class DueltraceWebBridge:
                                 "unusable_family_layout"):
             raise ValueError("Evidências inconsistentes; nenhuma alteração salva")
         return report
+
+    def _collect_live_diagnostics_once(self, recorder):
+        """Use existing, tested readers; never probe arbitrary RAM or alter rank."""
+        with self._lock:
+            active, _entry, profile = self._active()
+            current_sha = active.get("sha256") if profile else None
+        if current_sha != recorder.sha:
+            recorder.stop()
+            return False
+        try:
+            hand = self.get_hand()
+        except (OSError, RuntimeError, ValueError, TypeError):
+            hand = {"ready": False, "hand": []}
+        try:
+            opponent = self.get_live_opponent()
+        except (OSError, RuntimeError, ValueError, TypeError):
+            opponent = {"ready": False, "status": "runtime_probe_unavailable"}
+        # Only consume the *existing* RANK observation (when the main
+        # screen has made one). Calling get_rank_auto here would change
+        # calibration state and could modify the normal duel experience.
+        with self._lock:
+            last = self._rank_last_snapshot
+            rank = {"ready": False, "state": "unavailable"}
+            if (isinstance(last, dict)
+                    and last.get("rom_sha256") == current_sha
+                    and type(last.get("monotonic_at")) in (float, int)
+                    and 0 <= monotonic() - last["monotonic_at"] <= 4):
+                rank = {
+                    "ready": True, "state": "provisional",
+                    "score": last.get("score"), "category": last.get("category"),
+                }
+        return recorder.observe(hand, opponent, rank, current_sha)
+
+    def _live_diagnostics_loop(self, recorder, stop_event):
+        try:
+            while not stop_event.is_set() and recorder.running:
+                self._collect_live_diagnostics_once(recorder)
+                if stop_event.wait(3.0):
+                    break
+        finally:
+            recorder.stop()
+
+    def start_live_diagnostics(self):
+        """User opt-in only: sample locally, no cloud and no ROM dumps."""
+        from dueltrace_live_diagnostics import LiveDiagnosticsRecorder
+        with self._lock:
+            active, _entry, profile = self._active()
+            sha = active.get("sha256") if profile else None
+            if (type(sha) is not str
+                    or not re.fullmatch(r"[a-f0-9]{64}", sha)
+                    or profile.get("rom_sha256") != sha):
+                raise ValueError("Ative uma ISO cadastrada antes de iniciar o diagnóstico")
+            current = self._live_diagnostics
+            if current and current.running:
+                if current.sha == sha:
+                    return self.get_live_diagnostics_status()
+                raise ValueError("Encerre o diagnóstico anterior antes de trocar de mod")
+            recorder = LiveDiagnosticsRecorder(
+                self.catalog.home / "live_diagnostics", sha)
+            stop_event = threading.Event()
+            self._live_diagnostics = recorder
+            self._live_diagnostics_stop = stop_event
+            self._live_diagnostics_thread = threading.Thread(
+                target=self._live_diagnostics_loop,
+                args=(recorder, stop_event),
+                name="dueltrace-live-diagnostics", daemon=True)
+            self._live_diagnostics_thread.start()
+            return self.get_live_diagnostics_status()
+
+    def stop_live_diagnostics(self):
+        with self._lock:
+            if self._live_diagnostics_stop is not None:
+                self._live_diagnostics_stop.set()
+            if self._live_diagnostics is not None:
+                self._live_diagnostics.stop()
+            return self.get_live_diagnostics_status()
+
+    def get_live_diagnostics_status(self):
+        with self._lock:
+            recorder = self._live_diagnostics
+            if recorder is None:
+                return {
+                    "running": False, "sampleCount": 0,
+                    "changeCount": 0, "lastObservedAtUTC": None,
+                    "opponentStatuses": {}, "readyToCopy": False,
+                    "networkTransmission": False,
+                }
+            report = recorder.report()
+            return {
+                "running": report["running"],
+                "romFingerprint": report["romFingerprint"],
+                "sampleCount": report["sampleCount"],
+                "changeCount": report["changeCount"],
+                "lastObservedAtUTC": report["lastObservedAtUTC"],
+                "opponentStatuses": report["opponentStatuses"],
+                "readyToCopy": report["sampleCount"] > 0,
+                "networkTransmission": False,
+            }
+
+    def export_live_diagnostics(self):
+        """Return sanitized text to copy locally; never uploads it."""
+        with self._lock:
+            if self._live_diagnostics is None:
+                raise ValueError("Inicie o diagnóstico antes de exportar")
+            return self._live_diagnostics.export_json()
 
     def get_live_opponent(self):
         """Passive RAM reader with local, provisional ID logging.
