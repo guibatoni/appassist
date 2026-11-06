@@ -596,6 +596,15 @@ function LiveDiagnosticsPanel({sha}:{sha:string|null}) {
       {" "}· Última leitura: {status?.lastObservedAtUTC?
         new Date(status.lastObservedAtUTC).toLocaleTimeString("pt-BR"):"—"}
     </p>
+    {status?.forensicReview?.candidateStableDespiteHandAndLpFieldChanges&&
+      <p role="status" className="mt-2 text-xs text-gold">
+        Evidência provisória: o byte candidato {status.forensicReview.candidateIds.join(", ")}
+        {" "}permaneceu constante em {status.forensicReview.candidateObservedInEvents}
+        {" "}eventos, apesar de {status.forensicReview.distinctHands} mãos diferentes e
+        {" "}{status.forensicReview.distinctLegacyLpPairs} pares de campos de LP legados.
+        Esses campos podem ter outro significado no mod. Sem confirmação independente
+        do adversário, não é possível ativar drops nem identificar oponentes.
+      </p>}
     <p className="mt-1 text-xs text-gold">
       Sem sincronização privada ativa, o relatório permanece somente no PC.
       Nenhuma conexão direta com esta conversa é estabelecida. IDs e RANKs
