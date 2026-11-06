@@ -18,7 +18,7 @@ class OpponentReportCopyTests(unittest.TestCase):
             "function CardDropSourcesPanel(",1)[0]
         self.assertIn("Copiar diagnóstico técnico",section)
         self.assertIn("copyOpponentReport(mod)",section)
-        self.assertIn("!mod.opponents&&(mod.opponentCandidateCount??0)>0",section)
+        self.assertIn("!mod.opponents&&((mod.opponentCandidateCount??0)>0||Boolean(mod.opponentDiagnosticReason))",section)
         self.assertIn("Somente", "Somente")
 
     def test_serialization_only_uses_allowlisted_numeric_fields(self):
