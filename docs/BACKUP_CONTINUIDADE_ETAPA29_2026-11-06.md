@@ -39,3 +39,7 @@ GitHub privado `guibatoni/dueltrace-evidencias`: a sincronização de diagnósti
 ## Controle de risco
 
 Nenhuma mídia de jogo, binário de terceiros, dump de RAM, arte, chave ou caminho privado deve ir para o repositório de código. O comparador não precisa do repositório privado de telemetria e não habilita features por semelhança. O app segue funcional com o scanner antigo enquanto a branch nova é validada.
+
+## Complemento 29B — extração de fusões em contêiner renomeado
+
+Além do comparador, foi corrigido o limitador rígido de nome do extrator de fusões. `scanner/extrator_fusoes.py` mantém a interpretação de `WA_MRG.MRG` existente; se estiver ausente, verifica recursos alternativos de forma limitada e só aceita um quando TODOS os 7 bancos são decodificáveis, idênticos e sem conflitos. Se não forem, bloqueia em vez de inventar receitas. Testes sintéticos adicionados em `tests/test_extrator_fusoes.py`. O GOG ainda pode ter bancos em novos offsets e **não foi validado com ISO real nesta etapa**. Confirmar CI final da branch e preservação das extrações da ISO positiva.
