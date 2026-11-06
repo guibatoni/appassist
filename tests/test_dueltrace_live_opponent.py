@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import struct
 import unittest
 from pathlib import Path
 
@@ -79,6 +80,57 @@ class RuntimeOpponentTests(unittest.TestCase):
         self.assertIsNone(_valid_psx_sample(incomplete,base))
         bad=probe_live_opponent(read_at=incomplete,candidate_bases=[base])
         self.assertFalse(bad["ready"])
+
+    def test_working_five_card_hand_overrides_unverified_draw_format(self):
+        # GOG field evidence: the existing DUELTRACE hand is working,
+        # but the assumed draw-history layout did not validate in ePSXe.
+        base, old = memory_snapshot(oid=1,lp1=9000,lp2=9000,
+                                    invalid_history=True)
+        hand=bytearray(140)
+        for slot,card in enumerate((449,145,447,629,468)):
+            struct.pack_into("<H",hand,slot*28,card)
+            struct.pack_into("<I",hand,slot*28+12,slot)
+        raw=bytes(hand)
+        from dueltrace_live_hand import HAND_ADDRESS
+        from dueltrace_live_opponent import HAND_OFFSET
+        self.assertEqual(base+HAND_OFFSET,HAND_ADDRESS)
+        def read(addr,size):
+            if (addr,size)==(HAND_ADDRESS,140):
+                return raw
+            return old(addr,size)
+        stats={}
+        sample=_valid_psx_sample(read,base,stats)
+        self.assertEqual(sample["runtimeOpponentId"],1)
+        self.assertEqual(sample["validationMethod"],"known_hand_anchor")
+        self.assertEqual(stats.get("validatedHandAnchors"),1)
+        probe=probe_live_opponent(read_at=read,candidate_bases=[base])
+        self.assertTrue(probe["ready"])
+        self.assertEqual(probe["validationMethod"],"known_hand_anchor")
+        self.assertFalse(probe["romIdentityVerified"])
+        self.assertFalse(probe["mayActivateDrops"])
+
+    def test_known_hand_anchor_rejects_unverified_hand_layout(self):
+        base,old=memory_snapshot(invalid_history=True)
+        invalid=bytes(140)
+        from dueltrace_live_hand import HAND_ADDRESS
+        def read(addr,size):
+            return invalid if (addr,size)==(HAND_ADDRESS,140) else old(addr,size)
+        sample=_valid_psx_sample(read,base)
+        self.assertIsNone(sample)
+        self.assertFalse(probe_live_opponent(
+            read_at=read,candidate_bases=[base])["ready"])
+
+    def test_known_hand_does_not_override_invalid_lp_or_opponent_id(self):
+        from dueltrace_live_hand import HAND_ADDRESS
+        for kwargs in ({"oid":255},{"lp1":0},{"lp2":0}):
+            base,old=memory_snapshot(invalid_history=True,**kwargs)
+            raw=bytearray(140)
+            for slot in range(5):
+                struct.pack_into("<H",raw,slot*28,slot+1)
+                struct.pack_into("<I",raw,slot*28+12,slot)
+            def read(addr,size):
+                return bytes(raw) if (addr,size)==(HAND_ADDRESS,140) else old(addr,size)
+            self.assertIsNone(_valid_psx_sample(read,base))
 
     def test_find_high_win64_ram_base_even_after_large_low_mapping(self):
         high = 0x1422E800000
