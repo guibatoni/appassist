@@ -1203,13 +1203,142 @@ class DueltraceWebBridge:
             rows = rows if isinstance(rows, list) else []
             report = raw.get("last_analysis", {})
             report = report if isinstance(report, dict) else {}
-            return {
-                "observationCount": min(len(rows), 200),
-                "analysis": report,
-                "mayActivateDrops": False,
-                "mayActivateRank": False,
-                "inGameVerified": False,
-            }
+            return self._window_observation_summary(rows, report)
+
+    def _window_observation_summary(self, records, report):
+        """Expose only manually entered card IDs and aggregate diagnostics."""
+        from dueltrace_window_observation import _parse_observation
+        safe_entries = []
+        for i, row in enumerate(records[-200:]):
+            observed = _parse_observation(row)
+            if observed is None:
+                continue
+            safe_entries.append({
+                "index": i + 1,
+                "opponentSlot": observed["slot"],
+                "rank": observed["rank"],
+                "rewardCardId": observed["reward"],
+                "playedCardIds": list(observed["played"]),
+            })
+        return {
+            "observationCount": len(safe_entries),
+            "entries": safe_entries,
+            "analysis": report if isinstance(report, dict) else {},
+            "mayActivateDrops": False,
+            "mayActivateRank": False,
+            "inGameVerified": False,
+        }
+
+    def _evaluate_window_records(self, sha, entry, profile, records):
+        """Re-evaluate after a save or undo; never promotes inferred IDs."""
+        from scanner_multiiso import Disc, sha256 as hash_image
+        from dueltrace_window_observation import correlate_observed_duels
+        source = Path(entry.get("source_path") or "").resolve(strict=True)
+        if source.suffix.lower() not in (".iso", ".bin") or not source.is_file():
+            raise ValueError("Imagem de jogo indisponível")
+        result_dir = profile.get("scan_result_dir")
+        root = (self.catalog.home / "analises").resolve()
+        if not isinstance(result_dir, str) or not result_dir:
+            raise ValueError("Análise local indisponível")
+        folder = Path(result_dir).resolve()
+        if not folder.is_relative_to(root):
+            raise ValueError("Relatório fora da pasta permitida")
+        metadata_file = (folder / "relatorio.json").resolve()
+        if (not metadata_file.is_relative_to(root) or
+                not metadata_file.is_file() or
+                metadata_file.stat().st_size > 8 * 1024 * 1024):
+            raise ValueError("Relatório estrutural indisponível")
+        meta = load_json(metadata_file, {})
+        if (not isinstance(meta, dict)
+                or meta.get("sha256") != sha
+                or type(meta.get("scan_parser_revision")) is not int
+                or meta["scan_parser_revision"] < 29):
+            raise ValueError("Reanalise o mod com o scanner revisão 29")
+        # O scanner usa DOIS formatos de evidência: quando localiza um
+        # recurso WA único, grava mod_family_evidence; para mídias em
+        # que WA não foi selecionado, grava mod_family_audit. Antes este
+        # método aceitava apenas o segundo formato e recusava o GOG
+        # mesmo com seus 40 blocos comprovados no próprio relatório.
+        family = meta.get("mod_family_evidence")
+        selected_resource = meta.get("wa_resource_selection")
+        resource_name = (selected_resource.get("source")
+                         if isinstance(selected_resource, dict) else None)
+        if (not isinstance(family, dict)
+                or not isinstance(resource_name, str)
+                or not resource_name):
+            audit = meta.get("mod_family_audit")
+            resources = (audit.get("resourcesScanned", [])
+                         if isinstance(audit, dict) else [])
+            candidates = [item for item in resources
+                          if isinstance(item, dict)
+                          and isinstance(item.get("weightFamily"), dict)
+                          and type(item["weightFamily"].get("candidateCount")) is int
+                          and item["weightFamily"]["candidateCount"] > 0
+                          and isinstance(item.get("resource"), str)
+                          and item["resource"]]
+            if len(candidates) != 1:
+                raise ValueError(
+                    "Uma família de matrizes foi exibida, mas sua fonte "
+                    "não pôde ser determinada. Reanalise a ISO.")
+            family = candidates[0]["weightFamily"]
+            resource_name = candidates[0]["resource"]
+        if (type(family.get("candidateCount")) is not int
+                or family["candidateCount"] < 1
+                or family.get("scanComplete") is not True):
+            raise ValueError("Família de matrizes incompleta; reanalise a ISO.")
+        if hash_image(source) != sha:
+            raise ValueError("A ISO mudou desde a análise. Perfil preservado")
+        disc = Disc(source)
+        try:
+            if resource_name not in disc.files:
+                raise ValueError("Contêiner original não encontrado")
+            blob = disc.get(resource_name)
+            # Evita reutilizar evidência de um recurso trocado depois da
+            # análise, inclusive quando o SHA total da ISO foi informado
+            # por um catálogo local incorreto.
+            selected_hash = meta.get("hash_wa")
+            if (isinstance(selected_hash, str) and len(selected_hash) == 64
+                    and hashlib.sha256(blob).hexdigest() != selected_hash):
+                raise ValueError("Contêiner mudou desde a análise. Reanalise o mod.")
+            report = correlate_observed_duels(
+                blob, family, records)
+        finally:
+            disc.close()
+        if report["status"] in ("invalid_input", "invalid_observation",
+                                "unusable_family_layout"):
+            raise ValueError("Evidências inconsistentes; nenhuma alteração salva")
+        return report
+
+    def undo_last_window_observation(self, sha):
+        """Undo the latest manually entered observation and recompute windows."""
+        from dueltrace_window_observation import _parse_observation
+        if type(sha) is not str or not re.fullmatch(r"[a-f0-9]{64}", sha):
+            raise ValueError("SHA da ISO inválido")
+        with self._lock:
+            entry = next((e for e in self.catalog.list()
+                          if e.get("sha256") == sha), None)
+            profile = self.catalog.profile_for(entry) if entry else None
+            if not profile:
+                raise ValueError("Perfil do mod não localizado")
+            path = self._window_observation_path(sha)
+            if not path.is_file() or path.stat().st_size > 128 * 1024:
+                raise ValueError("Não há registros locais para desfazer")
+            previous = load_json(path, {})
+            if (not isinstance(previous, dict)
+                    or previous.get("rom_sha256") != sha
+                    or not isinstance(previous.get("observations"), list)):
+                raise ValueError("Registros inválidos ou de outra ISO")
+            rows = previous["observations"]
+            if (not rows or len(rows) > 200
+                    or any(_parse_observation(r) is None for r in rows)):
+                raise ValueError("Registro de duelo inválido; nada foi alterado")
+            kept = rows[:-1]
+            report = self._evaluate_window_records(sha, entry, profile, kept)
+            atomic_json(path, {
+                "schema": 1, "rom_sha256": sha,
+                "observations": kept, "last_analysis": report,
+            })
+            return self._window_observation_summary(kept, report)
 
     def record_window_observation(self, sha, opponent_slot, observed_rank,
                                   reward_card_id, played_card_ids):
@@ -1218,8 +1347,7 @@ class DueltraceWebBridge:
         The position 1–39 is structural and is NOT a proved runtime game ID.
         The source ISO must have the same SHA as the registered mod.
         """
-        from dueltrace_window_observation import _parse_observation, correlate_observed_duels
-        from scanner_multiiso import Disc, sha256 as hash_image
+        from dueltrace_window_observation import _parse_observation
         row = {
             "source": "manual_game_observation",
             "opponent_slot": opponent_slot,
@@ -1240,61 +1368,6 @@ class DueltraceWebBridge:
             choices = self._structural_opponent_choices(profile)
             if not choices or opponent_slot not in {c["slot"] for c in choices}:
                 raise ValueError("Selecione um dos 39 nomes extraídos desta ISO")
-            source = Path(entry.get("source_path") or "").resolve(strict=True)
-            if source.suffix.lower() not in (".iso", ".bin") or not source.is_file():
-                raise ValueError("Imagem de jogo indisponível")
-            result_dir = profile.get("scan_result_dir")
-            root = (self.catalog.home / "analises").resolve()
-            if not isinstance(result_dir, str) or not result_dir:
-                raise ValueError("Análise local indisponível")
-            folder = Path(result_dir).resolve()
-            if not folder.is_relative_to(root):
-                raise ValueError("Relatório fora da pasta permitida")
-            metadata_file = (folder / "relatorio.json").resolve()
-            if (not metadata_file.is_relative_to(root) or
-                    not metadata_file.is_file() or
-                    metadata_file.stat().st_size > 8 * 1024 * 1024):
-                raise ValueError("Relatório estrutural indisponível")
-            meta = load_json(metadata_file, {})
-            if (not isinstance(meta, dict)
-                    or meta.get("sha256") != sha
-                    or type(meta.get("scan_parser_revision")) is not int
-                    or meta["scan_parser_revision"] < 29):
-                raise ValueError("Reanalise o mod com o scanner revisão 29")
-            # O scanner usa DOIS formatos de evidência: quando localiza um
-            # recurso WA único, grava mod_family_evidence; para mídias em
-            # que WA não foi selecionado, grava mod_family_audit. Antes este
-            # método aceitava apenas o segundo formato e recusava o GOG
-            # mesmo com seus 40 blocos comprovados no próprio relatório.
-            family = meta.get("mod_family_evidence")
-            selected_resource = meta.get("wa_resource_selection")
-            resource_name = (selected_resource.get("source")
-                             if isinstance(selected_resource, dict) else None)
-            if (not isinstance(family, dict)
-                    or not isinstance(resource_name, str)
-                    or not resource_name):
-                audit = meta.get("mod_family_audit")
-                resources = (audit.get("resourcesScanned", [])
-                             if isinstance(audit, dict) else [])
-                candidates = [item for item in resources
-                              if isinstance(item, dict)
-                              and isinstance(item.get("weightFamily"), dict)
-                              and type(item["weightFamily"].get("candidateCount")) is int
-                              and item["weightFamily"]["candidateCount"] > 0
-                              and isinstance(item.get("resource"), str)
-                              and item["resource"]]
-                if len(candidates) != 1:
-                    raise ValueError(
-                        "Uma família de matrizes foi exibida, mas sua fonte "
-                        "não pôde ser determinada. Reanalise a ISO.")
-                family = candidates[0]["weightFamily"]
-                resource_name = candidates[0]["resource"]
-            if (type(family.get("candidateCount")) is not int
-                    or family["candidateCount"] < 1
-                    or family.get("scanComplete") is not True):
-                raise ValueError("Família de matrizes incompleta; reanalise a ISO.")
-            if hash_image(source) != sha:
-                raise ValueError("A ISO mudou desde a análise. Perfil preservado")
             path = self._window_observation_path(sha)
             if path.is_file() and path.stat().st_size > 128 * 1024:
                 raise ValueError("Registro anterior excede o limite")
@@ -1308,37 +1381,13 @@ class DueltraceWebBridge:
             records = [r for r in records[-199:] if _parse_observation(r) is not None]
             # Fresh ISO bytes are read from disk. The profile's speculative
             # data cannot substitute for this independent local read.
-            disc = Disc(source)
-            try:
-                if resource_name not in disc.files:
-                    raise ValueError("Contêiner original não encontrado")
-                blob = disc.get(resource_name)
-                # Evita reutilizar evidência de um recurso trocado depois da
-                # análise, inclusive quando o SHA total da ISO foi informado
-                # por um catálogo local incorreto.
-                selected_hash = meta.get("hash_wa")
-                if (isinstance(selected_hash, str) and len(selected_hash) == 64
-                        and hashlib.sha256(blob).hexdigest() != selected_hash):
-                    raise ValueError("Contêiner mudou desde a análise. Reanalise o mod.")
-                report = correlate_observed_duels(
-                    blob, family, records + [row])
-            finally:
-                disc.close()
-            if report["status"] in ("invalid_input", "invalid_observation",
-                                    "unusable_family_layout"):
-                raise ValueError("Evidências de tabela inconsistentes; nenhum duelo salvo")
+            report = self._evaluate_window_records(sha, entry, profile, records + [row])
             atomic_json(path, {
                 "schema": 1, "rom_sha256": sha,
                 "observations": records + [row],
                 "last_analysis": report,
             })
-            return {
-                "observationCount": len(records) + 1,
-                "analysis": report,
-                "mayActivateDrops": False,
-                "mayActivateRank": False,
-                "inGameVerified": False,
-            }
+            return self._window_observation_summary(records + [row], report)
 
     def _observations_path(self, sha):
         if type(sha) is not str or not re.fullmatch("[0-9a-f]{64}",sha):
