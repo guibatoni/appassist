@@ -111,6 +111,32 @@ def _safe_control_window(source):
     return safe
 
 
+FD_JUMP_COUNTS = (
+    "recordCount","fdRecords","fdWithTwoArguments","fdTruncated",
+    "jumpTargetInBank","jumpTargetOutOfFile","jumpTargetAtSource",
+    "jumpTargetHasFF","jumpTargetStartsFD","jumpTargetStartsF8",
+    "jumpTargetStartsFF","jumpTargetSameAsAnotherPointer",
+    "jumpTargetDistinctCount","fdArgumentHighZero",
+    "fdArgumentHighNonZero","directFFAfterFD",
+)
+FD_JUMP_STATES = frozenset({
+    "incompleto","entrada_invalida","ponteiros_ausentes",
+    "registros_invalidos","salto_fd_hipotese_estrutural",
+    "nenhum_salto_fd",
+})
+
+
+def _safe_fd_jump(source):
+    if not isinstance(source,dict):
+        return None
+    state=source.get("state")
+    data={"state":state if isinstance(state,str) and state in FD_JUMP_STATES
+          else "incompleto"}
+    for name in FD_JUMP_COUNTS:
+        data[name]=_bounded_int(source.get(name),0,39)
+    return data
+
+
 def numeric_evidence(report: dict) -> dict:
     root = report.get("independent_opponent_discovery",{}) if isinstance(report,dict) else {}
     root = root if isinstance(root,dict) else {}
@@ -122,7 +148,11 @@ def numeric_evidence(report: dict) -> dict:
     control_rows = forensic.get("controlWindows",[])
     control_rows = control_rows if isinstance(control_rows,list) else []
     control = [w for w in (_safe_control_window(r) for r in control_rows[:5]) if w]
-    return {"schema": 2, "windows": output, "controlWindows": control,
+    jump_rows=forensic.get("fdJumpWindows",[])
+    jump_rows=jump_rows if isinstance(jump_rows,list) else []
+    jumps=[w for w in (_safe_fd_jump(r) for r in jump_rows[:5]) if w]
+    return {"schema": 3, "windows": output, "controlWindows": control,
+            "fdJumpWindows": jumps,
             "scope": "hipoteses_nao_validadas",
             "mayActivate": False}
 
