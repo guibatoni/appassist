@@ -118,7 +118,7 @@ class FDJumpTests(unittest.TestCase):
         self.assertIn("HEADER_STATES.has(raw.state)",js)
         self.assertNotIn("targetOffset:",js)
         self.assertNotIn("rawBytes:",js)
-        self.assertGreaterEqual(SCAN_PARSER_REVISION,26)
+        self.assertGreaterEqual(SCAN_PARSER_REVISION,27)
 
 
 if __name__=="__main__":
