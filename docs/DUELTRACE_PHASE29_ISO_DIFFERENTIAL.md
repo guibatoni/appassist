@@ -41,3 +41,11 @@ Há falhas de reconhecimento em **GOG MOD 2.2, Rising of Wicked Gods e Enhance E
 Não alterar `main`, Biblioteca 722 cartas, artes, leitura de mão, sincronização privada Etapa 27, graus de comprovação dos drops, nem marcas de RANK. Os relatórios da ISO contêm caminhos e dados locais e não devem ser commitados em repositório; o comparador retorna apenas quantidades e etiquetas enum. Não criar adaptadores por nome de mod ou adivinhar offsets.
 
 **Validação:** testes e build Windows da Etapa 29 devem ser verificados no GitHub antes de anunciar Preview aprovada. Não afirmar análise direta de ISO cuja mídia não está disponível no ambiente.
+
+## Subetapa 29B — localizar bancos de fusões em recurso renomeado
+
+A revisão revelou um bloqueio real em `scanner/extrator_fusoes.py`: `analyze_fusion_banks` exigia exclusivamente um nome final `WA_MRG.MRG`. Isso impede até a sondagem de recursos como `G0SD/GOG_SD1.23`, mesmo que o formato seja compatível. A rotina de nomes convencionais foi mantida **sem alterações de escolha**.
+
+O extrator agora pode examinar **até oito contêineres** com tamanho suficiente (no máximo 96 MiB cada), sem depender da extensão, mas só seleciona um recurso renomeado quando detecta **sete bancos válidos, com receitas decodificadas de maneira idêntica e sem conflitos** nas mesmas posições históricas. Nenhuma semelhança de tamanho ou de um único banco seleciona o recurso. Dois contêineres igualmente compatíveis resultam em ambiguidade e bloqueiam a escolha. Testes sintéticos cobrem o novo formato, seis bancos válidos/um inválido, ambiguidade e manutenção da seleção canônica.
+
+Isto é **somente um adaptador para localizar a mesma estrutura em um contêiner renomeado**. Não prova que o GOG, Rising ou Enhance tenham fusões nessas posições; não resolve bancos realocados, formatos de 10-bit modificados ou novas contagens de cartas. E **não ativa automaticamente todas as receitas**: as verificações existentes de sete bancos, revisão explícita e eventual execução em jogo permanecem necessárias.
