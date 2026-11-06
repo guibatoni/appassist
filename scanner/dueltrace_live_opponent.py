@@ -22,6 +22,7 @@ HAND_OFFSET = 0xEA484
 LP_BASE_OFFSET = 0xEA000
 DRAW_HISTORY_OFFSET = 0x1A7E20
 DRAW_SAMPLE_SIZE = 6 * 8
+MAX_LIVE_READ_BYTES = max(DRAW_SAMPLE_SIZE, HAND_BYTES)
 RAM_LENGTH = 0x200000
 # A PSX mapping can be split by VirtualQueryEx; only offsets that must
 # be read for independent validation are required to be accessible.
@@ -104,8 +105,9 @@ def _valid_psx_sample(read_at, base: int, stats=None) -> dict | None:
     if not (0 < p1 <= 32767 and 0 < p2 <= 32767):
         _note_validation(stats, "implausibleLifePoints")
         return None
-    if not (len(set(hand_indices)) >= 3
-            and all(x < 60 for x in hand_indices)):
+    if (verified_hand is None
+            and not (len(set(hand_indices)) >= 3
+                     and all(x < 60 for x in hand_indices))):
         _note_validation(stats, "implausibleHandIndices")
         return None
     # Distinct validated first draws support that this is a PS1 memory
@@ -301,7 +303,7 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
     try:
         def read_at_native(addr, count):
             if not (type(addr) is int and 0 <= addr < 0x800000000000
-                    and type(count) is int and 0 < count <= DRAW_SAMPLE_SIZE):
+                    and type(count) is int and 0 < count <= MAX_LIVE_READ_BYTES):
                 return None
             buffer = ctypes.create_string_buffer(count)
             n = ctypes.c_size_t()
