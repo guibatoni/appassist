@@ -34,3 +34,16 @@ Foi recebido um JSON de Live Diagnostics com `romFingerprint=61d58d835246`, `sam
 **Correção complementar:** a exportação recebida possuía `knownHandAnchorAtHint=false` ao mesmo tempo que `mappingMethod=known_hand_anchor`. O caminho bem-sucedido por hint não preenchia aquele booleano, e o saneador adotava `false`. Corrigido o campo no caminho rápido, acrescentado `handAnchorValidated` no evento e adicionadas métricas descritivas `candidateEvents`, `candidateIdsObserved`, `candidateIdStableAcrossReadableChanges`, `handAnchorValidatedChanges`, `distinctLpPairsInReadableChanges`. Estabilidade se refere **somente às mudanças legíveis gravadas em uma sessão**, sem autorização para associar nomes ou liberar drops.
 
 O relatório foi guardado como evidência do usuário na Biblioteca (não commitamos log de sessão ou ROM em repositório público). Verificação da execução real da versão com correção e pipeline Windows da nova HEAD ainda depende de CI e execução.
+
+
+## Segundo relatório real: comparação de sessões em 06/11/2026
+
+Recebido o segundo JSON da mesma impressão digital reduzida da ISO ativa no aplicativo (`61d58d835246`): 10 amostras, sete eventos distintos, sete leituras de mão e sete leituras de sonda legíveis, `candidateId=5` em todos os eventos, `handAnchorValidated=true` nos sete eventos e dois pares de LP (`3879/1062`, `6939/3615`). O RANK permanece indisponível.
+
+**Observação diferencial fundamental:** a última mão do primeiro relatório e a primeira do segundo são ID a ID iguais (`[284,55,58,653,281]`) e os LP correspondem (`3879/1062`), além do candidato `5`. Depois o estado muda. Isso é consistente com o estado anterior ainda em RAM no começo do segundo diagnóstico, mas não comprova adversário diferente, nem a identidade do byte 5. A hipótese de que `0x8009B361` conservou o significado do original no GOG compete com a hipótese de offset estático/alterado.
+
+A exportação do segundo JSON retorna `handAnchorValidated=true` e `knownHandAnchorAtHint=false`. Identificado novo caminho de omissão: **cache por PID e base**. Se a base cacheada é a base inferida pela mão e a mão é novamente validada, a sonda agora devolve `knownHandAnchorAtHint=true` também nesse caminho. Adicionada regressão sintética executando duas sondagens sucessivas via kernel simulado. Não altera critérios de validação de adversário ou libera drops.
+
+Referências externas de **formato original, não de validação GOG**: https://datacrystal.tcrf.net/wiki/Yu-Gi-Oh%21_Forbidden_Memories/RAM_map (byte de Opponent ID em `0x8009B361`) e https://github.com/Unchiga/Yu-Gi-Oh-Forbidden-Memories-Recompiled/blob/master/tools/pc/fm_editor/README.md (blocos de decks/drops do retail). Confirmar os bytes da ISO GOG antes de transferir esses layouts para o mod.
+
+O segundo JSON completo e a análise comparativa permanecem apenas na Biblioteca privada `/DUELTRACE - Desenvolvimento/PROJETO_ATUAL/EVIDENCIAS_GOG/`. Não publicar logs de usuário em repositório público.
