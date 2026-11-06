@@ -60,14 +60,31 @@ export function safeOpponentReport(mod: LocalMod, diagnosis: ModScanDiagnostic):
     safe.firstInvalidByteHistogram = histogram(window?.firstInvalidByteHistogram, false)
     return safe
   })
+  // Other extraction probes are already computed by the deterministic
+  // scanner. Only counts and bounded status values leave the app.
+  const searches: Record<string, {candidateCount: number | null; state: string}> = {}
+  const allowedStates = new Set([
+    "nao_encontrado", "tabela_candidata_localizada",
+    "layout_candidato_localizado", "hipoteses_ambiguas",
+    "referencias_mips_candidatas", "sem_evidencia", "indisponivel",
+  ])
+  for (const probe of ["namePointer", "relocatedNames", "mipsStaticReferences"] as const) {
+    const source = diagnosis.opponentLayoutSearch?.probes?.[probe]
+    searches[probe] = {
+      candidateCount: count(source?.candidateCount),
+      state: source?.state && allowedStates.has(source.state)
+        ? source.state : "indisponivel",
+    }
+  }
   const report = {
-    schema: 1,
+    schema: 2,
     context: "dueltrace-opponent-pointers",
     scannerRevision: count(mod.scanParserRevision),
     cards: count(mod.cards),
     opponentCandidates: count(mod.opponentCandidateCount),
     opponentCount: count(mod.opponents),
     forensicWindows: windows,
+    alternativeLayoutSearch: searches,
     disclaimer: "Dados candidatos. Nenhum ID, drop ou RANK foi validado em jogo.",
   }
   return JSON.stringify(report, null, 2)
