@@ -68,6 +68,20 @@ def fingerprint_scan(info: dict | None) -> dict:
                       for r in clusters if isinstance(r, dict)), default=0)
     max_windows = max((_count(r.get("possible39BlockWindows"), 128)
                        for r in clusters if isinstance(r, dict)), default=0)
+    fusion = info.get("fusion_profile_evidence")
+    fusion = fusion if isinstance(fusion, dict) else {}
+    fusion_count = _count(fusion.get("count"), 100000)
+    fusion_state = (
+        "seven_consistent_banks_not_individually_tested"
+        if fusion_count > 0 and fusion.get("sevenConsistentBanks") is True
+        else "observed_individual_recipes"
+        if fusion_count > 0 and fusion.get("manuallyObserved") is True
+        else "profile_recipes_unverified"
+        if fusion_count > 0 else
+        "no_recipes_in_profile"
+        if fusion.get("inspected") is True
+        else "not_assessed_by_multiiso_scan"
+    )
     opponent_origin = _allowed_status(info.get("opponent_identification"),
         {"extraidos_estruturalmente", "verificado", "identificados_por_tabela"})
     wa_state = _allowed_status(wa.get("state"), {
@@ -134,7 +148,11 @@ def fingerprint_scan(info: dict | None) -> dict:
             "rankGroupsVerified": info.get("rotulos_ranks_confirmados") is True,
             "opponentToBlockVerified": False,
         },
-        "fusion": {"state": "not_assessed_by_multiiso_scan", "recipesVerified": False},
+        "fusion": {
+            "state": fusion_state, "recipeCount": fusion_count,
+            # Count of recorded recipes is not proof all of them work in-game.
+            "recipesVerified": False,
+        },
         "missingIndependentEvidence": [
             "GOG/runtime opponent ID to names/blocks",
             "RANK group selection from executed code or observed rewards",
