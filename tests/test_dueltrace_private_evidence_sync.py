@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scanner"))
 from dueltrace_live_diagnostics import LiveDiagnosticsRecorder
 from dueltrace_private_evidence_sync import (
     EvidenceSyncError, GitHubPrivateRepositorySink, PrivateEvidenceSync,
-    validate_private_repository, validate_sanitized_report,
+    WindowsTokenStore, validate_private_repository, validate_sanitized_report,
 )
 
 
@@ -149,6 +149,19 @@ class PrivateEvidenceTests(unittest.TestCase):
             self.assertNotIn("NEVER_REMOTE",decoded)
             self.assertNotIn(token,decoded)
             self.assertFalse(json.loads(decoded)["verifiedOpponentMapping"])
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows DPAPI only")
+    def test_windows_user_scoped_dpapi_credential_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store=WindowsTokenStore(Path(tmp)/"credential.bin")
+            secret="github_pat_" + "x"*50
+            store.save(secret)
+            self.assertTrue(store.path.is_file())
+            self.assertNotIn(secret.encode(),store.path.read_bytes())
+            self.assertEqual(store.load(),secret)
+            store.clear()
+            self.assertFalse(store.path.exists())
+            self.assertIsNone(store.load())
 
     def test_fail_closed_on_unexpected_fields_or_raw_dumps(self):
         with tempfile.TemporaryDirectory() as tmp:
