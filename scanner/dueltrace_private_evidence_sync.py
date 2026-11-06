@@ -197,9 +197,22 @@ class GitHubPrivateRepositorySink:
         path = "reports/" + sanitized["romFingerprint"] + "/" + session_id + ".json"
         endpoint = "/repos/" + repo + "/contents/" + path
         current = self._request("GET", endpoint, token, allow_missing=True)
+        # The recorder's "networkTransmission": false describes the local
+        # recorder, not this user-authorized transport. Preserve it inside
+        # an explicit remote envelope instead of mislabeling the upload.
+        remote = {
+            "schema": 1,
+            "subject": "DUELTRACE Private Evidence Sync",
+            "transport": "github_private_repository",
+            "syncedAtUTC": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "diagnostics": sanitized,
+        }
+        remote_bytes = json.dumps(
+            remote, ensure_ascii=False, separators=(",", ":")
+        ).encode("utf-8")
         payload = {
             "message": "DUELTRACE: relatório sanitizado de diagnóstico",
-            "content": base64.b64encode(report_text.encode("utf-8")).decode("ascii"),
+            "content": base64.b64encode(remote_bytes).decode("ascii"),
         }
         if current is not None:
             if (not isinstance(current, dict)
