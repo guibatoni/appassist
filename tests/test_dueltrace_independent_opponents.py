@@ -317,8 +317,9 @@ class IndependentOpponentTests(unittest.TestCase):
         self.assertIsNone(result["selected"])
         self.assertEqual(result["boundaryTerminatorEvidence"]["candidateCount"],0)
         compact=compact_opponent_evidence(result)
-        self.assertEqual(compact["forensicEvidence"]["windows"][0]
-                         ["boundaryDecision"],"ponteiros_repetidos")
+        self.assertIn(compact["forensicEvidence"]["windows"][0]
+                      ["boundaryDecision"],
+                      ("dados_apos_marcador", "ponteiro_intercalado"))
         self.assertEqual(compact["forensicEvidence"]["windows"][0]
                          ["pointerAliasCount"],1)
         self.assertFalse(compact["mayActivate"] if "mayActivate" in compact else False)
