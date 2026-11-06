@@ -43,3 +43,7 @@ Nenhuma mídia de jogo, binário de terceiros, dump de RAM, arte, chave ou camin
 ## Complemento 29B — extração de fusões em contêiner renomeado
 
 Além do comparador, foi corrigido o limitador rígido de nome do extrator de fusões. `scanner/extrator_fusoes.py` mantém a interpretação de `WA_MRG.MRG` existente; se estiver ausente, verifica recursos alternativos de forma limitada e só aceita um quando TODOS os 7 bancos são decodificáveis, idênticos e sem conflitos. Se não forem, bloqueia em vez de inventar receitas. Testes sintéticos adicionados em `tests/test_extrator_fusoes.py`. O GOG ainda pode ter bancos em novos offsets e **não foi validado com ISO real nesta etapa**. Confirmar CI final da branch e preservação das extrações da ISO positiva.
+
+## Complemento 29C — automatização no app moderno
+
+`scanner/dueltrace_intelligence.py` agora executa a sonda de sete bancos quando a ISO é importada pela Biblioteca moderna, mas apenas após confirmar o catálogo 722 por SHA, tamanho e data. Reutiliza o extrator 29B que pode reconhecer contêineres renomeados se os sete bancos forem iguais e válidos. Um resultado negativo fica cacheado por versão da ISO para evitar rescans caros; ausência de evidência não bloqueia cartas, artes nem recursos existentes. Testes sintéticos positivos/negativos em `tests/test_dueltrace_intelligence.py`. Sem confirmar receitas em jogo ou ativar drops/RANK.
