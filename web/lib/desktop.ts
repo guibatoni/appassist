@@ -427,6 +427,14 @@ export type MipsTraceResult = {
   last?: MipsTraceResult | null
 }
 
+export type PrivateEvidenceSyncStatus = {
+  enabled:boolean
+  repository:string|null
+  lastSyncedAtUTC:string|null
+  lastError:string|null
+  remoteIsChatGPTConnection:false
+}
+
 export type LiveDiagnosticsStatus = {
   running: boolean
   romFingerprint?: string
@@ -748,6 +756,9 @@ export interface DesktopAPI {
   stop_live_diagnostics(): Promise<LiveDiagnosticsStatus>
   get_live_diagnostics_status(): Promise<LiveDiagnosticsStatus>
   export_live_diagnostics(): Promise<string>
+  configure_private_evidence_sync(repository:string, token:string, consent:boolean):Promise<PrivateEvidenceSyncStatus>
+  disable_private_evidence_sync():Promise<PrivateEvidenceSyncStatus>
+  get_private_evidence_sync_status():Promise<PrivateEvidenceSyncStatus>
   get_live_opponent(): Promise<LiveOpponentProbe>
   get_candidate_matrix(sha: string, block?: number, group?: number, query?: string, offset?: number, limit?: number): Promise<CandidateMatrixPage>
   get_window_observations(sha: string): Promise<WindowObservationResult>
@@ -794,6 +805,9 @@ interface ProtectedNativeAPI {
   stop_live_diagnostics(token: string): Promise<LiveDiagnosticsStatus>
   get_live_diagnostics_status(token: string): Promise<LiveDiagnosticsStatus>
   export_live_diagnostics(token: string): Promise<string>
+  configure_private_evidence_sync(token:string,repository:string,secret:string,consent:boolean):Promise<PrivateEvidenceSyncStatus>
+  disable_private_evidence_sync(token:string):Promise<PrivateEvidenceSyncStatus>
+  get_private_evidence_sync_status(token:string):Promise<PrivateEvidenceSyncStatus>
   get_live_opponent(token: string): Promise<LiveOpponentProbe>
   get_candidate_matrix(token: string, sha: string, block?: number, group?: number, query?: string, offset?: number, limit?: number): Promise<CandidateMatrixPage>
   get_window_observations(token: string, sha: string): Promise<WindowObservationResult>
@@ -855,6 +869,10 @@ export function desktopApi(): DesktopAPI | null {
     stop_live_diagnostics: () => native.stop_live_diagnostics(token),
     get_live_diagnostics_status: () => native.get_live_diagnostics_status(token),
     export_live_diagnostics: () => native.export_live_diagnostics(token),
+    configure_private_evidence_sync: (repository,secret,consent) =>
+      native.configure_private_evidence_sync(token,repository,secret,consent),
+    disable_private_evidence_sync: () => native.disable_private_evidence_sync(token),
+    get_private_evidence_sync_status: () => native.get_private_evidence_sync_status(token),
     get_live_opponent: () => native.get_live_opponent(token),
     get_candidate_matrix: (sha,block=-1,group=1,query="",offset=0,limit=30) =>
       native.get_candidate_matrix(token,sha,block,group,query,offset,limit),

@@ -11,7 +11,7 @@ import {DropsPage} from "./drops-page"
 import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -481,6 +481,10 @@ function LiveDiagnosticsPanel({sha}:{sha:string|null}) {
   const [error,setError]=useState<string|null>(null)
   const [report,setReport]=useState("")
   const [message,setMessage]=useState("")
+  const [sync,setSync]=useState<PrivateEvidenceSyncStatus|null>(null)
+  const [syncRepo,setSyncRepo]=useState("")
+  const [syncToken,setSyncToken]=useState("")
+  const [syncConsent,setSyncConsent]=useState(false)
 
   useEffect(()=>{
     let active=true
@@ -490,8 +494,11 @@ function LiveDiagnosticsPanel({sha}:{sha:string|null}) {
       if(!api||querying)return
       querying=true
       try{
-        const next=await api.get_live_diagnostics_status()
-        if(active)setStatus(next)
+        const [next,nextSync]=await Promise.all([
+          api.get_live_diagnostics_status(),
+          api.get_private_evidence_sync_status(),
+        ])
+        if(active){setStatus(next);setSync(nextSync)}
       }catch{
         if(active)setStatus(null)
       }finally{querying=false}
@@ -512,6 +519,32 @@ function LiveDiagnosticsPanel({sha}:{sha:string|null}) {
       setStatus(next)
     }catch(e){
       setError(e instanceof Error?e.message:"Falha ao controlar o diagnóstico.")
+    }finally{setBusy(false)}
+  }
+
+  const connectPrivate=async()=>{
+    const api=desktopApi()
+    if(!api||busy||!syncConsent)return
+    setBusy(true);setError(null);setMessage("")
+    try {
+      const next=await api.configure_private_evidence_sync(
+        syncRepo.trim(),syncToken,true)
+      setSync(next);setSyncToken("");setSyncConsent(false)
+      setMessage("Sincronização privada ativada. A coleta começa quando você iniciar o diagnóstico.")
+    }catch(e){
+      setError(e instanceof Error?e.message:"Falha na autenticação privada.")
+    }finally{setBusy(false)}
+  }
+  const disconnectPrivate=async()=>{
+    const api=desktopApi()
+    if(!api||busy)return
+    setBusy(true);setError(null);setMessage("")
+    try{
+      setSync(await api.disable_private_evidence_sync())
+      setSyncToken("");setSyncConsent(false)
+      setMessage("Envios desativados e credencial local apagada. Relatórios já enviados permanecem no GitHub.")
+    }catch(e){
+      setError(e instanceof Error?e.message:"Falha ao desativar sincronização.")
     }finally{setBusy(false)}
   }
 
@@ -564,10 +597,57 @@ function LiveDiagnosticsPanel({sha}:{sha:string|null}) {
         new Date(status.lastObservedAtUTC).toLocaleTimeString("pt-BR"):"—"}
     </p>
     <p className="mt-1 text-xs text-gold">
-      Os dados permanecem somente no PC até você copiar o relatório.
-      Não existe conexão automática com esta conversa, nem envio de ISO,
-      RAM bruta, tokens ou imagens. IDs e RANKs detectados não são confirmações.
+      Sem sincronização privada ativa, o relatório permanece somente no PC.
+      Nenhuma conexão direta com esta conversa é estabelecida. IDs e RANKs
+      continuam provisórios, mesmo após um envio.
     </p>
+    <div className="mt-4 rounded-lg border border-line/70 p-3">
+      <h3 className="text-sm font-semibold text-primary">Sincronização privada de evidências</h3>
+      <p className="mt-1 text-xs text-muted">
+        Opcional, via HTTPS para um repositório GitHub privado separado. Com a coleta
+        ativa, envia o JSON sanitizado a cada ~60 segundos e ao encerrar.
+        Não envia ISO, arte, RAM bruta, caminhos do PC nem token.
+        O ChatGPT não acompanha o PC continuamente; os relatórios poderão ser
+        consultados pelo GitHub conectado quando você solicitar análise.
+      </p>
+      {sync?.enabled?
+        <div className="mt-3 space-y-2">
+          <p className="text-xs text-success">● Envio autorizado para {sync.repository}</p>
+          <p className="text-xs text-muted">Último envio: {sync.lastSyncedAtUTC?
+            new Date(sync.lastSyncedAtUTC).toLocaleString("pt-BR"):"Ainda não realizado"}</p>
+          {sync.lastError&&<p role="alert" className="text-xs text-danger">{sync.lastError}</p>}
+          <button type="button" className="btn-ghost" disabled={busy}
+            onClick={()=>void disconnectPrivate()}>Desativar e apagar credencial local</button>
+        </div>:
+        <div className="mt-3 space-y-2">
+          <label className="block text-xs text-muted" htmlFor="sync-repo">
+            Repositório privado (usuario/nome-do-repositorio)
+          </label>
+          <input id="sync-repo" className="field w-full p-2 text-xs"
+            autoComplete="off" value={syncRepo}
+            onChange={e=>setSyncRepo(e.target.value)} placeholder="usuario/dueltrace-evidencias"/>
+          <label className="block text-xs text-muted" htmlFor="sync-token">
+            Token de acesso fino do GitHub (Contents: Read and write, somente esse repositório)
+          </label>
+          <input id="sync-token" type="password" className="field w-full p-2 text-xs"
+            autoComplete="off" spellCheck={false} value={syncToken}
+            onChange={e=>setSyncToken(e.target.value)} placeholder="Cole o token somente aqui"/>
+          <label className="flex items-start gap-2 text-xs text-muted">
+            <input type="checkbox" checked={syncConsent}
+              onChange={e=>setSyncConsent(e.target.checked)}/>
+            Autorizo o envio periódico dos relatórios sanitizados para esse repositório
+            privado. Sei que os arquivos enviados continuam lá após desativar.
+          </label>
+          <button type="button" className="btn-gold" disabled={busy||!syncRepo.trim()||
+            !syncToken.trim()||!syncConsent} onClick={()=>void connectPrivate()}>
+            Verificar privacidade e ativar
+          </button>
+          <p className="text-xs text-gold">
+            Não coloque o token nesta conversa nem no repositório de código do DUELTRACE.
+            A credencial fica criptografada para seu usuário Windows.
+          </p>
+        </div>}
+    </div>
     {error&&<p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
     {message&&<p role="status" className="mt-2 text-xs text-primary">{message}</p>}
     {report&&<textarea readOnly value={report}

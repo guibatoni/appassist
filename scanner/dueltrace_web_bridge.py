@@ -24,6 +24,7 @@ from dueltrace_card_matcher import compare_profiles
 from dueltrace_card_match_ai import review_card_candidates
 from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
                                  suggest_hand_pairs)
+from dueltrace_private_evidence_sync import PrivateEvidenceSync, EvidenceSyncError
 from dueltrace_fusion_planner import plan_fusion_chains
 from dueltrace_rank_live import (model_available, read_rank_candidate,
                                  read_rank_from_verified_binding, project_lp_win_rank,
@@ -82,6 +83,11 @@ class DueltraceWebBridge:
         self._live_diagnostics = None
         self._live_diagnostics_stop = None
         self._live_diagnostics_thread = None
+        # Separate, opt-in remote channel; disabled until configured by user.
+        self._private_evidence_sync = PrivateEvidenceSync(
+            self.catalog.home / "live_diagnostics")
+        self._private_sync_pending = False
+        self._private_sync_again = False
         self._fusion_cache_key = None
         self._fusion_cache = {}
         self._hand_suggestions_key = None
@@ -1349,14 +1355,55 @@ class DueltraceWebBridge:
                 }
         return recorder.observe(hand, opponent, rank, current_sha)
 
+    def _queue_private_evidence_upload(self, recorder):
+        """Coalesce periodic and final uploads; never block RAM sampling."""
+        if not self._private_evidence_sync.status()["enabled"]:
+            return
+        with self._lock:
+            if self._private_sync_pending:
+                self._private_sync_again = True
+                return
+            self._private_sync_pending = True
+
+        def transmit():
+            while True:
+                try:
+                    self._private_evidence_sync.upload(recorder)
+                except (EvidenceSyncError, OSError, RuntimeError, ValueError):
+                    # The remote channel is optional. Never break RAM reading.
+                    pass
+                with self._lock:
+                    if self._private_sync_again:
+                        self._private_sync_again = False
+                    else:
+                        self._private_sync_pending = False
+                        return
+        threading.Thread(target=transmit, daemon=True,
+                         name="dueltrace-private-evidence-sync").start()
+
     def _live_diagnostics_loop(self, recorder, stop_event):
+        last_sync = monotonic()
         try:
             while not stop_event.is_set() and recorder.running:
                 self._collect_live_diagnostics_once(recorder)
+                if monotonic() - last_sync >= 60:
+                    self._queue_private_evidence_upload(recorder)
+                    last_sync = monotonic()
                 if stop_event.wait(3.0):
                     break
         finally:
             recorder.stop()
+            self._queue_private_evidence_upload(recorder)
+
+    def configure_private_evidence_sync(self, repository, token, consent):
+        """User's explicit action; accepts only verified private GitHub repo."""
+        return self._private_evidence_sync.configure(repository, token, consent)
+
+    def disable_private_evidence_sync(self):
+        return self._private_evidence_sync.disable()
+
+    def get_private_evidence_sync_status(self):
+        return self._private_evidence_sync.status()
 
     def start_live_diagnostics(self):
         """User opt-in only: sample locally, no cloud and no ROM dumps."""
@@ -1391,6 +1438,7 @@ class DueltraceWebBridge:
                 self._live_diagnostics_stop.set()
             if self._live_diagnostics is not None:
                 self._live_diagnostics.stop()
+                self._queue_private_evidence_upload(self._live_diagnostics)
             return self.get_live_diagnostics_status()
 
     def get_live_diagnostics_status(self):
