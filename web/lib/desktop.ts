@@ -433,6 +433,8 @@ export type LiveOpponentProbe = {
   runtimeOpponentId:number|null
   playerLP?:number
   opponentLP?:number
+  autoLogged?:boolean
+  localRuntimeIdEvents?:number
   mappingValidatedByIndependentFields?:boolean
   runtimeIdVerifiedForMod:boolean
   romIdentityVerified:boolean
