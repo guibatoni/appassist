@@ -32,6 +32,22 @@ export type LayoutFileCandidate = {
   validated: false
 }
 
+export type IsoLayoutComparison = {
+  schema:number
+  kind:string
+  positiveBaselineFingerprint:string|null
+  comparedProfiles:number
+  skippedProfiles:number
+  automaticallyActivatesFeatures:false
+  compared:Array<{
+    romFingerprint:string|null
+    structurallySameInComparedFields:boolean
+    differences:Array<{stage:string;feature:string;baseline:unknown;comparison:unknown}>
+    inGameValidated:false
+    suggestedNextAction:string
+  }>
+}
+
 export type ModScanDiagnostic = {
   romSha?: string
   opponentForensics?: {
@@ -785,6 +801,7 @@ export interface DesktopAPI {
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(sha: string): Promise<DeepScanResult>
   get_mod_scan_diagnostic(sha: string, withOllama?: boolean): Promise<ModScanDiagnostic>
+  compare_mod_layouts(sha: string): Promise<IsoLayoutComparison>
   import_iso(): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(): Promise<{started: boolean; status: string}>
@@ -834,6 +851,7 @@ interface ProtectedNativeAPI {
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(token: string, sha: string): Promise<DeepScanResult>
   get_mod_scan_diagnostic(token: string, sha: string, withOllama?: boolean): Promise<ModScanDiagnostic>
+  compare_mod_layouts(token: string, sha: string): Promise<IsoLayoutComparison>
   import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(token: string): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(token: string): Promise<{started: boolean; status: string}>
@@ -902,6 +920,7 @@ export function desktopApi(): DesktopAPI | null {
     activate_mod: (sha, acknowledge) => native.activate_mod(token, sha, acknowledge),
     scan_sources: (sha) => native.scan_sources(token, sha),
     get_mod_scan_diagnostic: (sha,withOllama) => native.get_mod_scan_diagnostic(token,sha,withOllama),
+    compare_mod_layouts: (sha) => native.compare_mod_layouts(token,sha),
     import_iso: () => native.import_iso(token),
     configure_epsxe: () => native.configure_epsxe(token),
     start_game: () => native.start_game(token),
