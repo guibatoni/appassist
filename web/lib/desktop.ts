@@ -32,6 +32,39 @@ export type LayoutFileCandidate = {
   validated: false
 }
 
+export type IsoForensicAudit = {
+  schema:1
+  subject:"DUELTRACE ISO Forensic Lab"
+  inspectedAtUTC:string
+  romFingerprint:string
+  exactSha256Matched:true
+  fileSizeBytes:number
+  disc:{sectorBytes:number;indexedFiles:number;
+        resourceSelection:string;resourceBytesRead:number}
+  executable:{state:string;coherent:boolean;physicalPaddingVerified:boolean;candidatesTried?:number}
+  cards:{state:string;count:number}
+  opponents:{state:string;count:number;namesStructural:number;
+             affineLengthException:boolean;inGameIdentityVerified:false}
+  rank:{state:string;staticCandidates:number;executionConfirmed:false}
+  drops:{state:string;validatedStructuralMatrices:number;
+         labelsVerified:false;opponentMappingVerified:false}
+  weightFamily:{state:string;matrixCount:number;distinct39Windows:number;
+    ambiguous:boolean;base:number|null;opponentStep:number|null;
+    matrixStride:number|null;distributionEncoding:string|null;
+    opponentMappingVerified:false;rankGroupLabelsVerified:false;
+    mayActivateDrops:false}
+  fusions:{state:string;validBanks:number;matchingBanks:number;
+           recipes:number;conflictingPairs:number;unambiguousPairs:number;
+           resourceMethod?:string;mayActivate:false}
+  images:{state:string;large:number;thumbnails:number;duplicateDifferences:number;checked:number}
+  verifiedInGame:false
+  mayActivateDrops:false
+  mayActivateRank:false
+  mayActivateFusions:false
+  networkTransmission:false
+  note:string
+}
+
 export type IsoLayoutComparison = {
   schema:number
   kind:string
@@ -802,6 +835,7 @@ export interface DesktopAPI {
   scan_sources(sha: string): Promise<DeepScanResult>
   get_mod_scan_diagnostic(sha: string, withOllama?: boolean): Promise<ModScanDiagnostic>
   compare_mod_layouts(sha: string): Promise<IsoLayoutComparison>
+  audit_mod_iso(sha: string): Promise<IsoForensicAudit>
   import_iso(): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(): Promise<{started: boolean; status: string}>
@@ -852,6 +886,7 @@ interface ProtectedNativeAPI {
   scan_sources(token: string, sha: string): Promise<DeepScanResult>
   get_mod_scan_diagnostic(token: string, sha: string, withOllama?: boolean): Promise<ModScanDiagnostic>
   compare_mod_layouts(token: string, sha: string): Promise<IsoLayoutComparison>
+  audit_mod_iso(token: string, sha: string): Promise<IsoForensicAudit>
   import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(token: string): Promise<{cancelled: boolean; configured?: boolean}>
   start_game(token: string): Promise<{started: boolean; status: string}>
@@ -921,6 +956,7 @@ export function desktopApi(): DesktopAPI | null {
     scan_sources: (sha) => native.scan_sources(token, sha),
     get_mod_scan_diagnostic: (sha,withOllama) => native.get_mod_scan_diagnostic(token,sha,withOllama),
     compare_mod_layouts: (sha) => native.compare_mod_layouts(token,sha),
+    audit_mod_iso: (sha) => native.audit_mod_iso(token,sha),
     import_iso: () => native.import_iso(token),
     configure_epsxe: () => native.configure_epsxe(token),
     start_game: () => native.start_game(token),
