@@ -88,6 +88,27 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(snapshot["cards"][1]["effectSource"],"ROM-offset-auditado")
         self.assertNotIn("source_path",str(snapshot))
 
+    def test_live_opponent_probe_requires_token_and_never_promotes(self):
+        native={"ready":True,"status":"runtime_id_candidate",
+                "runtimeOpponentId":11,
+                "mappingValidatedByIndependentFields":True,
+                "runtimeIdVerifiedForMod":False,
+                "opponentNameVerified":False,
+                "romIdentityVerified":False,
+                "mayActivateDrops":False,"mayActivateRank":False}
+        protected=ProtectedDesktopApi(self.bridge,"x"*64)
+        with self.assertRaises(PermissionError):
+            protected.get_live_opponent("wrong")
+        with patch("dueltrace_live_opponent.probe_live_opponent",return_value=native) as probe:
+            result=protected.get_live_opponent("x"*64)
+            probe.assert_called_once()
+            self.assertEqual(result["runtimeOpponentId"],11)
+            self.assertFalse(result["romIdentityVerified"])
+            self.assertFalse(result["mayActivateDrops"])
+            self.assertFalse(result["opponentNameVerified"])
+            self.assertFalse(result["mayActivateRank"])
+            self.assertEqual(self.catalog.current()["sha256"],self.sha)
+
     def test_family_summary_exposes_only_structural_counts(self):
         # A 40-block family has two possible 39-opponent windows, NOT
         # verified 40 opponents or unlocked drop tables.
