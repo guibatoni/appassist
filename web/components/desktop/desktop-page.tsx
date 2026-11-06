@@ -979,6 +979,7 @@ function Mods({mods,sha,onRefresh,configured}:{
   const [message,setMessage]=useState<string|null>(null)
   const [comparison,setComparison]=useState<IsoLayoutComparison|null>(null)
   const [forensicAudit,setForensicAudit]=useState<IsoForensicAudit|null>(null)
+  const [forensicSha,setForensicSha]=useState<string|null>(null)
 
   // A análise detalhada permanece disponível no motor, não nesta tela pública.
   const run=async(action:()=>Promise<unknown>,success:string)=>{
@@ -1002,14 +1003,33 @@ function Mods({mods,sha,onRefresh,configured}:{
         "Não foi possível copiar o diagnóstico do mod.")
     } finally {setBusy(false)}
   }
+  const sendForensic=async()=>{
+    const api=desktopApi()
+    if(!api||busy||!forensicSha)return
+    if(!window.confirm("Enviar SOMENTE o resumo forense sanitizado para seu repositório GitHub privado? Não envia ISO, arte, nomes de cartas nem receitas."))return
+    setBusy(true);setMessage("Verificando destino privado antes do envio...")
+    try{
+      const connection=await api.get_private_evidence_sync_status()
+      if(!connection.enabled){
+        setMessage("Ative a sincronização privada no Live Diagnostics para enviar esse relatório.")
+        return
+      }
+      const result=await api.upload_iso_forensic(forensicSha)
+      setMessage(result.synced
+        ?"Auditoria enviada ao GitHub privado. Agora posso consultá-la nesta conversa."
+        :"O envio não foi confirmado.")
+    }catch(err){
+      setMessage(err instanceof Error?err.message:"Falha ao enviar a auditoria privada.")
+    }finally{setBusy(false)}
+  }
   const auditIso=async(mod:LocalMod)=>{
     const api=desktopApi()
     if(!api||busy)return
     setBusy(true);setMessage("Laboratório forense: verificando SHA-256, tabelas e bancos da ISO...")
-    setForensicAudit(null)
+    setForensicAudit(null);setForensicSha(null)
     try{
       const report=await api.audit_mod_iso(mod.sha256)
-      setForensicAudit(report)
+      setForensicAudit(report);setForensicSha(mod.sha256)
       setMessage("Leitura forense concluída. Dados salvos localmente; nada foi transmitido.")
     }catch(err){
       setMessage(err instanceof Error?err.message:"Não foi possível auditar esta ISO.")
@@ -1100,6 +1120,14 @@ function Mods({mods,sha,onRefresh,configured}:{
             .catch(()=>setMessage("Não foi possível copiar. Confira a permissão da área de transferência."))}>
           <ClipboardCopy className="size-4"/> Copiar relatório forense
         </button>
+        <button type="button" className="btn-ghost mt-3 ml-2" disabled={busy}
+          onClick={()=>void sendForensic()}>
+          <Upload className="size-4"/> Enviar relatório privado
+        </button>
+        <p className="mt-2 text-xs text-muted">
+          O envio ao GitHub é opcional e exige sua confirmação em cada auditoria.
+          Ele não é iniciado automaticamente pelo diagnóstico.
+        </p>
       </div>}
       {comparison&&<div className="mt-3 rounded-lg border border-line/70 bg-background/50 p-3">
         <p className="text-sm font-semibold text-primary">
