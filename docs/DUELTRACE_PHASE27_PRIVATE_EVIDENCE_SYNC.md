@@ -45,3 +45,17 @@ O repositório de evidências é remoto, mas **não é uma API direta desta conv
 ## Próximo escopo de engenharia reversa
 
 Primeiro validar o canal e a identidade de sessão. Depois acrescentar **eventos comprovados de início/término de duelo e identificação contextual do adversário** quando houver evidência de ROM/MIPS, ao invés de publicar números estáticos. Para drops e fusões, o parser de bytes reais da ISO continua essencial. Nunca ativar pools ou fusões só por frequência observada.
+
+## Formato de arquivo remoto
+
+O JSON remoto usa um envelope de proveniência:
+```json
+{
+  "schema": 1,
+  "subject": "DUELTRACE Private Evidence Sync",
+  "transport": "github_private_repository",
+  "syncedAtUTC": "...",
+  "diagnostics": { "schema": 1, "subject": "DUELTRACE Live Diagnostics" }
+}
+```
+O objeto `diagnostics` conserva todos os campos locais sanitizados. Em particular, `diagnostics.networkTransmission=false` significa que **o módulo gravador local não transmite por si mesmo**; o envelope externo registra que houve um upload autorizado pela camada privada. Não confundir isso com ausência de envio.
