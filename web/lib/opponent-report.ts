@@ -27,6 +27,19 @@ const STATUS = new Set([
   "ff_encontrado", "glifo_invalido", "sem_ff_antes_proximo",
   "limite_leitura_sem_ff", "fim_arquivo_sem_ff",
 ])
+const CONTROL_COUNTS = [
+  "recordsExamined", "distinctPointers", "ffPresent", "fdPresent",
+  "fdBeforeFf", "fdWithoutFf", "fdFollowedByGlyph",
+  "fdFollowedByZero", "fdFollowedByControl", "fdAtRecordEnd",
+  "fdWithGlyphBeforeFf", "nonZeroAfterFf", "nonZeroAfterFd",
+  "ffAfterFirstInvalid", "interleavedOrTruncated",
+] as const
+const CONTROL_STATES = new Set([
+  "entrada_invalida", "layout_nao_acessivel", "ponteiros_ou_registros_invalidos",
+  "registros_parciais", "controles_mistos_necessitam_validacao",
+  "fd_sem_terminador_comprovado", "ff_observado_nao_comprova_ids",
+  "terminadores_desconhecidos",
+])
 
 function count(value: unknown): number | null {
   return typeof value === "number" && Number.isSafeInteger(value) &&
@@ -60,6 +73,23 @@ export function safeOpponentReport(mod: LocalMod, diagnosis: ModScanDiagnostic):
     safe.firstInvalidByteHistogram = histogram(window?.firstInvalidByteHistogram, false)
     return safe
   })
+  const controlWindows = (evidence.controlWindows ?? []).slice(0, 5).map(window => {
+    const safe: Record<string, number | string | null | Record<string, number>> = {}
+    for (const key of CONTROL_COUNTS) safe[key] = count(window?.[key])
+    safe.state = typeof window?.state === "string" && CONTROL_STATES.has(window.state)
+      ? window.state : "entrada_invalida"
+    const raw = window?.nonFfControlHistogram
+    const controlHistogram: Record<string, number> = {}
+    if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
+      for (const [byte, value] of Object.entries(raw).slice(0, 10)) {
+        const numeric = count(value)
+        if (/^0xF[0-9A-E]$/.test(byte) && numeric !== null &&
+            numeric >= 0 && numeric <= 5000) controlHistogram[byte] = numeric
+      }
+    }
+    safe.nonFfControlHistogram = controlHistogram
+    return safe
+  })
   // Other extraction probes are already computed by the deterministic
   // scanner. Only counts and bounded status values leave the app.
   const searches: Record<string, {candidateCount: number | null; state: string}> = {}
@@ -67,6 +97,8 @@ export function safeOpponentReport(mod: LocalMod, diagnosis: ModScanDiagnostic):
     "nao_encontrado", "tabela_candidata_localizada",
     "layout_candidato_localizado", "hipoteses_ambiguas",
     "referencias_mips_candidatas", "sem_evidencia", "indisponivel",
+    "sem_alvos_candidatos", "psx_header_invalido", "executavel_invalido",
+    "mapeamento_ram_invalido", "alvos_invalidos",
   ])
   for (const probe of ["namePointer", "relocatedNames", "mipsStaticReferences"] as const) {
     const source = diagnosis.opponentLayoutSearch?.probes?.[probe]
@@ -77,13 +109,14 @@ export function safeOpponentReport(mod: LocalMod, diagnosis: ModScanDiagnostic):
     }
   }
   const report = {
-    schema: 2,
+    schema: 3,
     context: "dueltrace-opponent-pointers",
     scannerRevision: count(mod.scanParserRevision),
     cards: count(mod.cards),
     opponentCandidates: count(mod.opponentCandidateCount),
     opponentCount: count(mod.opponents),
     forensicWindows: windows,
+    controlFlowWindows: controlWindows,
     alternativeLayoutSearch: searches,
     disclaimer: "Dados candidatos. Nenhum ID, drop ou RANK foi validado em jogo.",
   }
