@@ -82,6 +82,16 @@ def sanitise_sample(hand, opponent, rank):
             "lpOpponent": _number(opponent.get("opponentLP"), 1, 32767),
             "memoryRegionsExamined": _number(opponent.get("memoryRegionsExamined"), 0, 100000),
             "candidateBasesExamined": _number(opponent.get("candidateBasesExamined"), 0, 1000),
+            # Hand-derived host mapping is evidence only, not opponent ID proof.
+            "knownHandAnchorAtHint": _flag(opponent.get("knownHandAnchorAtHint")),
+            "hintRejectionCounts": {
+                key: _number(
+                    (opponent.get("hintValidationBreakdown") or {}).get(key),
+                    0, 100000) or 0
+                for key in MEMORY_FAILURES
+            } if isinstance(opponent.get("hintValidationBreakdown"), dict) else {
+                key: 0 for key in MEMORY_FAILURES
+            },
             "rejectionCounts": {
                 key: _number(breakdown.get(key), 0, 100000) or 0
                 for key in MEMORY_FAILURES
