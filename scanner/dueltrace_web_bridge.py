@@ -77,6 +77,7 @@ class DueltraceWebBridge:
         # Opt-in temporário: nunca comprova compatibilidade nem persiste entre sessões.
         self._rank_experimental_sha = None
         self._process = None
+        self._launched_rom_sha = None
         self._lock = threading.RLock()
         self._fusion_cache_key = None
         self._fusion_cache = {}
@@ -1314,29 +1315,78 @@ class DueltraceWebBridge:
         return report
 
     def get_live_opponent(self):
-        """Passively probe only the ePSXe process. Never write its RAM."""
+        """Passive RAM reader with local, provisional ID logging.
+
+        Auto-record only when THIS app launched the process for the
+        same active ISO SHA. An external disc swap is not detectable,
+        therefore stored IDs cannot promote drops or opponent mappings.
+        """
         from dueltrace_live_opponent import probe_live_opponent
+        fail={"ready":False,"status":"runtime_probe_unavailable",
+              "runtimeOpponentId":None,
+              "runtimeIdVerifiedForMod":False,"romIdentityVerified":False,
+              "opponentNameVerified":False,
+              "mayActivateDrops":False,"mayActivateRank":False,
+              "autoLogged":False}
         with self._lock:
             active, entry, profile = self._active()
+            sha=active.get("sha256") if isinstance(active,dict) else None
             if not profile:
-                return {"ready":False,"status":"activate_mod",
-                        "runtimeOpponentId":None,
-                        "runtimeIdVerifiedForMod":False,
-                        "opponentNameVerified":False,
-                        "romIdentityVerified":False,
-                        "mayActivateDrops":False,"mayActivateRank":False}
-            preferred = (
-                self._process.pid if self._process is not None
-                and self._process.poll() is None else None)
+                return {**fail,"status":"activate_mod"}
+            launched=self._process is not None and self._process.poll() is None
+            preferred=self._process.pid if launched else None
         try:
-            return probe_live_opponent(preferred_pid=preferred)
-        except (OSError, RuntimeError, ValueError, OverflowError):
-            return {"ready":False,"status":"runtime_probe_unavailable",
-                    "runtimeOpponentId":None,
-                    "runtimeIdVerifiedForMod":False,
-                    "opponentNameVerified":False,
-                    "romIdentityVerified":False,
-                    "mayActivateDrops":False,"mayActivateRank":False}
+            sample=probe_live_opponent(preferred_pid=preferred)
+        except (OSError,RuntimeError,ValueError,OverflowError):
+            return fail
+        if not (isinstance(sample,dict) and sample.get("ready") is True
+                and type(sample.get("runtimeOpponentId")) is int
+                and 0 <= sample["runtimeOpponentId"] <= 39):
+            return {**fail,**sample,"autoLogged":False}
+        # RAM field remains only a candidate until tested with this mod.
+        outcome={**sample,"autoLogged":False,
+                 "runtimeIdVerifiedForMod":False,
+                 "romIdentityVerified":False,
+                 "opponentNameVerified":False,
+                 "mayActivateDrops":False,"mayActivateRank":False}
+        if not (launched and preferred is not None
+                and type(sha) is str and re.fullmatch(r"[a-f0-9]{64}",sha)):
+            return outcome
+        with self._lock:
+            active_now,_entry,_profile=self._active()
+            if (active_now.get("sha256") != sha
+                    or self._launched_rom_sha != sha
+                    or self._process is None
+                    or self._process.poll() is not None
+                    or self._process.pid != preferred):
+                return outcome
+            path=self.catalog.home/"runtime_opponent_observations"/(sha+".json")
+            try:
+                raw=load_json(path,{})
+                if raw and (not isinstance(raw,dict)
+                            or raw.get("rom_sha256") != sha):
+                    return outcome
+                events=raw.get("events",[]) if isinstance(raw,dict) else []
+                if not isinstance(events,list) or len(events)>256:
+                    return outcome
+                if (events and isinstance(events[-1],dict)
+                        and events[-1].get("opponentRuntimeId")
+                            == sample["runtimeOpponentId"]):
+                    return {**outcome,"localRuntimeIdEvents":len(events)}
+                events=events[-255:]+[{
+                    "opponentRuntimeId":sample["runtimeOpponentId"],
+                    "observedAtUTC":datetime.now(timezone.utc).isoformat(),
+                    "source":"epsxe_ram_candidate_not_game_verified",
+                }]
+                atomic_json(path,{
+                    "schema":1,"rom_sha256":sha,"events":events,
+                    "verifiedForGame":False,"mayActivateDrops":False,
+                    "mayActivateRank":False,
+                })
+                return {**outcome,"autoLogged":True,
+                        "localRuntimeIdEvents":len(events)}
+            except (OSError,ValueError,TypeError):
+                return outcome
 
     def get_candidate_matrix(self, sha, physical_block_index=-1,
                              matrix_group=1, query="", offset=0, limit=30):
@@ -1796,4 +1846,5 @@ class DueltraceWebBridge:
             if self._process is not None and self._process.poll() is None:
                 return {"started":False,"status":"ePSXe já iniciado por DUELTRACE"}
             self._process=launch_epsxe(self.catalog,executable,active["sha256"])
+            self._launched_rom_sha=active["sha256"]
             return {"started":True,"status":"ePSXe iniciado com o mod selecionado"}
