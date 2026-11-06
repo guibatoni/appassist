@@ -17,7 +17,8 @@ ENDPOINT = "http://127.0.0.1:11434/api/generate"
 DEFAULT_MODEL = "qwen2.5-coder:7b"
 ALLOWED_CAUSES = frozenset({
     "ponteiros_repetidos_ou_fora_de_ordem",
-    "ponteiros_repetidos", "ponteiros_fora_do_arquivo",
+    "ponteiros_repetidos", "aliases_excessivos", "aliases_inconsistentes",
+    "ponteiros_fora_do_arquivo",
     "ponteiro_intercalado", "marcador_alem_da_fronteira",
     "dados_apos_marcador", "marcadores_inconsistentes",
     "marcador_nao_suportado", "nomes_ou_codificacao_nao_conclusivos",
@@ -33,6 +34,7 @@ ALLOWED_ACTIONS = frozenset({
 })
 KEYS = ("candidateReadable", "terminatedFF", "pointerCountDistinct",
         "pointerNonIncreasingPairs", "pointerAliasCount",
+        "pointerAliasGroups", "maxAliasMultiplicity",
         "pointerSpanMin", "pointerSpanMax",
         "recordBoundaryKnown", "recordBoundaryReached", "recordWithHeader",
         "firstInvalidOffsetMin", "firstInvalidOffsetMax")
