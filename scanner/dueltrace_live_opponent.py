@@ -323,6 +323,21 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
                     "mappingValidatedByIndependentFields":True,
                 }
             _PID_BASE_CACHE.pop(pid,None)
+        # Reuse the known working hand address before scanning thousands
+        # of unrelated host allocations. It can shortcut the scan ONLY
+        # when the full five-card hand decodes identically at both offsets.
+        hinted = _read_sample_twice(read_at_native, LEGACY_HOST_BASE_HINT)
+        if hinted is not None and hinted["validationMethod"] == "known_hand_anchor":
+            _PID_BASE_CACHE[pid] = LEGACY_HOST_BASE_HINT
+            return {
+                **fail,"ready":True,"status":"runtime_id_candidate",
+                "runtimeOpponentId":hinted["runtimeOpponentId"],
+                "playerLP":hinted["playerLP"],
+                "opponentLP":hinted["opponentLP"],
+                "validationMethod":"known_hand_anchor",
+                "mappingValidatedByIndependentFields":True,
+                "memoryScanSkippedByKnownHand":True,
+            }
         bases, scan_diagnostic = _candidate_bases(kernel,handle)
         failure_counts = {}
         found = []
