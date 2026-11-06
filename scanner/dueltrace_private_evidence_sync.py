@@ -140,7 +140,9 @@ class GitHubPrivateRepositorySink:
             with self._opener.open(request, timeout=12) as response:
                 if getattr(response, "status", 200) not in (200, 201):
                     raise EvidenceSyncError("Resposta GitHub inesperada.")
-                content = response.read(64 * 1024)
+                content = response.read(512 * 1024 + 1)
+                if len(content) > 512 * 1024:
+                    raise EvidenceSyncError("Resposta GitHub excedeu o limite.")
                 return json.loads(content) if content else {}
         except urllib.error.HTTPError as exc:
             if allow_missing and exc.code == 404:
