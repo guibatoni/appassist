@@ -13,11 +13,12 @@ import sys
 from ctypes import wintypes
 
 from dueltrace_live_hand import (
-    PROCESS_QUERY_INFORMATION, PROCESS_VM_READ, HAND_ADDRESS,
-    discover_epsxe_pids, _windows_kernel32,
+    PROCESS_QUERY_INFORMATION, PROCESS_VM_READ, HAND_ADDRESS, HAND_BYTES,
+    discover_epsxe_pids, _windows_kernel32, decode_hand,
 )
 
 OPPONENT_OFFSET = 0x9B361
+HAND_OFFSET = 0xEA484
 LP_BASE_OFFSET = 0xEA000
 DRAW_HISTORY_OFFSET = 0x1A7E20
 DRAW_SAMPLE_SIZE = 6 * 8
@@ -59,6 +60,23 @@ def _note_validation(stats, reason):
         stats[reason] = stats.get(reason, 0) + 1
 
 
+def _hand_anchor(read_at, base):
+    """Correlate PSX hand bytes with the ALREADY proven ePSXe hand reader.
+
+    This requires a valid five-card layout at both addresses and exact
+    equality, so a low-value byte in unrelated process memory cannot
+    become an opponent ID merely because the history layout changed.
+    """
+    candidate = read_at(base + HAND_OFFSET, HAND_BYTES)
+    known = read_at(HAND_ADDRESS, HAND_BYTES)
+    if (not isinstance(candidate, bytes) or len(candidate) != HAND_BYTES
+            or not isinstance(known, bytes) or len(known) != HAND_BYTES
+            or candidate != known):
+        return None
+    decoded = decode_hand(candidate)
+    return decoded if decoded is not None and len(decoded) == 5 else None
+
+
 def _valid_psx_sample(read_at, base: int, stats=None) -> dict | None:
     """Validate a candidate host mapping without identifying the ISO.
 
@@ -70,10 +88,10 @@ def _valid_psx_sample(read_at, base: int, stats=None) -> dict | None:
         return None
     opponent = read_at(base + OPPONENT_OFFSET, 1)
     duel = read_at(base + LP_BASE_OFFSET, 0x30)
+    verified_hand = _hand_anchor(read_at, base)
     draw = read_at(base + DRAW_HISTORY_OFFSET, DRAW_SAMPLE_SIZE)
     if (not isinstance(opponent, bytes) or len(opponent) != 1
-            or not isinstance(duel, bytes) or len(duel) != 0x30
-            or not isinstance(draw, bytes) or len(draw) != DRAW_SAMPLE_SIZE):
+            or not isinstance(duel, bytes) or len(duel) != 0x30):
         _note_validation(stats, "unreadableFields")
         return None
     oid = opponent[0]
@@ -93,21 +111,30 @@ def _valid_psx_sample(read_at, base: int, stats=None) -> dict | None:
     # Distinct validated first draws support that this is a PS1 memory
     # mapping, rather than coincidental low numbers in an arbitrary region.
     draws = []
+    if not isinstance(draw, bytes) or len(draw) != DRAW_SAMPLE_SIZE:
+        draw = bytes(DRAW_SAMPLE_SIZE)
     for i in range(8):
         at = i * 6
         card = int.from_bytes(draw[at:at+2], "little")
         idx_a, idx_b = draw[at+2], draw[at+3]
         if 1 <= card <= 722 and idx_a == idx_b and idx_a < 60:
             draws.append((card, idx_a))
-    if len(draws) < 3 or len(set(i for _, i in draws)) < 3:
+    history_valid = (
+        len(draws) >= 3 and len(set(i for _, i in draws)) >= 3)
+    if verified_hand is None and not history_valid:
         _note_validation(stats, "implausibleDrawHistory")
         return None
+    if verified_hand is not None:
+        _note_validation(stats, "validatedHandAnchors")
     _note_validation(stats, "validatedSamples")
     return {
         "runtimeOpponentId": oid,
         "playerLP": p1,
         "opponentLP": p2,
         "drawEntriesPlausible": len(draws),
+        "validationMethod": (
+            "known_hand_anchor" if verified_hand is not None
+            else "legacy_draw_history"),
         "base": base,
     }
 
@@ -240,6 +267,7 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
                 "runtimeOpponentId": found[0]["runtimeOpponentId"],
                 "playerLP": found[0]["playerLP"],
                 "opponentLP": found[0]["opponentLP"],
+                "validationMethod": found[0]["validationMethod"],
                 "mappingValidatedByIndependentFields": True}
 
     if sys.platform != "win32" and kernel is None:
@@ -289,6 +317,7 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
                     "runtimeOpponentId":observed["runtimeOpponentId"],
                     "playerLP":observed["playerLP"],
                     "opponentLP":observed["opponentLP"],
+                    "validationMethod":observed["validationMethod"],
                     "mappingValidatedByIndependentFields":True,
                 }
             _PID_BASE_CACHE.pop(pid,None)
@@ -314,6 +343,7 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
             "runtimeOpponentId":found[0]["runtimeOpponentId"],
             "playerLP":found[0]["playerLP"],
             "opponentLP":found[0]["opponentLP"],
+            "validationMethod":found[0]["validationMethod"],
             "mappingValidatedByIndependentFields":True,
         }
     finally:
