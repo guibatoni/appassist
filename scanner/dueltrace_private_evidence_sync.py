@@ -131,6 +131,106 @@ def validate_sanitized_report(raw: str) -> dict:
     return data
 
 
+def validate_iso_forensic_report(report: dict) -> dict:
+    """Reject unrecognized fields and any free-form binary/path payload."""
+    if not isinstance(report, dict):
+        raise EvidenceSyncError("Relatório forense inválido.")
+    try:
+        packed=json.dumps(report, ensure_ascii=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        raise EvidenceSyncError("JSON forense inválido.") from None
+    if len(packed)>20_000:
+        raise EvidenceSyncError("Relatório forense excede o limite.")
+    required={
+        "schema","subject","inspectedAtUTC","romFingerprint",
+        "exactSha256Matched","fileSizeBytes","disc","executable","cards",
+        "opponents","rank","drops","weightFamily","fusions","images",
+        "verifiedInGame","mayActivateDrops","mayActivateRank",
+        "mayActivateFusions","networkTransmission","note",
+    }
+    if (set(report)!=required or report.get("schema")!=1
+            or report.get("subject")!="DUELTRACE ISO Forensic Lab"
+            or report.get("exactSha256Matched") is not True
+            or report.get("verifiedInGame") is not False
+            or report.get("mayActivateDrops") is not False
+            or report.get("mayActivateRank") is not False
+            or report.get("mayActivateFusions") is not False
+            or report.get("networkTransmission") is not False
+            or report.get("note")!=(
+                "A leitura estrutural da ISO nao confirma IDs ou grupos RANK no jogo.")
+            or not isinstance(report.get("romFingerprint"),str)
+            or not FINGERPRINT.fullmatch(report["romFingerprint"])
+            or type(report.get("fileSizeBytes")) is not int
+            or not 2048<=report["fileSizeBytes"]<=2*1024*1024*1024
+            or not isinstance(report.get("inspectedAtUTC"),str)
+            or not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\+00:00",
+                                 report["inspectedAtUTC"])):
+        raise EvidenceSyncError("Relatório forense sem provas mínimas.")
+    fields={
+        "disc":{"sectorBytes","indexedFiles","resourceSelection","resourceBytesRead"},
+        "executable":{"state","coherent","physicalPaddingVerified","candidatesTried"},
+        "cards":{"state","count"},
+        "opponents":{"state","count","namesStructural","affineLengthException",
+                     "inGameIdentityVerified"},
+        "rank":{"state","staticCandidates","executionConfirmed"},
+        "drops":{"state","validatedStructuralMatrices",
+                 "labelsVerified","opponentMappingVerified"},
+        "weightFamily":{"state","matrixCount","distinct39Windows","ambiguous",
+                        "base","opponentStep","matrixStride",
+                        "distributionEncoding","opponentMappingVerified",
+                        "rankGroupLabelsVerified","mayActivateDrops"},
+        "fusions":{"state","validBanks","matchingBanks","recipes",
+                   "conflictingPairs","unambiguousPairs","resourceMethod","mayActivate"},
+        "images":{"state","large","thumbnails","duplicateDifferences","checked"},
+    }
+    maximums={
+        "indexedFiles":8192,"resourceBytesRead":96*1024*1024,
+        "candidatesTried":8,"count":722,"namesStructural":39,
+        "staticCandidates":1000,"validatedStructuralMatrices":156,
+        "matrixCount":156,"distinct39Windows":128,
+        "base":96*1024*1024,"opponentStep":96*1024*1024,
+        "matrixStride":96*1024*1024,
+        "validBanks":7,"matchingBanks":7,"recipes":50000,
+        "conflictingPairs":50000,"unambiguousPairs":50000,
+        "large":722,"thumbnails":722,"duplicateDifferences":722,"checked":722,
+    }
+    def walk(value):
+        if isinstance(value,dict):
+            for key,cell in value.items():
+                walk(cell)
+        elif isinstance(value,str):
+            if not re.fullmatch(r"[A-Za-z0-9_]{1,100}",value):
+                raise EvidenceSyncError("Relatório inclui texto não autorizado.")
+        elif value is None or type(value) in (int,bool):
+            return
+        else:
+            raise EvidenceSyncError("Campo forense não permitido.")
+    for group, allowed in fields.items():
+        obj=report.get(group)
+        if not isinstance(obj,dict) or set(obj)-allowed:
+            raise EvidenceSyncError("Campo forense fora da lista de permissões.")
+        if group=="disc" and obj.get("sectorBytes") not in (2048,2336,2352,2448):
+            raise EvidenceSyncError("Geometria de disco inválida.")
+        for name,value in obj.items():
+            if name in maximums and value is not None:
+                if type(value) is not int or not 0<=value<=maximums[name]:
+                    raise EvidenceSyncError("Contador forense inválido.")
+            else:
+                walk(value)
+    for group,name in (
+        ("opponents","inGameIdentityVerified"),("rank","executionConfirmed"),
+        ("drops","labelsVerified"),("drops","opponentMappingVerified"),
+        ("weightFamily","opponentMappingVerified"),
+        ("weightFamily","rankGroupLabelsVerified"),
+        ("weightFamily","mayActivateDrops"),("fusions","mayActivate")
+    ):
+        if report[group].get(name) is not False:
+            raise EvidenceSyncError("Relatório não está em quarentena.")
+    # Protect against hidden secrets even if an expected nested object was
+    # substituted by an unknown JSON-compatible structure.
+    return report
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise EvidenceSyncError("Redirecionamento remoto recusado.")
@@ -226,6 +326,36 @@ class GitHubPrivateRepositorySink:
             raise EvidenceSyncError("GitHub não confirmou a gravação.")
         return {"synced": True, "sessionId": session_id,
                 "fingerprint": sanitized["romFingerprint"]}
+
+
+    def upload_iso_forensic(self, repo, token, report):
+        """Explicit user action only; never part of timed RAM synchronization."""
+        sanitized=validate_iso_forensic_report(report)
+        repo=self.verify(repo,token)
+        endpoint=("/repos/"+repo+"/contents/reports/iso-forensics/"
+                  +sanitized["romFingerprint"]+".json")
+        current=self._request("GET",endpoint,token,allow_missing=True)
+        remote={
+            "schema":1,
+            "subject":"DUELTRACE Private ISO Forensic Sync",
+            "transport":"github_private_repository_explicit_user_action",
+            "syncedAtUTC":datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "diagnostics":sanitized,
+        }
+        data=json.dumps(remote,ensure_ascii=False,separators=(",",":")).encode("utf-8")
+        payload={"message":"DUELTRACE: auditoria estrutural de ISO (opt-in)",
+                 "content":base64.b64encode(data).decode("ascii")}
+        if current is not None:
+            if (not isinstance(current,dict)
+                    or not isinstance(current.get("sha"),str)
+                    or not re.fullmatch(r"[a-f0-9]{40}",current["sha"])):
+                raise EvidenceSyncError("Arquivo remoto de auditoria inválido.")
+            payload["sha"]=current["sha"]
+        answer=self._request("PUT",endpoint,token,payload)
+        if not isinstance(answer,dict) or not isinstance(answer.get("commit"),dict):
+            raise EvidenceSyncError("GitHub não confirmou a auditoria.")
+        return {"synced":True,"fingerprint":sanitized["romFingerprint"],
+                "kind":"iso_forensic_audit"}
 
 
 class _DATA_BLOB(ctypes.Structure):
@@ -346,6 +476,30 @@ class PrivateEvidenceSync:
             atomic_json(self._settings, {"schema": 1, "enabled": False})
             self._tokens.clear()
         return self.status()
+
+    def upload_forensic(self, report):
+        """One-off ISO audit transfer, only after explicit UI confirmation."""
+        validate_iso_forensic_report(report)
+        with self._lock:
+            data=self._config()
+            if data.get("enabled") is not True:
+                raise EvidenceSyncError(
+                    "Ative a sincronização privada na tela Live Diagnostics.")
+            token=self._tokens.load()
+            if not token:
+                raise EvidenceSyncError("Token ausente. Reconecte o GitHub privado.")
+            repo=data.get("repo")
+        try:
+            result=self._sink.upload_iso_forensic(repo,token,report)
+        except EvidenceSyncError as exc:
+            with self._lock:
+                self._last_error=str(exc)
+            raise
+        with self._lock:
+            self._last_synced_utc=datetime.now(timezone.utc).isoformat(
+                timespec="seconds")
+            self._last_error=None
+        return result
 
     def upload(self, recorder):
         with self._lock:
