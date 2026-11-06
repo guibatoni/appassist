@@ -58,7 +58,9 @@ class CandidateBrowserTests(unittest.TestCase):
             self.assertFalse(result["rankGroupLabelsVerified"])
             self.assertFalse(result["mayActivateDrops"])
             self.assertFalse(result["mayActivateRank"])
-            self.assertNotIn("rom",str(result).casefold())
+            self.assertNotIn("source_path", str(result))
+            self.assertNotIn("G0SD/", str(result))
+            self.assertNotIn("private_file", str(result))
 
     def test_query_by_id_or_name_and_use_own_catalog_attributes(self):
         result = self.browse(0,1,query="38")
