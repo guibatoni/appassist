@@ -1068,7 +1068,13 @@ function Mods({mods,sha,onRefresh,configured}:{
             Validação em jogo ainda necessária.
           </p>)}
         </div>
-      </div>}
+        <button type="button" className="btn-ghost mt-3"
+          onClick={()=>void navigator.clipboard.writeText(JSON.stringify(comparison,null,2))
+            .then(()=>setMessage("Resumo estrutural copiado. Cole-o nesta conversa; não inclui ISO nem receitas."))
+            .catch(()=>setMessage("Não foi possível copiar automaticamente. Confira a permissão da área de transferência."))}>
+          <ClipboardCopy className="size-4"/> Copiar resumo estrutural
+        </button>
+      </div>
       <div className="mt-4 space-y-2">
         {mods.map(mod=>{
           const active=sha===mod.sha256
