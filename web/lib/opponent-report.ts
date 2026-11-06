@@ -53,6 +53,25 @@ const FD_JUMP_STATES = new Set([
   "incompleto","entrada_invalida","ponteiros_ausentes",
   "registros_invalidos","salto_fd_hipotese_estrutural","nenhum_salto_fd",
 ])
+const FD_FLOW_COUNTS = [
+  "recordsExamined","ffReached","ffReachedAfterFd","fdRoutes",
+  "fdRoutesWithGlyphs","cycleCount","unknownControlCount",
+  "f8ControlCount","boundaryStopCount","truncatedArgumentCount",
+  "hopLimitCount","stepLimitCount","maxHopDepth",
+] as const
+const FD_FLOW_STATES = new Set([
+  "entrada_invalida","layout_indisponivel","ponteiros_invalidos",
+  "sem_registros","fluxos_auditados_sem_validacao",
+])
+const HEADER_BOOLEAN_FIELDS = [
+  "payloadSizeZero","payloadAligned4","payloadAligned2048",
+  "payloadFitsFile","loadAddressInRAM","payloadFitsRAM",
+  "entryWithinLoadedRange",
+] as const
+const HEADER_NUMERIC_FIELDS = [
+  "payloadDeclaredBytes","payloadAvailableBytes","payloadOverhangBytes",
+] as const
+
 const HEADER_STATES = new Set([
   "cabecalho_invalido","cabecalho_truncado",
   "payload_truncado_ou_invalido","destino_ram_invalido",
@@ -116,6 +135,13 @@ export function safeOpponentReport(mod: LocalMod, diagnosis: ModScanDiagnostic):
       ? window.state : "incompleto"
     return safe
   })
+  const fdFlowWindows = (evidence.fdFlowWindows ?? []).slice(0, 5).map(window => {
+    const safe: Record<string, number | string | null> = {}
+    for (const key of FD_FLOW_COUNTS) safe[key] = count(window?.[key])
+    safe.state = typeof window?.state === "string" && FD_FLOW_STATES.has(window.state)
+      ? window.state : "entrada_invalida"
+    return safe
+  })
   // Other extraction probes are already computed by the deterministic
   // scanner. Only counts and bounded status values leave the app.
   const searches: Record<string, {
@@ -126,6 +152,16 @@ export function safeOpponentReport(mod: LocalMod, diagnosis: ModScanDiagnostic):
       magicPresent: boolean
       fileHasPayloadRegion: boolean
       mappingCoherent: boolean
+      payloadDeclaredBytes?: number | null
+      payloadAvailableBytes?: number | null
+      payloadOverhangBytes?: number | null
+      payloadSizeZero?: boolean
+      payloadAligned4?: boolean
+      payloadAligned2048?: boolean
+      payloadFitsFile?: boolean
+      loadAddressInRAM?: boolean
+      payloadFitsRAM?: boolean
+      entryWithinLoadedRange?: boolean
     }
   }> = {}
   const allowedStates = new Set([
@@ -151,10 +187,19 @@ export function safeOpponentReport(mod: LocalMod, diagnosis: ModScanDiagnostic):
         fileHasPayloadRegion: raw.fileHasPayloadRegion === true,
         mappingCoherent: raw.mappingCoherent === true,
       }
+      for (const key of HEADER_BOOLEAN_FIELDS) {
+        searches[probe].headerEvidence![key] = raw[key] === true
+      }
+      for (const key of HEADER_NUMERIC_FIELDS) {
+        const value = raw[key]
+        searches[probe].headerEvidence![key] = typeof value === "number" &&
+          Number.isSafeInteger(value) && value >= 0 && value <= 8388608
+          ? value : null
+      }
     }
   }
   const report = {
-    schema: 4,
+    schema: 5,
     context: "dueltrace-opponent-pointers",
     scannerRevision: count(mod.scanParserRevision),
     cards: count(mod.cards),
@@ -163,6 +208,7 @@ export function safeOpponentReport(mod: LocalMod, diagnosis: ModScanDiagnostic):
     forensicWindows: windows,
     controlFlowWindows: controlWindows,
     fdJumpWindows,
+    fdFlowWindows,
     alternativeLayoutSearch: searches,
     disclaimer: "Dados candidatos. Nenhum ID, drop ou RANK foi validado em jogo.",
   }
