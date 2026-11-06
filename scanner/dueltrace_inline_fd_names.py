@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import struct
 import unicodedata
+from collections import Counter
 
 OPP_COUNT = 39
 MAX_NAME_BYTES = 64
@@ -87,12 +88,27 @@ def probe_inline_fd_names(
             continue
         if len({pointer for pointer, _ in rows}) != OPP_COUNT:
             continue
-        fields = {record[1] for _, record in rows}
+        counts = Counter(record[1] for _, record in rows)
         names = [record[0] for _, record in rows]
-        if len(fields) != 1 or len(set(names)) != OPP_COUNT:
+        if len(set(names)) != OPP_COUNT:
+            continue
+        # Strictly 38 exact affine values and a single +1 anomaly, or 39
+        # exact values. This proves a structural name run, not opponent IDs.
+        anomalous = []
+        if len(counts) == 1:
+            shared = next(iter(counts))
+        elif len(counts) == 2 and sorted(counts.values()) == [1, 38]:
+            shared = next((field for field, n in counts.items() if n == 38), None)
+            if shared is None or counts.get(shared + 1) != 1:
+                continue
+            anomalous = [i + 1 for i, (_, record) in enumerate(rows)
+                         if record[1] == shared + 1]
+        else:
             continue
         entry = {"startIndex": start, "count": OPP_COUNT,
-                 "sharedFieldBase": fields.pop(),
+                 "sharedFieldBase": shared,
+                 "oneByteLengthFieldAnomaly": bool(anomalous),
+                 "anomalousOrdinals": anomalous,
                  "allHaveFDSuffix": True, "allHaveFFAfterSuffix": True,
                  "distinctPointers": OPP_COUNT, "distinctNames": OPP_COUNT,
                  "validated": False, "inGameVerified": False}
@@ -102,7 +118,9 @@ def probe_inline_fd_names(
                 "startIndex": start, "count": OPP_COUNT,
                 "opponents": [{"id": index + 1, "nome": label}
                               for index, label in enumerate(names)],
-                "evidence": "fd_len_affine_39_distinct_ending_ff",
+                "evidence": ("fd_len_affine_38_plus_one_ending_ff"
+                             if anomalous else "fd_len_affine_39_distinct_ending_ff"),
+                "lengthFieldAnomaly": bool(anomalous),
                 "validated": False, "inGameVerified": False}
     report["candidateCount"] = len(report["candidates"])
     if len(report["candidates"]) == 1:
