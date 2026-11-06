@@ -31,6 +31,8 @@ READABLE = {0x02,0x04,0x08,0x20,0x40,0x80}
 # Legacy ePSXe memory host base, estimated from the existing hand
 # mapping. Not accepted without independent LP/history/hand checks.
 LEGACY_HOST_BASE_HINT = HAND_ADDRESS - 0xEA484
+# Only bounded in-memory caching; never writes host addresses or RAM dumps.
+_PID_BASE_CACHE: dict[int,int] = {}
 
 
 class MEMORY_BASIC_INFORMATION(ctypes.Structure):
@@ -213,6 +215,18 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
             ok = kernel.ReadProcessMemory(
                 handle, ctypes.c_void_p(addr),buffer,count,ctypes.byref(n))
             return buffer.raw if ok and n.value == count else None
+        cached_base = _PID_BASE_CACHE.get(pid)
+        if cached_base is not None:
+            observed = _read_sample_twice(read_at_native, cached_base)
+            if observed:
+                return {
+                    **fail,"ready":True,"status":"runtime_id_candidate",
+                    "runtimeOpponentId":observed["runtimeOpponentId"],
+                    "playerLP":observed["playerLP"],
+                    "opponentLP":observed["opponentLP"],
+                    "mappingValidatedByIndependentFields":True,
+                }
+            _PID_BASE_CACHE.pop(pid,None)
         bases = _candidate_bases(kernel,handle)
         found = []
         for base in bases:
@@ -224,6 +238,9 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
         if len(found) != 1:
             return {**fail, "status": (
                 "ambiguous_ram_mapping" if found else "ram_mapping_not_validated")}
+        if len(_PID_BASE_CACHE) > 16:
+            _PID_BASE_CACHE.clear()
+        _PID_BASE_CACHE[pid] = found[0]["base"]
         return {
             **fail,"ready":True,"status":"runtime_id_candidate",
             "runtimeOpponentId":found[0]["runtimeOpponentId"],
