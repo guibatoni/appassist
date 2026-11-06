@@ -15,6 +15,8 @@ import struct
 from dueltrace_name_boundaries import read_name_table
 from dueltrace_opponent_boundary_probe import (find_boundary_candidates,
     compact_boundary_evidence)
+from dueltrace_opponent_forensics import (
+    inspect_forensic_windows, explain_forensic_failure)
 
 OPP_COUNT = 39
 MIN_INDEX = 723
@@ -67,6 +69,9 @@ def discover_independent_opponents(
         "boundaryTerminatorEvidence": {"schema": 1, "candidateCount": 0,
                                       "candidates": [], "inGameVerified": False,
                                       "dropsVerified": False, "rankVerified": False},
+        "forensicEvidence": {"schema": 1, "status": "nao_analisado",
+                            "windows": [], "validated": False,
+                            "inGameVerified": False, "mayPromote": False},
         "validated": False, "inGameVerified": False,
         "rankVerified": False, "dropsVerified": False,
         "note": "Identidade dos adversarios e seus drops requer prova independente."
@@ -180,6 +185,9 @@ def discover_independent_opponents(
         pointers=pointers, text_base=text_base)
     output["boundaryTerminatorEvidence"] = compact_boundary_evidence(
         boundary_candidates)
+    output["forensicEvidence"] = inspect_forensic_windows(
+        exe, hypotheses=hypotheses, records=records, pointers=pointers,
+        text_base=text_base)
     if len(isolated) + len(boundary_candidates) == 1:
         if isolated:
             row, opponents = isolated[0]
@@ -229,6 +237,14 @@ def explain_opponent_blocker(report: dict) -> dict:
         return {"code": "multiplos_blocos", "reason":
                 "Mais de uma sequência completa de 39 nomes; não há base para escolher os IDs automaticamente."}
     if state == "hipotese_terminador_alternativo":
+        deep = report.get("forensicEvidence")
+        if isinstance(deep, dict) and deep.get("windows"):
+            explanation = explain_forensic_failure(deep)
+            if explanation["code"] not in ("sem_diagnostico_profundo",
+                                            "delimitador_fisico_coerente"):
+                return {"code": "fronteira_" + explanation["code"],
+                        "reason": explanation["reason"] +
+                                  " Evidência preservada para engenharia reversa."}
         terminator = next((x.get("possibleDifferentTerminator") for x in candidates
                            if isinstance(x, dict) and x.get("possibleDifferentTerminator")), None)
         suffix = f" (byte observado {terminator})" if terminator else ""
@@ -276,6 +292,10 @@ def compact_opponent_evidence(report: dict) -> dict:
                                        if isinstance(report.get("boundaryTerminatorEvidence"), dict)
                                        else {"schema": 1, "candidateCount": 0,
                                              "candidates": []}),
+        "forensicEvidence": (report.get("forensicEvidence")
+                             if isinstance(report.get("forensicEvidence"), dict)
+                             else {"schema": 1, "status": "nao_analisado",
+                                   "windows": [], "validated": False}),
         "validated": False, "inGameVerified": False,
         "rankVerified": False, "dropsVerified": False
     }
