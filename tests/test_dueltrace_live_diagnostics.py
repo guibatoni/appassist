@@ -72,7 +72,7 @@ class DiagnosticsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             rec=LiveDiagnosticsRecorder(Path(tmp),SHA)
             rec.observe(hand(),opponent(),{},SHA)
-            self.assertFalse(rec.observe(hand(),opponent(),"b"*64))
+            self.assertFalse(rec.observe(hand(),opponent(),{},"b"*64))
             self.assertFalse(rec.running)
             self.assertFalse(rec.observe(hand(),opponent(),{},SHA))
             self.assertEqual(rec.report()["changeCount"],1)
