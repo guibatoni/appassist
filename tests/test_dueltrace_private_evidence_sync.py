@@ -148,7 +148,11 @@ class PrivateEvidenceTests(unittest.TestCase):
             self.assertNotIn("0xDEADBEEF",decoded)
             self.assertNotIn("NEVER_REMOTE",decoded)
             self.assertNotIn(token,decoded)
-            self.assertFalse(json.loads(decoded)["verifiedOpponentMapping"])
+            remote=json.loads(decoded)
+            self.assertEqual(remote["transport"],"github_private_repository")
+            self.assertEqual(remote["subject"],"DUELTRACE Private Evidence Sync")
+            self.assertEqual(remote["diagnostics"]["networkTransmission"],False)
+            self.assertFalse(remote["diagnostics"]["verifiedOpponentMapping"])
 
     @unittest.skipUnless(sys.platform == "win32", "Windows DPAPI only")
     def test_windows_user_scoped_dpapi_credential_roundtrip(self):
