@@ -74,7 +74,7 @@ class QuarantinedCatalogTests(unittest.TestCase):
         self.assertIn("build_quarantined_catalog(",source)
         self.assertIn("catalogo_candidato_nao_verificado.json",source)
         self.assertIn("candidate_catalogue",source)
-        self.assertIn("SCAN_PARSER_REVISION=22",source)
+        self.assertIn("SCAN_PARSER_REVISION=23",source)
         self.assertGreaterEqual(SCAN_PARSER_REVISION,16)
         self.assertNotIn("cards=candidate_catalog",source)
         self.assertNotIn("opponents=candidate_catalog",source)
