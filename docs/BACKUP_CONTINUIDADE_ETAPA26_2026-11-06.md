@@ -46,3 +46,12 @@ A flag `knownHandAnchorAtHint=false` no JSON antigo foi identificada como falha 
 **Próxima ação científica:** localizar no executável do GOG a origem e a interpretação do byte na rotina MIPS e a seleção de bloco físico e matriz por resultado do duelo. O JSON isolado só permite observação estável de um candidato. Evitar novos registros manuais de cartas. Validar CI/Windows da HEAD depois dessas edições; **não afirmar confirmação do executável GOG**.
 
 **Segurança:** relatório de sessão completo deve ficar somente na Biblioteca do usuário, não em GitHub público. `main` não foi alterada.
+
+
+## Atualização após o segundo relatório (06/11/2026)
+
+Segundo Live Diagnostics, fingerprint `61d58d835246`: 10 amostras, 7 eventos legíveis; `candidateId=5` em todos, `handAnchorValidated=true`, RANK indisponível. Mão/LP da primeira observação repetem exatamente o último evento do primeiro relatório; houve mudanças subsequentes de mão e LP. **Não equiparar isso a dois adversários comprovadamente distintos**, pois o JSON não inclui o nome nem autentica o disco em execução no ePSXe. O ID 5 permanece candidato não confirmado. Se for necessário correlacionar com um adversário nomeado, solicitar apenas o nome já enfrentado; não exigir novo duelo.
+
+Bug de observabilidade corrigido também no caminho de cache de base da RAM: `knownHandAnchorAtHint` reflete o reconhecimento da âncora quando a base cacheada corresponde ao hint, sem elevar `runtimeIdVerifiedForMod`. Regressão sintética acrescentada. Código não altera mão, cards, artes ou drops.
+
+Logs e comparação completos foram salvos **somente** na Biblioteca em `EVIDENCIAS_GOG`. Etapa26 permanece PR #74 draft, sem merge; conferir CI da HEAD e não afirmar que ID→bloco físico→RANK foi concluído. Próxima investigação técnica requer bytes reais do executável GOG e/ou observação independente do adversário no ePSXe.
