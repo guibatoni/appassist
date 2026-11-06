@@ -203,6 +203,16 @@ def analyze_fusion_banks(rom_path: Path, *, expected_size=None,
     conflicting_banks=len(counts)>1
     conflicting_pairs=next((r["conflict_count"] for r in valid
                             if r["recipelist_sha256"]==winner),0)
+    # Conflicting A+B/B+A outcomes must not invalidate the evidence that
+    # other pairs were decoded. Count *unordered* pairs conservatively:
+    # never activate the unambiguous subset automatically.
+    outcomes={}
+    for row in selected:
+        key=(min(int(row["a"]),int(row["b"])),
+             max(int(row["a"]),int(row["b"])))
+        outcomes.setdefault(key,set()).add(int(row["result"]))
+    ambiguous_pairs=sum(len(values)>1 for values in outcomes.values())
+    clean_pairs=sum(len(values)==1 for values in outcomes.values())
     return {
         "schema":1,"rom_file":rom.name,
         "resource_selection_method":resource_method,
@@ -211,6 +221,8 @@ def analyze_fusion_banks(rom_path: Path, *, expected_size=None,
         "divergent_banks":conflicting_banks,
         "bank_conflicts":conflicting_pairs,
         "candidate_count":len(selected),
+        "unique_unordered_pairs_without_conflict":clean_pairs,
+        "unordered_pairs_with_conflicting_results":ambiguous_pairs,
         "candidate_fingerprint":winner,
         "status":("candidatas espelhadas, NÃO confirmadas no jogo"
                   if winner and mirrors>=2 and not conflicting_banks and not conflicting_pairs
