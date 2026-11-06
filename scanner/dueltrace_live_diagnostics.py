@@ -157,7 +157,9 @@ class LiveDiagnosticsRecorder:
 
     def _persist(self):
         self._directory.mkdir(parents=True, exist_ok=True)
-        atomic_json(self._directory / (self._fingerprint + ".json"), self.report())
+        # Full SHA prevents two different ISOs with the same visible prefix
+        # from sharing a diagnostics file.
+        atomic_json(self._directory / (self._sha + ".json"), self.report())
 
     def report(self):
         with self._lock:
