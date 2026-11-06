@@ -1214,9 +1214,24 @@ class DueltraceWebBridge:
                 raise ValueError("Caminho de análise fora da pasta autorizada.")
             meta=load_json(folder/"relatorio.json",{})
             diagnosis=diagnose_layout(meta,profile)
+            from dueltrace_forensic_ai import numeric_evidence
+            diagnosis["opponentForensics"]=numeric_evidence(meta)
             diagnosis["romSha"]=sha
             diagnosis["ai"]={"state":"nao_solicitada","note":"Use o diagnóstico Ollama se desejar hipóteses."}
+            diagnosis["forensic_ai"]={"state":"nao_solicitada",
+                                     "note":"Revisão binária local opcional, sem promover dados."}
             if with_ollama:
+                # Revisor numérico adicional: somente contagens, sem ISO,
+                # nomes, hashes ou offsets enviados ao modelo.
+                from dueltrace_forensic_ai import review_with_ollama
+                forensic=review_with_ollama(meta,timeout=25)
+                diagnosis["forensic_ai"]={
+                    "state":forensic["status"],
+                    "cause":forensic["cause"],
+                    "actions":forensic["actions"],
+                    "inGameVerified":False,
+                    "mayActivate":False
+                }
                 source=Path(entry.get("source_path") or "").resolve(strict=True)
                 if not source.is_file():
                     raise ValueError("ISO original não disponível para análise.")
