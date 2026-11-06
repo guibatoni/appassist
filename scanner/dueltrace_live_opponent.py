@@ -22,6 +22,9 @@ LP_BASE_OFFSET = 0xEA000
 DRAW_HISTORY_OFFSET = 0x1A7E20
 DRAW_SAMPLE_SIZE = 6 * 8
 RAM_LENGTH = 0x200000
+# A PSX mapping can be split by VirtualQueryEx; only offsets that must
+# be read for independent validation are required to be accessible.
+MIN_REQUIRED_SPAN = DRAW_HISTORY_OFFSET + DRAW_SAMPLE_SIZE
 MAX_REGIONS = 32768
 MAX_CANDIDATE_BASES = 128
 MEM_COMMIT = 0x1000
@@ -121,11 +124,11 @@ def _select_region_candidates(regions, *, hint=LEGACY_HOST_BASE_HINT,
     ordered = []
     for base, size in regions:
         if (type(base) is not int or type(size) is not int
-                or base < 0x10000 or size < RAM_LENGTH):
+                or base < 0x10000 or size < MIN_REQUIRED_SPAN):
             continue
         # A 2MB PSX mapping may be part of a larger committed reservation.
         # Probe multiple 64KB subpages in the first 1MB, within bounds.
-        for delta in range(0, min(size-RAM_LENGTH+1, 0x100000), 0x10000):
+        for delta in range(0, min(size-MIN_REQUIRED_SPAN+1, 0x100000), 0x10000):
             candidate = base + delta
             # Exact-size regions precede unrelated large allocations.
             ordered.append((0 if size == RAM_LENGTH else 1,
@@ -177,7 +180,7 @@ def _candidate_bases(kernel, handle) -> tuple[list[int], dict]:
         next_address = max(address + 0x1000, base + max(size, 0x1000))
         flags = int(mbi.Protect)
         if (mbi.State == MEM_COMMIT
-                and size >= RAM_LENGTH
+                and size >= MIN_REQUIRED_SPAN
                 and not (flags & (PAGE_GUARD | PAGE_NOACCESS))
                 and (flags & 0xFF) in READABLE):
             readable.append((base, size))
