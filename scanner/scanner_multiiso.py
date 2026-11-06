@@ -8,6 +8,7 @@ import argparse, csv, hashlib, json, re, struct, sys, unicodedata
 from pathlib import Path
 from dueltrace_layout_discovery import discover_disc_layout, candidate_files_for_decoder
 from dueltrace_cdrom_layout import detect_disc_geometry
+from dueltrace_exe_sector_padding import load_executable_sector_padding
 from dueltrace_card_opponent_discovery import discover_relocated_name_table
 from dueltrace_relocated_names import discover_relocated_name_layout
 from dueltrace_card_attribute_probe import discover_card_attribute_layout
@@ -35,7 +36,7 @@ WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
-SCAN_PARSER_REVISION=27  # exporta catálogo candidato isolado por SHA
+SCAN_PARSER_REVISION=28  # exporta catálogo candidato isolado por SHA
 
 
 def sha256(path:Path, progress=None):
@@ -361,11 +362,12 @@ def select_known_executable_layout(disc, candidates, *, max_candidates=8):
             tried.append({'name':name,'status':'tamanho fora do limite de análise',
                           'recognized':False})
             continue
-        sl=disc.get(name)
+        sl,extent_padding=load_executable_sector_padding(disc,name)
         opponents,cards,status=decode_names(sl)
         score=(2 if opponents and cards else 1 if cards else 0)
         tried.append({'name':name,'status':status,'recognized':bool(cards),
-                      'cards':len(cards),'opponents':len(opponents)})
+                      'cards':len(cards),'opponents':len(opponents),
+                      'executableSectorPadding':extent_padding})
         if score>best_score:
             best=(name,sl,opponents,cards,status)
             best_score=score
