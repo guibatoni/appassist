@@ -90,6 +90,11 @@ def _valid_psx_sample(read_at, base: int, stats=None) -> dict | None:
     opponent = read_at(base + OPPONENT_OFFSET, 1)
     duel = read_at(base + LP_BASE_OFFSET, 0x30)
     verified_hand = _hand_anchor(read_at, base)
+    # Record the known-good hand match EVEN when the presumed opponent or
+    # LP offsets fail. This distinguishes a good RAM anchor from a bad
+    # game-specific field layout without endorsing any opponent ID.
+    if verified_hand is not None:
+        _note_validation(stats, "validatedHandAnchors")
     draw = read_at(base + DRAW_HISTORY_OFFSET, DRAW_SAMPLE_SIZE)
     if (not isinstance(opponent, bytes) or len(opponent) != 1
             or not isinstance(duel, bytes) or len(duel) != 0x30):
@@ -126,8 +131,6 @@ def _valid_psx_sample(read_at, base: int, stats=None) -> dict | None:
     if verified_hand is None and not history_valid:
         _note_validation(stats, "implausibleDrawHistory")
         return None
-    if verified_hand is not None:
-        _note_validation(stats, "validatedHandAnchors")
     _note_validation(stats, "validatedSamples")
     return {
         "runtimeOpponentId": oid,
@@ -321,12 +324,20 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
                     "opponentLP":observed["opponentLP"],
                     "validationMethod":observed["validationMethod"],
                     "mappingValidatedByIndependentFields":True,
+                    # Cached probes bypass the hint scan, but still validate
+                    # the known five-card hand on every sample.
+                    "knownHandAnchorAtHint": (
+                        cached_base == LEGACY_HOST_BASE_HINT
+                        and observed["validationMethod"] == "known_hand_anchor"
+                    ),
                 }
             _PID_BASE_CACHE.pop(pid,None)
         # Reuse the known working hand address before scanning thousands
         # of unrelated host allocations. It can shortcut the scan ONLY
         # when the full five-card hand decodes identically at both offsets.
-        hinted = _read_sample_twice(read_at_native, LEGACY_HOST_BASE_HINT)
+        hint_stats = {}
+        hinted = _read_sample_twice(
+            read_at_native, LEGACY_HOST_BASE_HINT, hint_stats)
         if hinted is not None and hinted["validationMethod"] == "known_hand_anchor":
             _PID_BASE_CACHE[pid] = LEGACY_HOST_BASE_HINT
             return {
@@ -337,6 +348,9 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
                 "validationMethod":"known_hand_anchor",
                 "mappingValidatedByIndependentFields":True,
                 "memoryScanSkippedByKnownHand":True,
+                # This was previously omitted in the successful hint path,
+                # misleadingly exported as False by the sanitizer.
+                "knownHandAnchorAtHint":True,
             }
         bases, scan_diagnostic = _candidate_bases(kernel,handle)
         failure_counts = {}
@@ -348,8 +362,12 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
                 if len(found) > 1:
                     break
         if len(found) != 1:
-            # No raw RAM or host addresses are returned to the interface.
+            # Preserve separate stage diagnostics for the hand-derived base.
+            # This never exports the host base or RAM bytes; it shows whether
+            # the stable hand matched while legacy LP/ID offsets failed.
             return {**fail, **scan_diagnostic,
+                    "knownHandAnchorAtHint":hint_stats.get("validatedHandAnchors",0)>0,
+                    "hintValidationBreakdown":hint_stats,
                     "validationBreakdown":failure_counts, "status": (
                 "ambiguous_ram_mapping" if found else "ram_mapping_not_validated")}
         if len(_PID_BASE_CACHE) > 16:

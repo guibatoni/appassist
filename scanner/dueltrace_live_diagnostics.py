@@ -78,10 +78,24 @@ def sanitise_sample(hand, opponent, rank):
             "candidateId": _number(opponent.get("runtimeOpponentId"), 0, 39),
             "mappingMethod": _enum(opponent.get("validationMethod"), {
                 "known_hand_anchor", "legacy_draw_history"}),
+            "handAnchorValidated": (
+                opponent.get("ready") is True
+                and opponent.get("validationMethod") == "known_hand_anchor"
+            ),
             "lpPlayer": _number(opponent.get("playerLP"), 1, 32767),
             "lpOpponent": _number(opponent.get("opponentLP"), 1, 32767),
             "memoryRegionsExamined": _number(opponent.get("memoryRegionsExamined"), 0, 100000),
             "candidateBasesExamined": _number(opponent.get("candidateBasesExamined"), 0, 1000),
+            # Hand-derived host mapping is evidence only, not opponent ID proof.
+            "knownHandAnchorAtHint": _flag(opponent.get("knownHandAnchorAtHint")),
+            "hintRejectionCounts": {
+                key: _number(
+                    (opponent.get("hintValidationBreakdown") or {}).get(key),
+                    0, 100000) or 0
+                for key in MEMORY_FAILURES
+            } if isinstance(opponent.get("hintValidationBreakdown"), dict) else {
+                key: 0 for key in MEMORY_FAILURES
+            },
             "rejectionCounts": {
                 key: _number(breakdown.get(key), 0, 100000) or 0
                 for key in MEMORY_FAILURES
@@ -174,6 +188,20 @@ class LiveDiagnosticsRecorder:
             for event in changes:
                 state = event["data"]["opponent"]["status"]
                 failures[state] = failures.get(state, 0) + 1
+            # Change-events are NOT independent matches to a named ROM
+            # opponent. This is a strictly descriptive session summary.
+            readable = [
+                event["data"]["opponent"] for event in changes
+                if event["data"]["opponent"]["ready"]
+                and event["data"]["opponent"]["candidateId"] is not None
+            ]
+            candidates = sorted({event["candidateId"] for event in readable})
+            lp_pairs = {
+                (event["lpPlayer"], event["lpOpponent"])
+                for event in readable
+                if event["lpPlayer"] is not None
+                and event["lpOpponent"] is not None
+            }
             return {
                 "schema": 1,
                 "subject": "DUELTRACE Live Diagnostics",
@@ -186,6 +214,15 @@ class LiveDiagnosticsRecorder:
                 "handReadableChanges": hand_ok,
                 "opponentReadableChanges": opponent_ok,
                 "opponentStatuses": failures,
+                "candidateEvents": len(readable),
+                "candidateIdsObserved": candidates,
+                "candidateIdStableAcrossReadableChanges": (
+                    len(readable) >= 2 and len(candidates) == 1
+                ),
+                "handAnchorValidatedChanges": sum(
+                    bool(item["handAnchorValidated"]) for item in readable
+                ),
+                "distinctLpPairsInReadableChanges": len(lp_pairs),
                 "events": list(changes),
                 "verifiedOpponentMapping": False,
                 "verifiedRankGroups": False,
