@@ -2,7 +2,9 @@
 
 This module never edits the ISO or infers drop/RANK mappings. The only
 eligible alternative terminators are control bytes 0xF0..0xFE, and every
-candidate must have a full, unambiguous, ordered 39-record physical layout.
+candidate must have 39 unique pointers with unambiguous physical boundaries.
+Ordinal table order may differ from physical address order; aliases remain
+in quarantine without assigning an opponent ID.
 The result is *structural* evidence only; IDs require validation in game.
 """
 from __future__ import annotations
@@ -19,13 +21,14 @@ def inspect_boundary_window(exe: bytes, *, start_index: int, records: dict,
                             pointers: dict, text_base: int) -> dict:
     """Read a complete candidate using actual next-record byte positions.
 
-    Fail closed on nonmonotonic/shared pointers, a missing glyph prefix,
+    Fail closed on shared pointers, a missing glyph prefix,
     mixed/embedded control bytes, excessive padding, or unknown terminal.
     """
     result = {
         "startIndex": start_index, "status": "incompleto",
         "eligible": False, "terminator": None, "verifiedBoundaries": 0,
         "distinctNames": 0, "names": [],
+        "ordinalPointerInversions": 0, "physicalOrderRemapped": False,
         "validated": False, "inGameVerified": False,
         "dropsVerified": False, "rankVerified": False,
     }
@@ -39,16 +42,28 @@ def inspect_boundary_window(exe: bytes, *, start_index: int, records: dict,
         observed = [records[i] for i in ids]
     except (KeyError, TypeError):
         return result
-    if (len(set(positions)) != OPP_COUNT
-            or any(not 0 <= pos < len(exe) for pos in positions)
-            or any(right <= left for left, right in zip(positions, positions[1:]))):
-        result["status"] = "ponteiros_repetidos_ou_fora_de_ordem"
+    if any(not 0 <= pos < len(exe) for pos in positions):
+        result["status"] = "ponteiros_fora_do_arquivo"
         return result
+    if len(set(positions)) != OPP_COUNT:
+        # Reusing an offset may be legal for some games, but it does not
+        # prove which ordinal IDs are aliases. Retain diagnostic evidence.
+        result["status"] = "ponteiros_repetidos"
+        return result
+    inversions = sum(right <= left for left, right in zip(positions, positions[1:]))
+    result["ordinalPointerInversions"] = inversions
+    result["physicalOrderRemapped"] = bool(inversions)
 
-    names = []
+    # Parse the SAME 39 pointer-table entries by *physical* position.
+    # Their names are returned in original index order, NEVER in physical
+    # sorted order. The index-to-pointer mapping is preserved.
+    physical_order = sorted(range(OPP_COUNT), key=lambda ordinal: positions[ordinal])
+    names_by_ordinal = [""] * OPP_COUNT
     terminals = []
     bounded = 0
-    for offset, (pos, record) in enumerate(zip(positions, observed)):
+    for offset, ordinal in enumerate(physical_order):
+        pos = positions[ordinal]
+        record = observed[ordinal]
         if not isinstance(record, dict):
             return result
         name = record.get("readablePrefix")
@@ -75,9 +90,19 @@ def inspect_boundary_window(exe: bytes, *, start_index: int, records: dict,
             result["status"] = "marcador_nao_reproduzivel"
             return result
         if offset < OPP_COUNT - 1:
-            following = positions[offset + 1]
+            following = positions[physical_order[offset + 1]]
             if not 0 < following - pos <= MAX_PHYSICAL_SPAN:
                 result["status"] = "fronteira_fisica_fora_do_limite"
+                return result
+            if marker_pos >= following:
+                result["status"] = "marcador_alem_da_fronteira"
+                return result
+            # read_name_table already located the nearest physical pointer
+            # across its entire inspected range; do not skip an interleaved
+            # record that could belong to another structure.
+            if (record.get("boundaryKnown") is True and
+                    record.get("spanBytes") != following - pos):
+                result["status"] = "ponteiro_intercalado"
                 return result
             pad = exe[marker_pos + 1:following]
             if len(pad) > MAX_ZERO_PADDING or any(pad):
@@ -92,9 +117,9 @@ def inspect_boundary_window(exe: bytes, *, start_index: int, records: dict,
                 result["status"] = "ultimo_registro_sem_limite_seguro"
                 return result
         terminals.append(term)
-        names.append(name)
+        names_by_ordinal[ordinal] = name
     result["verifiedBoundaries"] = bounded
-    result["distinctNames"] = len(set(names))
+    result["distinctNames"] = len(set(names_by_ordinal))
     if len(set(terminals)) != 1:
         result["status"] = "marcadores_inconsistentes"
         return result
@@ -103,7 +128,7 @@ def inspect_boundary_window(exe: bytes, *, start_index: int, records: dict,
         result["status"] = "nomes_repetidos"
         return result
     result.update(status="delimitador_fisico_coerente",
-                  eligible=True, names=names)
+                  eligible=True, names=names_by_ordinal)
     return result
 
 
@@ -137,7 +162,10 @@ def compact_boundary_evidence(candidates: list[dict]) -> dict:
                 "terminator": x["terminator"],
                 "verifiedBoundaries": x["verifiedBoundaries"],
                 "distinctNames": x["distinctNames"],
-                "status": x["status"], "validated": False
+                "status": x["status"],
+                "physicalOrderRemapped": x["physicalOrderRemapped"],
+                "ordinalPointerInversions": x["ordinalPointerInversions"],
+                "validated": False
             } for x in candidates[:8]],
             "inGameVerified": False, "dropsVerified": False,
             "rankVerified": False}
