@@ -175,7 +175,7 @@ class DueltraceWebBridge:
             "not_found",
         }
         state = evidence.get("state")
-        if state not in valid_states:
+        if not isinstance(state, str) or state not in valid_states:
             return None
         clusters = evidence.get("clusters", [])
         if not isinstance(clusters, list):
