@@ -24,3 +24,13 @@ A sonda `_valid_psx_sample` comparava a mão no endereço comprovado do leitor c
 ## Restrições
 
 Biblioteca 722/722, artes e leitor da mão permanecem intactos. Não incluir ISO, conteúdo RAM, artes ou endereços do PC em relatórios. Não fazer merge na main. A Etapa 25 continua como base verificável; a Etapa 26 não substitui confirmação do CI/Windows/ePSXe.
+
+## Primeiro relatório real recebido em 06/11/2026 (observação, não calibração)
+
+Foi recebido um JSON de Live Diagnostics com `romFingerprint=61d58d835246`, `sampleCount=30`, `changeCount=15`, 15 alterações de mão legíveis, 15 de adversário legíveis, todas com `status=runtime_id_candidate`, `candidateId=5` e `mappingMethod=known_hand_anchor`. No recorte houve dois pares de LP: jogador/adversário `5408/10023` e `3879/1062`. Não houve RANK legível; `verifiedOpponentMapping=false`, `verifiedRankGroups=false`.
+
+**Confirmação limitada:** o byte **candidato** 5 permaneceu consistente nos 15 eventos de mudança que o monitor gravou nessa sessão e a sonda utilizou o ancoramento pela mão. Não confirma o oponente nomeado, ID de tabela do executável, identidade da ISO carregada dentro do ePSXe, bloco físico, RANK nem drops. O fingerprint da ISO ativa no DUELTRACE não é uma checagem independente do disco montado no emulador.
+
+**Correção complementar:** a exportação recebida possuía `knownHandAnchorAtHint=false` ao mesmo tempo que `mappingMethod=known_hand_anchor`. O caminho bem-sucedido por hint não preenchia aquele booleano, e o saneador adotava `false`. Corrigido o campo no caminho rápido, acrescentado `handAnchorValidated` no evento e adicionadas métricas descritivas `candidateEvents`, `candidateIdsObserved`, `candidateIdStableAcrossReadableChanges`, `handAnchorValidatedChanges`, `distinctLpPairsInReadableChanges`. Estabilidade se refere **somente às mudanças legíveis gravadas em uma sessão**, sem autorização para associar nomes ou liberar drops.
+
+O relatório foi guardado como evidência do usuário na Biblioteca (não commitamos log de sessão ou ROM em repositório público). Verificação da execução real da versão com correção e pipeline Windows da nova HEAD ainda depende de CI e execução.
