@@ -20,6 +20,7 @@ from dueltrace_opponent_forensics import (
 from dueltrace_opponent_control_probe import inspect_control_windows
 from dueltrace_fd_jump_probe import inspect_fd_jump_windows
 from dueltrace_fd_flow_probe import inspect_flow_windows
+from dueltrace_inline_fd_names import probe_inline_fd_names
 
 OPP_COUNT = 39
 MIN_INDEX = 723
@@ -243,6 +244,28 @@ def discover_independent_opponents(
         pointers=pointers, text_base=text_base, glyph_base=glyph_base)
     output["forensicEvidence"]["fdFlowWindows"] = flow["windows"]
     output["forensicEvidence"]["fdFlowScanState"] = flow["state"]
+    inline = probe_inline_fd_names(
+        exe, pointer_base=pointer_base, text_base=text_base,
+        glyph_base=glyph_base, start_min=MIN_INDEX, start_max=MAX_INDEX)
+    output["inlineFdEvidence"] = {
+        "schema": 1,
+        "candidateCount": inline.get("candidateCount", 0),
+        "state": inline.get("state"),
+        "unique39RecordRun": inline.get("selected") is not None,
+        "validated": False, "inGameVerified": False,
+        "mayActivate": False,
+    }
+    if (not isolated and not boundary_candidates
+            and isinstance(inline.get("selected"), dict)):
+        # A complete, unique run can be published as STRUCTURAL names only.
+        # The FD operand is a shared metadata relation to encoded length,
+        # not a ROM jump or a verified opponent-ID mapping.
+        output["state"] = "layout_fd_inline_unico_estrutural"
+        output["selected"] = dict(inline["selected"],
+                                  aliasCount=0,
+                                  verifiedPhysicalBoundaries=0)
+        output["candidateOpponentCount"] = OPP_COUNT
+        return output
     if len(isolated) + len(boundary_candidates) == 1:
         if isolated:
             row, opponents = isolated[0]
@@ -294,7 +317,8 @@ def explain_opponent_blocker(report: dict) -> dict:
     candidates = report.get("candidates") or []
     best = candidates[0] if candidates and isinstance(candidates[0], dict) else {}
     if state in ("layout_independente_unico_estrutural",
-                 "layout_terminador_alternativo_estrutural"):
+                 "layout_terminador_alternativo_estrutural",
+                 "layout_fd_inline_unico_estrutural"):
         return {"code": "nomes_estruturais", "reason":
                 "39 nomes encontrados estruturalmente; ordem e IDs ainda dependem de prova em jogo."}
     if state == "layouts_completos_ambiguos":
@@ -355,6 +379,8 @@ def compact_opponent_evidence(report: dict) -> dict:
         "reason": explanation["reason"],
         "candidateCount": report.get("candidateCount", 0),
         "candidateOpponentCount": report.get("candidateOpponentCount", 0),
+        "inlineFdEvidence": report.get("inlineFdEvidence", {
+            "schema": 1, "candidateCount": 0, "validated": False}),
         "degenerateEvidence": (report.get("degenerateEvidence")
                               if isinstance(report.get("degenerateEvidence"), dict)
                               else {"state": "nao_analisado"}),
