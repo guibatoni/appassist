@@ -61,7 +61,7 @@ class DiagnosticsTests(unittest.TestCase):
             self.assertTrue(rec.observe(hand(),opponent(oid=11),{},SHA))
             self.assertEqual(rec.report()["changeCount"],2)
             self.assertEqual(rec.report()["opponentStatuses"],{"ram_mapping_not_validated":2})
-            self.assertTrue((Path(tmp)/(SHA+".json")).is_file())
+            self.assertEqual(len(list(Path(tmp).glob(SHA+"_*.json"))),1)
             report=json.loads(rec.export_json())
             self.assertFalse(report["networkTransmission"])
             self.assertFalse(report["mayActivateDrops"])
