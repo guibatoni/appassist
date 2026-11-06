@@ -48,3 +48,9 @@ Rising tem **5.549 pares não ordenados sem conflito**, três pares com resultad
 ## Gatilhos ausentes
 
 A extração estrutural **não prova** execução de fusões, ID de oponente em RAM, início/fim de duelo, associação posição→nome, rótulos Z/S/TEC, drops efetivamente recebidos ou efeitos de cartas. Esses pontos requerem trace MIPS e observação independente do ePSXe. Conservar todas as funções já corretas do controle Galaxy. **Sem merge na main** e sem publicação automática de imagens ou dados privados.
+
+## Verificação complementar das artes
+
+Também foram inspecionados os dados de todas as 722 artes grandes e 722 miniaturas de cada ISO, com os limites de leitura, paleta e diversidade de cores do decoder local `fm_deep_assets.py`, sem exportar PNGs. **Rising 722 artes e 722 miniaturas válidas; Enhance 722+722; Galaxy 722+722**. As cópias redundantes de miniaturas divergem em 56, 7 e 6 registros respectivamente. Não se deve inferir corrupção das miniaturas primárias a partir dessas diferenças. A execução gráfica no ePSXe não foi testada.
+
+O parser foi atualizado para **`SCAN_PARSER_REVISION=30`**, exigindo reanálise de perfis antigos pelo mecanismo atual, e a Biblioteca explica quando clicar em Atualizar dados.
