@@ -173,6 +173,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.undo_last_window_observation(sha)
 
+    def get_live_opponent(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_live_opponent()
+
     def get_candidate_matrix(self, credential, sha, physical_block_index=-1,
                              matrix_group=1, query="", offset=0, limit=30):
         self._authorize(credential)
