@@ -240,6 +240,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.audit_mod_iso(sha)
 
+    def upload_iso_forensic(self, credential, sha):
+        self._authorize(credential)
+        return self._bridge.upload_iso_forensic(sha)
+
     def compare_mod_layouts(self, credential, baseline_sha):
         self._authorize(credential)
         return self._bridge.compare_mod_layouts(baseline_sha)
