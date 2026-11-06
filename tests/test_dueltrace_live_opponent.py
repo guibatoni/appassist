@@ -138,6 +138,45 @@ class RuntimeOpponentTests(unittest.TestCase):
                 return bytes(raw) if (addr,size)==(HAND_ADDRESS,140) else old(addr,size)
             self.assertIsNone(_valid_psx_sample(read,base))
 
+    def test_good_hand_anchor_survives_invalid_legacy_lp_offsets(self):
+        # The five cards are real evidence of the RAM mapping, while a
+        # different mod may relocate the older LP/opponent fields.
+        from dueltrace_live_hand import HAND_ADDRESS
+        base, old = memory_snapshot(oid=11, lp1=0, invalid_history=True)
+        raw = bytearray(140)
+        for slot, cid in enumerate((449, 145, 447, 629, 468)):
+            struct.pack_into("<H", raw, slot * 28, cid)
+            struct.pack_into("<I", raw, slot * 28 + 12, slot)
+        def read(addr, size):
+            if (addr, size) == (HAND_ADDRESS, 140):
+                return bytes(raw)
+            return old(addr, size)
+        stats = {}
+        self.assertIsNone(_valid_psx_sample(read, base, stats))
+        self.assertEqual(stats.get("validatedHandAnchors"), 1)
+        self.assertEqual(stats.get("implausibleLifePoints"), 1)
+        self.assertEqual(stats.get("validatedSamples", 0), 0)
+        self.assertFalse(probe_live_opponent(
+            read_at=read, candidate_bases=[base])["ready"])
+
+    def test_good_hand_anchor_survives_unreadable_legacy_opponent_byte(self):
+        from dueltrace_live_hand import HAND_ADDRESS
+        base, old = memory_snapshot(invalid_history=True)
+        raw = bytearray(140)
+        for slot, cid in enumerate((449, 145, 447, 629, 468)):
+            struct.pack_into("<H", raw, slot * 28, cid)
+            struct.pack_into("<I", raw, slot * 28 + 12, slot)
+        def read(addr, size):
+            if (addr, size) == (HAND_ADDRESS, 140):
+                return bytes(raw)
+            if (addr, size) == (base + OPPONENT_OFFSET, 1):
+                return None
+            return old(addr, size)
+        stats = {}
+        self.assertIsNone(_valid_psx_sample(read, base, stats))
+        self.assertEqual(stats.get("validatedHandAnchors"), 1)
+        self.assertEqual(stats.get("unreadableFields"), 1)
+
     def test_find_high_win64_ram_base_even_after_large_low_mapping(self):
         high = 0x1422E800000
         low, read_low = memory_snapshot(oid=14, lp1=9000, lp2=9000)
