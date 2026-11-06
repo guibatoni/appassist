@@ -175,6 +175,41 @@ class MultiModIntelligence:
                 }
             report_state = "analisado"
         fusion_status={"status":"sem_banco_validado","count":0}
+        # New imports can now probe seven banks automatically, including a
+        # renamed resource, but ONLY if cards belong to the exact ISO and
+        # are fully validated. Do not invent fusion results from a partial
+        # catalog or import a single merely plausible bank.
+        probe_state=work_dir / f"{sha}.fusoes-probe-status.json"
+        if (not fusion_path.is_file()
+                and profile.get("verified",{}).get("cartas")=="verificado"
+                and len(profile.get("cards",[]))==722
+                and type(entry.get("size")) is int
+                and type(entry.get("mtime_ns")) is int):
+            stamp={"schema":1,"revision":1,"sha256":sha,
+                   "size":entry["size"],"mtime_ns":entry["mtime_ns"]}
+            cached_probe=load_json(probe_state,{})
+            if any(cached_probe.get(k)!=v for k,v in stamp.items()):
+                try:
+                    from extrator_fusoes import (
+                        analyze_fusion_banks, save_fusion_report)
+                    found=analyze_fusion_banks(
+                        image,expected_size=entry["size"],
+                        expected_mtime_ns=entry["mtime_ns"])
+                    if (found.get("valid_banks")==7
+                            and found.get("matching_banks")==7
+                            and found.get("divergent_banks") is False
+                            and found.get("bank_conflicts")==0):
+                        found["rom_sha256"]=sha
+                        save_fusion_report(fusion_path,found)
+                        atomic_json(probe_state,{
+                            **stamp,"status":"seven_mirrors_consistent"})
+                    else:
+                        atomic_json(probe_state,{
+                            **stamp,"status":"unsupported_or_divergent"})
+                except (OSError, ValueError, RuntimeError, OverflowError):
+                    # An unsupported fusion layout is not a failed card scan.
+                    atomic_json(probe_state,{
+                        **stamp,"status":"unsupported_or_unknown"})
         if fusion_path.is_file():
             try:
                 fusion_status=import_structural_fusions(self.catalog,sha)
