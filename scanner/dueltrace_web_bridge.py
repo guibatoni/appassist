@@ -206,6 +206,34 @@ class DueltraceWebBridge:
             "mayActivateRank": False,
         }
 
+    def _structural_opponent_choices(self, profile):
+        """39 names from THIS mod, with structural positions, never game IDs."""
+        if not isinstance(profile, dict):
+            return []
+        verified = profile.get("verified", {})
+        flags = profile.get("supported_features", {})
+        if (not isinstance(verified, dict) or not isinstance(flags, dict)
+                or verified.get("oponentes") != "extraidos_estruturalmente"
+                or flags.get("opponents") is not True):
+            return []
+        rows = profile.get("opponents", [])
+        if not isinstance(rows, list) or len(rows) != 39:
+            return []
+        choices = []
+        for item in rows:
+            if not isinstance(item, dict):
+                return []
+            slot, name = item.get("id"), item.get("name")
+            if (type(slot) is not int or not 1 <= slot <= 39
+                    or not isinstance(name, str) or not name.strip()
+                    or len(name) > 96
+                    or any(ord(c) < 32 for c in name)):
+                return []
+            choices.append({"slot": slot, "name": name})
+        if {item["slot"] for item in choices} != set(range(1, 40)):
+            return []
+        return sorted(choices, key=lambda item: item["slot"])
+
     def _mod(self, entry):
         profile = self.catalog.profile_for(entry)
         summary = profile_summary(entry, profile)
@@ -216,6 +244,7 @@ class DueltraceWebBridge:
             "scanParserRevision":entry.get("scan_parser_revision") if
                 type(entry.get("scan_parser_revision")) is int else None,
             "modFamilyEvidence":self._mod_family_summary(profile),
+            "structuralOpponentChoices":self._structural_opponent_choices(profile),
             "cards":summary.get("cards_total",0),
             "candidateCards":max(0,min(722,int((profile or {}).get("candidate_catalogue",{}).get("cards",0))))
                 if isinstance((profile or {}).get("candidate_catalogue"),dict) else 0,
