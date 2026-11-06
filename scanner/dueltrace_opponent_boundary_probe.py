@@ -79,6 +79,9 @@ def inspect_boundary_window(exe: bytes, *, start_index: int, records: dict,
     for offset, pos in enumerate(physical_positions):
         ordinals = alias_ordinals[pos]
         record = observed[ordinals[0]]
+        if not isinstance(record, dict):
+            result["status"] = "nomes_ou_codificacao_nao_conclusivos"
+            return result
         # Another record describing the same bytes must agree exactly.
         # Prevent contaminated record dictionaries from synthesizing aliases.
         for alias_ordinal in ordinals[1:]:
@@ -90,8 +93,6 @@ def inspect_boundary_window(exe: bytes, *, start_index: int, records: dict,
                         "headerPresent", "spanBytes", "boundaryKnown")):
                 result["status"] = "aliases_inconsistentes"
                 return result
-        if not isinstance(record, dict):
-            return result
         name = record.get("readablePrefix")
         first_invalid = record.get("firstInvalidHex")
         first_offset = record.get("firstInvalidOffset")
