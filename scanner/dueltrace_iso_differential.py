@@ -58,6 +58,16 @@ def fingerprint_scan(info: dict | None) -> dict:
     family = family if isinstance(family, dict) else {}
     audit = info.get("mod_family_audit")
     audit = audit if isinstance(audit, dict) else {}
+    opponent_disc = info.get("independent_opponent_discovery")
+    opponent_disc = opponent_disc if isinstance(opponent_disc, dict) else {}
+    fd = opponent_disc.get("inlineFdEvidence")
+    fd = fd if isinstance(fd, dict) else {}
+    clusters = family.get("clusters")
+    clusters = clusters if isinstance(clusters, list) else []
+    max_blocks = max((_count(r.get("consecutiveBlockCount"), 128)
+                      for r in clusters if isinstance(r, dict)), default=0)
+    max_windows = max((_count(r.get("possible39BlockWindows"), 128)
+                       for r in clusters if isinstance(r, dict)), default=0)
     opponent_origin = _allowed_status(info.get("opponent_identification"),
         {"extraidos_estruturalmente", "verificado", "identificados_por_tabela"})
     wa_state = _allowed_status(wa.get("state"), {
@@ -94,11 +104,14 @@ def fingerprint_scan(info: dict | None) -> dict:
                       else "names_extracted_id_unverified" if opponents == 39
                       else "incomplete" if opponents else "not_extracted"),
             "inGameIdentityVerified": False,
+            "inlineFd39Records": fd.get("unique39RecordRun") is True,
         },
         "resources": {
             "state": wa_state,
             "structural117Found": matrices == 117,
             "candidateFamilyCount": _count(family.get("candidateCount"), 1000),
+            "longestConsecutiveBlockRun": max_blocks,
+            "maxPossible39BlockWindows": max_windows,
             "familyScanStatus": _allowed_status(family.get("state"), {
                 "not_found", "invalid_input", "invalid_layout",
                 "incomplete_or_ambiguous_scan",
@@ -147,8 +160,9 @@ def compare_structures(baseline: dict, others: list[dict]) -> dict:
         differences = []
         for stage, paths in (
             ("cards", ("state",)),
-            ("opponents", ("state", "origin")),
-            ("resources", ("state", "structural117Found")),
+            ("opponents", ("state", "origin", "inlineFd39Records")),
+            ("resources", ("state", "structural117Found",
+                           "longestConsecutiveBlockRun", "maxPossible39BlockWindows")),
             ("drops", ("state", "rankGroupsVerified")),
             ("fusion", ("state",)),
         ):
