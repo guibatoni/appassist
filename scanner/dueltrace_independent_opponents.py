@@ -24,6 +24,9 @@ MAX_INDEX = 1152
 MAX_INDICES = MAX_INDEX + OPP_COUNT + 1
 MAX_CANDIDATES = 8
 MAX_NAME = 60
+# Diagnostic windows must have independent evidence, not 39 rereads of
+# the same string. This is NOT a condition for publishing opponent IDs.
+MIN_INDEPENDENT_DIAGNOSTIC_NAMES = 24
 HASH_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -66,6 +69,11 @@ def discover_independent_opponents(
         # omit candidate names, ROM paths and extracted source bytes.
         "quarantinedRecords": [],
         "candidateCount": 0, "candidateOpponentCount": 0,
+        "degenerateEvidence": {"state": "nao_observado", "rejectedWindows": 0,
+                               "distinctPointerCount": 0,
+                               "distinctReadableNames": 0,
+                               "maxRepeatedReads": 0,
+                               "uniformPointerZero": None},
         "boundaryTerminatorEvidence": {"schema": 1, "candidateCount": 0,
                                       "candidates": [], "inGameVerified": False,
                                       "dropsVerified": False, "rankVerified": False},
@@ -108,6 +116,7 @@ def discover_independent_opponents(
         names[i] = readable[i] if term[i] else ""
         invalid[i] = record.get("firstInvalidHex")
     hypotheses = []
+    degenerate = []
     isolated = []
     for start in range(MIN_INDEX, MAX_INDEX + 1):
         indices = range(start, start + OPP_COUNT)
@@ -119,6 +128,7 @@ def discover_independent_opponents(
             continue
         distinct = len(set(x for x in complete if x))
         ptr_unique = len({pointers[i] for i in indices})
+        prefix_unique = len(set(x for x in prefixes if x))
         # Neighbors with readable but unterminated prefixes also count as
         # populated. A shifted window cannot redefine the first ID merely
         # because a mod uses a different terminator byte.
@@ -134,6 +144,7 @@ def discover_independent_opponents(
             "nameTextBase": text_base, "glyphBase": glyph_base,
             "recognized": count, "readablePrefixes": prefix_count,
             "distinctNames": distinct, "distinctPointers": ptr_unique,
+            "distinctReadablePrefixes": prefix_unique,
             "isolated": edge_isolated, "atOriginalPosition": start == original_index,
             "possibleDifferentTerminator": (
                 common_hex if common_count >= 30 and prefix_count >= 34 else None),
@@ -141,6 +152,13 @@ def discover_independent_opponents(
             "samples": prefixes[:4],
             "validated": False, "inGameVerified": False
         }
+        # An FF at one address read 39 times is ONE string, not 39
+        # independent opponent candidates. Such a table is diagnostic
+        # evidence of a wrong pointer base, placeholder or shared field.
+        if (ptr_unique < MIN_INDEPENDENT_DIAGNOSTIC_NAMES
+                or prefix_unique < MIN_INDEPENDENT_DIAGNOSTIC_NAMES):
+            degenerate.append(row)
+            continue
         hypotheses.append(row)
         if (count == OPP_COUNT and distinct >= 37 and ptr_unique == OPP_COUNT
                 and edge_isolated):
@@ -149,8 +167,24 @@ def discover_independent_opponents(
 
     hypotheses.sort(
         key=lambda x: (-x["recognized"], -x["readablePrefixes"],
-                       -x["distinctNames"], -int(x["isolated"]),
+                       -x["distinctReadablePrefixes"], -int(x["isolated"]),
                        abs(x["startIndex"] - original_index)))
+    degenerate.sort(key=lambda x: (
+        -x["readablePrefixes"], -x["recognized"],
+        -x["distinctPointers"], abs(x["startIndex"] - original_index)))
+    if degenerate:
+        top = degenerate[0]
+        start = top["startIndex"]
+        raw = [pointers[i] for i in range(start, start + OPP_COUNT)]
+        output["degenerateEvidence"] = {
+            "state": "ponteiros_ou_nomes_repetidos",
+            "rejectedWindows": len(degenerate),
+            "distinctPointerCount": top["distinctPointers"],
+            "distinctReadableNames": top["distinctReadablePrefixes"],
+            "maxRepeatedReads": OPP_COUNT - top["distinctPointers"],
+            "uniformPointerZero": bool(all(ptr == 0 for ptr in raw))
+                                  if len(set(raw)) == 1 else None
+        }
     # Overlapping partial runs are not independent discoveries. Keep best
     # evidence per contiguous cluster but do not hide competing full runs.
     compact = []
@@ -175,8 +209,10 @@ def discover_independent_opponents(
          "validated": False, "inGameVerified": False}
         for row in compact[:3]]
     output["candidateCount"] = len(compact)
+    # Count *independent* legible names, not rereads of a shared pointer.
     output["candidateOpponentCount"] = max(
-        (max(x["recognized"], x["readablePrefixes"]) for x in hypotheses), default=0)
+        (min(x["readablePrefixes"], x["distinctReadablePrefixes"],
+             x["distinctPointers"]) for x in hypotheses), default=0)
     # A second path considers ONLY physical record boundaries. A common
     # invalid byte is not enough: each of the 39 records must end on the
     # same control marker with no nonzero bytes before the next pointer.
@@ -185,8 +221,9 @@ def discover_independent_opponents(
         pointers=pointers, text_base=text_base)
     output["boundaryTerminatorEvidence"] = compact_boundary_evidence(
         boundary_candidates)
+    forensic_hypotheses = hypotheses or degenerate[:MAX_CANDIDATES]
     output["forensicEvidence"] = inspect_forensic_windows(
-        exe, hypotheses=hypotheses, records=records, pointers=pointers,
+        exe, hypotheses=forensic_hypotheses, records=records, pointers=pointers,
         text_base=text_base)
     if len(isolated) + len(boundary_candidates) == 1:
         if isolated:
@@ -222,6 +259,8 @@ def discover_independent_opponents(
         output["state"] = ("hipotese_terminador_alternativo"
                            if any(x["possibleDifferentTerminator"] for x in hypotheses)
                            else "tabelas_parciais_nao_verificadas")
+    elif degenerate:
+        output["state"] = "tabela_de_ponteiros_degenerada"
     return output
 
 
@@ -243,6 +282,17 @@ def explain_opponent_blocker(report: dict) -> dict:
     if state == "layouts_completos_ambiguos":
         return {"code": "multiplos_blocos", "reason":
                 "Mais de uma sequência completa de 39 nomes; não há base para escolher os IDs automaticamente."}
+    if state == "tabela_de_ponteiros_degenerada":
+        info = report.get("degenerateEvidence") or {}
+        distinct = info.get("distinctPointerCount", 0)
+        if distinct == 1:
+            return {"code": "tabela_colapsada_um_ponteiro", "reason":
+                    "Os 39 índices consultados repetem um único endereço. "
+                    "Foi lido um só registro, não 39 nomes distintos. "
+                    "A região candidata será descartada; é necessário localizar outra tabela."}
+        return {"code": "tabela_colapsada", "reason":
+                "As leituras repetem poucos endereços ou textos; não há "
+                "evidência de 39 nomes independentes. Procurar outra tabela."}
     if state == "hipotese_terminador_alternativo":
         deep = report.get("forensicEvidence")
         if isinstance(deep, dict) and deep.get("windows"):
@@ -287,6 +337,9 @@ def compact_opponent_evidence(report: dict) -> dict:
         "reason": explanation["reason"],
         "candidateCount": report.get("candidateCount", 0),
         "candidateOpponentCount": report.get("candidateOpponentCount", 0),
+        "degenerateEvidence": (report.get("degenerateEvidence")
+                              if isinstance(report.get("degenerateEvidence"), dict)
+                              else {"state": "nao_analisado"}),
         "candidates": [
             {k: v for k, v in row.items() if k != "samples"}
             for row in (report.get("candidates") or [])[:MAX_CANDIDATES]
