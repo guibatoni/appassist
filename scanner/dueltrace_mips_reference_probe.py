@@ -68,6 +68,24 @@ def inspect_mips_table_references(exe:bytes,table_file_offsets,
         return result
     result["exeSha256"]=hashlib.sha256(exe).hexdigest()
     header=inspect_psx_executable_header(exe[:HEADER_BYTES],len(exe))
+    # A GOG executable can have a PS-X EXE signature but an unsupported
+    # RAM/load mapping, or may not have the signature at all. Report which
+    # validation failed instead of guessing a load address and decoding
+    # arbitrary bytes as MIPS code.
+    safe_header_states={
+        "cabecalho_invalido","cabecalho_truncado",
+        "payload_truncado_ou_invalido","destino_ram_invalido",
+        "entrada_fora_do_payload","cabecalho_coerente_nao_validado",
+    }
+    header_state=header.get("state")
+    result["headerEvidence"]={
+        "state":header_state if header_state in safe_header_states
+                else "cabecalho_invalido",
+        "magicPresent":exe.startswith(b"PS-X EXE"),
+        "fileHasPayloadRegion":len(exe)>HEADER_BYTES,
+        "mappingCoherent":bool(header.get("headerCoherent")),
+        "validated":False
+    }
     if not header.get("headerCoherent"):
         result["state"]="psx_header_invalido"
         return result
