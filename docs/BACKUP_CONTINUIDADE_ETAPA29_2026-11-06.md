@@ -47,3 +47,6 @@ Além do comparador, foi corrigido o limitador rígido de nome do extrator de fu
 ## Complemento 29C — automatização no app moderno
 
 `scanner/dueltrace_intelligence.py` agora executa a sonda de sete bancos quando a ISO é importada pela Biblioteca moderna, mas apenas após confirmar o catálogo 722 por SHA, tamanho e data. Reutiliza o extrator 29B que pode reconhecer contêineres renomeados se os sete bancos forem iguais e válidos. Um resultado negativo fica cacheado por versão da ISO para evitar rescans caros; ausência de evidência não bloqueia cartas, artes nem recursos existentes. Testes sintéticos positivos/negativos em `tests/test_dueltrace_intelligence.py`. Sem confirmar receitas em jogo ou ativar drops/RANK.
+
+## Compartilhamento da comparação
+A Biblioteca oferece **Copiar resumo estrutural**, disparado pelo usuário, com metadados sanitizados e sem ISO/ROM/arte/receitas. A autorização da Etapa27 não foi ampliada silenciosamente para envio de relatórios estáticos. Para investigar GOG, Rising e Enhance, o usuário poderá selecionar a ISO positiva e colar a comparação aqui.
