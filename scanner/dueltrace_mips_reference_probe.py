@@ -78,12 +78,32 @@ def inspect_mips_table_references(exe:bytes,table_file_offsets,
         "entrada_fora_do_payload","cabecalho_coerente_nao_validado",
     }
     header_state=header.get("state")
+    # Read-only field validation: distinguish an oversized declaration,
+    # zero/unaligned text size and valid padding without guessing a payload.
+    actual=max(0,len(exe)-HEADER_BYTES)
+    declared=struct.unpack_from("<I",exe,0x1C)[0]
+    load=struct.unpack_from("<I",exe,0x18)[0]
+    entry=struct.unpack_from("<I",exe,0x10)[0]
+    load_phys=_physical(load)
+    entry_phys=_physical(entry)
     result["headerEvidence"]={
         "state":header_state if header_state in safe_header_states
                 else "cabecalho_invalido",
         "magicPresent":exe.startswith(b"PS-X EXE"),
         "fileHasPayloadRegion":len(exe)>HEADER_BYTES,
         "mappingCoherent":bool(header.get("headerCoherent")),
+        "payloadDeclaredBytes":declared if declared<=MAX_EXECUTABLE_BYTES else None,
+        "payloadAvailableBytes":actual,
+        "payloadOverhangBytes":min(MAX_EXECUTABLE_BYTES,max(0,declared-actual)),
+        "payloadSizeZero":declared==0,
+        "payloadAligned4":declared%4==0,
+        "payloadAligned2048":declared%HEADER_BYTES==0,
+        "payloadFitsFile":declared<=actual,
+        "loadAddressInRAM":load_phys is not None and load%4==0,
+        "payloadFitsRAM":(load_phys is not None and declared<=0x200000-load_phys),
+        "entryWithinLoadedRange":(
+            load_phys is not None and entry_phys is not None and entry%4==0
+            and load_phys<=entry_phys<load_phys+declared),
         "validated":False
     }
     if not header.get("headerCoherent"):
