@@ -442,11 +442,27 @@ export type WindowObservationResult = {
     compatibleWindowCount?: number
     candidateWindowHint?: number | null
     observationCount?: number
+    unmappedPhysicalBlocks?: {
+      status: string
+      nameToBlockMappingVerified: false
+      rankGroupsVerified: false
+      mayActivateDrops: false
+      mayActivateRank: false
+      slots: Array<{
+        structuralNamePosition: number
+        physicalBlocksExamined: number
+        possiblePhysicalBlocks: number
+        candidateSamples: Array<{clusterIndex:number;physicalBlockIndex:number}>
+        mayActivateDrops: false
+        inGameIdVerified: false
+      }>
+    }
     windows?: Array<{
       index: number
       deckContradictions: number
       rewardContradictions: number
       sameRankGroupConflicts: number
+      rankGroupNotAssessable?: number
       compatibleUnderHypothesis: boolean
     }>
   }
