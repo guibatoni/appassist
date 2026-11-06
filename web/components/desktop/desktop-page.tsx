@@ -1133,7 +1133,7 @@ function Mods({mods,sha,onRefresh,configured}:{
                 {" "}Nenhum drop ou grupo RANK foi ativado a partir dessas evidências.
               </p>}
               {typeof mod.scanParserRevision==="number"&&mod.scanParserRevision<30&&<p className="mt-3 text-xs text-gold">
-                Este perfil foi analisado antes da revisão 29. Clique em Atualizar dados para identificar famílias de tabelas.
+                Este perfil foi analisado antes da revisão 30. Clique em Atualizar dados para identificar famílias de tabelas.
               </p>}
               {!mod.opponents&&((mod.opponentCandidateCount??0)>0||Boolean(mod.opponentDiagnosticReason))&&<p className="mt-3 text-xs text-muted">
                 {(mod.opponentCandidateCount??0)>0
