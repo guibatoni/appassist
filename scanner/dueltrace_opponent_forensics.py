@@ -185,6 +185,28 @@ def summarize_alternative_layouts(report: dict) -> dict:
                     "magicPresent":header.get("magicPresent") is True,
                     "fileHasPayloadRegion":header.get("fileHasPayloadRegion") is True,
                     "mappingCoherent":header.get("mappingCoherent") is True,
+                    "payloadDeclaredBytes": (
+                        header.get("payloadDeclaredBytes")
+                        if type(header.get("payloadDeclaredBytes")) is int
+                           and 0<=header["payloadDeclaredBytes"]<=8*1024*1024
+                        else None),
+                    "payloadAvailableBytes": (
+                        header.get("payloadAvailableBytes")
+                        if type(header.get("payloadAvailableBytes")) is int
+                           and 0<=header["payloadAvailableBytes"]<=8*1024*1024
+                        else None),
+                    "payloadOverhangBytes": (
+                        header.get("payloadOverhangBytes")
+                        if type(header.get("payloadOverhangBytes")) is int
+                           and 0<=header["payloadOverhangBytes"]<=8*1024*1024
+                        else None),
+                    "payloadSizeZero":header.get("payloadSizeZero") is True,
+                    "payloadAligned4":header.get("payloadAligned4") is True,
+                    "payloadAligned2048":header.get("payloadAligned2048") is True,
+                    "payloadFitsFile":header.get("payloadFitsFile") is True,
+                    "loadAddressInRAM":header.get("loadAddressInRAM") is True,
+                    "payloadFitsRAM":header.get("payloadFitsRAM") is True,
+                    "entryWithinLoadedRange":header.get("entryWithinLoadedRange") is True,
                     "validated":False,
                 }
         output["probes"][label] = entry
