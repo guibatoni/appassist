@@ -142,6 +142,11 @@ class LiveDiagnosticsRecorder:
         return self._sha
 
     @property
+    def session_id(self):
+        """Random, path-safe identifier, not a PID or local file path."""
+        return self._session_id
+
+    @property
     def running(self):
         with self._lock:
             return self._running
