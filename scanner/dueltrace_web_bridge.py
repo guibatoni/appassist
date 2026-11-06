@@ -1215,7 +1215,9 @@ class DueltraceWebBridge:
             meta=load_json(folder/"relatorio.json",{})
             diagnosis=diagnose_layout(meta,profile)
             from dueltrace_forensic_ai import numeric_evidence
+            from dueltrace_opponent_forensics import summarize_alternative_layouts
             diagnosis["opponentForensics"]=numeric_evidence(meta)
+            diagnosis["opponentLayoutSearch"]=summarize_alternative_layouts(meta)
             diagnosis["romSha"]=sha
             diagnosis["ai"]={"state":"nao_solicitada","note":"Use o diagnóstico Ollama se desejar hipóteses."}
             diagnosis["forensic_ai"]={"state":"nao_solicitada",

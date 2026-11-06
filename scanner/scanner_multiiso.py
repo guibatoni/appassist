@@ -35,7 +35,7 @@ WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
 ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
-SCAN_PARSER_REVISION=23  # exporta catálogo candidato isolado por SHA
+SCAN_PARSER_REVISION=24  # exporta catálogo candidato isolado por SHA
 
 
 def sha256(path:Path, progress=None):
@@ -501,7 +501,8 @@ def process(path,output,with_art=False,digest=None,progress=None):
     # Não reaproveitar CSVs desatualizados de uma tentativa anterior.
     for previous in ('cartas.csv','oponentes.csv','drops_por_oponente.csv',
                      'decks.csv','validacao_pesos.csv',
-                     'catalogo_candidato_nao_verificado.json'):
+                     'catalogo_candidato_nao_verificado.json',
+                     'oponentes_candidatos_nao_verificados.json'):
         (dest/previous).unlink(missing_ok=True)
     disc=None
     try:
