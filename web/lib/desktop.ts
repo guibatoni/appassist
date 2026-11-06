@@ -39,6 +39,7 @@ export type ModScanDiagnostic = {
     scope: string
     mayActivate: false
     windows: Array<Record<string, unknown>>
+    controlWindows?: Array<Record<string, unknown>>
   }
   opponentLayoutSearch?: {
     schema: number
