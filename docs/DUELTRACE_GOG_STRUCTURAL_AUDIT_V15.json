@@ -1,0 +1,172 @@
+{
+  "schema": 1,
+  "format": "dueltrace_mod_family_audit_v15",
+  "status": "family_found_runtime_mapping_pending",
+  "resourcesConsidered": 6,
+  "resourcesScanned": [
+    {
+      "resource": "G0SD/GOG_SD1.23",
+      "size": 38148608,
+      "sha256Prefix": "329d422d725a",
+      "weightFamily": {
+        "schema": 1,
+        "state": "single_family_unmapped_windows",
+        "candidateCount": 2,
+        "selected": null,
+        "candidates": [
+          {
+            "base": 15308800,
+            "opponentStep": 6144,
+            "matrixStride": 1460,
+            "encoding": "plain",
+            "opponentBlocks": 39,
+            "deckMatrices": 39,
+            "unlabeledDistributionMatrices": 117,
+            "matrixCount": 156,
+            "weightTotalPerMatrix": 2048,
+            "cardSlotsPerMatrix": 722,
+            "nonzeroEntriesMin": 25,
+            "nonzeroEntriesMax": 59,
+            "nonzeroEntriesPerGroup": [
+              1222,
+              1817,
+              1206,
+              1509
+            ],
+            "distinctMatrices": 155,
+            "validatedInGame": false,
+            "opponentIdsVerified": false,
+            "rankGroupLabelsVerified": false,
+            "dropsVerified": false,
+            "mayActivateDrops": false,
+            "mayActivateRank": false
+          },
+          {
+            "base": 15314944,
+            "opponentStep": 6144,
+            "matrixStride": 1460,
+            "encoding": "plain",
+            "opponentBlocks": 39,
+            "deckMatrices": 39,
+            "unlabeledDistributionMatrices": 117,
+            "matrixCount": 156,
+            "weightTotalPerMatrix": 2048,
+            "cardSlotsPerMatrix": 722,
+            "nonzeroEntriesMin": 25,
+            "nonzeroEntriesMax": 61,
+            "nonzeroEntriesPerGroup": [
+              1228,
+              1831,
+              1196,
+              1516
+            ],
+            "distinctMatrices": 155,
+            "validatedInGame": false,
+            "opponentIdsVerified": false,
+            "rankGroupLabelsVerified": false,
+            "dropsVerified": false,
+            "mayActivateDrops": false,
+            "mayActivateRank": false
+          }
+        ],
+        "scanComplete": true,
+        "inGameVerified": false,
+        "mayActivateDrops": false,
+        "mayActivateRank": false,
+        "universalCompatibilityClaimed": false,
+        "plainAnchorsExamined": 46,
+        "clusters": [
+          {
+            "firstBlockOffset": 15308800,
+            "lastBlockOffset": 15548416,
+            "consecutiveBlockCount": 40,
+            "runCapReached": false,
+            "ffTailVerified": true,
+            "ruleBytes": 200,
+            "ruleBytesIdenticalAcrossBlocks": true,
+            "possible39BlockWindows": 2,
+            "encoding": "plain",
+            "opponentStep": 6144,
+            "matrixStride": 1460,
+            "inGameVerified": false
+          }
+        ],
+        "ambiguous39BlockWindows": true
+      }
+    },
+    {
+      "resource": "G0SD/GO_SD2.23",
+      "size": 35430400,
+      "sha256Prefix": "c37cbd1c5489",
+      "weightFamily": {
+        "schema": 1,
+        "state": "not_found",
+        "candidateCount": 0,
+        "selected": null,
+        "candidates": [],
+        "scanComplete": true,
+        "inGameVerified": false,
+        "mayActivateDrops": false,
+        "mayActivateRank": false,
+        "universalCompatibilityClaimed": false,
+        "plainAnchorsExamined": 0,
+        "clusters": [],
+        "ambiguous39BlockWindows": false
+      }
+    },
+    {
+      "resource": "G0SD/GOG_SD2.23",
+      "size": 14675968,
+      "sha256Prefix": "69f43b469272",
+      "weightFamily": {
+        "schema": 1,
+        "state": "not_found",
+        "candidateCount": 0,
+        "selected": null,
+        "candidates": [],
+        "scanComplete": true,
+        "inGameVerified": false,
+        "mayActivateDrops": false,
+        "mayActivateRank": false,
+        "universalCompatibilityClaimed": false,
+        "plainAnchorsExamined": 0,
+        "clusters": [],
+        "ambiguous39BlockWindows": false
+      }
+    },
+    {
+      "resource": "G0SD/GO_SD4.23",
+      "size": 5742592,
+      "sha256Prefix": "f8f9aad28fde",
+      "weightFamily": {
+        "schema": 1,
+        "state": "not_found",
+        "candidateCount": 0,
+        "selected": null,
+        "candidates": [],
+        "scanComplete": true,
+        "inGameVerified": false,
+        "mayActivateDrops": false,
+        "mayActivateRank": false,
+        "universalCompatibilityClaimed": false,
+        "plainAnchorsExamined": 0,
+        "clusters": [],
+        "ambiguous39BlockWindows": false
+      }
+    }
+  ],
+  "resourceScanBudgetBytes": 134217728,
+  "modIdentityVerified": false,
+  "rankLabelsVerified": false,
+  "inGameVerified": false,
+  "mayActivateDrops": false,
+  "mayActivateRank": false,
+  "allModsSupported": false,
+  "limitations": [
+    "MIPS execution/real opponent IDs not established",
+    "Three rank-group labels require game-specific evidence",
+    "Unknown compression/encoding needs a new adapter"
+  ],
+  "resourcesWithFamily": 1,
+  "resourceBytesScanned": 93997568
+}
