@@ -236,6 +236,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.activate_mod(sha,acknowledge)
 
+    def compare_mod_layouts(self, credential, baseline_sha):
+        self._authorize(credential)
+        return self._bridge.compare_mod_layouts(baseline_sha)
+
     def get_mod_scan_diagnostic(self, credential, sha, with_ollama=False):
         self._authorize(credential)
         return self._bridge.get_mod_scan_diagnostic(sha,with_ollama)
