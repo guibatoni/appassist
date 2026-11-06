@@ -678,9 +678,31 @@ def process(path,output,with_art=False,digest=None,progress=None):
                 [x["pointerBase"] for x in known]
                 +[x["pointerBase"] for x in relocated]
                 +[x["glyphBase"] for x in relocated]))[:8]
+            if not target_offsets and not opponents:
+                # Os nomes candidatos da ISO já foram lidos. Mesmo quando
+                # nenhuma busca por 0xFF isolado localizou tabela alternativa,
+                # podemos verificar se o código MIPS referencia as bases
+                # destas janelas, SEM presumir que sejam IDs reais.
+                starts=[x.get("startIndex") for x in
+                        found_opponents.get("candidates",[])[:4]
+                        if isinstance(x,dict)]
+                target_offsets=list(dict.fromkeys(
+                    SLUS_PTR_BASE+start*2 for start in starts
+                    if type(start) is int and
+                    0x800<=SLUS_PTR_BASE+start*2<len(sl)
+                    and (SLUS_PTR_BASE+start*2)%2==0))[:4]
+                target_source="janelas_candidatas_nao_verificadas"
+            else:
+                target_source="layout_alternativo_nao_verificado"
             if target_offsets:
                 info["mips_name_pointer_evidence"]=inspect_mips_table_references(
                     sl,target_offsets)
+                info["mips_name_pointer_evidence"]["targetSource"]=target_source
+            else:
+                info["mips_name_pointer_evidence"]={
+                    "schema":1,"state":"sem_alvos_candidatos",
+                    "references":[],"validated":False,
+                    "executionConfirmed":False}
             # Atribuições de IDs, ataques e tipos permanecem hipóteses.
             # Todas as tabelas e nomes são lidos do mesmo executável.
             if relocated:
