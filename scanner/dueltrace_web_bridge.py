@@ -1313,6 +1313,31 @@ class DueltraceWebBridge:
             raise ValueError("Evidências inconsistentes; nenhuma alteração salva")
         return report
 
+    def get_live_opponent(self):
+        """Passively probe only the ePSXe process. Never write its RAM."""
+        from dueltrace_live_opponent import probe_live_opponent
+        with self._lock:
+            active, entry, profile = self._active()
+            if not profile:
+                return {"ready":False,"status":"activate_mod",
+                        "runtimeOpponentId":None,
+                        "runtimeIdVerifiedForMod":False,
+                        "opponentNameVerified":False,
+                        "romIdentityVerified":False,
+                        "mayActivateDrops":False,"mayActivateRank":False}
+            preferred = (
+                self._process.pid if self._process is not None
+                and self._process.poll() is None else None)
+        try:
+            return probe_live_opponent(preferred_pid=preferred)
+        except (OSError, RuntimeError, ValueError, OverflowError):
+            return {"ready":False,"status":"runtime_probe_unavailable",
+                    "runtimeOpponentId":None,
+                    "runtimeIdVerifiedForMod":False,
+                    "opponentNameVerified":False,
+                    "romIdentityVerified":False,
+                    "mayActivateDrops":False,"mayActivateRank":False}
+
     def get_candidate_matrix(self, sha, physical_block_index=-1,
                              matrix_group=1, query="", offset=0, limit=30):
         """Zero-manual-data candidate browser, based on local ISO bytes.
