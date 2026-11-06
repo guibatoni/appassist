@@ -152,6 +152,8 @@ def summarize_alternative_layouts(report: dict) -> dict:
     allowed_states = {
         "nao_encontrado", "tabela_candidata_localizada", "layout_candidato_localizado",
         "hipoteses_ambiguas", "referencias_mips_candidatas", "sem_evidencia",
+        "sem_alvos_candidatos", "psx_header_invalido",
+        "executavel_invalido", "mapeamento_ram_invalido", "alvos_invalidos",
     }
     output = {"schema": 1, "validated": False, "inGameVerified": False,
               "mayPromote": False, "probes": {}}
