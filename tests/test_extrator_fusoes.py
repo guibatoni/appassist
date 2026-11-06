@@ -12,7 +12,8 @@ from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 from extrator_fusoes import (
     BLOCK_SIZE, MIN_INDEX_SIZE, FUSION_BANK_OFFSETS,
-    FusionFormatError, decode_bank, analyze_fusion_banks, save_fusion_report
+    FusionFormatError, decode_bank, analyze_fusion_banks, save_fusion_report,
+    select_fusion_resource
 )
 from auto_mods import ModCatalog, atomic_json, supported_for_runtime
 
@@ -86,6 +87,63 @@ class FusionBankTests(unittest.TestCase):
             self.assertEqual(report["matching_banks"],6)
             self.assertTrue(report["divergent_banks"])
             self.assertIn("REVISÃO",report["status"])
+
+    def test_renamed_resource_detected_only_with_seven_identical_banks(self):
+        raw = bytearray(max(FUSION_BANK_OFFSETS)+BLOCK_SIZE)
+        bank = make_bank()
+        for offset in FUSION_BANK_OFFSETS:
+            raw[offset:offset+BLOCK_SIZE] = bank
+
+        class RenamedDisc:
+            files = {"G0SD/GOG_SD1.23": (3, len(raw))}
+            def get(self, name, limit_bytes=None):
+                return bytes(raw[:limit_bytes])
+
+        name, method = select_fusion_resource(RenamedDisc())
+        self.assertEqual(name, "G0SD/GOG_SD1.23")
+        self.assertEqual(method, "seven_identical_banks_in_renamed_resource")
+        with tempfile.TemporaryDirectory() as folder:
+            image = Path(folder)/"renamed.iso"
+            image.write_bytes(b"example")
+            class PatchedDisc(RenamedDisc):
+                def __init__(self, path):
+                    pass
+                def close(self):
+                    pass
+            with patch("extrator_fusoes.Disc", PatchedDisc):
+                result = analyze_fusion_banks(image)
+            self.assertEqual(result["matching_banks"],7)
+            self.assertEqual(result["valid_banks"],7)
+            self.assertEqual(result["candidate_count"],80)
+            self.assertFalse(result["verified_in_game"])
+            self.assertEqual(result["resource_selection_method"],method)
+
+    def test_renamed_resource_refuses_partial_or_ambiguous_bank_matches(self):
+        raw = bytearray(max(FUSION_BANK_OFFSETS)+BLOCK_SIZE)
+        for offset in FUSION_BANK_OFFSETS:
+            raw[offset:offset+BLOCK_SIZE] = make_bank()
+
+        class ResourceDisc:
+            def __init__(self,files,data):
+                self.files=files
+                self.data=data
+            def get(self,name,limit_bytes=None):
+                return bytes(self.data[:limit_bytes])
+
+        length=len(raw)
+        one=ResourceDisc({"GOG_SD1.23":(1,length)},raw)
+        # Six valid copies, one invalid; still not enough to infer format.
+        raw[FUSION_BANK_OFFSETS[-1]:FUSION_BANK_OFFSETS[-1]+BLOCK_SIZE]=bytes(BLOCK_SIZE)
+        with self.assertRaises(FusionFormatError):
+            select_fusion_resource(one)
+        raw[FUSION_BANK_OFFSETS[-1]:FUSION_BANK_OFFSETS[-1]+BLOCK_SIZE]=make_bank()
+        many=ResourceDisc({"A/ONE.MRG":(1,length),"B/TWO.MRG":(8,length)},raw)
+        with self.assertRaises(FusionFormatError):
+            select_fusion_resource(many)
+        # Canonical name keeps old detection regardless of contents.
+        canonical=ResourceDisc({"DATA/WA_MRG.MRG":(1,length)},bytearray(length))
+        self.assertEqual(select_fusion_resource(canonical),
+                         ("DATA/WA_MRG.MRG","canonical_name"))
 
     def test_batch_review_requires_explicit_ack_and_seven_consistent_banks(self):
         with tempfile.TemporaryDirectory() as folder:
