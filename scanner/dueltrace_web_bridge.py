@@ -1442,6 +1442,7 @@ class DueltraceWebBridge:
             return self.get_live_diagnostics_status()
 
     def get_live_diagnostics_status(self):
+        from dueltrace_live_forensics import summarize_live_report
         with self._lock:
             recorder = self._live_diagnostics
             if recorder is None:
@@ -1450,6 +1451,7 @@ class DueltraceWebBridge:
                     "changeCount": 0, "lastObservedAtUTC": None,
                     "opponentStatuses": {}, "readyToCopy": False,
                     "networkTransmission": False,
+                    "forensicReview": summarize_live_report(None),
                 }
             report = recorder.report()
             return {
@@ -1461,6 +1463,8 @@ class DueltraceWebBridge:
                 "opponentStatuses": report["opponentStatuses"],
                 "readyToCopy": report["sampleCount"] > 0,
                 "networkTransmission": False,
+                # Aggregate-only, local interpretation. No game proof.
+                "forensicReview": summarize_live_report(report),
             }
 
     def export_live_diagnostics(self):
