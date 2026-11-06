@@ -254,6 +254,7 @@ export type LocalMod = {
   name: string
   level: string
   scanParserRevision?: number | null
+  structuralOpponentChoices?: Array<{slot:number;name:string}>
   modFamilyEvidence?: {
     state: string
     scanRevision: number
