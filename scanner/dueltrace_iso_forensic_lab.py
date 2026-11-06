@@ -22,7 +22,7 @@ from dueltrace_independent_opponents import discover_independent_opponents
 from dueltrace_mod_family_probe import discover_weight_families
 from dueltrace_full_resource_drop_bridge import use_unique_weight_family
 from fm_rank_mips_evidence import inspect_mips_rank_routines
-from extrator_fusoes import analyze_fusion_banks
+from extrator_fusoes import analyze_fusion_banks, select_fusion_resource
 
 SHA64 = re.compile(r"^[a-f0-9]{64}$")
 MAX_ROM_BYTES = 2 * 1024 * 1024 * 1024
@@ -66,9 +66,14 @@ def _resource(disc):
         return name,"unique_canonical_resource"
     if len(exact)>1:
         return None, "multiple_canonical_resources"
-    # Without the historical name there is no safe arbitrary resource
-    # selection from size alone. Future adapters may validate by content.
-    return None,"resource_name_unknown"
+    # Content-based fallback: seven conflict-free identical fusion banks,
+    # never an arbitrary file selected by size or extension alone.
+    try:
+        name,method=select_fusion_resource(disc)
+        return name,"seven_bank_structural_resource" if method!=(
+            "canonical_name") else "unique_canonical_resource"
+    except (OSError,ValueError,KeyError,OverflowError):
+        return None,"resource_name_or_structure_unknown"
 
 
 def _art_integrity(wa: bytes) -> dict:
