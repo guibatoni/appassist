@@ -11,7 +11,7 @@ import {DropsPage} from "./drops-page"
 import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -403,6 +403,175 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
   </section>
 }
 
+function LiveOpponentPanel() {
+  const [sample,setSample]=useState<LiveOpponentProbe|null>(null)
+  useEffect(()=>{
+    let active=true
+    let fetching=false
+    const read=async()=>{
+      if(fetching)return
+      const api=desktopApi()
+      if(!api)return
+      fetching=true
+      try{
+        const next=await api.get_live_opponent()
+        if(active)setSample(next)
+      }catch{
+        if(active)setSample(null)
+      }finally{fetching=false}
+    }
+    void read()
+    const timer=window.setInterval(()=>void read(),2500)
+    return ()=>{active=false;window.clearInterval(timer)}
+  },[])
+  return <section className="mt-3 rounded-lg border border-primary/40 bg-background/30 px-3 py-3">
+    <p className="text-sm font-semibold text-primary">
+      Leitura automática do adversário no emulador (experimental)
+    </p>
+    {sample?.ready&&Number.isInteger(sample.runtimeOpponentId)?
+      <p className="mt-2 text-xs text-muted">
+        ID de adversário candidato na RAM PS1:{" "}
+        <strong className="text-primary">#{sample.runtimeOpponentId}</strong>.
+        {" "}LP lidos: {sample.playerLP} / {sample.opponentLP}.
+        {" "}Leitura validada por outras estruturas de RAM, mas o ID ainda não
+        foi relacionado ao nome da ISO nem ao bloco de drops.
+        {(sample.localRuntimeIdEvents??0)>0?
+          ` ${sample.localRuntimeIdEvents} mudança(s) de ID registrada(s) automaticamente
+          nesta sessão iniciada pelo DUELTRACE (evidência provisória).`:""}
+      </p>:
+      <p className="mt-2 text-xs text-muted">
+        {sample?.status==="no_epsxe"?"ePSXe não encontrado. A leitura começa automaticamente quando houver um duelo.":
+         sample?.status==="multiple_epsxe_processes"?"Mais de um processo ePSXe detectado; não é seguro escolher um.":
+         sample?.status==="ram_mapping_not_validated"?"Aguardando um duelo ativo com RAM do PS1 identificável. Nenhum ID será adivinhado.":
+         "Buscando adversário no ePSXe sem alterar a memória do jogo."}
+      </p>}
+    <p className="mt-1 text-xs text-gold">
+      O endereço do ID é conhecido no jogo original, mas o GOG MOD 2.2 pode
+      usar outra estrutura. A leitura é somente observacional e não ativa drops.
+    </p>
+  </section>
+}
+
+function StructuralMatrixExplorer({mod}:{mod:LocalMod}) {
+  const [block,setBlock]=useState(-1)
+  const [group,setGroup]=useState(1)
+  const [query,setQuery]=useState("")
+  const [debouncedQuery,setDebouncedQuery]=useState("")
+  const [offset,setOffset]=useState(0)
+  const [result,setResult]=useState<CandidateMatrixPage|null>(null)
+  const [busy,setBusy]=useState(false)
+  const [error,setError]=useState<string|null>(null)
+
+  useEffect(()=>{
+    const id=window.setTimeout(()=>setDebouncedQuery(query),350)
+    return ()=>window.clearTimeout(id)
+  },[query])
+
+  useEffect(()=>{
+    let active=true
+    const api=desktopApi()
+    if(!api)return
+    setBusy(true);setError(null)
+    void api.get_candidate_matrix(mod.sha256,block,group,debouncedQuery,offset,15).then(
+      next=>{if(active){setResult(next);setBusy(false)}},
+      reason=>{if(active){setError(reason instanceof Error?reason.message:"Matriz indisponível.");setBusy(false)}},
+    )
+    return ()=>{active=false}
+  },[mod.sha256,block,group,debouncedQuery,offset])
+
+  const chooseBlock=(value:number)=>{
+    setBlock(value);setOffset(0)
+  }
+  return <section className="mt-3 rounded-lg border border-primary/30 bg-background/40 px-3 py-3">
+    <p className="text-sm font-semibold text-primary">
+      Dados automáticos da ISO — matrizes candidatas
+    </p>
+    <p className="mt-1 text-xs text-gold">
+      O DUELTRACE lê as distribuições diretamente da ISO. São pesos estruturais
+      reais, mas a identidade do adversário e os grupos de RANK ainda não foram
+      confirmados. Esta área NÃO representa drops oficiais.
+    </p>
+    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+      <label className="flex flex-col gap-1 text-xs text-muted">
+        Bloco físico (não é ID do adversário)
+        <select className="field rounded-md px-2 py-2 text-sm"
+          value={block} onChange={e=>chooseBlock(Number(e.target.value))}>
+          <option value={-1}>Automático (hipótese disponível)</option>
+          {Array.from({length:Math.min(result?.blockCount??mod.modFamilyEvidence?.consecutiveBlocks??0,128)},(_,i)=>
+            <option key={i} value={i}>Bloco físico {i}</option>)}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1 text-xs text-muted">
+        Tabela estrutural
+        <select className="field rounded-md px-2 py-2 text-sm" value={group}
+          onChange={e=>{setGroup(Number(e.target.value));setOffset(0)}}>
+          <option value={0}>Deck candidato (grupo 0)</option>
+          <option value={1}>Distribuição candidata 1</option>
+          <option value={2}>Distribuição candidata 2</option>
+          <option value={3}>Distribuição candidata 3</option>
+        </select>
+      </label>
+      <label className="flex flex-col gap-1 text-xs text-muted">
+        Buscar carta (ID ou nome)
+        <input className="field rounded-md px-2 py-2 text-sm"
+          maxLength={80} placeholder="ID ou nome da Biblioteca"
+          value={query} onChange={e=>{setQuery(e.target.value);setOffset(0)}}/>
+      </label>
+    </div>
+    {busy&&<p className="mt-2 text-xs text-muted">Lendo dados da ISO local...</p>}
+    {error&&<p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
+    {result&&!result.available&&!busy&&<p className="mt-2 text-xs text-gold">
+      Este formato ainda não tem matrizes exploráveis verificadas estruturalmente
+      ({result.status}). A Biblioteca de cartas continua disponível.
+    </p>}
+    {result?.available&&<div className="mt-3">
+      <p className="text-xs text-muted">
+        Bloco físico <strong>{result.physicalBlockIndex}</strong> de {result.blockCount} ·
+        {" "}{result.nonzeroCards} cartas com peso · soma dos pesos: {result.totalWeight}.
+        {" "}{result.selectionReason==="single_hypothesis_from_saved_observation"
+          ?"Bloco sugerido automaticamente pelas observações locais (não confirmado)."
+          :"Bloco exploratório sem ID de adversário confirmado."}
+      </p>
+      <div className="mt-2 max-h-72 overflow-auto rounded-md border border-line/60">
+        <table className="w-full text-left text-xs text-muted">
+          <thead className="sticky top-0 bg-panel-strong text-primary">
+            <tr>
+              <th className="px-2 py-2">Carta da ISO</th>
+              <th className="px-2 py-2">ATK / DEF</th>
+              <th className="px-2 py-2">Peso</th>
+              <th className="px-2 py-2">%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.rows.map(row=><tr key={row.id} className="border-t border-line/30">
+              <td className="px-2 py-2">#{row.id} · {row.name}</td>
+              <td className="px-2 py-2">{row.atk??"—"} / {row.def??"—"}</td>
+              <td className="px-2 py-2">{row.weight}/2048</td>
+              <td className="px-2 py-2">{row.chancePercent.toFixed(2)}%</td>
+            </tr>)}
+          </tbody>
+        </table>
+        {result.rows.length===0&&<p className="p-3 text-xs text-muted">
+          Nenhuma carta corresponde ao filtro nesta distribuição.
+        </p>}
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted">
+        <span>{result.total??0} cartas correspondentes ·
+          {" "}proporções condicionais ao grupo não identificado</span>
+        <div className="flex items-center gap-2">
+          <button type="button" className="btn-ghost disabled:opacity-40"
+            onClick={()=>setOffset(n=>Math.max(0,n-15))} disabled={busy||offset===0}>
+            Anterior
+          </button>
+          <button type="button" className="btn-ghost disabled:opacity-40"
+            onClick={()=>setOffset(n=>n+15)}
+            disabled={busy||offset+15>=(result.total??0)}>Próxima</button>
+        </div>
+      </div>
+    </div>}
+  </section>
+}
+
 function WindowEvidenceForm({mod}:{mod:LocalMod}) {
   const opponentChoices=mod.structuralOpponentChoices??[]
   const [slot,setSlot]=useState("")
@@ -754,6 +923,9 @@ function Mods({mods,sha,onRefresh,configured}:{
                 </button>
               </div>
               {(mod.modFamilyEvidence?.possible39Windows??0)>1&&<WindowEvidenceForm mod={mod}/>}
+              {active&&<LiveOpponentPanel/>}
+              {(mod.modFamilyEvidence?.consecutiveBlocks??0)>=39&&
+                <StructuralMatrixExplorer mod={mod}/>}
               {!mod.opponents&&((mod.opponentCandidateCount??0)>0||Boolean(mod.opponentDiagnosticReason))&&<button
                 type="button" disabled={busy||!desktopApi()}
                 className="mt-3 inline-flex items-center gap-2 rounded-md border border-line/70 px-3 py-2 text-xs text-muted transition-colors hover:border-primary/60 hover:text-white disabled:opacity-40"

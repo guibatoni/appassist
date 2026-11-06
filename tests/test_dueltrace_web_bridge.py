@@ -88,6 +88,59 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(snapshot["cards"][1]["effectSource"],"ROM-offset-auditado")
         self.assertNotIn("source_path",str(snapshot))
 
+    def test_live_opponent_probe_requires_token_and_never_promotes(self):
+        native={"ready":True,"status":"runtime_id_candidate",
+                "runtimeOpponentId":11,
+                "mappingValidatedByIndependentFields":True,
+                "runtimeIdVerifiedForMod":False,
+                "opponentNameVerified":False,
+                "romIdentityVerified":False,
+                "mayActivateDrops":False,"mayActivateRank":False}
+        protected=ProtectedDesktopApi(self.bridge,"x"*64)
+        with self.assertRaises(PermissionError):
+            protected.get_live_opponent("wrong")
+        with patch("dueltrace_live_opponent.probe_live_opponent",return_value=native) as probe:
+            result=protected.get_live_opponent("x"*64)
+            probe.assert_called_once()
+            self.assertEqual(result["runtimeOpponentId"],11)
+            self.assertFalse(result["romIdentityVerified"])
+            self.assertFalse(result["mayActivateDrops"])
+            self.assertFalse(result["opponentNameVerified"])
+            self.assertFalse(result["mayActivateRank"])
+            self.assertEqual(self.catalog.current()["sha256"],self.sha)
+
+    def test_runtime_ids_auto_log_only_for_matching_launched_session(self):
+        from auto_mods import load_json
+        self.bridge._process=Mock()
+        self.bridge._process.pid=4242
+        self.bridge._process.poll.return_value=None
+        self.bridge._launched_rom_sha=self.sha
+        path=self.home/"runtime_opponent_observations"/(self.sha+".json")
+        provisional={
+            "ready":True,"status":"runtime_id_candidate",
+            "runtimeOpponentId":11,
+            "runtimeIdVerifiedForMod":False,
+            "romIdentityVerified":False,
+            "opponentNameVerified":False,
+            "mayActivateDrops":False,"mayActivateRank":False,
+        }
+        with patch("dueltrace_live_opponent.probe_live_opponent",return_value=provisional):
+            first=self.bridge.get_live_opponent()
+            second=self.bridge.get_live_opponent()
+        self.assertTrue(first["autoLogged"])
+        self.assertFalse(second["autoLogged"])
+        saved=load_json(path,{})
+        self.assertEqual(len(saved["events"]),1)
+        self.assertEqual(saved["events"][0]["opponentRuntimeId"],11)
+        self.assertFalse(saved["verifiedForGame"])
+        self.assertNotIn("memory",str(saved).casefold())
+        self.bridge._launched_rom_sha="b"*64
+        different={**provisional,"runtimeOpponentId":12}
+        with patch("dueltrace_live_opponent.probe_live_opponent",return_value=different):
+            ignored=self.bridge.get_live_opponent()
+        self.assertFalse(ignored["autoLogged"])
+        self.assertEqual(len(load_json(path,{})["events"]),1)
+
     def test_family_summary_exposes_only_structural_counts(self):
         # A 40-block family has two possible 39-opponent windows, NOT
         # verified 40 opponents or unlocked drop tables.
@@ -171,6 +224,10 @@ class BridgeTests(unittest.TestCase):
         self.profile["verified"]["oponentes"]="extraidos_estruturalmente"
         self.profile["opponents"]=[{"id":i, "name":f"Adversário {i}"}
                                    for i in range(1,40)]
+        present = {row["id"] for row in self.profile["cards"]}
+        self.profile["cards"].extend(
+            {"id": i, "name":f"Carta validada {i}", "atk":i*2,"def":i*3}
+            for i in range(1,723) if i not in present)
         atomic_json(self.profile_path,self.profile)
         choices=self.bridge.get_state()["mods"][0]["structuralOpponentChoices"]
         self.assertEqual(len(choices),39)
@@ -196,6 +253,19 @@ class BridgeTests(unittest.TestCase):
             protected.record_window_observation("wrong",self.sha,1,"S-POW",38,[1])
         with patch("scanner_multiiso.sha256",return_value=self.sha), patch(
                 "scanner_multiiso.Disc",Disc):
+            with self.assertRaises(PermissionError):
+                protected.get_candidate_matrix("wrong",self.sha,0,1,"38",0,10)
+            preview=protected.get_candidate_matrix(
+                "x"*64,self.sha,0,1,"38",0,10)
+            self.assertTrue(preview["available"])
+            self.assertEqual(preview["blockCount"],40)
+            self.assertEqual(preview["rows"][0]["id"],38)
+            self.assertEqual(preview["rows"][0]["weight"],100)
+            self.assertFalse(preview["mayActivateDrops"])
+            self.assertFalse(preview["rankGroupLabelsVerified"])
+            suggested=protected.get_candidate_matrix("x"*64,self.sha,-1,1)
+            self.assertTrue(suggested["available"])
+            self.assertTrue(suggested["autoSelected"])
             result=protected.record_window_observation(
                 "x"*64,self.sha,1,"S-POW",38,[1])
             self.assertEqual(result["observationCount"],1)
