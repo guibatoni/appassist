@@ -115,6 +115,47 @@ class RuntimeOpponentTests(unittest.TestCase):
         self.assertFalse(probe["romIdentityVerified"])
         self.assertFalse(probe["mayActivateDrops"])
 
+    def test_native_fast_hint_reports_anchor_success_without_a_scan(self):
+        # Exercise the native kernel-adapter path (the injected read_at path
+        # does not run the successful hint branch). No real Windows process.
+        import ctypes
+        from unittest.mock import Mock
+        from dueltrace_live_hand import HAND_ADDRESS
+        from dueltrace_live_opponent import HAND_OFFSET, _PID_BASE_CACHE
+        base, old = memory_snapshot(oid=5, lp1=5408, lp2=10023,
+                                    invalid_history=True)
+        self.assertEqual(base + HAND_OFFSET, HAND_ADDRESS)
+        hand = bytearray(140)
+        for slot, cid in enumerate((629,105,426,81,468)):
+            struct.pack_into("<H", hand, slot*28, cid)
+            struct.pack_into("<I", hand, slot*28+12, slot)
+        def read(addr, size):
+            if (addr,size) == (HAND_ADDRESS,140):
+                return bytes(hand)
+            return old(addr,size)
+        def kernel_read(_handle, address, buffer, count, written):
+            data = read(address.value, count)
+            if data is None or len(data) != count:
+                return False
+            ctypes.memmove(buffer, data, count)
+            ctypes.cast(written,ctypes.POINTER(ctypes.c_size_t)).contents.value = count
+            return True
+        kernel = Mock()
+        kernel.OpenProcess.return_value = 17
+        kernel.ReadProcessMemory.side_effect = kernel_read
+        _PID_BASE_CACHE.pop(49876,None)
+        try:
+            result = probe_live_opponent(kernel=kernel,pids=[49876])
+        finally:
+            _PID_BASE_CACHE.pop(49876,None)
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["runtimeOpponentId"],5)
+        self.assertTrue(result["knownHandAnchorAtHint"])
+        self.assertTrue(result["memoryScanSkippedByKnownHand"])
+        self.assertEqual(result["validationMethod"],"known_hand_anchor")
+        self.assertFalse(result["runtimeIdVerifiedForMod"])
+        kernel.CloseHandle.assert_called_once()
+
     def test_known_hand_anchor_rejects_unverified_hand_layout(self):
         base,old=memory_snapshot(invalid_history=True)
         invalid=bytes(140)
