@@ -169,6 +169,16 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.import_rank_trace(duel_id)
 
+    def get_window_observations(self, credential, sha):
+        self._authorize(credential)
+        return self._bridge.get_window_observations(sha)
+
+    def record_window_observation(self, credential, sha, opponent_slot,
+                                  observed_rank, reward_card_id, played_card_ids):
+        self._authorize(credential)
+        return self._bridge.record_window_observation(
+            sha, opponent_slot, observed_rank, reward_card_id, played_card_ids)
+
     def get_duel_evidence(self, credential):
         self._authorize(credential)
         return self._bridge.get_duel_evidence()

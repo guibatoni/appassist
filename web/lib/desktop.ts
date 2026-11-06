@@ -426,6 +426,27 @@ export type MipsTraceResult = {
   last?: MipsTraceResult | null
 }
 
+export type WindowObservationResult = {
+  observationCount: number
+  analysis: {
+    status?: string
+    windowCount?: number
+    compatibleWindowCount?: number
+    candidateWindowHint?: number | null
+    observationCount?: number
+    windows?: Array<{
+      index: number
+      deckContradictions: number
+      rewardContradictions: number
+      sameRankGroupConflicts: number
+      compatibleUnderHypothesis: boolean
+    }>
+  }
+  inGameVerified: false
+  mayActivateDrops: false
+  mayActivateRank: false
+}
+
 export type DuelEvidence = {
   status: string
   observations: number
@@ -628,6 +649,8 @@ export interface DesktopAPI {
   import_rank_trace(duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(): Promise<RankAuditExport>
   get_duel_evidence(): Promise<DuelEvidence>
+  get_window_observations(sha: string): Promise<WindowObservationResult>
+  record_window_observation(sha: string, slot: number, rank: string, rewardId: number, playedIds: number[]): Promise<WindowObservationResult>
   record_duel_result(opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string, captureId?: string | null): Promise<DuelEvidence>
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(sha: string): Promise<DeepScanResult>
@@ -665,6 +688,8 @@ interface ProtectedNativeAPI {
   import_rank_trace(token: string, duelId?: string | null): Promise<MipsTraceResult>
   export_rank_audit(token: string): Promise<RankAuditExport>
   get_duel_evidence(token: string): Promise<DuelEvidence>
+  get_window_observations(token: string, sha: string): Promise<WindowObservationResult>
+  record_window_observation(token: string, sha: string, slot: number, rank: string, rewardId: number, playedIds: number[]): Promise<WindowObservationResult>
   record_duel_result(token: string, opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string, captureId?: string | null): Promise<DuelEvidence>
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
   scan_sources(token: string, sha: string): Promise<DeepScanResult>
@@ -717,6 +742,9 @@ export function desktopApi(): DesktopAPI | null {
     import_rank_trace: (duelId) => native.import_rank_trace(token, duelId),
     export_rank_audit: () => native.export_rank_audit(token),
     get_duel_evidence: () => native.get_duel_evidence(token),
+    get_window_observations: (sha) => native.get_window_observations(token, sha),
+    record_window_observation: (sha,slot,rank,rewardId,playedIds) =>
+      native.record_window_observation(token,sha,slot,rank,rewardId,playedIds),
     record_duel_result: (opponentId, observedRank, cardId, observedPoints, victoryType, captureId) =>
       native.record_duel_result(token, opponentId, observedRank, cardId, observedPoints, victoryType, captureId),
     activate_mod: (sha, acknowledge) => native.activate_mod(token, sha, acknowledge),

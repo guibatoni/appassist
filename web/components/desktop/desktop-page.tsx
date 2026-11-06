@@ -403,6 +403,112 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
   </section>
 }
 
+function WindowEvidenceForm({mod}:{mod:LocalMod}) {
+  const [slot,setSlot]=useState("1")
+  const [rank,setRank]=useState("")
+  const [reward,setReward]=useState("")
+  const [played,setPlayed]=useState("")
+  const [busy,setBusy]=useState(false)
+  const [error,setError]=useState<string|null>(null)
+  const [summary,setSummary]=useState<{
+    observationCount: number
+    analysis: {status?:string;windowCount?:number;compatibleWindowCount?:number;candidateWindowHint?:number|null}
+  }|null>(null)
+
+  useEffect(()=>{
+    const api=desktopApi()
+    if (!api)return
+    let active=true
+    void api.get_window_observations(mod.sha256).then(
+      result=>{if(active)setSummary(result)},
+      ()=>{if(active)setSummary(null)},
+    )
+    return ()=>{active=false}
+  },[mod.sha256])
+
+  const submit=async(event:React.FormEvent<HTMLFormElement>)=>{
+    event.preventDefault()
+    if(busy)return
+    const api=desktopApi()
+    if(!api){setError("Abra o aplicativo para Windows.");return}
+    const id=Number(slot),card=Number(reward)
+    const tokens=played.trim()?played.trim().split(/[\s,;]+/):[]
+    const cards=tokens.map(Number)
+    const upper=rank.trim().toUpperCase()
+    if(!Number.isInteger(id)||id<1||id>39||!Number.isInteger(card)||
+       card<1||card>722||!/^[A-Z0-9_-]{1,24}$/.test(upper)||
+       cards.length>24||cards.some(v=>!Number.isInteger(v)||v<1||v>722)||
+       new Set(cards).size!==cards.length){
+      setError("Verifique índice (1–39), carta recebida (1–722), RANK e IDs das cartas usadas (sem repetições).")
+      return
+    }
+    setBusy(true);setError(null)
+    try {
+      const result=await api.record_window_observation(mod.sha256,id,upper,card,cards)
+      setSummary(result)
+      setReward("");setPlayed("")
+    }catch(e){
+      setError(e instanceof Error?e.message:"Falha ao gravar observação do duelo.")
+    }finally{setBusy(false)}
+  }
+  const status=summary?.analysis?.status??"awaiting_independent_duels"
+  const label:Record<string,string>={
+    awaiting_independent_duels:"Aguardando observações.",
+    single_window_suggested_not_verified:"Uma janela é compatível com os relatos, ainda sem comprovação em jogo.",
+    multiple_windows_still_possible:"As duas janelas continuam possíveis.",
+    observations_conflict_with_all_windows:"Os relatos contradizem as janelas candidatas; confira o índice e os IDs observados.",
+    resource_ambiguous_or_missing:"Recurso ainda não identificado de forma única.",
+  }
+  return <details className="mt-3 rounded-lg border border-line/60 bg-background/30 px-3 py-3">
+    <summary className="cursor-pointer text-sm font-semibold text-primary">
+      Registrar evidência de duelo (experimental)
+    </summary>
+    <p className="mt-2 text-xs text-gold">
+      Informe a posição do adversário na lista estrutural de 39 nomes, ainda não
+      validada como ID interno do jogo. Registre apenas duelos que observou.
+      Essas informações nunca desbloqueiam drops nem RANK.
+    </p>
+    <form onSubmit={e=>void submit(e)} className="mt-3 grid gap-2 md:grid-cols-2">
+      <label className="flex flex-col gap-1 text-xs text-muted">
+        Posição estrutural (1–39)
+        <input className="field rounded-md px-3 py-2 text-sm" type="number" min={1} max={39}
+          value={slot} onChange={e=>setSlot(e.target.value)} required/>
+      </label>
+      <label className="flex flex-col gap-1 text-xs text-muted">
+        RANK exibido no fim do duelo
+        <input className="field rounded-md px-3 py-2 text-sm" maxLength={24}
+          placeholder="Ex.: S-POW" value={rank}
+          onChange={e=>setRank(e.target.value)} required/>
+      </label>
+      <label className="flex flex-col gap-1 text-xs text-muted">
+        ID da carta recebida
+        <input className="field rounded-md px-3 py-2 text-sm" type="number" min={1} max={722}
+          value={reward} onChange={e=>setReward(e.target.value)} required/>
+      </label>
+      <label className="flex flex-col gap-1 text-xs text-muted">
+        IDs das cartas usadas pelo adversário (opcional)
+        <input className="field rounded-md px-3 py-2 text-sm" maxLength={120}
+          placeholder="Ex.: 12, 58, 210" value={played}
+          onChange={e=>setPlayed(e.target.value)}/>
+      </label>
+      <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+        <button type="submit" disabled={busy||!desktopApi()} className="btn-ghost disabled:opacity-40">
+          {busy?"Comparando...":"Salvar e comparar janelas"}
+        </button>
+        <span className="text-xs text-muted">
+          {summary?.observationCount??0} observação(ões) locais · {label[status]??"Análise provisória disponível."}
+        </span>
+      </div>
+      {error&&<p role="alert" className="md:col-span-2 text-xs text-danger">{error}</p>}
+      {(summary?.analysis?.windowCount??0)>0&&<p className="md:col-span-2 text-xs text-muted">
+        Janelas: {summary?.analysis?.windowCount} · Compatíveis sob hipótese:{" "}
+        {summary?.analysis?.compatibleWindowCount??0}.
+        {" "}Identidade do adversário e grupos de RANK não verificados.
+      </p>}
+    </form>
+  </details>
+}
+
 function Mods({mods,sha,onRefresh,configured}:{
   mods:LocalMod[];sha:string|null;onRefresh:()=>Promise<void>;configured:boolean
 }) {
@@ -568,6 +674,7 @@ function Mods({mods,sha,onRefresh,configured}:{
                   <RefreshCcw className="size-4"/> Atualizar dados
                 </button>
               </div>
+              {(mod.modFamilyEvidence?.possible39Windows??0)>1&&<WindowEvidenceForm mod={mod}/>}
               {!mod.opponents&&((mod.opponentCandidateCount??0)>0||Boolean(mod.opponentDiagnosticReason))&&<button
                 type="button" disabled={busy||!desktopApi()}
                 className="mt-3 inline-flex items-center gap-2 rounded-md border border-line/70 px-3 py-2 text-xs text-muted transition-colors hover:border-primary/60 hover:text-white disabled:opacity-40"
