@@ -36,3 +36,13 @@ Destino pretendido: `/DUELTRACE - Desenvolvimento/PROJETO_ATUAL/`. Documentos an
 ## Comportamento de segurança
 
 Não transmitir ROM, caminhos, endereços RAM, tokens ou arte; somente leitura do ePSXe. Não fazer merge na main sem autorização. Salvar backup ao encerrar cada etapa.
+
+## Atualização: primeiro relatório real da Etapa 26 (06/11/2026)
+
+Usuário forneceu JSON sanitizado com fingerprint `61d58d835246`. A análise confirmou 30 amostras e 15 mudanças exportadas; 15 leituras da mão e da sonda de adversário legíveis; 15 eventos com `candidateId=5` e `mappingMethod=known_hand_anchor`; 2 estados distintos de LP (`5408/10023` e `3879/1062`); RANK indisponível em todos os 15 eventos. **Não há nome, ID interno do executável ou vínculo com os 40 blocos e 160 matrizes confirmado por esses dados.** Não associar índice estrutural 5 ao candidato 5.
+
+A flag `knownHandAnchorAtHint=false` no JSON antigo foi identificada como falha de preenchimento no caminho rápido de sucesso da sonda; não significa que a âncora não validou. Foram acrescentados o preenchimento de sucesso, `handAnchorValidated` e resumo automático descritivo de estabilidade do candidato; sem modificações na Biblioteca de cartas, artes, decisão de RANK ou ativação de drops. Consultar `docs/DUELTRACE_PHASE26_HAND_ANCHOR_EVIDENCE.md`.
+
+**Próxima ação científica:** localizar no executável do GOG a origem e a interpretação do byte na rotina MIPS e a seleção de bloco físico e matriz por resultado do duelo. O JSON isolado só permite observação estável de um candidato. Evitar novos registros manuais de cartas. Validar CI/Windows da HEAD depois dessas edições; **não afirmar confirmação do executável GOG**.
+
+**Segurança:** relatório de sessão completo deve ficar somente na Biblioteca do usuário, não em GitHub público. `main` não foi alterada.
