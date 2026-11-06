@@ -1803,6 +1803,36 @@ class DueltraceWebBridge:
         self._rank_experimental_sha=None
         return self.get_state()
 
+    def audit_mod_iso(self, sha):
+        """Explicit local-only forensic run; never changes a registered mod."""
+        if type(sha) is not str or not re.fullmatch(r"[a-f0-9]{64}",sha):
+            raise ValueError("SHA de ISO inválido.")
+        with self._lock:
+            entry=next((e for e in self.catalog.list()
+                        if e.get("sha256")==sha),None)
+            if entry is None:
+                raise ValueError("ISO não cadastrada.")
+            source=entry.get("source_path")
+            if type(source) is not str or not source:
+                raise ValueError("Caminho da ISO cadastrada indisponível.")
+            path=Path(source).resolve(strict=True)
+            if path.suffix.lower() not in (".iso",".bin"):
+                raise ValueError("Somente imagens ISO/BIN cadastradas são permitidas.")
+            expected_size=entry.get("size")
+            expected_mtime=entry.get("mtime_ns")
+            before=path.stat()
+            if (type(expected_size) is int and expected_size!=before.st_size
+                    or type(expected_mtime) is int
+                    and expected_mtime!=before.st_mtime_ns):
+                raise ValueError(
+                    "Imagem alterada desde a importação. Atualize dados primeiro.")
+        from dueltrace_iso_forensic_lab import inspect_iso
+        report=inspect_iso(path,sha)
+        # A deliberate local persist, separate from cards/profiles/drop tables.
+        target=(self.catalog.home/"iso_forensics"/(sha+".json"))
+        atomic_json(target,report)
+        return report
+
     def compare_mod_layouts(self, baseline_sha):
         """Compare already scanned ISOs, never reading ROM bytes or paths out."""
         from dueltrace_iso_differential import (
