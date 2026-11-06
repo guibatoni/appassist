@@ -40,13 +40,25 @@ export type ModScanDiagnostic = {
     mayActivate: false
     windows: Array<Record<string, unknown>>
     controlWindows?: Array<Record<string, unknown>>
+    fdJumpWindows?: Array<Record<string, unknown>>
   }
   opponentLayoutSearch?: {
     schema: number
     validated: false
     inGameVerified: false
     mayPromote: false
-    probes: Record<string, {candidateCount: number; state: string; validated: false}>
+    probes: Record<string, {
+      candidateCount: number
+      state: string
+      validated: false
+      headerEvidence?: {
+        state: string
+        magicPresent: boolean
+        fileHasPayloadRegion: boolean
+        mappingCoherent: boolean
+        validated: false
+      }
+    }>
   }
   state: string
   status: string

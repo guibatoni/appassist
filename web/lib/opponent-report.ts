@@ -41,6 +41,25 @@ const CONTROL_STATES = new Set([
   "terminadores_desconhecidos",
 ])
 
+const FD_JUMP_COUNTS = [
+  "recordCount","fdRecords","fdWithTwoArguments","fdTruncated",
+  "jumpTargetInBank","jumpTargetOutOfFile","jumpTargetAtSource",
+  "jumpTargetHasFF","jumpTargetStartsFD","jumpTargetStartsF8",
+  "jumpTargetStartsFF","jumpTargetSameAsAnotherPointer",
+  "jumpTargetDistinctCount","fdArgumentHighZero",
+  "fdArgumentHighNonZero","directFFAfterFD",
+] as const
+const FD_JUMP_STATES = new Set([
+  "incompleto","entrada_invalida","ponteiros_ausentes",
+  "registros_invalidos","salto_fd_hipotese_estrutural","nenhum_salto_fd",
+])
+const HEADER_STATES = new Set([
+  "cabecalho_invalido","cabecalho_truncado",
+  "payload_truncado_ou_invalido","destino_ram_invalido",
+  "entrada_fora_do_payload","cabecalho_coerente_nao_validado",
+])
+
+
 function count(value: unknown): number | null {
   return typeof value === "number" && Number.isSafeInteger(value) &&
     value >= -100000 && value <= 100000 ? value : null
@@ -90,9 +109,25 @@ export function safeOpponentReport(mod: LocalMod, diagnosis: ModScanDiagnostic):
     safe.nonFfControlHistogram = controlHistogram
     return safe
   })
+  const fdJumpWindows = (evidence.fdJumpWindows ?? []).slice(0, 5).map(window => {
+    const safe: Record<string, number | string | null> = {}
+    for (const key of FD_JUMP_COUNTS) safe[key] = count(window?.[key])
+    safe.state = typeof window?.state === "string" && FD_JUMP_STATES.has(window.state)
+      ? window.state : "incompleto"
+    return safe
+  })
   // Other extraction probes are already computed by the deterministic
   // scanner. Only counts and bounded status values leave the app.
-  const searches: Record<string, {candidateCount: number | null; state: string}> = {}
+  const searches: Record<string, {
+    candidateCount: number | null
+    state: string
+    headerEvidence?: {
+      state: string
+      magicPresent: boolean
+      fileHasPayloadRegion: boolean
+      mappingCoherent: boolean
+    }
+  }> = {}
   const allowedStates = new Set([
     "nao_encontrado", "tabela_candidata_localizada",
     "layout_candidato_localizado", "hipoteses_ambiguas",
@@ -107,9 +142,19 @@ export function safeOpponentReport(mod: LocalMod, diagnosis: ModScanDiagnostic):
       state: source?.state && allowedStates.has(source.state)
         ? source.state : "indisponivel",
     }
+    if (probe === "mipsStaticReferences" && source?.headerEvidence) {
+      const raw = source.headerEvidence
+      searches[probe].headerEvidence = {
+        state: typeof raw.state === "string" && HEADER_STATES.has(raw.state)
+          ? raw.state : "cabecalho_invalido",
+        magicPresent: raw.magicPresent === true,
+        fileHasPayloadRegion: raw.fileHasPayloadRegion === true,
+        mappingCoherent: raw.mappingCoherent === true,
+      }
+    }
   }
   const report = {
-    schema: 3,
+    schema: 4,
     context: "dueltrace-opponent-pointers",
     scannerRevision: count(mod.scanParserRevision),
     cards: count(mod.cards),
@@ -117,6 +162,7 @@ export function safeOpponentReport(mod: LocalMod, diagnosis: ModScanDiagnostic):
     opponentCount: count(mod.opponents),
     forensicWindows: windows,
     controlFlowWindows: controlWindows,
+    fdJumpWindows,
     alternativeLayoutSearch: searches,
     disclaimer: "Dados candidatos. Nenhum ID, drop ou RANK foi validado em jogo.",
   }
