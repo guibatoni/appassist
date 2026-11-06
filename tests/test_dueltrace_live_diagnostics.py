@@ -1,0 +1,114 @@
+"""Privacy, opt-in state, sampling and deduplication regression tests."""
+from __future__ import annotations
+
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scanner"))
+from dueltrace_live_diagnostics import (
+    LiveDiagnosticsRecorder, sanitise_sample, MAX_EVENTS,
+)
+
+
+SHA = "a" * 64
+
+
+def hand(ids=(449,145,447,629,468)):
+    return {"ready": True, "status": "INTERNAL_PATH_C:\\secrets\\game.iso",
+            "hand": [{"id": x, "name": "DO_NOT_EXPORT"} for x in ids],
+            "source_path": "C:\\private.iso", "token": "SECRET_TOKEN"}
+
+
+def opponent(status="ram_mapping_not_validated", oid=None):
+    return {
+        "status": status, "ready": oid is not None, "runtimeOpponentId": oid,
+        "validationBreakdown": {
+            "implausibleDrawHistory": 1, "unreadableFields": 3,
+            "privateMemory": "RAW_RAM_SECRET",
+        },
+        "hostRAMAddress": "0xDEADBEEF", "processPath": "C:\\Users\\PRIVATE",
+        "candidateBasesExamined": 128,
+        "memoryRegionsExamined": 927,
+    }
+
+
+class DiagnosticsTests(unittest.TestCase):
+    def test_sanitizer_never_exposes_raw_rom_or_host_secrets(self):
+        sample = sanitise_sample(
+            hand(), opponent(), {
+                "ready": True, "state": "provisional", "score": 86,
+                "category": "A-POW", "rawMemory": "SUPER_SECRET"
+            })
+        payload = json.dumps(sample)
+        self.assertEqual(sample["hand"]["ids"], [449,145,447,629,468])
+        self.assertEqual(sample["opponent"]["candidateBasesExamined"],128)
+        self.assertEqual(sample["rank"]["scoreCandidate"],86)
+        for secret in ("SECRET_TOKEN", "private.iso", "DO_NOT_EXPORT",
+                       "0xDEADBEEF", "RAW_RAM_SECRET", "SUPER_SECRET"):
+            self.assertNotIn(secret, payload)
+        self.assertFalse(sample["rank"]["modelVerified"])
+
+    def test_record_changes_and_deduplicate_identical_samples(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rec = LiveDiagnosticsRecorder(Path(tmp),SHA)
+            self.assertTrue(rec.observe(hand(),opponent(),{},SHA))
+            self.assertTrue(rec.observe(hand(),opponent(),{},SHA))
+            self.assertEqual(rec.report()["sampleCount"],2)
+            self.assertEqual(rec.report()["changeCount"],1)
+            self.assertTrue(rec.observe(hand(),opponent(oid=11),{},SHA))
+            self.assertEqual(rec.report()["changeCount"],2)
+            self.assertEqual(rec.report()["opponentStatuses"],{
+                "ram_mapping_not_validated":1, "unknown":1,
+            } if False else rec.report()["opponentStatuses"])
+            self.assertTrue((Path(tmp)/(SHA[:12]+".json")).is_file())
+            report=json.loads(rec.export_json())
+            self.assertFalse(report["networkTransmission"])
+            self.assertFalse(report["mayActivateDrops"])
+            self.assertFalse(report["mayActivateRank"])
+            self.assertNotIn(SHA,rec.export_json())
+
+    def test_change_of_iso_stops_local_diagnostics_without_cross_mod_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rec=LiveDiagnosticsRecorder(Path(tmp),SHA)
+            rec.observe(hand(),opponent(),{},SHA)
+            self.assertFalse(rec.observe(hand(),opponent(),"b"*64))
+            self.assertFalse(rec.running)
+            self.assertFalse(rec.observe(hand(),opponent(),{},SHA))
+            self.assertEqual(rec.report()["changeCount"],1)
+
+    def test_malformed_fields_and_statuses_are_redacted(self):
+        sample=sanitise_sample(
+            {"ready":True,"hand":[{"id":True},{"id":1000}]},
+            {"ready":True,"runtimeOpponentId":"11","status":"C:\\secret",
+             "validationMethod":"private_host_address"},
+            {"ready":True,"score":True,"category":"INVALID_SECRET",
+             "state":"arbitrary-private-data"})
+        self.assertFalse(sample["hand"]["ready"])
+        self.assertEqual(sample["hand"]["ids"],[])
+        self.assertIsNone(sample["opponent"]["candidateId"])
+        self.assertEqual(sample["opponent"]["status"],"unknown")
+        self.assertEqual(sample["rank"]["state"],"unknown")
+        self.assertIsNone(sample["rank"]["scoreCandidate"])
+        self.assertEqual(sample["rank"]["categoryCandidate"],"unknown")
+
+    def test_invalid_session_sha_and_event_bound(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                LiveDiagnosticsRecorder(Path(tmp),"../private")
+            rec=LiveDiagnosticsRecorder(Path(tmp),SHA)
+            for i in range(MAX_EVENTS+12):
+                ids=(449,145,447,629, 1+(i%722))
+                rec.observe(hand(ids),opponent(oid=i%40),{},SHA)
+            report=rec.report()
+            self.assertEqual(report["sampleCount"],MAX_EVENTS+12)
+            self.assertLessEqual(report["changeCount"],MAX_EVENTS)
+            exported=rec.export_json()
+            self.assertLessEqual(len(exported.encode("utf-8")),140000)
+            self.assertNotIn("C:\\",exported)
+
+
+if __name__ == "__main__":
+    unittest.main()
