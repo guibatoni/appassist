@@ -1832,6 +1832,25 @@ class DueltraceWebBridge:
                 report = _load(resolved / "relatorio.json")
                 if report.get("sha256") != entry.get("sha256"):
                     raise ValueError("SHA do relatório não corresponde à ISO")
+                # Fusion evidence comes from a separate local extraction
+                # pipeline, not scanner_multiiso.process(). Export only
+                # counts and source kind; never actual recipes/card names.
+                recipes = profile.get("fusion_recipes")
+                recipes = recipes if isinstance(recipes, list) else []
+                rows = [r for r in recipes if isinstance(r, dict)]
+                review = profile.get("fusion_review")
+                review = review if isinstance(review, dict) else {}
+                report["fusion_profile_evidence"] = {
+                    "inspected": True,
+                    "count": min(len(rows), 100000),
+                    "sevenConsistentBanks": (
+                        review.get("matching_banks") == 7
+                        and review.get("divergent_banks") is False
+                        and review.get("bank_conflicts") == 0),
+                    "manuallyObserved": any(
+                        r.get("validation") == "observada_manualmente_no_jogo"
+                        for r in rows),
+                }
                 return report
 
             baseline = local_report(baseline_entry)
