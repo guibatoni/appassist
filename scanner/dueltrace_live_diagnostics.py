@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import json
 import re
 import threading
+from uuid import uuid4
 from pathlib import Path
 
 from auto_mods import atomic_json
@@ -112,6 +113,8 @@ class LiveDiagnosticsRecorder:
         self._directory = Path(directory)
         self._sha = sha
         self._fingerprint = sha[:12]
+        # Never overwrite a previous evidence session when the app restarts.
+        self._session_id = uuid4().hex[:16]
         self._lock = threading.RLock()
         self._events = []
         self._last = None
@@ -159,7 +162,8 @@ class LiveDiagnosticsRecorder:
         self._directory.mkdir(parents=True, exist_ok=True)
         # Full SHA prevents two different ISOs with the same visible prefix
         # from sharing a diagnostics file.
-        atomic_json(self._directory / (self._sha + ".json"), self.report())
+        atomic_json(self._directory / (
+            self._sha + "_" + self._session_id + ".json"), self.report())
 
     def report(self):
         with self._lock:
