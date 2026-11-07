@@ -67,6 +67,10 @@ class ProtectedDesktopApi:
                     daemon=True).start()
             return {"maximized":self._native_maximized}
 
+    def get_alpha_discovery(self, credential, sha):
+        self._authorize(credential)
+        return self._bridge.get_alpha_discovery(sha)
+
     def get_alpha_preferences(self, credential):
         self._authorize(credential)
         return self._bridge.get_alpha_preferences()
