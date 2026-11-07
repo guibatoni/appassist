@@ -55,45 +55,22 @@ function Empty({children}:{children:React.ReactNode}) {
 
 function RankPanel({sha}:{sha:string|null}) {
   const [rank,setRank]=useState<RankState|null>(null)
-  const [calibrating,setCalibrating]=useState(false)
-  const [calibrationError,setCalibrationError]=useState(false)
   const [popoutError,setPopoutError]=useState(false)
-
-  // Leitura automática continua ativa mesmo sem intervenção do usuário.
   useEffect(()=>{
     let mounted=true,reading=false
     setRank(null)
-    setCalibrationError(false)
-    const read=async()=>{
+    const poll=async()=>{
       const api=desktopApi()
       if(!api||reading)return
       reading=true
-      try{
-        const value=await api.get_rank_auto()
-        if(mounted)setRank(value)
-      }catch{
-        if(mounted)setRank({ready:false,state:"unavailable",status:"",
-          score:null,category:null,counters:null})
-      }finally{reading=false}
+      try{const next=await api.get_rank_auto();if(mounted)setRank(next)}
+      catch{if(mounted)setRank(null)}
+      finally{reading=false}
     }
-    void read()
-    const interval=window.setInterval(()=>void read(),850)
+    void poll()
+    const interval=window.setInterval(()=>void poll(),850)
     return()=>{mounted=false;window.clearInterval(interval)}
   },[sha])
-
-  const calibrate=async()=>{
-    const api=desktopApi()
-    if(!api||!sha||calibrating)return
-    setCalibrating(true)
-    setCalibrationError(false)
-    try{
-      await api.calibrate_rank()
-      setRank(await api.get_rank_auto())
-    }catch{
-      setCalibrationError(true)
-    }finally{setCalibrating(false)}
-  }
-
   const ready=rank?.ready===true
   return <section className="panel rounded-xl p-4" aria-label="RANK ao vivo">
     <div className="flex items-center justify-between gap-2">
@@ -106,23 +83,13 @@ function RankPanel({sha}:{sha:string|null}) {
       <RankScoreDisplay score={ready?rank.score:null}
         category={ready?rank.category:null}/>
     </div>
-    <button type="button" className="btn-ghost mt-4 w-full justify-center disabled:opacity-40"
-      disabled={!sha||calibrating||!desktopApi()} onClick={()=>void calibrate()}>
-      <RefreshCcw className={"size-4 "+(calibrating?"animate-spin":"")}/>
-      {calibrating?"Calibrando…":"Calibrar calculadora"}
-    </button>
-    <button type="button" className="btn-ghost mt-2 w-full justify-center"
+    <button type="button" className="btn-ghost mt-3 w-full justify-center"
       disabled={!desktopApi()} onClick={async()=>{
         try{await desktopApi()?.open_tool_window("calculadora");setPopoutError(false)}
         catch{setPopoutError(true)}
-      }}>
-      Abrir calculadora em pop-up
-    </button>
+      }}>Abrir visor em pop-up</button>
     {popoutError&&<p className="mt-2 text-xs text-danger" role="alert">
-      Não foi possível abrir a janela independente.
-    </p>}
-    {calibrationError&&<p role="alert" className="mt-2 text-center text-xs text-gold">
-      Não foi possível calibrar. Confira o mod selecionado.
+      Não foi possível abrir o visor.
     </p>}
   </section>
 }
@@ -1270,9 +1237,7 @@ function CardDropSourcesPanel({sha,card}:{sha:string|null;card:LocalCard}) {
       rows.length===0?<p className="text-sm text-muted">Nenhum oponente confirmado para esta carta.</p>:
       <div className="space-y-2">
         <p className="text-xs text-primary">{result.total} possibilidade(s), ordenadas por chance de drop.</p>
-        {!result.rankLabelsVerified&&<p className="text-xs text-gold">
-          RANKs agrupados segundo o padrão original; confira o mapeamento em duelo neste mod.
-        </p>}
+
         <ul className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
           {rows.map(row=><li key={row.opponentId+"-"+row.group}
             className="flex items-start justify-between gap-2 rounded-md border border-line/50 bg-panel-strong/50 p-2">
@@ -1288,7 +1253,6 @@ function CardDropSourcesPanel({sha,card}:{sha:string|null;card:LocalCard}) {
             </div>
           </li>)}
         </ul>
-        <p className="text-[11px] text-muted">Fonte: {result.source}. Pesos extraídos da ISO ativa; não são garantia de obtenção.</p>
       </div>}
   </section>
 }
@@ -1320,7 +1284,7 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
   const chosen=visible.find(c=>c.id===selectedId)??visible[0]??null
   const pages=Math.max(1,Math.ceil(visible.length/32))
   return <>
-    <Heading title="Biblioteca de Cartas" subtitle="Cartas extraídas da ISO ativa, sem raridades e efeitos inventados"/>
+    <Heading title="Biblioteca de Cartas" subtitle="Explore, pesquise e consulte os detalhes das cartas"/>
     <section className="panel rounded-xl p-4">
       <div className="flex flex-wrap gap-2">
         <label className="field flex min-w-56 flex-1 items-center gap-2 px-3 py-2">
@@ -1368,7 +1332,6 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
             <div className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3">
               <h3 className="mb-1 font-semibold text-gold">Descrição extraída do SLUS</h3>
               <p className="whitespace-pre-line text-sm text-foreground/85">{chosen.description??"Nenhuma descrição vinculada com segurança ao ID desta carta."}</p>
-              {chosen.descriptionSource&&<p className="mt-2 break-all text-[11px] text-muted">Fonte: {chosen.descriptionSource}</p>}
             </div>
             <div className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3">
               <h3 className="mb-1 font-semibold text-primary">Texto indicativo de efeito</h3>
@@ -1376,7 +1339,6 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
               {chosen.effect&&<p className="mt-2 text-xs text-gold">
                 Mecânica no duelo ainda não confirmada — descrição não é prova de execução.
               </p>}
-              {chosen.effectSource&&<p className="mt-1 break-all text-xs text-muted">Fonte: {chosen.effectSource}</p>}
             </div>
             <CardDropSourcesPanel key={(sha??"sem-iso")+"-"+chosen.id} sha={sha} card={chosen}/></>:<Empty>Selecione uma carta.</Empty>}
         </aside>
@@ -1439,7 +1401,7 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
     return()=>{mounted=false;window.clearTimeout(id)}
   },[sha,query,offset,sort,cardType])
   return <>
-    <Heading title="Biblioteca de Fusões" subtitle="Imagem, nome e ID de cada material e resultado — somente receitas do mod ativo"/>
+    <Heading title="Biblioteca de Fusões" subtitle="Encontre combinações e resultados de fusão"/>
     <section className="panel rounded-xl p-4">
       <div className="flex flex-wrap items-center gap-3">
         <label className="field flex min-w-56 flex-1 items-center gap-2 px-3 py-2">
@@ -1465,10 +1427,7 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         <span className="text-xs text-muted">{records?.total??0} receitas</span>
       </div>
       {error&&<p className="mt-3 text-sm text-danger" role="alert">{error}</p>}
-      {records?.provisional&&<p className="mt-3 rounded-md border border-gold/40 p-3 text-xs text-gold">
-        Fusões extraídas de sete bancos da ISO ativa, ainda sem confirmação
-        individual no jogo. Pares com resultados conflitantes não são sugeridos.
-      </p>}
+
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         {records?.rows.map((r,i)=><article key={r.a+"-"+r.b+"-"+r.result+"-"+i}
           className="relative rounded-xl border border-line/80 bg-gradient-to-br from-panel-strong/90 via-[#0b1a35] to-background p-3 shadow-[inset_0_1px_0_rgb(245_184_61/0.09)] transition-colors hover:border-primary/60">
@@ -1511,18 +1470,11 @@ export function DesktopPage({page}:{page:Page}) {
     <div className="panel flex flex-wrap items-center gap-3 rounded-xl px-4 py-2 text-xs">
 
       <span className="text-muted">ISO ativa: <strong className="font-semibold text-white">{state?.activeName??"Nenhuma ISO selecionada"}</strong></span>
-      <button type="button" className="btn-ghost ml-auto text-xs"
-        disabled={!desktopApi()} onClick={()=>void desktopApi()?.open_tool_window("calculadora")}>
-        Calculadora em janela
-      </button>
     </div>
     {error&&<p className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm text-gold" role="status">{error}</p>}
     {loading&&<p className="text-sm text-muted">Carregando dados locais...</p>}
     {page==="inicio"&&<Home sha={state?.activeSha??null} cards={state?.cards??[]}/>}
-    {page==="mods"&&<>
-      <LiveDiagnosticsPanel sha={state?.activeSha??null}/>
-      <Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>
-    </>}
+    {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>}
     {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="fusoes"&&<Fusions sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="drops"&&<DropsPage sha={state?.activeSha??null} cards={state?.cards??[]}/>}
