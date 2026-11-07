@@ -45,6 +45,10 @@ permissions:
 jobs:
   build-web-and-windows:
     runs-on: windows-latest
+    permissions:
+      contents: write  # private Preview fallback on trusted feature branch pushes only
+    outputs:
+      artifact_ready: ${{ steps.preview_artifact.outcome == 'success' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -134,6 +138,8 @@ jobs:
         run: |
           ./tools/security/gate_windows_package.ps1 -PackageDirectory dist/DUELTRACE-WebUI -ZipPath dist/DUELTRACE-WebUI-Windows-Preview.zip -OutputDirectory dist/security
       - uses: actions/upload-artifact@v4
+        id: preview_artifact
+        continue-on-error: true  # GitHub Actions artifact storage quota fallback
         with:
           name: DUELTRACE-Windows-Preview-Unsigned-Security-Scanned
           path: |
@@ -142,10 +148,41 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Publicar Preview privada diretamente se a cota Artifacts estiver cheia
+        if: ${{ github.event_name == 'push' && github.repository == 'guibatoni/appassist' && startsWith(github.ref, 'refs/heads/feature/dueltrace-v') && steps.preview_artifact.outcome == 'failure' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Run only after Python/Next.js tests, archive audit and Defender passed.
+          # This is a private repository, not a public release.
+          $branch = $env:GITHUB_REF_NAME
+          $found = [regex]::Match($branch, '^feature/dueltrace-v([0-9])([0-9])([0-9])-[a-z0-9][a-z0-9-]*$')
+          if (-not $found.Success) { throw "Branch Preview inválida." }
+          $version = "$($found.Groups[1].Value).$($found.Groups[2].Value).$($found.Groups[3].Value)"
+          $zip = (Resolve-Path 'dist/DUELTRACE-WebUI-Windows-Preview.zip').Path
+          $size = (Get-Item $zip).Length
+          if ($size -lt 1000000) { throw "ZIP Preview incompleto." }
+          $hash = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $tag = "preview-v$version-r$env:GITHUB_RUN_ID"
+          $notes = "Preview privada Windows sem assinatura. Commit $env:GITHUB_SHA. SHA-256 ZIP: $hash. Aprovada na CI, Microsoft Defender e auditoria de integridade. Não contém ISOs, saves ou ROMs. Sem merge na main."
+          gh release create $tag $zip --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "DUELTRACE Preview v$version build $env:GITHUB_RUN_ID" --notes $notes --prerelease --latest=false
+          if ($LASTEXITCODE -ne 0) { throw "Falha ao criar Release privada." }
+          $metadata = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or -not $metadata) { throw "Release não consultável." }
+          $asset = @($metadata.assets | Where-Object { $_.name -eq 'DUELTRACE-WebUI-Windows-Preview.zip' })
+          if ($metadata.target_commitish -ne $env:GITHUB_SHA -or $asset.Count -ne 1) {
+            throw "Release não corresponde ao commit validado."
+          }
+          if ($asset[0].size -ne $size -or $asset[0].digest -ne "sha256:$hash") {
+            throw "Release não corresponde ao tamanho/hash auditado."
+          }
+          Write-Host "Preview privada publicada: $tag"
+
   publish-preview-release:
     name: Publicar Preview verificável no GitHub Releases
     needs: build-web-and-windows
-    if: github.event_name == 'push' && github.repository == 'guibatoni/appassist' && startsWith(github.ref, 'refs/heads/feature/dueltrace-v')
+    if: github.event_name == 'push' && github.repository == 'guibatoni/appassist' && startsWith(github.ref, 'refs/heads/feature/dueltrace-v') && needs.build-web-and-windows.outputs.artifact_ready == 'true'
     runs-on: ubuntu-latest
     permissions:
       actions: read
