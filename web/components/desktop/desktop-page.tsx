@@ -137,17 +137,24 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [showAll,setShowAll]=useState(false)
   const [tipsVisible,setTipsVisible]=useState(true)
   const [tipsError,setTipsError]=useState(false)
+  const [preferenceError,setPreferenceError]=useState(false)
   useEffect(()=>{
-    try{setTipsVisible(window.localStorage.getItem("dueltrace.fusion.tips")!=="hidden")}
-    catch{setTipsVisible(true)}
+    let mounted=true
+    const api=desktopApi()
+    if(!api)return
+    void api.get_alpha_preferences().then(result=>{
+      if(mounted)setTipsVisible(result.fusionTipsVisible)
+    }).catch(()=>{})
+    return ()=>{mounted=false}
   },[])
-  const toggleTips=()=>{
-    setTipsVisible(v=>{
-      const next=!v
-      try{window.localStorage.setItem("dueltrace.fusion.tips",next?"shown":"hidden")}
-      catch{/* Temporary option remains active for this window. */}
-      return next
-    })
+  const toggleTips=async()=>{
+    const next=!tipsVisible
+    setTipsVisible(next)
+    setPreferenceError(false)
+    const api=desktopApi()
+    if(!api)return
+    try{await api.set_alpha_preferences(next)}
+    catch{setTipsVisible(!next);setPreferenceError(true)}
   }
   useEffect(()=>{
     let mounted=true,reading=false
@@ -215,7 +222,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
               try{await desktopApi()?.open_tool_window("fusoes");setTipsError(false)}
               catch{setTipsError(true)}
             }}>Abrir dicas em pop-up</button>
-          <button type="button" className="btn-ghost" onClick={toggleTips}>
+          <button type="button" className="btn-ghost" onClick={()=>void toggleTips()}>
             {tipsVisible?"Ocultar dicas":"Mostrar dicas"}
           </button>
           {tipsVisible&&<button type="button" onClick={()=>setMode("pairs")}
@@ -224,6 +231,9 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             className={mode==="chains"?"btn-gold":"btn-ghost"}>Cadeias (2–5)</button>}
         </div>
       </div>
+      {preferenceError&&<p className="mt-2 text-xs text-danger" role="alert">
+        Não foi possível salvar a preferência de dicas.
+      </p>}
       {tipsError&&<p className="mt-2 text-xs text-danger" role="alert">
         Não foi possível abrir a janela de dicas independente.
       </p>}
