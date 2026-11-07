@@ -56,12 +56,27 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         "source": "DATA/WA_MRG.MRG + SLUS_014.11",
         "rankPoints": (profile.get("rank_points", {}) if isinstance(profile,dict) else {}),
     }
-    if (not isinstance(profile, dict)
-            or profile.get("verified", {}).get("tabelas_drops") != "verificado"
-            or profile.get("verified", {}).get("oponentes") != "verificado"
-            or profile.get("verified", {}).get("cartas") != "verificado"
-            or not profile.get("supported_features", {}).get("drops")
-            or not profile.get("supported_features", {}).get("cards")):
+    if not isinstance(profile, dict):
+        return empty
+    alpha = profile.get("alpha_discovery", {})
+    # Only the bridge can construct the opt-in source-bound ALPHA view;
+    # never persist these flags in a registered mod profile.
+    alpha_candidate = (
+        isinstance(alpha, dict)
+        and alpha.get("state") == "retail_sentinel_39_reward_records"
+        and alpha.get("source") == "local_iso_sha256_matched"
+        and alpha.get("rom_sha256") == profile.get("rom_sha256")
+        and profile.get("supported_features", {}).get("cards") is True
+        and profile.get("verified", {}).get("cartas") == "verificado"
+    )
+    fully_verified = (
+        profile.get("verified", {}).get("tabelas_drops") == "verificado"
+        and profile.get("verified", {}).get("oponentes") == "verificado"
+        and profile.get("verified", {}).get("cartas") == "verificado"
+        and profile.get("supported_features", {}).get("drops") is True
+        and profile.get("supported_features", {}).get("cards") is True
+    )
+    if not fully_verified and not alpha_candidate:
         return empty
     raw_opponents = profile.get("opponents")
     raw_groups = profile.get("drop_group_labels")
@@ -203,11 +218,19 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
                 and profile.get("verified", {}).get("nomes_dos_ranks") == "verificado")
     return {
         **empty, "available": True,
-        "status": ("Drops validados: 117 tabelas × 2048 pesos; "
-                   + ("RANKs Z-POW, S-POW e S-TEC do Remaster X15 identificados."
-                      if is_known else
-                      "padrão original: dez RANKs compartilham três bancos; "
-                      "mapeamento de mods sem SHA conhecido deve ser conferido em duelo.")),
+        "provisional": bool(alpha_candidate and not fully_verified),
+        "opponentMappingVerified": bool(fully_verified),
+        "mayActivateDrops": False,
+        "status": (
+            "ALPHA — cartas e pesos de drop extraídos desta ISO; 39 índices "
+            "provisórios e grupos RANK interpretados pelo formato original. "
+            "Associação nome/ID e grupos não confirmada em execução."
+            if alpha_candidate and not fully_verified else
+            "Drops validados: 117 tabelas × 2048 pesos; "
+            + ("RANKs Z-POW, S-POW e S-TEC do Remaster X15 identificados."
+               if is_known else
+               "padrão original: dez RANKs compartilham três bancos; "
+               "mapeamento de mods sem SHA conhecido deve ser conferido em duelo.")),
         "total": len(matched), "rows": matched[offset:offset+limit],
         "opponents": [{"id": key, "name": opponents[key]} for key in sorted(opponents)],
         "groups": list(raw_groups),
@@ -218,7 +241,7 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         "rankOptions":list(ranks),"rankSelected":rank,
         "rankSystem":rank_system(iso_sha),
         "cardTypes": card_types,
-        "rankLabelsVerified": is_known,
+        "rankLabelsVerified": is_known and not alpha_candidate,
     }
 
 def get_card_drop_sources(profile: dict | None, card_id: int) -> dict:
@@ -236,6 +259,7 @@ def get_card_drop_sources(profile: dict | None, card_id: int) -> dict:
         "rows": [],
         "rankSystem": first["rankSystem"],
         "rankLabelsVerified": first["rankLabelsVerified"],
+        "provisional": first.get("provisional", False),
         "source": first["source"],
     }
     if not first["available"]:
