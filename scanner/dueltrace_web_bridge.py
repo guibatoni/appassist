@@ -100,6 +100,27 @@ class DueltraceWebBridge:
         self._cross_mod_cards_cache = None
         self.settings_path = self.catalog.home / "dueltrace_desktop_settings.json"
 
+    def get_alpha_preferences(self):
+        """Return only allowlisted UI preferences, not emulator settings."""
+        with self._lock:
+            prefs=load_json(self.settings_path,{})
+            if not isinstance(prefs,dict):
+                prefs={}
+            return {"fusionTipsVisible":
+                    prefs.get("fusion_tips_visible") is not False}
+
+    def set_alpha_preferences(self, fusion_tips_visible):
+        """Persist user choice even when pywebview uses private mode."""
+        if type(fusion_tips_visible) is not bool:
+            raise ValueError("Preferência de dicas inválida.")
+        with self._lock:
+            prefs=load_json(self.settings_path,{})
+            if not isinstance(prefs,dict):
+                prefs={}
+            prefs["fusion_tips_visible"]=fusion_tips_visible
+            atomic_json(self.settings_path,prefs)
+            return {"fusionTipsVisible":fusion_tips_visible}
+
     def _active(self):
         active = self.catalog.current() or {}
         entry = next((x for x in self.catalog.list()
