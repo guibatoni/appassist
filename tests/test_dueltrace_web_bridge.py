@@ -797,7 +797,7 @@ class BridgeTests(unittest.TestCase):
         atomic_json(self.profile_path,self.profile)
         self.assertEqual(self.bridge.get_fusions("floresta antiga",0,20)["total"],1)
         self.assertEqual(self.bridge.get_fusions("RELÂMPAGO",0,20)["total"],1)
-        self.assertEqual(self.bridge.get_fusions("flor lunar secreta",0,20)["total"],1)
+        self.assertEqual(self.bridge.get_fusions("flor lunar secreta",0,20)["total"],2)
         self.assertEqual(self.bridge.get_fusions("carta ausente",0,20)["total"],0)
 
     def test_fusions_sort_type_filter_and_page_stay_consistent(self):
