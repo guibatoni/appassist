@@ -11,7 +11,7 @@ import {DropsPage} from "./drops-page"
 import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison, IsoForensicAudit, MipsTraceResult} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison, IsoForensicAudit, MipsTraceResult, AlphaDiscovery} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -1078,6 +1078,29 @@ function Mods({mods,sha,onRefresh,configured}:{
   mods:LocalMod[];sha:string|null;onRefresh:()=>Promise<void>;configured:boolean
 }) {
   const [expandedSha,setExpandedSha]=useState<string|null>(null)
+  const [alphaResults,setAlphaResults]=useState<Record<string,AlphaDiscovery>>({})
+  const [alphaBusy,setAlphaBusy]=useState<string|null>(null)
+  useEffect(()=>{
+    if(!expandedSha||alphaResults[expandedSha])return
+    const api=desktopApi()
+    if(!api)return
+    let cancelled=false
+    const key=expandedSha
+    setAlphaBusy(key)
+    void api.get_alpha_discovery(key)
+      .then(result=>{
+        if(!cancelled)setAlphaResults(v=>({...v,[key]:result}))
+      })
+      .catch(()=>{
+        if(!cancelled)setAlphaResults(v=>({...v,[key]:{
+          available:false,status:"audit_unavailable",dropCandidates:0,
+          fusionCandidates:0,opponentCount:0,
+          candidateMode:"unavailable",verifiedInGame:false,
+        }}))
+      })
+      .finally(()=>{if(!cancelled)setAlphaBusy(v=>v===key?null:v)})
+    return ()=>{cancelled=true}
+  },[expandedSha,alphaResults])
   const [busy,setBusy]=useState(false)
   const [message,setMessage]=useState<string|null>(null)
   const [comparison,setComparison]=useState<IsoLayoutComparison|null>(null)
@@ -1159,6 +1182,9 @@ function Mods({mods,sha,onRefresh,configured}:{
     try{
       const result=await api.scan_sources(mod.sha256)
       await onRefresh()
+      setAlphaResults(v=>{
+        const next={...v};delete next[mod.sha256];return next
+      })
       setMessage((result.cardCount??0)>0
         ?`${result.cardCount} cartas extraídas; ${result.opponentCount??0} adversários disponíveis.`
           +(result.opponentCount===0&&result.opponentDiagnosticReason
@@ -1260,11 +1286,14 @@ function Mods({mods,sha,onRefresh,configured}:{
         {mods.map(mod=>{
           const active=sha===mod.sha256
           const open=expandedSha===mod.sha256
+          const alpha=alphaResults[mod.sha256]
           const details=[
-            ["Cartas",mod.cards],
-            ["Fusões",mod.fusions],
-            ["Oponentes",mod.opponents??0],
-            ["Drops",mod.dropEntries??0],
+            ["Cartas",mod.cards,false],
+            ["Fusões",Math.max(mod.fusions,alpha?.fusionCandidates??0),
+              (alpha?.fusionCandidates??0)>mod.fusions],
+            ["Oponentes",mod.opponents??0,false],
+            ["Drops",Math.max(mod.dropEntries??0,alpha?.dropCandidates??0),
+              (alpha?.dropCandidates??0)>(mod.dropEntries??0)],
           ] as const
           return <article key={mod.sha256} className={
             "overflow-hidden rounded-xl border bg-panel-strong/70 transition-colors "+
@@ -1292,12 +1321,29 @@ function Mods({mods,sha,onRefresh,configured}:{
             {open&&<div id={"mod-info-"+mod.sha256.slice(0,16)}
               className="border-t border-line/60 px-4 pb-4 pt-3">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {details.map(([label,value])=>
+                {details.map(([label,value,provisional])=>
                   <div key={label} className="rounded-lg border border-line/40 bg-background/50 px-3 py-2 text-center">
                     <p className="font-display text-lg font-bold text-primary">{value>0?value.toLocaleString("pt-BR"):"—"}</p>
                     <p className="text-xs text-muted">{label}</p>
+                    {provisional&&<p className="text-[10px] text-gold">Candidato Alpha</p>}
                   </div>)}
               </div>
+              {alphaBusy===mod.sha256&&<p className="mt-2 text-xs text-primary" role="status">
+                Inspecionando automaticamente a ISO e seus bancos de fusões e recompensas…
+              </p>}
+              {alpha?.available&&<p className="mt-2 text-xs text-gold" role="status">
+                Dados Alpha da própria ISO: {alpha.dropCandidates.toLocaleString("pt-BR")} entradas
+                de recompensa e {alpha.fusionCandidates.toLocaleString("pt-BR")} receitas candidatas.
+                {alpha.candidateMode==="40_block_retail_mapping_hypothesis"
+                  ?" A escolha de 39 entre 40 blocos segue a convenção original; os nomes/IDs e grupos RANK ainda não foram confirmados em jogo."
+                  :" Associação de adversários e execução das fusões ainda não comprovadas."}
+                {" "}Nenhum RANK ou drop ao vivo foi ativado automaticamente.
+              </p>}
+              {alpha&&!alpha.available&&<p className="mt-2 text-xs text-muted">
+                Análise Alpha: {alpha.status==="audit_unavailable"
+                  ?"não foi possível examinar esta ISO nesta sessão."
+                  :"o extrator não confirmou um layout único; o scanner manteve as evidências para revisão."}
+              </p>}
               {mod.cardEvidence==="extraidas_estruturalmente"&&<p className="mt-3 text-xs text-gold">
                 Cartas extraídas do próprio executável, mas a identidade dos IDs ainda não foi confirmada em jogo. Oponentes e drops permanecem separados.
               </p>}
