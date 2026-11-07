@@ -35,3 +35,7 @@
 
 ## Restrições
 Sem merge/push na main, sem publicação de binários comerciais, sem extrapolar nomes de ranks, sem alteração de licença. Manter PR em draft até CI/Windows real. A automação horária de evidências existe mas não é acesso permanente do ChatGPT à RAM.
+
+## Correção de transmissão privada verificada em 07/11/2026
+
+A primeira tentativa do usuário não produziu o diretório `reports/iso-forensics/` no GitHub privado. O último commit remoto verificado era um Live Diagnostics do dia anterior. Investigação da ISO de controle Galaxy por leitura somente de binário confirmou **1.070 janelas heurísticas MIPS candidatas**, enquanto Rising registra **998** e Enhance **994**. O leitor local aceita essas contagens, mas o validador de transmissão tinha limite de **1.000**, podendo rejeitar a auditoria de Galaxy sem enviar o JSON. O máximo de `rank.staticCandidates` foi ampliado de 1.000 para **65.536** (limite superior ainda explícito), com regressão para o caso real 1.070 e rejeição de 65.537. Uma janela MIPS é apenas padrão estático, não rotina de RANK confirmada. **A ausência de um upload ainda não comprova que esta foi a única causa; confirmar com a Preview no Windows.** O envio continua exclusivamente manual por clique e somente a repositório privado.
