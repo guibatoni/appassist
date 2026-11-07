@@ -1140,7 +1140,9 @@ function Mods({mods,sha,onRefresh,configured}:{
             className={"overflow-hidden rounded-xl border bg-panel-strong/70 "+
               (active?"border-primary/70":"border-line/70")}>
             <button type="button" className="flex w-full items-center gap-3 px-4 py-3 text-left"
-              aria-expanded={open} onClick={()=>setExpandedSha(open?null:mod.sha256)}>
+              aria-expanded={open}
+              aria-controls={"mod-info-"+mod.sha256.slice(0,16)}
+              onClick={()=>setExpandedSha(open?null:mod.sha256)}>
               <Gamepad2 className="size-5 shrink-0 text-primary"/>
               <span className="min-w-0 flex-1 truncate font-semibold text-white">
                 {mod.name}
@@ -1148,7 +1150,8 @@ function Mods({mods,sha,onRefresh,configured}:{
               </span>
               <ChevronDown className={"size-5 text-primary transition-transform "+(open?"rotate-180":"")}/>
             </button>
-            {open&&<div className="border-t border-line/60 p-4">
+            {open&&<div id={"mod-info-"+mod.sha256.slice(0,16)}
+              className="border-t border-line/60 p-4">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {values.map(([label,value])=>
                   <div key={label} className="rounded-lg border border-line/50 bg-background/60 px-2 py-3 text-center">
