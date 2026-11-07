@@ -402,7 +402,7 @@ export type FusionRow = {
   source: string
 }
 
-export type FusionPage = { total: number; offset: number; rows: FusionRow[] }
+export type FusionPage = { total: number; offset: number; rows: FusionRow[]; provisional?:boolean; status?:string }
 
 export type DropRow = {
   opponentId: number
@@ -655,6 +655,9 @@ export type DuelEvidence = {
 
 export type DropsPage = {
   available: boolean
+  provisional?:boolean
+  opponentMappingVerified?:boolean
+  mayActivateDrops?:boolean
   status: string
   total: number
   offset: number
@@ -673,6 +676,7 @@ export type DropsPage = {
 }
 
 export type CardDropSources = {
+  provisional?:boolean
   romSha: string | null
   cardId: number
   available: boolean
