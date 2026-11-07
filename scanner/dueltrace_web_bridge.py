@@ -1043,6 +1043,37 @@ class DueltraceWebBridge:
         """
         with self._lock:
             state=self.get_rank()
+            # Sem botão de calibração: só iniciar leitura legada se houver
+            # um duelo plausível no emulador. Preserva as verificações de
+            # LP/PID, duas leituras estáveis e mudanças dos contadores já
+            # implementadas. Nunca registra como binding validado.
+            if (state.get("state")=="unsupported"
+                    and self._rank_experimental_sha is None):
+                active, _entry, profile=self._active()
+                sha=active.get("sha256")
+                if (type(sha) is str and re.fullmatch(r"[0-9a-f]{64}",sha)
+                        and isinstance(profile,dict)
+                        and profile.get("rom_sha256")==sha
+                        and validate_live_rank_binding(profile) is None
+                        and not model_available(sha)):
+                    preferred=(self._process.pid if self._process is not None
+                               and self._process.poll() is None else None)
+                    try:
+                        observed=self._rank_reader(preferred_pid=preferred)
+                    except (OSError,RuntimeError,ValueError,TypeError,KeyError):
+                        observed=None
+                    if isinstance(observed,dict) and observed.get("ready") is True:
+                        fields=observed.get("counters")
+                        pid=observed.get("pid")
+                        if (isinstance(fields,dict)
+                                and type(pid) is int and pid>0
+                                and type(fields.get("turns")) is int
+                                and fields["turns"]>=1
+                                and type(fields.get("remaining_lp")) is int
+                                and 0<fields["remaining_lp"]<=32766):
+                            self._rank_experimental_sha=sha
+                            self._reset_rank_read_state()
+                            state=self.get_rank()
             if state.get("ready") is True:
                 self._rank_auto_probe=None
                 if (isinstance(self._rank_calibration,dict)
