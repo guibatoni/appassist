@@ -118,6 +118,27 @@ class FusionBankTests(unittest.TestCase):
             self.assertFalse(result["verified_in_game"])
             self.assertEqual(result["resource_selection_method"],method)
 
+    def test_renamed_resource_keeps_seven_mirrors_with_pair_conflicts_quarantined(self):
+        bank=bytearray(make_bank())
+        # Original (card 1)+(card 101) gives 201; add reverse pair 101+1=300.
+        # A single conflicting pair must not lose the 79 other correct recipes.
+        pointer=MIN_INDEX_SIZE+40*6
+        struct.pack_into("<H",bank,2+(101-1)*2,pointer)
+        result=300
+        bank[pointer:pointer+4]=bytes([1,((result>>8)&3)<<2,1,result&255])
+        report=decode_bank(bytes(bank))
+        self.assertGreater(report["conflict_count"],0)
+        blob=bytearray(max(FUSION_BANK_OFFSETS)+BLOCK_SIZE)
+        for offset in FUSION_BANK_OFFSETS:
+            blob[offset:offset+BLOCK_SIZE]=bank
+        class RenamedDisc:
+            files={"G0SD/GOG_SD1.23":(1,len(blob))}
+            def get(self,name,limit_bytes=None):
+                return bytes(blob[:limit_bytes])
+        name,method=select_fusion_resource(RenamedDisc())
+        self.assertEqual(name,"G0SD/GOG_SD1.23")
+        self.assertEqual(method,"seven_identical_banks_in_renamed_resource")
+
     def test_renamed_resource_refuses_partial_or_ambiguous_bank_matches(self):
         raw = bytearray(max(FUSION_BANK_OFFSETS)+BLOCK_SIZE)
         for offset in FUSION_BANK_OFFSETS:
