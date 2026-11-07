@@ -225,6 +225,22 @@ class PrivateEvidenceTests(unittest.TestCase):
                 sync.upload_forensic(report)
             self.assertIsNone(creds.value)
 
+    def test_real_galaxy_rank_scanner_exceeds_old_private_upload_limit(self):
+        # Derived from the real 2025 Galaxy image: 1070 heuristic windows,
+        # whereas the six best candidates are only a UI display subset.
+        report=example_iso_report()
+        report["rank"]["staticCandidates"]=1070
+        self.assertEqual(
+            validate_iso_forensic_report(report)["rank"]["staticCandidates"],
+            1070)
+        report["rank"]["staticCandidates"]=65537
+        with self.assertRaises(EvidenceSyncError):
+            validate_iso_forensic_report(report)
+        # A static MIPS count never upgrades the in-game evidence flags.
+        report["rank"]["staticCandidates"]=1070
+        self.assertFalse(report["rank"]["executionConfirmed"])
+        self.assertFalse(report["mayActivateRank"])
+
     def test_iso_forensic_endpoint_is_explicit_and_no_content_leaks(self):
         report=example_iso_report()
         token="github_pat_"+"x"*45
