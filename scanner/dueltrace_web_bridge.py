@@ -34,7 +34,9 @@ from dueltrace_rank_profile_live import (
 )
 from epsxe_launcher import launch_epsxe
 from dueltrace_drops import get_drop_catalog, get_card_drop_sources
-from dueltrace_alpha_reward_pools import discover_alpha_reward_pools, GROUPS as ALPHA_REWARD_GROUPS
+from dueltrace_alpha_reward_pools import GROUPS as ALPHA_REWARD_GROUPS
+from dueltrace_dynamic_reward_discovery import discover_dynamic_reward_pools
+from dueltrace_iso_layout_hints import recover_scan_resource
 from dueltrace_drop_rank_evidence import rank_drop_report
 from dueltrace_rank_system import available_ranks,rank_system,rank_label_for_existing_score
 from dueltrace_mips_duel_trace import inspect_duel_mips_trace, MAX_TRACE_BYTES
@@ -468,13 +470,19 @@ class DueltraceWebBridge:
                 return {}
             disc = Disc(source)
             try:
-                resource_name, _method = select_fusion_resource(disc)
+                hinted = recover_scan_resource(
+                    self.catalog.home, profile, sha, disc.files)
+                if hinted is not None:
+                    resource_name, family = hinted
+                else:
+                    resource_name, _method = select_fusion_resource(disc)
+                    family = None
                 resource_size = disc.files[resource_name][1]
                 if (type(resource_size) is not int or
                         not 40*0x1800 <= resource_size <= 96*1024*1024):
                     return {}
                 wa = disc.get(resource_name)
-                rewards = discover_alpha_reward_pools(wa)
+                rewards = discover_dynamic_reward_pools(wa, family)
             finally:
                 disc.close()
             if (source.stat().st_size, source.stat().st_mtime_ns) != (
@@ -493,6 +501,7 @@ class DueltraceWebBridge:
                     "alpha_discovery": {
                         "state": "retail_sentinel_39_reward_records",
                         "source": "local_iso_sha256_matched",
+                        "candidateMode": rewards.get("candidateMode"),
                         "rom_sha256": sha,
                     },
                     "drop_group_labels": list(ALPHA_REWARD_GROUPS),
@@ -504,7 +513,8 @@ class DueltraceWebBridge:
             try:
                 raw = analyze_fusion_banks(
                     source, expected_size=stamp.st_size,
-                    expected_mtime_ns=stamp.st_mtime_ns)
+                    expected_mtime_ns=stamp.st_mtime_ns,
+                    resource_name=resource_name)
                 if (raw.get("valid_banks") == 7
                         and raw.get("matching_banks") == 7
                         and raw.get("divergent_banks") is False
@@ -538,6 +548,9 @@ class DueltraceWebBridge:
                 "fusions": fusions,
                 "sourceSha": sha,
                 "runtimeVerified": False,
+                "provisionalMapping": rewards.get("candidateMode"),
+                "resourceMethod": ("source_bound_scan_family"
+                                   if hinted is not None else "seven_fusion_banks"),
             }
             return self._alpha_bundle_cache
         except (OSError, ValueError, KeyError, TypeError, RuntimeError,
