@@ -402,7 +402,7 @@ export type FusionRow = {
   source: string
 }
 
-export type FusionPage = { total: number; offset: number; rows: FusionRow[] }
+export type FusionPage = { total: number; offset: number; rows: FusionRow[]; provisional?:boolean; status?:string }
 
 export type DropRow = {
   opponentId: number
@@ -655,6 +655,9 @@ export type DuelEvidence = {
 
 export type DropsPage = {
   available: boolean
+  provisional?:boolean
+  opponentMappingVerified?:boolean
+  mayActivateDrops?:boolean
   status: string
   total: number
   offset: number
@@ -673,6 +676,7 @@ export type DropsPage = {
 }
 
 export type CardDropSources = {
+  provisional?:boolean
   romSha: string | null
   cardId: number
   available: boolean
@@ -809,9 +813,15 @@ export type UpdateCheck = {
 
 export type WindowControlAction="state"|"minimize"|"toggle_maximize"|"close"
 export type WindowControlState={maximized:boolean}
+export type PopoutKind="calculadora"|"fusoes"
+export type PopoutState={opened?:boolean;closed?:boolean;reused?:boolean;kind:PopoutKind}
 
 export interface DesktopAPI {
   window_control(action:WindowControlAction):Promise<WindowControlState>
+  open_tool_window(kind:PopoutKind):Promise<PopoutState>
+  get_alpha_preferences():Promise<{fusionTipsVisible:boolean}>
+  set_alpha_preferences(visible:boolean):Promise<{fusionTipsVisible:boolean}>
+  close_tool_window(kind:PopoutKind):Promise<PopoutState>
   check_updates(): Promise<UpdateCheck>
   open_updates_page(runId?: number): Promise<{opened: boolean}>
   install_signed_update(): Promise<{started: boolean; status: string; version?: string}>
@@ -864,6 +874,10 @@ export interface DesktopAPI {
 
 interface ProtectedNativeAPI {
   window_control(token:string,action:WindowControlAction):Promise<WindowControlState>
+  open_tool_window(token:string,kind:PopoutKind):Promise<PopoutState>
+  get_alpha_preferences(token:string):Promise<{fusionTipsVisible:boolean}>
+  set_alpha_preferences(token:string,visible:boolean):Promise<{fusionTipsVisible:boolean}>
+  close_tool_window(token:string,kind:PopoutKind):Promise<PopoutState>
   check_updates(token: string): Promise<UpdateCheck>
   open_updates_page(token: string, runId?: number): Promise<{opened: boolean}>
   install_signed_update(token: string): Promise<{started: boolean; status: string; version?: string}>
@@ -930,6 +944,10 @@ export function desktopApi(): DesktopAPI | null {
   if (!native || typeof token !== "string" || token.length < 32) return null
   return {
     window_control: (action) => native.window_control(token,action),
+    open_tool_window: (kind) => native.open_tool_window(token,kind),
+    get_alpha_preferences: () => native.get_alpha_preferences(token),
+    set_alpha_preferences: (visible) => native.set_alpha_preferences(token,visible),
+    close_tool_window: (kind) => native.close_tool_window(token,kind),
     check_updates: () => native.check_updates(token),
     open_updates_page: (runId) => native.open_updates_page(token, runId),
     install_signed_update: () => native.install_signed_update(token),

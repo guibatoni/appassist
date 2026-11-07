@@ -85,10 +85,10 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path ../dist/security | Out-Null
           npm sbom --sbom-format cyclonedx | Out-File -FilePath ../dist/security/npm-sbom.cdx.json -Encoding utf8
-      - name: Validar quatro páginas compiladas
+      - name: Validar páginas principais e pop-ups compilados
         shell: pwsh
         run: |
-          $needed = @('web/out/index.html', 'web/out/inicio/index.html', 'web/out/mods/index.html', 'web/out/biblioteca/index.html', 'web/out/fusoes/index.html', 'web/out/drops/index.html')
+          $needed = @('web/out/index.html', 'web/out/inicio/index.html', 'web/out/mods/index.html', 'web/out/biblioteca/index.html', 'web/out/fusoes/index.html', 'web/out/drops/index.html', 'web/out/ferramentas/calculadora/index.html', 'web/out/ferramentas/fusoes/index.html')
           foreach ($file in $needed) {
             if (-not (Test-Path $file)) { throw "Falta HTML da tela: $file" }
           }

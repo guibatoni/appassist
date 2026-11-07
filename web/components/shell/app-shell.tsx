@@ -1,8 +1,16 @@
+"use client"
+
+import {usePathname} from "next/navigation"
 import Image from "next/image"
 import { Sidebar } from "./sidebar"
 import { TopBar } from "./top-bar"
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const route=usePathname()
+  if(route.startsWith("/ferramentas/")){
+    // Small native pywebview window: no main sidebar or window toolbar.
+    return <div className="dueltrace-scroll h-dvh overflow-y-auto bg-background p-3">{children}</div>
+  }
   return (
     <div className="relative flex h-dvh min-h-0 flex-col overflow-hidden">
       <Image

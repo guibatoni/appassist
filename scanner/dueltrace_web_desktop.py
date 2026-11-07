@@ -227,6 +227,9 @@ def main():
         window.events.restored+=mark_restored
         def secure_loaded(window):
             current=window.get_current_url()
+            if current in ("about:blank", "", None):
+                # A secondary window is born blank before its trusted route.
+                return
             if trusted_window_url(current,url):
                 # Uma navegação externa cria outro contexto JS e não recebe token.
                 script=("Object.defineProperty(window,'__DUELTRACE_TOKEN__', "
@@ -238,6 +241,61 @@ def main():
                 # Recupera a interface se alguma ação tentar sair da origem local.
                 window.load_url(url)
         window.events.loaded+=secure_loaded
+        tool_windows={}
+        tool_windows_lock=threading.RLock()
+        tool_routes={
+            "calculadora":("Calculadora de SPOILS — DUELTRACE",510,720),
+            "fusoes":("Dicas de fusões — DUELTRACE",570,730),
+        }
+        def open_tool_window(kind):
+            # The native JS API already checked the exact allowlisted kind.
+            title,width,height=tool_routes[kind]
+            with tool_windows_lock:
+                existing=tool_windows.get(kind)
+                if existing is not None:
+                    try:
+                        existing.restore()
+                        existing.show()
+                        return {"opened":True,"reused":True,"kind":kind}
+                    except (OSError,RuntimeError):
+                        tool_windows.pop(kind,None)
+                child=webview.create_window(
+                    title,
+                    url="about:blank",
+                    js_api=api,width=width,height=height,
+                    min_size=(390,440),resizable=True,
+                    on_top=True,background_color="#040a1a",
+                    frameless=False)
+                child.events.loaded+=secure_loaded
+                # Attach security handler BEFORE loading the trusted page;
+                # otherwise a fast WebView2 first navigation can miss token.
+                child.load_url(url+"ferramentas/"+kind+"/")
+                def forget_child():
+                    with tool_windows_lock:
+                        if tool_windows.get(kind) is child:
+                            tool_windows.pop(kind,None)
+                child.events.closed+=forget_child
+                tool_windows[kind]=child
+                return {"opened":True,"reused":False,"kind":kind}
+
+        def close_tool_window(kind):
+            with tool_windows_lock:
+                child=tool_windows.pop(kind,None)
+            if child is None:
+                return {"closed":True,"kind":kind}
+            # Reply must arrive before destroying the calling WebView.
+            def close_after_response():
+                time.sleep(0.25)
+                try:
+                    child.destroy()
+                except (OSError,RuntimeError):
+                    pass
+            threading.Thread(target=close_after_response,daemon=True,
+                             name="dueltrace-tool-close").start()
+            return {"closed":True,"kind":kind}
+        api._tool_window_open=open_tool_window
+        api._tool_window_close=close_tool_window
+
         def pick_file(kind):
             if kind=="rank_report":
                 return window.create_file_dialog(

@@ -34,6 +34,7 @@ from dueltrace_rank_profile_live import (
 )
 from epsxe_launcher import launch_epsxe
 from dueltrace_drops import get_drop_catalog, get_card_drop_sources
+from dueltrace_alpha_reward_pools import discover_alpha_reward_pools, GROUPS as ALPHA_REWARD_GROUPS
 from dueltrace_drop_rank_evidence import rank_drop_report
 from dueltrace_rank_system import available_ranks,rank_system,rank_label_for_existing_score
 from dueltrace_mips_duel_trace import inspect_duel_mips_trace, MAX_TRACE_BYTES
@@ -91,11 +92,34 @@ class DueltraceWebBridge:
         self._private_sync_again = False
         self._fusion_cache_key = None
         self._fusion_cache = {}
+        self._alpha_bundle_key = None
+        self._alpha_bundle_cache = {}
         self._hand_suggestions_key = None
         self._hand_suggestions = None
         self._cross_mod_cards_cache_key = None
         self._cross_mod_cards_cache = None
         self.settings_path = self.catalog.home / "dueltrace_desktop_settings.json"
+
+    def get_alpha_preferences(self):
+        """Return only allowlisted UI preferences, not emulator settings."""
+        with self._lock:
+            prefs=load_json(self.settings_path,{})
+            if not isinstance(prefs,dict):
+                prefs={}
+            return {"fusionTipsVisible":
+                    prefs.get("fusion_tips_visible") is not False}
+
+    def set_alpha_preferences(self, fusion_tips_visible):
+        """Persist user choice even when pywebview uses private mode."""
+        if type(fusion_tips_visible) is not bool:
+            raise ValueError("Preferência de dicas inválida.")
+        with self._lock:
+            prefs=load_json(self.settings_path,{})
+            if not isinstance(prefs,dict):
+                prefs={}
+            prefs["fusion_tips_visible"]=fusion_tips_visible
+            atomic_json(self.settings_path,prefs)
+            return {"fusionTipsVisible":fusion_tips_visible}
 
     def _active(self):
         active = self.catalog.current() or {}
@@ -410,17 +434,176 @@ class DueltraceWebBridge:
                 "warning":"O DUELTRACE não confirma automaticamente qual ISO o ePSXe abriu.",
             }
 
+    def _alpha_bundle(self, sha, entry, profile):
+        """Source-bound, lazy alpha preview; never persists or activates data.
+
+        The full ISO SHA is checked once per source mtime/size and profile
+        revision. This path is only reached from an already registered and
+        active mod. No arbitrary caller can select another user's file.
+        """
+        if (not isinstance(profile, dict) or not isinstance(entry, dict)
+                or type(sha) is not str or
+                not re.fullmatch(r"[a-f0-9]{64}", sha)
+                or profile.get("rom_sha256") != sha):
+            return {}
+        try:
+            source = Path(entry.get("source_path") or "").resolve(strict=True)
+            stamp = source.stat()
+            if (source.suffix.lower() not in (".iso", ".bin")
+                    or not 2048 <= stamp.st_size <= 2*1024*1024*1024):
+                return {}
+            profile_path = (Path(self.catalog.home) / "profiles" /
+                            sha[:16] / "profile.json")
+            try:
+                revision = profile_path.stat().st_mtime_ns
+            except OSError:
+                revision = 0
+            key = (sha, stamp.st_size, stamp.st_mtime_ns, revision)
+            if self._alpha_bundle_key == key:
+                return self._alpha_bundle_cache
+            # Never return stale ISO-derived rows if source was replaced.
+            from scanner_multiiso import Disc, sha256 as hash_image
+            from extrator_fusoes import analyze_fusion_banks, select_fusion_resource
+            if hash_image(source) != sha:
+                return {}
+            disc = Disc(source)
+            try:
+                resource_name, _method = select_fusion_resource(disc)
+                resource_size = disc.files[resource_name][1]
+                if (type(resource_size) is not int or
+                        not 40*0x1800 <= resource_size <= 96*1024*1024):
+                    return {}
+                wa = disc.get(resource_name)
+                rewards = discover_alpha_reward_pools(wa)
+            finally:
+                disc.close()
+            if (source.stat().st_size, source.stat().st_mtime_ns) != (
+                    stamp.st_size, stamp.st_mtime_ns):
+                return {}
+            provisional = None
+            card_list = profile.get("cards", [])
+            opponents = profile.get("opponents", [])
+            if (rewards.get("available") is True
+                    and isinstance(card_list, list) and len(card_list) == 722
+                    and isinstance(opponents, list) and len(opponents) == 39
+                    and profile.get("supported_features", {}).get("cards") is True
+                    and profile.get("verified", {}).get("cartas") == "verificado"):
+                provisional = {
+                    **profile,
+                    "alpha_discovery": {
+                        "state": "retail_sentinel_39_reward_records",
+                        "source": "local_iso_sha256_matched",
+                        "rom_sha256": sha,
+                    },
+                    "drop_group_labels": list(ALPHA_REWARD_GROUPS),
+                    "drops": rewards["rows"],
+                }
+            # Seven mirror banks and a single canonical resource are required
+            # before offering *provisional* recipes in the Alpha library.
+            fusions = []
+            try:
+                raw = analyze_fusion_banks(
+                    source, expected_size=stamp.st_size,
+                    expected_mtime_ns=stamp.st_mtime_ns)
+                if (raw.get("valid_banks") == 7
+                        and raw.get("matching_banks") == 7
+                        and raw.get("divergent_banks") is False
+                        and profile.get("verified", {}).get("cartas") == "verificado"
+                        and isinstance(card_list, list)
+                        and len(card_list) == 722):
+                    results = {}
+                    for row in raw.get("candidates", []):
+                        a, b, out = (row.get(k) for k in ("a", "b", "result"))
+                        if (not all(type(x) is int and 1 <= x <= 722
+                                    for x in (a, b, out))):
+                            continue
+                        results.setdefault((min(a,b), max(a,b)), set()).add(out)
+                    # The three contradictory Rising pairs remain QUARANTINED.
+                    fusions = [
+                        {**row, "validation": "alpha_seven_matching_iso_banks"}
+                        for row in raw.get("candidates", [])
+                        if ((min(row["a"],row["b"]),max(row["a"],row["b"]))
+                            in results
+                            and len(results[(
+                                min(row["a"],row["b"]),
+                                max(row["a"],row["b"]))]) == 1)
+                    ]
+            except (OSError, ValueError, KeyError, TypeError, RuntimeError,
+                    OverflowError):
+                fusions = []
+            self._alpha_bundle_key = key
+            self._alpha_bundle_cache = {
+                "rewardProfile": provisional,
+                "rewardEvidence": {k:v for k,v in rewards.items() if k!="rows"},
+                "fusions": fusions,
+                "sourceSha": sha,
+                "runtimeVerified": False,
+            }
+            return self._alpha_bundle_cache
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError,
+                OverflowError):
+            return {}
+
+    def _combined_fusion_recipes(self, sha, entry, profile):
+        """Keep same-SHA curated recipes and add conflict-free ISO candidates.
+
+        A manually verified fusion is never replaced by a contradictory
+        structural candidate. The output remains a UI suggestion, NOT a new
+        verified profile. Source-specific provenance is kept per recipe.
+        """
+        if not isinstance(profile, dict):
+            return [], False
+        curated = (profile.get("fusion_recipes", [])
+                   if profile.get("supported_features", {}).get("fusions") else [])
+        curated = curated if isinstance(curated, list) else []
+        alpha = self._alpha_bundle(sha, entry, profile)
+        candidates = alpha.get("fusions", [])
+        candidates = candidates if isinstance(candidates, list) else []
+        result = []
+        pairs = {}
+        for row in curated:
+            if not isinstance(row, dict):
+                continue
+            a,b,r=(row.get("a"),row.get("b"),row.get("result"))
+            if not all(type(v) is int and 1<=v<=722 for v in (a,b,r)):
+                continue
+            key=(min(a,b),max(a,b))
+            pairs.setdefault(key,set()).add(r)
+            result.append(row)
+        existing={(r["a"],r["b"],r["result"]) for r in result}
+        from_alpha = False
+        for row in candidates:
+            a,b,r=(row.get("a"),row.get("b"),row.get("result"))
+            if not all(type(v) is int and 1<=v<=722 for v in (a,b,r)):
+                continue
+            key=(min(a,b),max(a,b))
+            if key in pairs and r not in pairs[key]:
+                continue  # preserve curated/observed behavior
+            item=(a,b,r)
+            if item in existing:
+                continue
+            result.append(row)
+            existing.add(item)
+            pairs.setdefault(key,set()).add(r)
+            from_alpha = True
+        return result, from_alpha
+
     def _fusion_index(self, sha, profile):
         profile_path=Path(self.catalog.home)/"profiles"/sha[:16]/"profile.json"
         try:
             stamp=profile_path.stat().st_mtime_ns
         except OSError:
             stamp=0
-        key=(sha,stamp)
+        _active,entry,_profile=self._active()
+        try:
+            source=Path(entry["source_path"]).stat()
+            source_stamp=(source.st_size,source.st_mtime_ns)
+        except (OSError,KeyError,TypeError,ValueError):
+            source_stamp=None
+        key=(sha,stamp,source_stamp)
         if self._fusion_cache_key != key:
-            recipes=(profile or {}).get("fusion_recipes",[])
-            allowed=bool((profile or {}).get("supported_features",{}).get("fusions"))
-            self._fusion_cache=build_fusion_index(recipes if allowed else [])
+            recipes,_alpha=self._combined_fusion_recipes(sha,entry,profile)
+            self._fusion_cache=build_fusion_index(recipes)
             self._fusion_cache_key=key
             self._hand_suggestions_key=None
             self._hand_suggestions=None
@@ -931,12 +1114,16 @@ class DueltraceWebBridge:
         validate_sort(sort,card_type)
         with self._lock:
             active,entry,profile=self._active()
-            if not profile or not profile.get("supported_features",{}).get("fusions"):
+            if not profile:
+                return {"total":0,"offset":offset,"rows":[]}
+            recipes,alpha_added=self._combined_fusion_recipes(
+                active.get("sha256"),entry,profile)
+            if not recipes:
                 return {"total":0,"offset":offset,"rows":[]}
             cards={c["id"]:c for c in self._cards(profile)}
             q=query.strip().casefold()
             rows=[]
-            for item in profile.get("fusion_recipes",[]):
+            for item in recipes:
                 try:
                     a,b,result=(int(item[k]) for k in ("a","b","result"))
                 except (KeyError,ValueError,TypeError):
@@ -967,7 +1154,14 @@ class DueltraceWebBridge:
                              row["nameResult"],sort),
                     row["a"],row["b"]))
             total=len(rows)
-            return {"total":total,"offset":offset,"rows":rows[offset:offset+limit]}
+            return {
+                "total":total,"offset":offset,"rows":rows[offset:offset+limit],
+                "provisional": alpha_added,
+                "status": ("Fusões da ISO ativa: candidatas de sete bancos "
+                           "idênticos e receitas já cadastradas. Pares "
+                           "conflitantes omitidos, sem prova individual no jogo."
+                           if alpha_added else "Receitas do perfil ativo."),
+            }
 
     def compare_mod_cards(self, source_sha, target_sha, query="",
                           offset=0, limit=40, confidence="todas"):
@@ -1046,12 +1240,20 @@ class DueltraceWebBridge:
 
     def get_drops(self, opponent_id=0, group="", query="", offset=0, limit=36,
                   sort="id", card_type="", rank=""):
-        """Consulta exclusivamente tabelas validadas do perfil ISO ativo."""
+        """Catalog confirmed tables, or explicitly labeled local ISO Alpha candidates."""
         with self._lock:
-            _active, _entry, profile = self._active()
-            return get_drop_catalog(
+            active, entry, profile = self._active()
+            original = get_drop_catalog(
                 profile, opponent_id=opponent_id, group=group,
                 query=query, offset=offset, limit=limit,
+                sort=sort,card_type=card_type,rank=rank)
+            if original["available"] or not profile:
+                return original
+            provisional = self._alpha_bundle(
+                active.get("sha256"), entry, profile).get("rewardProfile")
+            return get_drop_catalog(
+                provisional, opponent_id=opponent_id, group=group,
+                query=query,offset=offset,limit=limit,
                 sort=sort,card_type=card_type,rank=rank)
 
     def get_card_drop_sources(self, card_id):
@@ -1059,6 +1261,10 @@ class DueltraceWebBridge:
         with self._lock:
             active, _entry, profile = self._active()
             result = get_card_drop_sources(profile, card_id)
+            if not result["available"]:
+                provisional = self._alpha_bundle(
+                    active.get("sha256"), _entry, profile).get("rewardProfile")
+                result = get_card_drop_sources(provisional, card_id)
             if result["romSha"] != active.get("sha256"):
                 return {**result, "available": False, "rows": [], "total": 0,
                         "status": "Perfil não corresponde à ISO ativa"}
@@ -1795,6 +2001,8 @@ class DueltraceWebBridge:
             raise ValueError("Confirmação inválida")
         self.catalog.activate(sha,acknowledge_uncertainty=acknowledge)
         self._fusion_cache_key=None
+        self._alpha_bundle_key=None
+        self._alpha_bundle_cache={}
         self._hand_suggestions_key=None
         self._hand_suggestions=None
         self._rank_calibration=None
