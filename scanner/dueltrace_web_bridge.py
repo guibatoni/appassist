@@ -557,6 +557,42 @@ class DueltraceWebBridge:
                 OverflowError):
             return {}
 
+    def get_alpha_discovery(self, sha):
+        """Inspect one registered local mod when its row is opened in the UI.
+
+        Return counters only. No RAW ROM, names, fusion recipes, probabilities,
+        filesystem paths or tokens cross this interface. All results come
+        from the exact same registered image and are NEVER game verified.
+        """
+        if type(sha) is not str or not re.fullmatch(r"[a-f0-9]{64}",sha):
+            raise ValueError("Identificador de mod inválido")
+        with self._lock:
+            entry=next((item for item in self.catalog.list()
+                        if item.get("sha256")==sha),None)
+            profile=self.catalog.profile_for(entry) if entry else None
+            if profile is None:
+                return {"available":False,"status":"mod_not_registered",
+                        "fusionCandidates":0,"dropCandidates":0,
+                        "opponentCount":0,"candidateMode":"unavailable",
+                        "verifiedInGame":False}
+            bundle=self._alpha_bundle(sha,entry,profile)
+            rewards=bundle.get("rewardEvidence",{})
+            return {
+                "available":bool(bundle.get("rewardProfile")
+                                 or bundle.get("fusions")),
+                "status":str(rewards.get("status") or "not_decoded")[:100],
+                "dropCandidates":int(rewards.get("rowCount") or 0)
+                    if bundle.get("rewardProfile") else 0,
+                "fusionCandidates":len(bundle.get("fusions",[])),
+                "opponentCount":len(profile.get("opponents",[])),
+                "candidateMode":str(rewards.get("candidateMode")
+                                   or "unavailable")[:80],
+                "possible39Windows":int(rewards.get("possible39Windows") or 0),
+                "verifiedInGame":False,
+                "mayActivateDrops":False,
+                "mayActivateRank":False,
+            }
+
     def _combined_fusion_recipes(self, sha, entry, profile):
         """Keep same-SHA curated recipes and add conflict-free ISO candidates.
 
