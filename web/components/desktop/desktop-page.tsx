@@ -56,6 +56,7 @@ function RankPanel({sha}:{sha:string|null}) {
   const [rank,setRank]=useState<RankState|null>(null)
   const [calibrating,setCalibrating]=useState(false)
   const [calibrationError,setCalibrationError]=useState(false)
+  const [popoutError,setPopoutError]=useState(false)
 
   // Leitura automática continua ativa mesmo sem intervenção do usuário.
   useEffect(()=>{
@@ -113,6 +114,16 @@ function RankPanel({sha}:{sha:string|null}) {
       <RefreshCcw className={"size-4 "+(calibrating?"animate-spin":"")}/>
       {calibrating?"Calibrando…":"Calibrar calculadora"}
     </button>
+    <button type="button" className="btn-ghost mt-2 w-full justify-center"
+      disabled={!desktopApi()} onClick={async()=>{
+        try{await desktopApi()?.open_tool_window("calculadora");setPopoutError(false)}
+        catch{setPopoutError(true)}
+      }}>
+      Abrir calculadora em pop-up
+    </button>
+    {popoutError&&<p className="mt-2 text-xs text-danger" role="alert">
+      Não foi possível abrir a janela independente.
+    </p>}
     {calibrationError&&<p role="alert" className="mt-2 text-center text-xs text-gold">
       Não foi possível calibrar. Confira o mod selecionado.
     </p>}
@@ -124,6 +135,20 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [hand,setHand]=useState<HandState|null>(null)
   const [mode,setMode]=useState<"pairs"|"chains">("pairs")
   const [showAll,setShowAll]=useState(false)
+  const [tipsVisible,setTipsVisible]=useState(true)
+  const [tipsError,setTipsError]=useState(false)
+  useEffect(()=>{
+    try{setTipsVisible(window.localStorage.getItem("dueltrace.fusion.tips")!=="hidden")}
+    catch{setTipsVisible(true)}
+  },[])
+  const toggleTips=()=>{
+    setTipsVisible(v=>{
+      const next=!v
+      try{window.localStorage.setItem("dueltrace.fusion.tips",next?"shown":"hidden")}
+      catch{/* Temporary option remains active for this window. */}
+      return next
+    })
+  }
   useEffect(()=>{
     let mounted=true,reading=false
     setHand(null)
@@ -185,13 +210,24 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
           <p className="text-xs text-muted">Combinações das cartas que estão na sua mão</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={()=>setMode("pairs")}
+          <button type="button" className="btn-ghost" disabled={!desktopApi()}
+            onClick={async()=>{
+              try{await desktopApi()?.open_tool_window("fusoes");setTipsError(false)}
+              catch{setTipsError(true)}
+            }}>Abrir dicas em pop-up</button>
+          <button type="button" className="btn-ghost" onClick={toggleTips}>
+            {tipsVisible?"Ocultar dicas":"Mostrar dicas"}
+          </button>
+          {tipsVisible&&<button type="button" onClick={()=>setMode("pairs")}
             className={mode==="pairs"?"btn-gold":"btn-ghost"}>Duplas</button>
-          <button type="button" onClick={()=>setMode("chains")}
-            className={mode==="chains"?"btn-gold":"btn-ghost"}>Cadeias (2–5)</button>
+          {tipsVisible&&<button type="button" onClick={()=>setMode("chains")}
+            className={mode==="chains"?"btn-gold":"btn-ghost"}>Cadeias (2–5)</button>}
         </div>
       </div>
-      <div className="mt-3">
+      {tipsError&&<p className="mt-2 text-xs text-danger" role="alert">
+        Não foi possível abrir a janela de dicas independente.
+      </p>}
+      <div className={tipsVisible?"mt-3":"hidden"}>
         {!hand?.ready?<Empty>As sugestões aparecerão quando o ePSXe identificar sua mão.</Empty>:
           visibleCombinations.length===0?<Empty>Nenhuma fusão identificada para estas cartas.</Empty>:
           mode==="pairs"?<div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -213,11 +249,11 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
               </div>)}
           </div>}
       </div>
-      {hand?.ready&&combinations.length>6&&<button type="button"
+      {tipsVisible&&hand?.ready&&combinations.length>6&&<button type="button"
         className="btn-ghost mt-3" onClick={()=>setShowAll(v=>!v)}>
         {showAll?"Mostrar menos":`Ver todas as ${combinations.length} combinações`}
       </button>}
-      {hand?.ready&&mode==="chains"&&hand.chainsComplete===false&&
+      {tipsVisible&&hand?.ready&&mode==="chains"&&hand.chainsComplete===false&&
         <p className="mt-2 text-xs text-gold">Busca parcial: limite de combinações atingido.</p>}
     </section>
   </div>
@@ -1563,6 +1599,10 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         <span className="text-xs text-muted">{records?.total??0} receitas</span>
       </div>
       {error&&<p className="mt-3 text-sm text-danger" role="alert">{error}</p>}
+      {records?.provisional&&<p className="mt-3 rounded-md border border-gold/40 p-3 text-xs text-gold">
+        Fusões extraídas de sete bancos da ISO ativa, ainda sem confirmação
+        individual no jogo. Pares com resultados conflitantes não são sugeridos.
+      </p>}
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         {records?.rows.map((r,i)=><article key={r.a+"-"+r.b+"-"+r.result+"-"+i}
           className="relative rounded-xl border border-line/80 bg-gradient-to-br from-panel-strong/90 via-[#0b1a35] to-background p-3 shadow-[inset_0_1px_0_rgb(245_184_61/0.09)] transition-colors hover:border-primary/60">
@@ -1605,6 +1645,10 @@ export function DesktopPage({page}:{page:Page}) {
     <div className="panel flex flex-wrap items-center gap-3 rounded-xl px-4 py-2 text-xs">
 
       <span className="text-muted">ISO ativa: <strong className="font-semibold text-white">{state?.activeName??"Nenhuma ISO selecionada"}</strong></span>
+      <button type="button" className="btn-ghost ml-auto text-xs"
+        disabled={!desktopApi()} onClick={()=>void desktopApi()?.open_tool_window("calculadora")}>
+        Calculadora em janela
+      </button>
     </div>
     {error&&<p className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm text-gold" role="status">{error}</p>}
     {loading&&<p className="text-sm text-muted">Carregando dados locais...</p>}
