@@ -298,6 +298,12 @@ export type CardMatchResult = {
   verifiedInGame: boolean
 }
 
+export type AlphaDiscovery = {
+  available:boolean;status:string;dropCandidates:number;fusionCandidates:number;
+  opponentCount:number;candidateMode:string;possible39Windows?:number;
+  verifiedInGame:false;mayActivateDrops?:false;mayActivateRank?:false;
+}
+
 export type LocalMod = {
   sha256: string
   name: string
@@ -818,6 +824,7 @@ export type PopoutState={opened?:boolean;closed?:boolean;reused?:boolean;kind:Po
 
 export interface DesktopAPI {
   window_control(action:WindowControlAction):Promise<WindowControlState>
+  get_alpha_discovery(sha:string):Promise<AlphaDiscovery>
   open_tool_window(kind:PopoutKind):Promise<PopoutState>
   get_alpha_preferences():Promise<{fusionTipsVisible:boolean}>
   set_alpha_preferences(visible:boolean):Promise<{fusionTipsVisible:boolean}>
@@ -874,6 +881,7 @@ export interface DesktopAPI {
 
 interface ProtectedNativeAPI {
   window_control(token:string,action:WindowControlAction):Promise<WindowControlState>
+  get_alpha_discovery(token:string,sha:string):Promise<AlphaDiscovery>
   open_tool_window(token:string,kind:PopoutKind):Promise<PopoutState>
   get_alpha_preferences(token:string):Promise<{fusionTipsVisible:boolean}>
   set_alpha_preferences(token:string,visible:boolean):Promise<{fusionTipsVisible:boolean}>
@@ -944,6 +952,7 @@ export function desktopApi(): DesktopAPI | null {
   if (!native || typeof token !== "string" || token.length < 32) return null
   return {
     window_control: (action) => native.window_control(token,action),
+    get_alpha_discovery: (sha) => native.get_alpha_discovery(token,sha),
     open_tool_window: (kind) => native.open_tool_window(token,kind),
     get_alpha_preferences: () => native.get_alpha_preferences(token),
     set_alpha_preferences: (visible) => native.set_alpha_preferences(token,visible),
