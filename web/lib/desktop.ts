@@ -457,6 +457,26 @@ export type MipsTraceResult = {
   records?: number
   correlatedDuels?: number
   tableReadReports?: number
+  opponentFieldEvidence?:{
+    schema:1
+    status:string
+    available:boolean
+    traceFormatRecognized:boolean
+    instructionSamples:number
+    distinctPCs:number
+    byteMemoryEvents:number
+    legacyFieldReadEvents:number
+    legacyFieldWriteEvents:number
+    legacyObservedValues:number[]
+    candidateAddressCount:number
+    candidateAddresses:Array<{address:string;readEvents:number;writeEvents:number;distinctPCs:number;observedValues:number[]}>
+    opponentIdentityVerified:false
+    romIdentityVerified:false
+    physicalWindowMappingVerified:false
+    rankRoutineConfirmed:false
+    mayActivateDrops:false
+    note:string
+  }
   rankTableEvidence?: {
     status:string
     tableReadsObserved:boolean
