@@ -56,6 +56,30 @@ class NativeWindowControlsTests(unittest.TestCase):
         self.assertTrue(self.api._native_close_requested)
         self.window.destroy.assert_not_called()
 
+    def test_popouts_are_token_bound_and_kind_allowlisted(self):
+        self.api._tool_window_open=Mock(return_value={
+            "opened":True,"kind":"calculadora"})
+        self.api._tool_window_close=Mock(return_value={
+            "closed":True,"kind":"calculadora"})
+        for kind in ("calculadora","fusoes"):
+            with self.subTest(kind=kind):
+                with self.assertRaises(PermissionError):
+                    self.api.open_tool_window("invalid",kind)
+                with self.assertRaises(PermissionError):
+                    self.api.close_tool_window("invalid",kind)
+        for invalid in (None,1,{},"config","http://evil.local",""):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    self.api.open_tool_window(self.token,invalid)
+                with self.assertRaises(ValueError):
+                    self.api.close_tool_window(self.token,invalid)
+        self.api._tool_window_open.assert_not_called()
+        self.api._tool_window_close.assert_not_called()
+        self.api.open_tool_window(self.token,"calculadora")
+        self.api.close_tool_window(self.token,"calculadora")
+        self.api._tool_window_open.assert_called_once_with("calculadora")
+        self.api._tool_window_close.assert_called_once_with("calculadora")
+
     def test_no_native_window_does_not_perform_any_action(self):
         self.api._native_window=None
         with self.assertRaises(RuntimeError):
