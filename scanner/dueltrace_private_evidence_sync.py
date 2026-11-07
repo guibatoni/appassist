@@ -186,7 +186,7 @@ def validate_iso_forensic_report(report: dict) -> dict:
     maximums={
         "indexedFiles":8192,"resourceBytesRead":96*1024*1024,
         "candidatesTried":8,"count":722,"namesStructural":39,
-        "staticCandidates":1000,"validatedStructuralMatrices":156,
+        "staticCandidates":65536,  # count of scan hits, not 6 displayed candidates"validatedStructuralMatrices":156,
         "matrixCount":156,"distinct39Windows":128,
         "base":96*1024*1024,"opponentStep":96*1024*1024,
         "matrixStride":96*1024*1024,
