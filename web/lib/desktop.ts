@@ -819,6 +819,8 @@ export type PopoutState={opened?:boolean;closed?:boolean;reused?:boolean;kind:Po
 export interface DesktopAPI {
   window_control(action:WindowControlAction):Promise<WindowControlState>
   open_tool_window(kind:PopoutKind):Promise<PopoutState>
+  get_alpha_preferences():Promise<{fusionTipsVisible:boolean}>
+  set_alpha_preferences(visible:boolean):Promise<{fusionTipsVisible:boolean}>
   close_tool_window(kind:PopoutKind):Promise<PopoutState>
   check_updates(): Promise<UpdateCheck>
   open_updates_page(runId?: number): Promise<{opened: boolean}>
@@ -873,6 +875,8 @@ export interface DesktopAPI {
 interface ProtectedNativeAPI {
   window_control(token:string,action:WindowControlAction):Promise<WindowControlState>
   open_tool_window(token:string,kind:PopoutKind):Promise<PopoutState>
+  get_alpha_preferences(token:string):Promise<{fusionTipsVisible:boolean}>
+  set_alpha_preferences(token:string,visible:boolean):Promise<{fusionTipsVisible:boolean}>
   close_tool_window(token:string,kind:PopoutKind):Promise<PopoutState>
   check_updates(token: string): Promise<UpdateCheck>
   open_updates_page(token: string, runId?: number): Promise<{opened: boolean}>
@@ -941,6 +945,8 @@ export function desktopApi(): DesktopAPI | null {
   return {
     window_control: (action) => native.window_control(token,action),
     open_tool_window: (kind) => native.open_tool_window(token,kind),
+    get_alpha_preferences: () => native.get_alpha_preferences(token),
+    set_alpha_preferences: (visible) => native.set_alpha_preferences(token,visible),
     close_tool_window: (kind) => native.close_tool_window(token,kind),
     check_updates: () => native.check_updates(token),
     open_updates_page: (runId) => native.open_updates_page(token, runId),
