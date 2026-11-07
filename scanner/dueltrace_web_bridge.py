@@ -507,7 +507,10 @@ class DueltraceWebBridge:
                     expected_mtime_ns=stamp.st_mtime_ns)
                 if (raw.get("valid_banks") == 7
                         and raw.get("matching_banks") == 7
-                        and raw.get("divergent_banks") is False):
+                        and raw.get("divergent_banks") is False
+                        and profile.get("verified", {}).get("cartas") == "verificado"
+                        and isinstance(card_list, list)
+                        and len(card_list) == 722):
                     results = {}
                     for row in raw.get("candidates", []):
                         a, b, out = (row.get(k) for k in ("a", "b", "result"))
