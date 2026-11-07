@@ -276,7 +276,7 @@ class DueltraceWebBridge:
         summary = profile_summary(entry, profile)
         return {
             "sha256":entry.get("sha256",""),
-            "name":entry.get("file_name") or summary.get("name") or "Mod local",
+            "name":entry.get("display_name") or entry.get("file_name") or summary.get("name") or "Mod local",
             "level":entry.get("level","desconhecido"),
             "scanParserRevision":entry.get("scan_parser_revision") if
                 type(entry.get("scan_parser_revision")) is int else None,
@@ -426,7 +426,8 @@ class DueltraceWebBridge:
             return {
                 "connected":True,"source":"DUELTRACE Windows / dados locais",
                 "activeSha":active.get("sha256") if profile else None,
-                "activeName":entry.get("file_name") if entry and profile else None,
+                "activeName":(entry.get("display_name") or entry.get("file_name"))
+                    if entry and profile else None,
                 "mods":mods,
                 "cards":self._cards(profile),
                 "fusionCount":len(profile.get("fusion_recipes",[]))
@@ -435,6 +436,25 @@ class DueltraceWebBridge:
                 "epsxeConfigured":bool(settings.get("epsxe_executable")),
                 "warning":"O DUELTRACE não confirma automaticamente qual ISO o ePSXe abriu.",
             }
+
+    def rename_mod(self, sha, display_name):
+        with self._lock:
+            return self.catalog.rename_display(sha,display_name)
+
+    def remove_mod(self, sha):
+        with self._lock:
+            removed=self.catalog.remove_from_library(sha)
+            # Não deixar RANK/fusões/estado do mod anterior em memória.
+            if removed.get("wasActive"):
+                self._reset_rank_read_state()
+                self._rank_experimental_sha=None
+                self._fusion_cache_key=None
+                self._fusion_cache={}
+                self._alpha_bundle_key=None
+                self._alpha_bundle_cache={}
+                self._hand_suggestions_key=None
+                self._hand_suggestions=None
+            return removed
 
     def _alpha_bundle(self, sha, entry, profile):
         """Source-bound, lazy alpha preview; never persists or activates data.
@@ -1023,6 +1043,37 @@ class DueltraceWebBridge:
         """
         with self._lock:
             state=self.get_rank()
+            # Sem botão de calibração: só iniciar leitura legada se houver
+            # um duelo plausível no emulador. Preserva as verificações de
+            # LP/PID, duas leituras estáveis e mudanças dos contadores já
+            # implementadas. Nunca registra como binding validado.
+            if (state.get("state")=="unsupported"
+                    and self._rank_experimental_sha is None):
+                active, _entry, profile=self._active()
+                sha=active.get("sha256")
+                if (type(sha) is str and re.fullmatch(r"[0-9a-f]{64}",sha)
+                        and isinstance(profile,dict)
+                        and profile.get("rom_sha256")==sha
+                        and validate_live_rank_binding(profile) is None
+                        and not model_available(sha)):
+                    preferred=(self._process.pid if self._process is not None
+                               and self._process.poll() is None else None)
+                    try:
+                        observed=self._rank_reader(preferred_pid=preferred)
+                    except (OSError,RuntimeError,ValueError,TypeError,KeyError):
+                        observed=None
+                    if isinstance(observed,dict) and observed.get("ready") is True:
+                        fields=observed.get("counters")
+                        pid=observed.get("pid")
+                        if (isinstance(fields,dict)
+                                and type(pid) is int and pid>0
+                                and type(fields.get("turns")) is int
+                                and fields["turns"]>=1
+                                and type(fields.get("remaining_lp")) is int
+                                and 0<fields["remaining_lp"]<=32766):
+                            self._rank_experimental_sha=sha
+                            self._reset_rank_read_state()
+                            state=self.get_rank()
             if state.get("ready") is True:
                 self._rank_auto_probe=None
                 if (isinstance(self._rank_calibration,dict)
@@ -1184,8 +1235,15 @@ class DueltraceWebBridge:
                     continue
                 names=[cards.get(cid,{}).get("name") or f"Carta #{cid}"
                        for cid in (a,b,result)]
-                if q and not any(q in text.casefold() or q==str(cid)
-                                 for text,cid in zip(names,(a,b,result))):
+                texts=list(names)
+                for cid in (a,b,result):
+                    card=cards.get(cid,{})
+                    for field in ("effect","description"):
+                        value=card.get(field)
+                        if isinstance(value,str):
+                            texts.append(value)
+                if q and not (any(q in text.casefold() for text in texts)
+                              or q in (str(a),str(b),str(result))):
                     continue
                 rows.append({
                     "a":a,"b":b,"result":result,

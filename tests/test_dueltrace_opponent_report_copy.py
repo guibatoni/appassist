@@ -16,9 +16,11 @@ class OpponentReportCopyTests(unittest.TestCase):
         ui = (ROOT/"web/components/desktop/desktop-page.tsx").read_text(encoding="utf8")
         section = ui.split("function Mods(",1)[1].split(
             "function CardDropSourcesPanel(",1)[0]
-        self.assertIn("Copiar diagnóstico técnico",section)
-        self.assertIn("copyOpponentReport(mod)",section)
-        self.assertIn("!mod.opponents&&((mod.opponentCandidateCount??0)>0||Boolean(mod.opponentDiagnosticReason))",section)
+        self.assertNotIn("Copiar diagnóstico técnico",section)
+        self.assertNotIn("copyOpponentReport(mod)",section)
+        self.assertNotIn("opponentDiagnosticReason",section)
+        self.assertIn("Atualizar dados",section)
+        # A exportação interna sanitizada continua disponível para manutenção.
         self.assertIn("Somente", "Somente")
 
     def test_serialization_only_uses_allowlisted_numeric_fields(self):

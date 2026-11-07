@@ -88,12 +88,14 @@ class DegeneratePointerTests(unittest.TestCase):
         self.assertNotIn("pointerBase", str(summary))
         self.assertFalse(summary["mayPromote"])
 
-    def test_ui_explains_no_candidates_and_can_export_diagnostic(self):
+    def test_customer_ui_hides_internal_opponent_evidence(self):
         source = (ROOT/"web/components/desktop/desktop-page.tsx").read_text(
             encoding="utf-8")
-        self.assertIn("Nenhuma sequência independente de adversários", source)
-        self.assertIn("Boolean(mod.opponentDiagnosticReason)", source)
-        self.assertIn("Copiar diagnóstico técnico", source)
+        mods=source.split("function Mods(",1)[1].split("function CardDropSourcesPanel(",1)[0]
+        self.assertNotIn("Nenhuma sequência independente de adversários",mods)
+        self.assertNotIn("Boolean(mod.opponentDiagnosticReason)",mods)
+        self.assertNotIn("Copiar diagnóstico técnico",mods)
+        self.assertIn("Atualizar dados",mods)
         self.assertGreaterEqual(SCAN_PARSER_REVISION, 24)
 
 

@@ -20,9 +20,10 @@ class OpponentRevisionUiTests(unittest.TestCase):
         source=(ROOT/"web"/"components"/"desktop"/"desktop-page.tsx").read_text(
             encoding="utf-8")
         mods=source.split("function Mods(",1)[1].split("function CardDropSourcesPanel(",1)[0]
-        self.assertIn('mod.scanParserRevision<19',mods)
-        self.assertIn('Análise anterior à revisão 19',mods)
-        self.assertIn('Motivo ainda não registrado neste perfil.',mods)
+        self.assertNotIn('mod.scanParserRevision<19',mods)
+        self.assertNotIn('Análise anterior à revisão 19',mods)
+        self.assertNotIn('Motivo ainda não registrado neste perfil.',mods)
+        self.assertIn('Atualizar dados',mods)
         self.assertNotIn('quarantinedRecords',mods)
         self.assertNotIn('get_mod_scan_diagnostic',mods)
 

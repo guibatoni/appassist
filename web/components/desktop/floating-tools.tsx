@@ -1,9 +1,10 @@
 "use client"
 
 import {useEffect,useState} from "react"
+import Image from "next/image"
 import {Calculator,Swords,X} from "lucide-react"
-import {desktopApi,useDesktopState} from "@/lib/desktop"
-import type {HandState,RankState} from "@/lib/desktop"
+import {desktopApi,useDesktopState,cardWithFrame,cardArt} from "@/lib/desktop"
+import type {HandState,RankState,LocalCard} from "@/lib/desktop"
 import {RankScoreDisplay} from "./rank-score-display"
 
 /**
@@ -71,9 +72,33 @@ export function FloatingCalculator(){
       <RankScoreDisplay score={ready?live.score:null}
         category={ready?live.category:null} large/>
       <p role="status" className="mt-4 text-center text-[11px] text-muted">
-        {live?.status??"Aguardando leitura do duelo."}
+        {ready?"Pontuação estimada · atualização automática":"Aguardando duelo."}
       </p>
     </section>
+  </div>
+}
+
+function FusionTipCard({card,sha,label,fallback}:{
+  card:LocalCard|null|undefined;sha:string|null;label:string;fallback?:string
+}){
+  const [mode,setMode]=useState<"frame"|"art"|"none">("frame")
+  useEffect(()=>setMode("frame"),[sha,card?.id])
+  const img=card&&sha?(mode==="frame"?cardWithFrame(sha,card.id):
+    mode==="art"?cardArt(sha,card.id):null):null
+  return <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
+    <p className="text-[10px] uppercase tracking-wide text-muted">{label}</p>
+    <div className="relative h-[78px] w-[68px] shrink-0 overflow-hidden rounded border border-gold/30 bg-background/75">
+      {img?<Image src={img} alt={card?.name??"Carta"} fill unoptimized sizes="68px"
+        className="object-fill [image-rendering:pixelated]"
+        onError={()=>setMode(mode==="frame"?"art":"none")}/>:
+        <div className="flex h-full items-center justify-center text-xs text-primary">
+          {card?`#${card.id}`:"—"}
+        </div>}
+    </div>
+    <p className="line-clamp-2 min-h-8 break-words text-center text-[11px] font-semibold text-white">
+      {card?.name??fallback??"Carta"}
+    </p>
+    {card&&<p className="text-[10px] text-gold">#{card.id}</p>}
   </div>
 }
 
@@ -81,6 +106,7 @@ export function FloatingFusionTips(){
   const {state}=useDesktopState()
   const [hand,setHand]=useState<HandState|null>(null)
   const [error,setError]=useState(false)
+  const cardsById=new Map((state?.cards??[]).map(card=>[card.id,card]))
 
   useEffect(()=>{
     let mounted=true
@@ -128,10 +154,19 @@ export function FloatingFusionTips(){
           {pairs.slice(0,6).map((item,i)=>
             <div key={`${item.slot_a}-${item.slot_b}-${item.result}-${i}`}
               className="rounded-md border border-line/70 bg-background/40 px-3 py-2">
-              <p className="text-[11px] text-muted">Mão {item.slot_a} + {item.slot_b}</p>
-              <p className="break-words text-sm font-semibold text-gold">
-                {item.result_name} <span className="text-xs text-muted">#{item.result}</span>
+              <p className="mb-2 text-center text-[11px] text-muted">
+                Mão {item.slot_a} + {item.slot_b}
               </p>
+              <div className="flex items-center gap-1">
+                <FusionTipCard label="Material" sha={state?.activeSha??null}
+                  card={hand?.hand[item.slot_a-1]??cardsById.get(item.a)}/>
+                <span className="text-primary">+</span>
+                <FusionTipCard label="Material" sha={state?.activeSha??null}
+                  card={hand?.hand[item.slot_b-1]??cardsById.get(item.b)}/>
+                <span className="text-gold">→</span>
+                <FusionTipCard label="Resultado" sha={state?.activeSha??null}
+                  card={cardsById.get(item.result)} fallback={item.result_name}/>
+              </div>
             </div>)}
         </div>
         {pairs.length>6&&<p className="mt-2 text-[11px] text-muted">
@@ -146,12 +181,17 @@ export function FloatingFusionTips(){
           {chains.slice(0,4).map((item,i)=>
             <div key={`${item.result}-${item.slot_order.join("-")}-${i}`}
               className="rounded-md border border-line/70 bg-background/40 px-3 py-2">
-              <p className="text-[11px] text-muted">
+              <p className="mb-2 text-[11px] text-muted">
                 Ordem da mão: {item.slot_order.join(" → ")}
               </p>
-              <p className="break-words text-sm font-semibold text-gold">
-                {item.result_name} <span className="text-xs text-muted">#{item.result}</span>
-              </p>
+              <div className="flex items-start justify-center gap-1">
+                {item.slot_order.map((slot,i)=><FusionTipCard key={i} label={`Pos. ${slot}`}
+                  sha={state?.activeSha??null}
+                  card={hand?.hand[slot-1]??null}/>)}
+                <span className="self-center text-gold">→</span>
+                <FusionTipCard label="Resultado" sha={state?.activeSha??null}
+                  card={cardsById.get(item.result)} fallback={item.result_name}/>
+              </div>
             </div>)}
         </div>
         {chains.length>4&&<p className="mt-2 text-[11px] text-muted">

@@ -24,12 +24,12 @@ class CleanHomeRankUiTests(unittest.TestCase):
         self.assertNotIn("manualRankMetrics",self.page)
         self.assertNotIn("sourceLabel(",self.home)
 
-    def test_rank_is_continuously_automatic_with_single_calibration_button(self):
+    def test_rank_is_continuously_automatic_without_calibration_button(self):
         self.assertIn("api.get_rank_auto()",self.rank)
-        self.assertIn("window.setInterval(()=>void read(),850)",self.rank)
-        self.assertIn("api.calibrate_rank()",self.rank)
-        self.assertIn("Calibrar calculadora",self.rank)
-        self.assertIn("disabled={!sha||calibrating||!desktopApi()}",self.rank)
+        self.assertIn("window.setInterval(()=>void poll(),850)",self.rank)
+        self.assertNotIn("api.calibrate_rank()",self.rank)
+        self.assertNotIn("Calibrar calculadora",self.rank)
+        self.assertIn("Abrir visor em pop-up",self.rank)
         self.assertIn("rank.score",self.rank)
         self.assertIn("rank.category",self.rank)
         self.assertNotIn("api.calculate_spoils",self.rank)

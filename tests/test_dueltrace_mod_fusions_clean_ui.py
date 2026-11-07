@@ -17,13 +17,13 @@ class PublicUiContractTests(unittest.TestCase):
 
     def test_mods_use_one_column_disclosure_list_with_status_and_actions(self):
         mods=self.mods
-        self.assertIn('className="mt-4 space-y-2"',mods)
+        self.assertIn('className="mt-4 space-y-3"',mods)
         self.assertIn("aria-expanded={open}",mods)
         self.assertIn("aria-controls={",mods)
         self.assertIn("setExpandedSha(open?null:mod.sha256)",mods)
         self.assertIn("ChevronDown",mods)
         self.assertIn('rotate-180',mods)
-        self.assertIn('>Ativo</span>',mods)
+        self.assertIn('● Ativo</span>',mods)
         self.assertIn('"Ativar mod"',mods)
         self.assertIn('Atualizar dados',mods)
         self.assertIn('Adicionar mod',mods)
@@ -40,7 +40,7 @@ class PublicUiContractTests(unittest.TestCase):
                 self.assertNotIn(forbidden,self.mods)
         # Os métodos de análise continuam no backend e não são expostos como UI.
         self.assertNotIn(">{mod.sha256",self.mods)
-        self.assertIn("api.scan_sources(mod.sha256)",self.mods)
+        self.assertIn("desktopApi()!.scan_sources(mod.sha256)",self.mods)
         self.assertIn('mod.requiresReview',self.mods)
         self.assertNotIn("CardMatchPanel mods=",self.mods)
 

@@ -117,10 +117,13 @@ class AutomaticRankTests(unittest.TestCase):
                                                  "entries":[self.entry,entry]})
         atomic_json(self.catalog.active_file,{"sha256":unknown})
         self.reader.reset_mock()
-        self.assertEqual(self.bridge.get_rank_auto()["state"],"unsupported")
+        self.assertEqual(self.bridge.get_rank()["state"],"unsupported")
         self.reader.assert_not_called()
-        self.assertTrue(self.bridge.set_rank_experimental(True)["enabled"])
+        # A interface Alpha inicia somente após detectar um duelo plausível
+        # e ainda exige consenso de LP e duas alterações reais.
         self.assertEqual(self.bridge.get_rank_auto()["state"],"auto_calibrating")
+        self.assertEqual(self.bridge._rank_experimental_sha,unknown)
+        self.assertTrue(self.reader.called)
         pending=self.bridge.get_rank_auto()
         self.assertEqual(pending["state"],"needs_ram_validation")
         self.assertEqual(pending["validationProgress"],0)
@@ -136,7 +139,8 @@ class AutomaticRankTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.bridge.capture_rank_prediction()
         self.bridge.set_rank_experimental(False)
-        self.assertEqual(self.bridge.get_rank_auto()["state"],"unsupported")
+        self.assertEqual(self.bridge.get_rank()["state"],"unsupported")
+        self.assertEqual(self.bridge.get_rank_auto()["state"],"auto_calibrating")
 
     def test_calibration_button_restarts_known_iso_without_changing_formula(self):
         self.bridge.get_rank_auto()
@@ -163,8 +167,10 @@ class AutomaticRankTests(unittest.TestCase):
         atomic_json(self.catalog.registry_file,{"schema":1,"entries":[self.entry,entry]})
         atomic_json(self.catalog.active_file,{"sha256":unknown})
         self.reader.reset_mock()
-        self.assertEqual(self.bridge.get_rank_auto()["state"],"unsupported")
+        self.assertEqual(self.bridge.get_rank()["state"],"unsupported")
         self.reader.assert_not_called()
+        # O botão desapareceu da UI; endpoint manual é mantido para legado.
+        self.assertEqual(self.bridge.get_rank_auto()["state"],"auto_calibrating")
         result=self.bridge.calibrate_rank()
         self.assertTrue(result["started"])
         self.assertEqual(self.bridge._rank_experimental_sha,unknown)
