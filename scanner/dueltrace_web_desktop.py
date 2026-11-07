@@ -227,6 +227,9 @@ def main():
         window.events.restored+=mark_restored
         def secure_loaded(window):
             current=window.get_current_url()
+            if current in ("about:blank", "", None):
+                # A secondary window is born blank before its trusted route.
+                return
             if trusted_window_url(current,url):
                 # Uma navegação externa cria outro contexto JS e não recebe token.
                 script=("Object.defineProperty(window,'__DUELTRACE_TOKEN__', "
@@ -258,12 +261,15 @@ def main():
                         tool_windows.pop(kind,None)
                 child=webview.create_window(
                     title,
-                    url=url+"ferramentas/"+kind+"/",
+                    url="about:blank",
                     js_api=api,width=width,height=height,
                     min_size=(390,440),resizable=True,
                     on_top=True,background_color="#040a1a",
                     frameless=False)
                 child.events.loaded+=secure_loaded
+                # Attach security handler BEFORE loading the trusted page;
+                # otherwise a fast WebView2 first navigation can miss token.
+                child.load_url(url+"ferramentas/"+kind+"/")
                 def forget_child():
                     with tool_windows_lock:
                         if tool_windows.get(kind) is child:
