@@ -67,6 +67,14 @@ class ProtectedDesktopApi:
                     daemon=True).start()
             return {"maximized":self._native_maximized}
 
+    def get_alpha_preferences(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_alpha_preferences()
+
+    def set_alpha_preferences(self, credential, fusion_tips_visible):
+        self._authorize(credential)
+        return self._bridge.set_alpha_preferences(fusion_tips_visible)
+
     def open_tool_window(self, credential, kind):
         """Open only one of two local, authenticated auxiliary windows."""
         self._authorize(credential)
