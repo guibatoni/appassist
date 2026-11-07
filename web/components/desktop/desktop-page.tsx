@@ -219,7 +219,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             {tipsVisible?"Ocultar dicas":"Mostrar dicas"}
           </button>
           {tipsVisible&&<button type="button" onClick={()=>setMode("pairs")}
-            className={mode==="pairs"?"btn-gold":"btn-ghost"}>Duplas</button>
+            className={mode==="pairs"?"btn-gold":"btn-ghost"}>Duplas</button>}
           {tipsVisible&&<button type="button" onClick={()=>setMode("chains")}
             className={mode==="chains"?"btn-gold":"btn-ghost"}>Cadeias (2–5)</button>}
         </div>
