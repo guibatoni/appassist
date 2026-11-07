@@ -105,10 +105,11 @@ def decode_bank(block: bytes, *, num_cards: int = NUM_CARDS) -> dict:
 
 
 def select_fusion_resource(disc) -> tuple[str, str]:
-    """Keep canonical WA unchanged; accept renamed resources only with seven mirrors.
+    """Keep canonical WA unchanged; accept renamed resources with seven mirrors.
 
-    Seven identical conflict-free banks are strong STRUCTURAL evidence, not
-    proof that a particular fusion executes in the selected mod.
+    A few contradictory *pairs* inside seven identical banks must be
+    quarantined as pairs, not invalidate the whole resource. Mere
+    structural consistency does not prove fusion execution in the mod.
     """
     named = [n for n in disc.files if n.upper().endswith("WA_MRG.MRG")]
     if len(named) == 1:
@@ -136,9 +137,6 @@ def select_fusion_resource(disc) -> tuple[str, str]:
             valid = True
             for off in FUSION_BANK_OFFSETS:
                 bank = decode_bank(raw[off:off+BLOCK_SIZE])
-                if bank["conflict_count"]:
-                    valid = False
-                    break
                 hashes.add(bank["recipelist_sha256"])
                 if len(hashes) > 1:
                     valid = False
@@ -155,7 +153,8 @@ def select_fusion_resource(disc) -> tuple[str, str]:
 
 
 def analyze_fusion_banks(rom_path: Path, *, expected_size=None,
-                         expected_mtime_ns=None, progress=None) -> dict:
+                         expected_mtime_ns=None, progress=None,
+                         resource_name: str | None = None) -> dict:
     """Varre as 7 cópias de fusões do disco, valida formato e cruza assinaturas."""
     rom=Path(rom_path).resolve(strict=True)
     before=rom.stat()
@@ -168,7 +167,15 @@ def analyze_fusion_banks(rom_path: Path, *, expected_size=None,
     all_recipes={}
     try:
         disc=Disc(rom)
-        wa_name, resource_method = select_fusion_resource(disc)
+        if resource_name is not None:
+            if (not isinstance(resource_name,str)
+                    or resource_name not in disc.files
+                    or type(disc.files[resource_name][1]) is not int
+                    or disc.files[resource_name][1] > 96*1024*1024):
+                raise FusionFormatError("Contêiner solicitado não está no índice da ISO")
+            wa_name, resource_method = resource_name, "same_iso_structural_family"
+        else:
+            wa_name, resource_method = select_fusion_resource(disc)
         # Lê prefixo limitado (sem carregar os ~38 MB de WA nem os ~518 MB da ISO).
         max_end=max(FUSION_BANK_OFFSETS)+BLOCK_SIZE
         wa=disc.get(wa_name,limit_bytes=max_end)
