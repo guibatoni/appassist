@@ -448,6 +448,10 @@ class DueltraceWebBridge:
             disc = Disc(source)
             try:
                 resource_name, _method = select_fusion_resource(disc)
+                resource_size = disc.files[resource_name][1]
+                if (type(resource_size) is not int or
+                        not 40*0x1800 <= resource_size <= 96*1024*1024):
+                    return {}
                 wa = disc.get(resource_name)
                 rewards = discover_alpha_reward_pools(wa)
             finally:
@@ -516,21 +520,66 @@ class DueltraceWebBridge:
                 OverflowError):
             return {}
 
+    def _combined_fusion_recipes(self, sha, entry, profile):
+        """Keep same-SHA curated recipes and add conflict-free ISO candidates.
+
+        A manually verified fusion is never replaced by a contradictory
+        structural candidate. The output remains a UI suggestion, NOT a new
+        verified profile. Source-specific provenance is kept per recipe.
+        """
+        if not isinstance(profile, dict):
+            return [], False
+        curated = (profile.get("fusion_recipes", [])
+                   if profile.get("supported_features", {}).get("fusions") else [])
+        curated = curated if isinstance(curated, list) else []
+        alpha = self._alpha_bundle(sha, entry, profile)
+        candidates = alpha.get("fusions", [])
+        candidates = candidates if isinstance(candidates, list) else []
+        result = []
+        pairs = {}
+        for row in curated:
+            if not isinstance(row, dict):
+                continue
+            a,b,r=(row.get("a"),row.get("b"),row.get("result"))
+            if not all(type(v) is int and 1<=v<=722 for v in (a,b,r)):
+                continue
+            key=(min(a,b),max(a,b))
+            pairs.setdefault(key,set()).add(r)
+            result.append(row)
+        existing={(r["a"],r["b"],r["result"]) for r in result}
+        from_alpha = False
+        for row in candidates:
+            a,b,r=(row.get("a"),row.get("b"),row.get("result"))
+            if not all(type(v) is int and 1<=v<=722 for v in (a,b,r)):
+                continue
+            key=(min(a,b),max(a,b))
+            if key in pairs and r not in pairs[key]:
+                continue  # preserve curated/observed behavior
+            item=(a,b,r)
+            if item in existing:
+                continue
+            result.append(row)
+            existing.add(item)
+            pairs.setdefault(key,set()).add(r)
+            from_alpha = True
+        return result, from_alpha
+
     def _fusion_index(self, sha, profile):
         profile_path=Path(self.catalog.home)/"profiles"/sha[:16]/"profile.json"
         try:
             stamp=profile_path.stat().st_mtime_ns
         except OSError:
             stamp=0
-        key=(sha,stamp)
+        _active,entry,_profile=self._active()
+        try:
+            source=Path(entry["source_path"]).stat()
+            source_stamp=(source.st_size,source.st_mtime_ns)
+        except (OSError,KeyError,TypeError,ValueError):
+            source_stamp=None
+        key=(sha,stamp,source_stamp)
         if self._fusion_cache_key != key:
-            recipes=(profile or {}).get("fusion_recipes",[])
-            allowed=bool((profile or {}).get("supported_features",{}).get("fusions"))
-            if not allowed:
-                active, entry, _ = self._active()
-                source=self._alpha_bundle(sha,entry,profile)
-                recipes=source.get("fusions",[])
-            self._fusion_cache=build_fusion_index(recipes if (allowed or recipes) else [])
+            recipes,_alpha=self._combined_fusion_recipes(sha,entry,profile)
+            self._fusion_cache=build_fusion_index(recipes)
             self._fusion_cache_key=key
             self._hand_suggestions_key=None
             self._hand_suggestions=None
@@ -1043,9 +1092,8 @@ class DueltraceWebBridge:
             active,entry,profile=self._active()
             if not profile:
                 return {"total":0,"offset":offset,"rows":[]}
-            verified=bool(profile.get("supported_features",{}).get("fusions"))
-            recipes=(profile.get("fusion_recipes",[]) if verified else
-                     self._alpha_bundle(active.get("sha256"),entry,profile).get("fusions",[]))
+            recipes,alpha_added=self._combined_fusion_recipes(
+                active.get("sha256"),entry,profile)
             if not recipes:
                 return {"total":0,"offset":offset,"rows":[]}
             cards={c["id"]:c for c in self._cards(profile)}
@@ -1084,10 +1132,11 @@ class DueltraceWebBridge:
             total=len(rows)
             return {
                 "total":total,"offset":offset,"rows":rows[offset:offset+limit],
-                "provisional": not verified,
-                "status": ("Fusões extraídas de sete bancos idênticos desta ISO. "
-                           "Pares conflitantes foram omitidos; não verificado em jogo."
-                           if not verified else "Receitas do perfil ativo."),
+                "provisional": alpha_added,
+                "status": ("Fusões da ISO ativa: candidatas de sete bancos "
+                           "idênticos e receitas já cadastradas. Pares "
+                           "conflitantes omitidos, sem prova individual no jogo."
+                           if alpha_added else "Receitas do perfil ativo."),
             }
 
     def compare_mod_cards(self, source_sha, target_sha, query="",
