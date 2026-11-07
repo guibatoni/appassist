@@ -1235,8 +1235,15 @@ class DueltraceWebBridge:
                     continue
                 names=[cards.get(cid,{}).get("name") or f"Carta #{cid}"
                        for cid in (a,b,result)]
-                if q and not any(q in text.casefold() or q==str(cid)
-                                 for text,cid in zip(names,(a,b,result))):
+                texts=list(names)
+                for cid in (a,b,result):
+                    card=cards.get(cid,{})
+                    for field in ("effect","description"):
+                        value=card.get(field)
+                        if isinstance(value,str):
+                            texts.append(value)
+                if q and not (any(q in text.casefold() for text in texts)
+                              or q in (str(a),str(b),str(result))):
                     continue
                 rows.append({
                     "a":a,"b":b,"result":result,
