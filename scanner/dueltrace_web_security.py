@@ -265,6 +265,14 @@ class ProtectedDesktopApi:
         return self._bridge.record_duel_result(
             opponent_id,observed_rank,card_id,observed_points,victory_type,capture_id)
 
+    def rename_mod(self, credential, sha, display_name):
+        self._authorize(credential)
+        return self._bridge.rename_mod(sha,display_name)
+
+    def remove_mod(self, credential, sha):
+        self._authorize(credential)
+        return self._bridge.remove_mod(sha)
+
     def activate_mod(self, credential, sha, acknowledge=False):
         self._authorize(credential)
         return self._bridge.activate_mod(sha,acknowledge)
