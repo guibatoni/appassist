@@ -88,6 +88,60 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(snapshot["cards"][1]["effectSource"],"ROM-offset-auditado")
         self.assertNotIn("source_path",str(snapshot))
 
+    def test_forensic_private_upload_requires_explicit_action_and_current_sha(self):
+        protected=ProtectedDesktopApi(self.bridge,"x"*64)
+        image=self.home/"rom.iso"
+        image.write_bytes(b"synthetic local ROM file")
+        report={"schema":1,"romFingerprint":self.sha[:12],
+                "exactSha256Matched":True,"fileSizeBytes":image.stat().st_size}
+        target=self.home/"iso_forensics"/(self.sha+".json")
+        atomic_json(target,report)
+        sync=Mock()
+        sync.upload_forensic.return_value={
+            "synced":True,"fingerprint":self.sha[:12],
+            "kind":"iso_forensic_audit"}
+        self.bridge._private_evidence_sync=sync
+        with self.assertRaises(PermissionError):
+            protected.upload_iso_forensic("not-authorized",self.sha)
+        sync.upload_forensic.assert_not_called()
+        with patch("scanner_multiiso.sha256",return_value="b"*64):
+            with self.assertRaises(ValueError):
+                protected.upload_iso_forensic("x"*64,self.sha)
+        sync.upload_forensic.assert_not_called()
+        with patch("scanner_multiiso.sha256",return_value=self.sha):
+            result=protected.upload_iso_forensic("x"*64,self.sha)
+        self.assertTrue(result["synced"])
+        sync.upload_forensic.assert_called_once_with(report)
+
+    def test_iso_forensic_lab_requires_auth_and_persists_only_safe_summary(self):
+        import json
+        protected=ProtectedDesktopApi(self.bridge,"x"*64)
+        with self.assertRaises(PermissionError):
+            protected.audit_mod_iso("not-authorized", self.sha)
+        with self.assertRaises(ValueError):
+            protected.audit_mod_iso("x"*64,"../secret")
+        iso=self.home/"rom.iso"
+        iso.write_bytes(b"test fake ISO content")
+        sample={
+            "schema":1,"subject":"DUELTRACE ISO Forensic Lab",
+            "romFingerprint":self.sha[:12],
+            "exactSha256Matched":True,
+            "cards":{"count":722},
+            "opponents":{"count":39,"inGameIdentityVerified":False},
+            "mayActivateDrops":False,"networkTransmission":False,
+        }
+        with patch("dueltrace_iso_forensic_lab.inspect_iso",
+                   return_value=sample) as probe:
+            response=protected.audit_mod_iso("x"*64,self.sha)
+            probe.assert_called_once_with(iso.resolve(),self.sha)
+        self.assertEqual(response["cards"]["count"],722)
+        saved=self.home/"iso_forensics"/(self.sha+".json")
+        self.assertTrue(saved.is_file())
+        self.assertEqual(json.loads(saved.read_text())["cards"]["count"],722)
+        self.assertFalse((self.home/"live_diagnostics"/"private_sync_settings.json").exists())
+        self.assertFalse(response["networkTransmission"])
+        self.assertNotIn(str(iso),str(response))
+
     def test_compare_registered_isos_is_local_authorized_and_read_only(self):
         protected = ProtectedDesktopApi(self.bridge, "x"*64)
         with self.assertRaises(PermissionError):

@@ -11,7 +11,7 @@ import {DropsPage} from "./drops-page"
 import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison, IsoForensicAudit} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -978,6 +978,8 @@ function Mods({mods,sha,onRefresh,configured}:{
   const [busy,setBusy]=useState(false)
   const [message,setMessage]=useState<string|null>(null)
   const [comparison,setComparison]=useState<IsoLayoutComparison|null>(null)
+  const [forensicAudit,setForensicAudit]=useState<IsoForensicAudit|null>(null)
+  const [forensicSha,setForensicSha]=useState<string|null>(null)
 
   // A análise detalhada permanece disponível no motor, não nesta tela pública.
   const run=async(action:()=>Promise<unknown>,success:string)=>{
@@ -1000,6 +1002,38 @@ function Mods({mods,sha,onRefresh,configured}:{
       setMessage(err instanceof Error ? err.message :
         "Não foi possível copiar o diagnóstico do mod.")
     } finally {setBusy(false)}
+  }
+  const sendForensic=async()=>{
+    const api=desktopApi()
+    if(!api||busy||!forensicSha)return
+    if(!window.confirm("Enviar SOMENTE o resumo forense sanitizado para seu repositório GitHub privado? Não envia ISO, arte, nomes de cartas nem receitas."))return
+    setBusy(true);setMessage("Verificando destino privado antes do envio...")
+    try{
+      const connection=await api.get_private_evidence_sync_status()
+      if(!connection.enabled){
+        setMessage("Ative a sincronização privada no Live Diagnostics para enviar esse relatório.")
+        return
+      }
+      const result=await api.upload_iso_forensic(forensicSha)
+      setMessage(result.synced
+        ?"Auditoria enviada ao GitHub privado. Agora posso consultá-la nesta conversa."
+        :"O envio não foi confirmado.")
+    }catch(err){
+      setMessage(err instanceof Error?err.message:"Falha ao enviar a auditoria privada.")
+    }finally{setBusy(false)}
+  }
+  const auditIso=async(mod:LocalMod)=>{
+    const api=desktopApi()
+    if(!api||busy)return
+    setBusy(true);setMessage("Laboratório forense: verificando SHA-256, tabelas e bancos da ISO...")
+    setForensicAudit(null);setForensicSha(null)
+    try{
+      const report=await api.audit_mod_iso(mod.sha256)
+      setForensicAudit(report);setForensicSha(mod.sha256)
+      setMessage("Leitura forense concluída. Dados salvos localmente; nada foi transmitido.")
+    }catch(err){
+      setMessage(err instanceof Error?err.message:"Não foi possível auditar esta ISO.")
+    }finally{setBusy(false)}
   }
   const compareIso=async(mod:LocalMod)=>{
     const api=desktopApi()
@@ -1051,6 +1085,50 @@ function Mods({mods,sha,onRefresh,configured}:{
           <RefreshCcw className="size-4"/> Atualizar lista</button>
       </div>
       {message&&<p className="mt-3 text-sm text-gold" role="status">{message}</p>}
+      {forensicAudit&&<div className="mt-3 rounded-lg border border-line/70 bg-background/50 p-3">
+        <p className="text-sm font-semibold text-primary">
+          Laboratório Forense — ISO {forensicAudit.romFingerprint}
+        </p>
+        <p className="mt-1 text-xs text-muted">
+          SHA-256 conferido. {forensicAudit.disc.indexedFiles} arquivos indexados.
+          Nenhuma associação de adversários, drops ou RANK foi validada em jogo.
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted sm:grid-cols-3">
+          <p>Cartas: <strong>{forensicAudit.cards.count}/722</strong></p>
+          <p>Adversários: <strong>{forensicAudit.opponents.count}/39</strong></p>
+          <p>Artes: <strong>{forensicAudit.images.large}/722</strong></p>
+          <p>Miniaturas: <strong>{forensicAudit.images.thumbnails}/722</strong></p>
+          <p>Matrizes: <strong>{forensicAudit.drops.validatedStructuralMatrices}/117</strong></p>
+          <p>Fusões: <strong>{forensicAudit.fusions.recipes.toLocaleString("pt-BR")}</strong></p>
+          <p>Bancos espelhados: <strong>{forensicAudit.fusions.matchingBanks}/7</strong></p>
+          <p>Pares conflitantes: <strong>{forensicAudit.fusions.conflictingPairs}</strong></p>
+          <p>Janelas possíveis: <strong>{forensicAudit.weightFamily.distinct39Windows}</strong></p>
+        </div>
+        {forensicAudit.weightFamily.ambiguous&&<p className="mt-2 text-xs text-gold">
+          Mais de uma janela de 39 blocos: não atribuir drops a adversários.
+        </p>}
+        {forensicAudit.fusions.conflictingPairs>0&&<p className="mt-2 text-xs text-gold">
+          Fusões com resultados contraditórios preservadas em quarentena.
+        </p>}
+        <p className="mt-2 text-xs text-muted">
+          IDs em RAM, grupos RANK e fusões em duelo ainda exigem validação independente.
+          Relatório local salvo em área separada dos perfis de jogo.
+        </p>
+        <button type="button" className="btn-ghost mt-3" disabled={busy}
+          onClick={()=>void navigator.clipboard.writeText(JSON.stringify(forensicAudit,null,2))
+            .then(()=>setMessage("Relatório forense copiado para compartilhar nesta conversa."))
+            .catch(()=>setMessage("Não foi possível copiar. Confira a permissão da área de transferência."))}>
+          <ClipboardCopy className="size-4"/> Copiar relatório forense
+        </button>
+        <button type="button" className="btn-ghost mt-3 ml-2" disabled={busy}
+          onClick={()=>void sendForensic()}>
+          <Upload className="size-4"/> Enviar relatório privado
+        </button>
+        <p className="mt-2 text-xs text-muted">
+          O envio ao GitHub é opcional e exige sua confirmação em cada auditoria.
+          Ele não é iniciado automaticamente pelo diagnóstico.
+        </p>
+      </div>}
       {comparison&&<div className="mt-3 rounded-lg border border-line/70 bg-background/50 p-3">
         <p className="text-sm font-semibold text-primary">
           Comparação: referência {comparison.positiveBaselineFingerprint}
@@ -1178,6 +1256,10 @@ function Mods({mods,sha,onRefresh,configured}:{
                   disabled={busy||!desktopApi()} onClick={()=>void compareIso(mod)}>
                   <Layers className="size-4"/> Comparar ISOs
                 </button>}
+                <button type="button" className="btn-ghost flex-1 disabled:opacity-40"
+                  disabled={busy||!desktopApi()} onClick={()=>void auditIso(mod)}>
+                  <Search className="size-4"/> Auditar ISO
+                </button>
               </div>
               {(mod.modFamilyEvidence?.possible39Windows??0)>1&&<WindowEvidenceForm mod={mod}/>}
               {active&&<LiveOpponentPanel/>}
