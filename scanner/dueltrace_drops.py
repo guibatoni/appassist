@@ -185,7 +185,13 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
         if not matches_type(card,card_type):
             continue
         name = card.get("name") or f"Carta #{cid}"
-        if text and text not in name.casefold() and text != str(cid):
+        searchable=[name]
+        for key in ("description_text","effect_text","description","effect"):
+            value=card.get(key)
+            if isinstance(value,str):
+                searchable.append(value)
+        if text and text != str(cid) and not any(
+                text in value.casefold() for value in searchable):
             continue
         offset_repr = (f"0x{source_offset:X}"
                        if type(source_offset) is int and 0 <= source_offset <= 96*1024*1024
