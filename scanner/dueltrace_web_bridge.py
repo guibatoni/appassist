@@ -276,7 +276,7 @@ class DueltraceWebBridge:
         summary = profile_summary(entry, profile)
         return {
             "sha256":entry.get("sha256",""),
-            "name":entry.get("file_name") or summary.get("name") or "Mod local",
+            "name":entry.get("display_name") or entry.get("file_name") or summary.get("name") or "Mod local",
             "level":entry.get("level","desconhecido"),
             "scanParserRevision":entry.get("scan_parser_revision") if
                 type(entry.get("scan_parser_revision")) is int else None,
@@ -435,6 +435,25 @@ class DueltraceWebBridge:
                 "epsxeConfigured":bool(settings.get("epsxe_executable")),
                 "warning":"O DUELTRACE não confirma automaticamente qual ISO o ePSXe abriu.",
             }
+
+    def rename_mod(self, sha, display_name):
+        with self._lock:
+            return self.catalog.rename_display(sha,display_name)
+
+    def remove_mod(self, sha):
+        with self._lock:
+            removed=self.catalog.remove_from_library(sha)
+            # Não deixar RANK/fusões/estado do mod anterior em memória.
+            if removed.get("wasActive"):
+                self._reset_rank_read_state()
+                self._rank_experimental_sha=None
+                self._fusion_cache_key=None
+                self._fusion_cache={}
+                self._alpha_bundle_key=None
+                self._alpha_bundle_cache={}
+                self._hand_suggestions_key=None
+                self._hand_suggestions=None
+            return removed
 
     def _alpha_bundle(self, sha, entry, profile):
         """Source-bound, lazy alpha preview; never persists or activates data.
