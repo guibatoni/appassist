@@ -789,6 +789,17 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.bridge.get_fusions("",0,100000)
 
+    def test_fusion_searches_material_effect_and_description_without_other_mods(self):
+        self.profile["cards"][0]["effect_text"]="Poder da floresta antiga"
+        self.profile["cards"][0]["effect_source"]="SLUS:test"
+        self.profile["cards"][1]["description_text"]="Espírito do relâmpago"
+        self.profile["cards"][5]["description_text"]="Flor lunar secreta"
+        atomic_json(self.profile_path,self.profile)
+        self.assertEqual(self.bridge.get_fusions("floresta antiga",0,20)["total"],1)
+        self.assertEqual(self.bridge.get_fusions("RELÂMPAGO",0,20)["total"],1)
+        self.assertEqual(self.bridge.get_fusions("flor lunar secreta",0,20)["total"],1)
+        self.assertEqual(self.bridge.get_fusions("carta ausente",0,20)["total"],0)
+
     def test_fusions_sort_type_filter_and_page_stay_consistent(self):
         self.profile["cards"][5]["type_label"]="Dragão"
         self.profile["cards"][6]["type_label"]="Mago"
