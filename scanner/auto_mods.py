@@ -234,6 +234,10 @@ class ModCatalog:
             # Usuário aprovou a assinatura; não cancelar aprovação ao mover arquivo.
             if same_rom:
                 entry["approved"] = bool(same_rom[0].get("approved", False))
+                # A reanálise não pode apagar o apelido definido pelo usuário.
+                alias=same_rom[0].get("display_name")
+                if isinstance(alias,str) and alias.strip():
+                    entry["display_name"]=alias
             new_entries = [e for e in old_entries
                            if e.get("source_path") != str(path) and e.get("sha256") != entry["sha256"]]
             new_entries.append(entry)
@@ -258,6 +262,50 @@ class ModCatalog:
                     "features":features,"level":entry["level"],
                     "compatibility_mode":mode})
         return entry
+
+    def rename_display(self, sha256: str, display_name: str) -> dict:
+        """Alteração apenas visual no registro local. Nunca renomeia a ISO."""
+        import re
+        if (type(sha256) is not str or
+                not re.fullmatch(r"[0-9a-f]{64}",sha256)):
+            raise ValueError("Mod inválido.")
+        if (type(display_name) is not str
+                or not 1<=len(display_name.strip())<=72
+                or any(ord(ch)<32 or ord(ch)==127 for ch in display_name)):
+            raise ValueError("Apelido inválido (1–72 caracteres).")
+        alias=" ".join(display_name.strip().split())
+        with self._lock:
+            entries=self.list()
+            entry=next((x for x in entries if x.get("sha256")==sha256),None)
+            if entry is None:
+                raise ValueError("ISO não encontrada na biblioteca.")
+            entry["display_name"]=alias
+            atomic_json(self.registry_file,{"schema":1,"entries":entries})
+            return {"sha256":sha256,"displayName":alias}
+
+    def remove_from_library(self, sha256: str) -> dict:
+        """Esquece a entrada; nunca apaga o arquivo ISO/BIN ou seu perfil.
+
+        O perfil/caches permanecem no diretório do DUELTRACE para
+        recuperação/novo cadastro, mas o mod deixa de ser pesquisável.
+        Se ativo, desativa o perfil; nenhuma ISO substituta é ativada.
+        """
+        import re
+        if (type(sha256) is not str or
+                not re.fullmatch(r"[0-9a-f]{64}",sha256)):
+            raise ValueError("Mod inválido.")
+        with self._lock:
+            entries=self.list()
+            remaining=[x for x in entries if x.get("sha256")!=sha256]
+            if len(remaining)==len(entries):
+                raise ValueError("ISO não encontrada na biblioteca.")
+            atomic_json(self.registry_file,{"schema":1,"entries":remaining})
+            active=load_json(self.active_file,{})
+            was_active=active.get("sha256")==sha256
+            if was_active:
+                atomic_json(self.active_file,{})
+            return {"removed":True,"wasActive":was_active,
+                    "sourceFilePreserved":True}
 
     def activate(self, sha256: str, *, acknowledge_uncertainty: bool = False) -> dict:
         with self._lock:
