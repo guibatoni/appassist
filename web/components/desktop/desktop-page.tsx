@@ -1387,6 +1387,7 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [sort,setSort]=useState<"id"|"atk"|"def"|"type"|"name">("id")
   const [cardType,setCardType]=useState("")
   const [offset,setOffset]=useState(0)
+  const [pageSize,setPageSize]=useState(20)
   const [records,setRecords]=useState<FusionPage|null>(null)
   const [error,setError]=useState<string|null>(null)
   const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
@@ -1394,7 +1395,6 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const types=useMemo(()=>Array.from(new Set(cards.map(c=>c.type||c.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"pt-BR")),[cards])
   useEffect(()=>{setQuery("");setSort("id");setCardType("");setOffset(0);setRecords(null)},[sha])
   useEffect(()=>{setPreview(null)},[sha,query,offset,sort,cardType])
-  const pageSize=12
   useEffect(()=>{
     let mounted=true
     setRecords(null)
@@ -1407,14 +1407,14 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       }catch(e){if(mounted)setError(e instanceof Error?e.message:"Falha ao carregar fusões")}
     },220)
     return()=>{mounted=false;window.clearTimeout(id)}
-  },[sha,query,offset,sort,cardType])
+  },[sha,query,offset,sort,cardType,pageSize])
   return <>
     <Heading title="Biblioteca de Fusões" subtitle="Encontre combinações e resultados de fusão"/>
     <section className="panel rounded-xl p-4">
       <div className="flex flex-wrap items-center gap-3">
         <label className="field flex min-w-56 flex-1 items-center gap-2 px-3 py-2">
           <Search className="size-4 text-primary"/>
-          <input className="w-full bg-transparent outline-none" placeholder="Pesquisar material, resultado ou ID"
+          <input className="w-full bg-transparent outline-none" placeholder="Buscar cartas, efeitos ou descrições"
             value={query} onChange={e=>{setQuery(e.target.value);setOffset(0)}}/>
         </label>
         <label className="text-xs text-muted">Ordenar resultado
@@ -1430,6 +1430,12 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             onChange={e=>{setCardType(e.target.value);setOffset(0)}}>
             <option value="">Todos os tipos</option>
             {types.map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-muted">Por página
+          <select className="field px-2 py-2" aria-label="Fusões por página"
+            value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setOffset(0)}}>
+            {[10,20,30,40,50].map(n=><option key={n} value={n}>{n}</option>)}
           </select>
         </label>
         <span className="text-xs text-muted">{records?.total??0} receitas</span>
