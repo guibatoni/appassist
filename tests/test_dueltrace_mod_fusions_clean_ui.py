@@ -40,7 +40,7 @@ class PublicUiContractTests(unittest.TestCase):
                 self.assertNotIn(forbidden,self.mods)
         # Os métodos de análise continuam no backend e não são expostos como UI.
         self.assertNotIn(">{mod.sha256",self.mods)
-        self.assertIn("api.scan_sources(mod.sha256)",self.mods)
+        self.assertIn("desktopApi()!.scan_sources(mod.sha256)",self.mods)
         self.assertIn('mod.requiresReview',self.mods)
         self.assertNotIn("CardMatchPanel mods=",self.mods)
 
