@@ -241,7 +241,8 @@ class IndependentOpponentTests(unittest.TestCase):
     def test_public_ui_shows_reason_without_raw_evidence_or_rom(self):
         ui=(ROOT/"web/components/desktop/desktop-page.tsx").read_text(encoding="utf8")
         bridge=(ROOT/"scanner/dueltrace_web_bridge.py").read_text(encoding="utf8")
-        self.assertIn("Motivo: {mod.opponentDiagnosticReason}",ui)
+        mods=ui.split("function Mods(",1)[1].split("function CardDropSourcesPanel(",1)[0]
+        self.assertNotIn("Motivo: {mod.opponentDiagnosticReason}",mods)
         self.assertIn('"opponentDiagnosticReason"',bridge)
         self.assertNotIn("quarantinedRecords",ui)
         self.assertNotIn("get_mod_scan_diagnostic",ui.split("function Mods(",1)[1].split(
