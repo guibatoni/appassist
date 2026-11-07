@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
+import {RankScoreDisplay} from "./rank-score-display"
 import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
@@ -102,12 +103,8 @@ function RankPanel({sha}:{sha:string|null}) {
       </span>
     </div>
     <div className="mt-4 rounded-lg border border-primary/20 bg-background/60 px-4 py-5 text-center">
-      <p className="font-display text-4xl font-bold tabular-nums text-primary">
-        {ready?rank.score:"—"} <span className="text-sm font-normal text-muted">pts</span>
-      </p>
-      <p className="mt-2 font-display text-xl font-bold text-gold">
-        {ready?rank.category:"—"}
-      </p>
+      <RankScoreDisplay score={ready?rank.score:null}
+        category={ready?rank.category:null}/>
     </div>
     <button type="button" className="btn-ghost mt-4 w-full justify-center disabled:opacity-40"
       disabled={!sha||calibrating||!desktopApi()} onClick={()=>void calibrate()}>
