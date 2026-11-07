@@ -71,6 +71,38 @@ class BridgeTests(unittest.TestCase):
             "ready":True,"status":"Mão de teste","hand_ids":[1,2,3,4,5]})
         self.bridge=DueltraceWebBridge(self.catalog,ram_reader=self.reader)
 
+    def test_alpha_fusions_extend_same_iso_without_overriding_curated_pairs(self):
+        # Curated 1+2=7 and 7+3=8 survive. Unknown 2+3=8 is additive.
+        # The contradictory 1+2=8 must NOT enter suggestions.
+        candidates={"fusions":[
+            {"a":1,"b":2,"result":8,"validation":"alpha_seven_matching_iso_banks"},
+            {"a":1,"b":2,"result":7,"validation":"alpha_seven_matching_iso_banks"},
+            {"a":2,"b":3,"result":8,"validation":"alpha_seven_matching_iso_banks"},
+        ]}
+        with patch.object(self.bridge,"_alpha_bundle",return_value=candidates):
+            recipes,provisional=self.bridge._combined_fusion_recipes(
+                self.sha,self.entry,self.profile)
+            self.assertTrue(provisional)
+            self.assertEqual(len(recipes),3)
+            self.assertNotIn((1,2,8),[(r["a"],r["b"],r["result"]) for r in recipes])
+            data=self.bridge.get_fusions("",0,50)
+        self.assertTrue(data["provisional"])
+        self.assertEqual(data["total"],3)
+        self.assertTrue(all("nameResult" in r for r in data["rows"]))
+
+    def test_hide_fusion_preference_is_persisted_without_changing_emulator_settings(self):
+        self.assertTrue(self.bridge.get_alpha_preferences()["fusionTipsVisible"])
+        self.assertFalse(self.bridge.set_alpha_preferences(False)["fusionTipsVisible"])
+        self.assertFalse(self.bridge.get_alpha_preferences()["fusionTipsVisible"])
+        self.assertTrue(self.bridge.set_alpha_preferences(True)["fusionTipsVisible"])
+        for invalid in (None,0,1,"false",{},[]):
+            with self.subTest(invalid=invalid),self.assertRaises(ValueError):
+                self.bridge.set_alpha_preferences(invalid)
+        protected=ProtectedDesktopApi(self.bridge,"x"*64)
+        with self.assertRaises(PermissionError):
+            protected.set_alpha_preferences("unauthorized",False)
+        self.assertTrue(protected.get_alpha_preferences("x"*64)["fusionTipsVisible"])
+
     def test_state_uses_local_profile_and_never_fabricates_effect(self):
         snapshot=self.bridge.get_state()
         self.assertEqual(snapshot["activeName"],"Local Test.iso")
