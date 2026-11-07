@@ -208,15 +208,46 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             {hand.pairs.slice(0,showAll?undefined:6).map((item,i)=>
               <div key={i} className="rounded-lg border border-line/60 bg-background/40 p-3">
                 <p className="text-xs text-primary">Posições {item.slot_a} + {item.slot_b}</p>
-                <p className="mt-1 font-semibold text-white">{item.result_name} #{item.result}</p>
-                <MonsterStats card={cardsById.get(item.result)??null} className="mt-1"/>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {([
+                    {key:"a",name:"Material",card:hand.hand[item.slot_a-1]??cardsById.get(item.a)??null},
+                    {key:"b",name:"Material",card:hand.hand[item.slot_b-1]??cardsById.get(item.b)??null},
+                    {key:"result",name:"Resultado",card:cardsById.get(item.result)??null},
+                  ]).map(part=><div key={part.key} className="min-w-0 text-center">
+                    <p className="mb-1 text-[10px] uppercase text-muted">{part.name}</p>
+                    <div className="mx-auto w-16"><CardThumbnail card={part.card} sha={sha}/></div>
+                    <p className="mt-1 line-clamp-2 text-xs font-semibold text-white">
+                      {part.card?.name??(part.key==="result"?item.result_name:"Carta")}
+                    </p>
+                    <p className="text-[10px] text-gold">
+                      #{part.card?.id??(part.key==="result"?item.result:"—")}
+                    </p>
+                  </div>)}
+                </div>
+                <MonsterStats card={cardsById.get(item.result)??null} className="mt-2"/>
               </div>)}
           </div>:<div className="grid gap-2 md:grid-cols-2">
             {hand.chains.slice(0,showAll?undefined:6).map((item,i)=>
               <div key={i} className="rounded-lg border border-gold/20 bg-background/40 p-3">
-                <p className="font-semibold text-gold">{item.result_name} #{item.result}</p>
-                <MonsterStats card={cardsById.get(item.result)??null} className="mt-1"/>
-                <p className="mt-1 text-xs text-primary">Ordem: {item.slot_order.join(" → ")}</p>
+                <p className="text-xs text-primary">Ordem: {item.slot_order.join(" → ")}</p>
+                <div className="mt-2 flex max-w-full flex-wrap justify-center gap-2">
+                  {item.slot_order.map((slot,j)=>{
+                    const card=hand.hand[slot-1]??null
+                    return <div key={j} className="w-16 text-center">
+                      <div><CardThumbnail card={card} sha={sha}/></div>
+                      <p className="mt-1 line-clamp-2 text-[10px] text-white">
+                        {card?.name??`Carta ${slot}`}
+                      </p>
+                    </div>
+                  })}
+                  <div className="w-16 text-center">
+                    <div><CardThumbnail card={cardsById.get(item.result)??null} sha={sha}/></div>
+                    <p className="mt-1 line-clamp-2 text-[10px] font-semibold text-gold">
+                      {item.result_name}
+                    </p>
+                  </div>
+                </div>
+                <MonsterStats card={cardsById.get(item.result)??null} className="mt-2"/>
                 <ol className="mt-2 space-y-1 text-xs text-muted">{item.steps.map((step,j)=>
                   <li key={j}>{j+1}. #{step.material_a} + #{step.material_b} = #{step.result}</li>)}
                 </ol>
@@ -1341,11 +1372,11 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
             {(chosen.guardianStar1!==null&&chosen.guardianStar1!==undefined||chosen.guardianStar2!==null&&chosen.guardianStar2!==undefined)&&
               <p className="text-sm text-muted">Estrelas Guardiãs (IDs extraídos): {chosen.guardianStar1??"—"} / {chosen.guardianStar2??"—"}</p>}
             <div className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3">
-              <h3 className="mb-1 font-semibold text-gold">Descrição extraída do SLUS</h3>
+              <h3 className="mb-1 font-semibold text-gold">Descrição da carta</h3>
               <p className="whitespace-pre-line text-sm text-foreground/85">{chosen.description??"Nenhuma descrição vinculada com segurança ao ID desta carta."}</p>
             </div>
             <div className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3">
-              <h3 className="mb-1 font-semibold text-primary">Texto indicativo de efeito</h3>
+              <h3 className="mb-1 font-semibold text-primary">Efeito</h3>
               <p className="whitespace-pre-line text-sm text-foreground/85">{chosen.effect??"Nenhum efeito individual foi identificado com procedência."}</p>
               {chosen.effect&&<p className="mt-2 text-xs text-gold">
                 Mecânica no duelo ainda não confirmada — descrição não é prova de execução.
