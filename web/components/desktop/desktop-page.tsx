@@ -4,7 +4,7 @@ import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardCopy, FilePlus2, Gamepad2,
-  GitMerge, Layers, Play, RefreshCcw, Search, Shield, Swords, Upload,
+  GitMerge, Layers, Pencil, Play, RefreshCcw, Search, Shield, Swords, Trash2, Upload,
 } from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
@@ -1074,354 +1074,167 @@ function WindowEvidenceForm({mod}:{mod:LocalMod}) {
 function Mods({mods,sha,onRefresh,configured}:{
   mods:LocalMod[];sha:string|null;onRefresh:()=>Promise<void>;configured:boolean
 }) {
+  const [search,setSearch]=useState("")
   const [expandedSha,setExpandedSha]=useState<string|null>(null)
-  const [alphaResults,setAlphaResults]=useState<Record<string,AlphaDiscovery>>({})
-  const [alphaBusy,setAlphaBusy]=useState<string|null>(null)
-  useEffect(()=>{
-    if(!expandedSha||alphaResults[expandedSha])return
-    const api=desktopApi()
-    if(!api)return
-    let cancelled=false
-    const key=expandedSha
-    setAlphaBusy(key)
-    void api.get_alpha_discovery(key)
-      .then(result=>{
-        if(!cancelled)setAlphaResults(v=>({...v,[key]:result}))
-      })
-      .catch(()=>{
-        if(!cancelled)setAlphaResults(v=>({...v,[key]:{
-          available:false,status:"audit_unavailable",dropCandidates:0,
-          fusionCandidates:0,opponentCount:0,
-          candidateMode:"unavailable",verifiedInGame:false,
-        }}))
-      })
-      .finally(()=>{if(!cancelled)setAlphaBusy(v=>v===key?null:v)})
-    return ()=>{cancelled=true}
-  },[expandedSha,alphaResults])
+  const [editingSha,setEditingSha]=useState<string|null>(null)
+  const [nickname,setNickname]=useState("")
   const [busy,setBusy]=useState(false)
   const [message,setMessage]=useState<string|null>(null)
-  const [comparison,setComparison]=useState<IsoLayoutComparison|null>(null)
-  const [forensicAudit,setForensicAudit]=useState<IsoForensicAudit|null>(null)
-  const [forensicSha,setForensicSha]=useState<string|null>(null)
+  const [alphaResults,setAlphaResults]=useState<Record<string,AlphaDiscovery>>({})
+  const [alphaLoading,setAlphaLoading]=useState<string|null>(null)
 
-  // A análise detalhada permanece disponível no motor, não nesta tela pública.
-  const run=async(action:()=>Promise<unknown>,success:string)=>{
-    setBusy(true);setMessage(null)
-    try{
-      await action()
-      await onRefresh()
-      setMessage(success)
-    }catch{
-      setMessage("Não foi possível concluir a operação. Confira o arquivo e tente novamente.")
-    }finally{setBusy(false)}
-  }
-  const copyDiagnostics=async(mod:LocalMod)=>{
-    setBusy(true);setMessage(null)
-    try {
-      const windows=await copyOpponentReport(mod)
-      setMessage("Diagnóstico técnico copiado ("+windows+
-        " janelas, somente contagens). Cole o texto na conversa para análise.")
-    } catch(err) {
-      setMessage(err instanceof Error ? err.message :
-        "Não foi possível copiar o diagnóstico do mod.")
-    } finally {setBusy(false)}
-  }
-  const sendForensic=async()=>{
+  useEffect(()=>{
     const api=desktopApi()
-    if(!api||busy||!forensicSha)return
-    if(!window.confirm("Enviar SOMENTE o resumo forense sanitizado para seu repositório GitHub privado? Não envia ISO, arte, nomes de cartas nem receitas."))return
-    setBusy(true);setMessage("Verificando destino privado antes do envio...")
-    try{
-      const connection=await api.get_private_evidence_sync_status()
-      if(!connection.enabled){
-        setMessage("Ative a sincronização privada no Live Diagnostics para enviar esse relatório.")
-        return
-      }
-      const result=await api.upload_iso_forensic(forensicSha)
-      setMessage(result.synced
-        ?"Auditoria enviada ao GitHub privado. Agora posso consultá-la nesta conversa."
-        :"O envio não foi confirmado.")
-    }catch(err){
-      setMessage(err instanceof Error?err.message:"Falha ao enviar a auditoria privada.")
-    }finally{setBusy(false)}
-  }
-  const auditIso=async(mod:LocalMod)=>{
-    const api=desktopApi()
-    if(!api||busy)return
-    setBusy(true);setMessage("Laboratório forense: verificando SHA-256, tabelas e bancos da ISO...")
-    setForensicAudit(null);setForensicSha(null)
-    try{
-      const report=await api.audit_mod_iso(mod.sha256)
-      setForensicAudit(report);setForensicSha(mod.sha256)
-      setMessage("Leitura forense concluída. Dados salvos localmente; nada foi transmitido.")
-    }catch(err){
-      setMessage(err instanceof Error?err.message:"Não foi possível auditar esta ISO.")
-    }finally{setBusy(false)}
-  }
-  const compareIso=async(mod:LocalMod)=>{
-    const api=desktopApi()
-    if(!api||busy)return
+    if(!api||!expandedSha||alphaResults[expandedSha])return
+    let mounted=true
+    const key=expandedSha
+    setAlphaLoading(key)
+    void api.get_alpha_discovery(key)
+      .then(data=>{if(mounted)setAlphaResults(v=>({...v,[key]:data}))})
+      .catch(()=>{})
+      .finally(()=>{if(mounted)setAlphaLoading(v=>v===key?null:v)})
+    return()=>{mounted=false}
+  },[expandedSha,alphaResults])
+
+  const perform=async(task:()=>Promise<unknown>,notice:string)=>{
     setBusy(true);setMessage(null)
-    try{
-      const result=await api.compare_mod_layouts(mod.sha256)
-      setComparison(result)
-      setMessage(result.comparedProfiles>0
-        ?"Comparação estrutural concluída. Dados continuam provisórios."
-        :"Nenhuma outra ISO com relatório comparável. Atualize dados dos demais mods.")
-    }catch(err){
-      setMessage(err instanceof Error?err.message:"Não foi possível comparar as ISOs.")
-    }finally{setBusy(false)}
+    try{await task();await onRefresh();setMessage(notice)}
+    catch(e){setMessage(e instanceof Error?e.message:"Não foi possível concluir a operação.")}
+    finally{setBusy(false)}
   }
+
   const rescan=async(mod:LocalMod)=>{
-    const api=desktopApi()
-    if(!api)return
-    setBusy(true);setMessage(null)
-    try{
-      const result=await api.scan_sources(mod.sha256)
-      await onRefresh()
+    await perform(async()=>{
+      await desktopApi()!.scan_sources(mod.sha256)
       setAlphaResults(v=>{
         const next={...v};delete next[mod.sha256];return next
       })
-      setMessage((result.cardCount??0)>0
-        ?`${result.cardCount} cartas extraídas; ${result.opponentCount??0} adversários disponíveis.`
-          +(result.opponentCount===0&&result.opponentDiagnosticReason
-            ?" Motivo: "+result.opponentDiagnosticReason:"")
-        :(result.candidateCardCount??0)>0
-          ?`${result.candidateCardCount} cartas candidatas encontradas, aguardando validação.`
-          :"Análise concluída, mas as cartas continuam não identificadas. O scanner preservou as evidências para investigação.")
-    }catch{
-      setMessage("Não foi possível atualizar este mod. Verifique a ISO e tente novamente.")
-    }finally{setBusy(false)}
+    },"Informações atualizadas.")
   }
+
+  const saveNickname=async(mod:LocalMod)=>{
+    if(!nickname.trim()){setMessage("Informe um apelido para este mod.");return}
+    await perform(()=>desktopApi()!.rename_mod(mod.sha256,nickname.trim()),
+      "Apelido salvo. O nome do arquivo original permanece igual.")
+    setEditingSha(null)
+  }
+
+  const removeMod=async(mod:LocalMod)=>{
+    if(!window.confirm(`Remover "${mod.name}" da biblioteca do DUELTRACE?\n\nA ISO original permanecerá no computador.`))return
+    await perform(()=>desktopApi()!.remove_mod(mod.sha256),
+      "Mod removido da biblioteca. O arquivo original foi preservado.")
+    if(expandedSha===mod.sha256)setExpandedSha(null)
+  }
+
+  const filtered=mods.filter(mod=>
+    (mod.name+" "+mod.sha256).toLocaleLowerCase("pt-BR")
+      .includes(search.trim().toLocaleLowerCase("pt-BR")))
+    .sort((a,b)=>a.name.localeCompare(b.name,"pt-BR"))
+
   return <>
-    <Heading title="Biblioteca de Mods" subtitle="Seus jogos organizados em um só lugar"/>
+    <Heading title="Biblioteca de Mods" subtitle="Gerencie seus jogos e escolha o mod que deseja jogar"/>
     <section className="panel rounded-xl p-4">
       <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn-gold disabled:opacity-40" disabled={busy||!desktopApi()}
-          onClick={()=>void run(()=>desktopApi()!.import_iso(),"Biblioteca atualizada.")}>
-          <FilePlus2 className="size-4"/> Adicionar mod</button>
-        <button type="button" className="btn-ghost disabled:opacity-40" disabled={busy||!desktopApi()}
-          onClick={()=>void run(()=>desktopApi()!.configure_epsxe(),"Emulador configurado.")}>
-          <Gamepad2 className="size-4"/> {configured?"Alterar emulador":"Configurar ePSXe"}</button>
-        <button type="button" className="btn-ghost disabled:opacity-40" disabled={busy||!configured||!sha||!desktopApi()}
-          onClick={()=>void run(()=>desktopApi()!.start_game(),"Jogo iniciado.")}>
-          <Play className="size-4"/> Jogar</button>
-        <button type="button" className="btn-ghost disabled:opacity-40" disabled={busy||!desktopApi()}
-          onClick={()=>void onRefresh()}>
-          <RefreshCcw className="size-4"/> Atualizar lista</button>
+        <button type="button" className="btn-gold" disabled={busy||!desktopApi()}
+          onClick={()=>void perform(()=>desktopApi()!.import_iso(),"Mod adicionado à biblioteca.")}>
+          <FilePlus2 className="size-4"/> Adicionar mod
+        </button>
+        <button type="button" className="btn-ghost" disabled={busy||!desktopApi()}
+          onClick={()=>void perform(()=>desktopApi()!.configure_epsxe(),"Emulador configurado.")}>
+          <Gamepad2 className="size-4"/>{configured?"Alterar emulador":"Configurar emulador"}
+        </button>
+        <button type="button" className="btn-ghost" disabled={busy||!configured||!sha||!desktopApi()}
+          onClick={()=>void perform(()=>desktopApi()!.start_game(),"Jogo iniciado.")}>
+          <Play className="size-4"/> Jogar
+        </button>
+        <button type="button" className="btn-ghost" disabled={busy}
+          onClick={()=>void onRefresh()}><RefreshCcw className="size-4"/> Atualizar lista</button>
       </div>
-      {message&&<p className="mt-3 text-sm text-gold" role="status">{message}</p>}
-      {forensicAudit&&<div className="mt-3 rounded-lg border border-line/70 bg-background/50 p-3">
-        <p className="text-sm font-semibold text-primary">
-          Laboratório Forense — ISO {forensicAudit.romFingerprint}
-        </p>
-        <p className="mt-1 text-xs text-muted">
-          SHA-256 conferido. {forensicAudit.disc.indexedFiles} arquivos indexados.
-          Nenhuma associação de adversários, drops ou RANK foi validada em jogo.
-        </p>
-        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted sm:grid-cols-3">
-          <p>Cartas: <strong>{forensicAudit.cards.count}/722</strong></p>
-          <p>Adversários: <strong>{forensicAudit.opponents.count}/39</strong></p>
-          <p>Artes: <strong>{forensicAudit.images.large}/722</strong></p>
-          <p>Miniaturas: <strong>{forensicAudit.images.thumbnails}/722</strong></p>
-          <p>Matrizes: <strong>{forensicAudit.drops.validatedStructuralMatrices}/117</strong></p>
-          <p>Fusões: <strong>{forensicAudit.fusions.recipes.toLocaleString("pt-BR")}</strong></p>
-          <p>Bancos espelhados: <strong>{forensicAudit.fusions.matchingBanks}/7</strong></p>
-          <p>Pares conflitantes: <strong>{forensicAudit.fusions.conflictingPairs}</strong></p>
-          <p>Janelas possíveis: <strong>{forensicAudit.weightFamily.distinct39Windows}</strong></p>
-        </div>
-        {forensicAudit.weightFamily.ambiguous&&<p className="mt-2 text-xs text-gold">
-          Mais de uma janela de 39 blocos: não atribuir drops a adversários.
-        </p>}
-        {forensicAudit.fusions.conflictingPairs>0&&<p className="mt-2 text-xs text-gold">
-          Fusões com resultados contraditórios preservadas em quarentena.
-        </p>}
-        <p className="mt-2 text-xs text-muted">
-          IDs em RAM, grupos RANK e fusões em duelo ainda exigem validação independente.
-          Relatório local salvo em área separada dos perfis de jogo.
-        </p>
-        <button type="button" className="btn-ghost mt-3" disabled={busy}
-          onClick={()=>void navigator.clipboard.writeText(JSON.stringify(forensicAudit,null,2))
-            .then(()=>setMessage("Relatório forense copiado para compartilhar nesta conversa."))
-            .catch(()=>setMessage("Não foi possível copiar. Confira a permissão da área de transferência."))}>
-          <ClipboardCopy className="size-4"/> Copiar relatório forense
-        </button>
-        <button type="button" className="btn-ghost mt-3 ml-2" disabled={busy}
-          onClick={()=>void sendForensic()}>
-          <Upload className="size-4"/> Enviar relatório privado
-        </button>
-        <p className="mt-2 text-xs text-muted">
-          O envio ao GitHub é opcional e exige sua confirmação em cada auditoria.
-          Ele não é iniciado automaticamente pelo diagnóstico.
-        </p>
-      </div>}
-      {comparison&&<div className="mt-3 rounded-lg border border-line/70 bg-background/50 p-3">
-        <p className="text-sm font-semibold text-primary">
-          Comparação: referência {comparison.positiveBaselineFingerprint}
-        </p>
-        <p className="mt-1 text-xs text-muted">
-          {comparison.comparedProfiles} mod(s) comparados; {comparison.skippedProfiles} sem análise disponível.
-          As diferenças não comprovam IDs, RANK, drops nem fusões.
-        </p>
-        <div className="mt-2 space-y-1">
-          {comparison.compared.map((entry,i)=><p key={entry.romFingerprint??String(i)}
-            className="text-xs text-muted">
-            <span className="font-semibold text-primary">{mods.find(m=>m.sha256.startsWith(entry.romFingerprint??"-"))?.name??entry.romFingerprint}</span>:
-            {" "}{entry.differences.length} diferenças
-            {entry.differences.length>0&&" ("+Array.from(new Set(entry.differences.map(d=>d.stage))).join(", ")+")"}.
-            Validação em jogo ainda necessária.
-          </p>)}
-        </div>
-        <button type="button" className="btn-ghost mt-3"
-          onClick={()=>void navigator.clipboard.writeText(JSON.stringify(comparison,null,2))
-            .then(()=>setMessage("Resumo estrutural copiado. Cole-o nesta conversa; não inclui ISO nem receitas."))
-            .catch(()=>setMessage("Não foi possível copiar automaticamente. Confira a permissão da área de transferência."))}>
-          <ClipboardCopy className="size-4"/> Copiar resumo estrutural
-        </button>
-      </div>}
-      <div className="mt-4 space-y-2">
-        {mods.map(mod=>{
-          const active=sha===mod.sha256
+      <label className="field mt-4 flex items-center gap-2 px-3 py-2">
+        <Search className="size-4 text-primary"/>
+        <span className="sr-only">Pesquisar mod por nome ou apelido</span>
+        <input className="w-full bg-transparent outline-none" value={search}
+          onChange={e=>setSearch(e.target.value)}
+          placeholder="Buscar mod pelo nome ou apelido"/>
+      </label>
+      {message&&<p className="mt-3 text-sm text-primary" role="status">{message}</p>}
+      <div className="mt-4 space-y-3">
+        {filtered.map(mod=>{
           const open=expandedSha===mod.sha256
+          const active=sha===mod.sha256
           const alpha=alphaResults[mod.sha256]
-          const details=[
-            ["Cartas",mod.cards,false],
-            ["Fusões",Math.max(mod.fusions,alpha?.fusionCandidates??0),
-              (alpha?.fusionCandidates??0)>mod.fusions],
-            ["Oponentes",mod.opponents??0,false],
-            ["Drops",Math.max(mod.dropEntries??0,alpha?.dropCandidates??0),
-              (alpha?.dropCandidates??0)>(mod.dropEntries??0)],
+          const values=[
+            ["Cartas",mod.cards],
+            ["Fusões",Math.max(mod.fusions,alpha?.fusionCandidates??0)],
+            ["Oponentes",mod.opponents??0],
+            ["Drops",Math.max(mod.dropEntries??0,alpha?.dropCandidates??0)],
           ] as const
-          return <article key={mod.sha256} className={
-            "overflow-hidden rounded-xl border bg-panel-strong/70 transition-colors "+
-            (active?"border-primary/65":"border-line/70 hover:border-primary/45")
-          }>
-            <button type="button" aria-expanded={open}
-              aria-controls={"mod-info-"+mod.sha256.slice(0,16)}
-              onClick={()=>setExpandedSha(open?null:mod.sha256)}
-              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-primary/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-line/60 bg-background/80">
-                <Gamepad2 className="size-5 text-primary"/>
+          return <article key={mod.sha256}
+            className={"overflow-hidden rounded-xl border bg-panel-strong/70 "+
+              (active?"border-primary/70":"border-line/70")}>
+            <button type="button" className="flex w-full items-center gap-3 px-4 py-3 text-left"
+              aria-expanded={open} onClick={()=>setExpandedSha(open?null:mod.sha256)}>
+              <Gamepad2 className="size-5 shrink-0 text-primary"/>
+              <span className="min-w-0 flex-1 truncate font-semibold text-white">
+                {mod.name}
+                {active&&<span className="ml-2 text-xs text-success">● Ativo</span>}
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold text-white">{mod.name}</span>
-                <span className="mt-0.5 block text-xs text-muted">
-                  {active&&mod.level==="desconhecido"?"Modo básico":
-                    active&&mod.requiresReview?"Ativo · compatibilidade parcial":
-                    active?"Pronto para jogar":
-                    mod.requiresReview?"Compatibilidade limitada":"Disponível"}
-                </span>
-              </span>
-              {active&&<span className="rounded-md bg-primary/15 px-2 py-1 text-xs font-semibold text-primary">Ativo</span>}
-              <ChevronDown className={"size-5 shrink-0 text-primary transition-transform duration-200 "+(open?"rotate-180":"")}/>
+              <ChevronDown className={"size-5 text-primary transition-transform "+(open?"rotate-180":"")}/>
             </button>
-            {open&&<div id={"mod-info-"+mod.sha256.slice(0,16)}
-              className="border-t border-line/60 px-4 pb-4 pt-3">
+            {open&&<div className="border-t border-line/60 p-4">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {details.map(([label,value,provisional])=>
-                  <div key={label} className="rounded-lg border border-line/40 bg-background/50 px-3 py-2 text-center">
-                    <p className="font-display text-lg font-bold text-primary">{value>0?value.toLocaleString("pt-BR"):"—"}</p>
+                {values.map(([label,value])=>
+                  <div key={label} className="rounded-lg border border-line/50 bg-background/60 px-2 py-3 text-center">
+                    <p className="font-display text-xl font-bold text-primary">
+                      {value>0?value.toLocaleString("pt-BR"):"—"}
+                    </p>
                     <p className="text-xs text-muted">{label}</p>
-                    {provisional&&<p className="text-[10px] text-gold">Candidato Alpha</p>}
                   </div>)}
               </div>
-              {alphaBusy===mod.sha256&&<p className="mt-2 text-xs text-primary" role="status">
-                Inspecionando automaticamente a ISO e seus bancos de fusões e recompensas…
+              {alphaLoading===mod.sha256&&<p className="mt-2 text-xs text-muted" role="status">
+                Carregando informações deste mod…
               </p>}
-              {alpha?.available&&<p className="mt-2 text-xs text-gold" role="status">
-                Dados Alpha da própria ISO: {alpha.dropCandidates.toLocaleString("pt-BR")} entradas
-                de recompensa e {alpha.fusionCandidates.toLocaleString("pt-BR")} receitas candidatas.
-                {alpha.candidateMode==="40_block_retail_mapping_hypothesis"
-                  ?" A escolha de 39 entre 40 blocos segue a convenção original; os nomes/IDs e grupos RANK ainda não foram confirmados em jogo."
-                  :" Associação de adversários e execução das fusões ainda não comprovadas."}
-                {" "}Nenhum RANK ou drop ao vivo foi ativado automaticamente.
-              </p>}
-              {alpha&&!alpha.available&&<p className="mt-2 text-xs text-muted">
-                Análise Alpha: {alpha.status==="audit_unavailable"
-                  ?"não foi possível examinar esta ISO nesta sessão."
-                  :"o extrator não confirmou um layout único; o scanner manteve as evidências para revisão."}
-              </p>}
-              {mod.cardEvidence==="extraidas_estruturalmente"&&<p className="mt-3 text-xs text-gold">
-                Cartas extraídas do próprio executável, mas a identidade dos IDs ainda não foi confirmada em jogo. Oponentes e drops permanecem separados.
-              </p>}
-              {mod.opponentEvidence==="extraidos_estruturalmente"&&<p className="mt-3 text-xs text-gold">
-                {mod.opponents} adversários recuperados do executável. IDs ainda não confirmados em jogo; drops e RANK não são liberados por essa hipótese.
-              </p>}
-              {(mod.modFamilyEvidence?.consecutiveBlocks??0)>0&&<p className="mt-3 text-xs text-muted">
-                <span className="font-semibold text-primary">Detecção MultiMod (scanner rev. {mod.modFamilyEvidence!.scanRevision}):</span>{" "}
-                {mod.modFamilyEvidence!.consecutiveBlocks} blocos consecutivos e{" "}
-                {mod.modFamilyEvidence!.structuralMatrices} matrizes estruturais de pesos.{" "}
-                {mod.modFamilyEvidence!.possible39Windows>1
-                  ?`${mod.modFamilyEvidence!.possible39Windows} possíveis janelas de 39 adversários; a correspondência permanece ambígua.`
-                  :"Associação aos IDs de adversários ainda não verificada."}
-                {" "}Nenhum drop ou grupo RANK foi ativado a partir dessas evidências.
-              </p>}
-              {typeof mod.scanParserRevision==="number"&&mod.scanParserRevision<30&&<p className="mt-3 text-xs text-gold">
-                Este perfil foi analisado antes da revisão 30. Clique em Atualizar dados para identificar famílias de tabelas.
-              </p>}
-              {!mod.opponents&&((mod.opponentCandidateCount??0)>0||Boolean(mod.opponentDiagnosticReason))&&<p className="mt-3 text-xs text-muted">
-                {(mod.opponentCandidateCount??0)>0
-                  ?`Até ${mod.opponentCandidateCount} nomes independentes candidatos detectados (não verificados).`
-                  :"Nenhuma sequência independente de adversários encontrada nesta região."}
-                {mod.opponentDiagnosticReason
-                  ?<span className="mt-1 block text-gold">
-                    Motivo: {mod.opponentDiagnosticReason}
-                  </span>
-                  :<span className="mt-1 block text-gold">
-                    {typeof mod.scanParserRevision==="number"&&mod.scanParserRevision<19
-                      ?"Análise anterior à revisão 19: clique em Atualizar dados para registrar o motivo."
-                      :"Motivo ainda não registrado neste perfil. Clique em Atualizar dados e confira o resultado."}
-                  </span>}
-              </p>}
-              {!mod.cards&&(mod.candidateCards??0)>0&&<p className="mt-3 text-xs text-gold">
-                ${mod.candidateCards?.toLocaleString("pt-BR")} cartas candidatas em análise. Elas ainda não aparecem na Biblioteca para evitar dados incorretos.
-              </p>}
-              {!mod.cards&&!(mod.candidateCards??0)&&<p className="mt-3 text-xs text-muted">
-                O leitor ainda não localizou uma tabela confiável de cartas neste mod. Atualizar dados executa uma nova investigação da ISO.
-              </p>}
-              {!mod.cards&&mod.nameDiscoveryStatus&&<p className="mt-1 text-[11px] text-muted">
-                Resultado dos nomes: {mod.nameDiscoveryStatus}
-              </p>}
-              {mod.requiresReview&&<p className="mt-3 text-xs text-muted">
-                Alguns recursos deste mod podem não estar disponíveis.
-              </p>}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" disabled={busy||!desktopApi()||active}
-                  className="btn-gold flex-1 disabled:opacity-40" onClick={()=>{
-                    const question=mod.level==="desconhecido"
-                      ?"As informações deste mod ainda não foram identificadas. Ativar em modo básico para jogar?"
-                      :"Este mod tem compatibilidade parcial. Ativar os recursos disponíveis?"
-                    const ok=!mod.requiresReview||window.confirm(question)
-                    if(ok)void run(()=>desktopApi()!.activate_mod(mod.sha256,mod.requiresReview),"Mod ativado.")
+              {editingSha===mod.sha256&&
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <input className="field min-w-0 flex-1 px-3 py-2"
+                    autoFocus value={nickname} maxLength={72}
+                    placeholder="Apelido do mod"
+                    onChange={e=>setNickname(e.target.value)}
+                    onKeyDown={e=>{if(e.key==="Enter")void saveNickname(mod);
+                      if(e.key==="Escape")setEditingSha(null)}}/>
+                  <button className="btn-gold" disabled={busy}
+                    onClick={()=>void saveNickname(mod)}>Salvar</button>
+                  <button className="btn-ghost"
+                    onClick={()=>setEditingSha(null)}>Cancelar</button>
+                </div>}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button className="btn-gold flex-1 disabled:opacity-40" type="button"
+                  disabled={busy||!desktopApi()||active} onClick={()=>{
+                    if(mod.requiresReview&&!window.confirm("Ativar este mod com os recursos disponíveis?"))return
+                    void perform(()=>desktopApi()!.activate_mod(mod.sha256,mod.requiresReview),
+                      "Mod ativado.")
                   }}>{active?"Mod ativo":"Ativar mod"}</button>
-                <button type="button" className="btn-ghost flex-1 disabled:opacity-40"
-                  disabled={busy||!desktopApi()} onClick={()=>void rescan(mod)}>
+                <button className="btn-ghost flex-1" type="button" disabled={busy||!desktopApi()}
+                  onClick={()=>void rescan(mod)}>
                   <RefreshCcw className="size-4"/> Atualizar dados
                 </button>
-                {mods.length>1&&<button type="button" className="btn-ghost flex-1 disabled:opacity-40"
-                  disabled={busy||!desktopApi()} onClick={()=>void compareIso(mod)}>
-                  <Layers className="size-4"/> Comparar ISOs
-                </button>}
-                <button type="button" className="btn-ghost flex-1 disabled:opacity-40"
-                  disabled={busy||!desktopApi()} onClick={()=>void auditIso(mod)}>
-                  <Search className="size-4"/> Auditar ISO
+                <button className="btn-ghost" type="button"
+                  aria-label={`Renomear ${mod.name}`} title="Alterar apelido"
+                  disabled={busy||!desktopApi()} onClick={()=>{
+                    setEditingSha(mod.sha256);setNickname(mod.name)
+                  }}><Pencil className="size-4"/></button>
+                <button className="btn-ghost text-danger" type="button"
+                  aria-label={`Remover ${mod.name} da biblioteca`}
+                  title="Remover da biblioteca" disabled={busy||!desktopApi()}
+                  onClick={()=>void removeMod(mod)}>
+                  <Trash2 className="size-4"/>
                 </button>
               </div>
-              {(mod.modFamilyEvidence?.possible39Windows??0)>1&&<WindowEvidenceForm mod={mod}/>}
-              {active&&<LiveOpponentPanel/>}
-              {(mod.modFamilyEvidence?.consecutiveBlocks??0)>=39&&
-                <StructuralMatrixExplorer mod={mod}/>}
-              {!mod.opponents&&((mod.opponentCandidateCount??0)>0||Boolean(mod.opponentDiagnosticReason))&&<button
-                type="button" disabled={busy||!desktopApi()}
-                className="mt-3 inline-flex items-center gap-2 rounded-md border border-line/70 px-3 py-2 text-xs text-muted transition-colors hover:border-primary/60 hover:text-white disabled:opacity-40"
-                onClick={()=>void copyDiagnostics(mod)}>
-                <ClipboardCopy className="size-4"/> Copiar diagnóstico técnico
-              </button>}
             </div>}
           </article>
         })}
+        {!filtered.length&&<Empty>Nenhum mod encontrado.</Empty>}
       </div>
-      {!mods.length&&<Empty>Nenhum mod adicionado. Importe uma ISO/BIN para começar.</Empty>}
     </section>
   </>
 }
