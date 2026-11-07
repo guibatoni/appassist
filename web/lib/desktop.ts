@@ -869,6 +869,8 @@ export interface DesktopAPI {
   record_window_observation(sha: string, slot: number, rank: string, rewardId: number, playedIds: number[]): Promise<WindowObservationResult>
   record_duel_result(opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string, captureId?: string | null): Promise<DuelEvidence>
   activate_mod(sha: string, acknowledge: boolean): Promise<DesktopState>
+  rename_mod(sha:string,displayName:string):Promise<{sha256:string;displayName:string}>
+  remove_mod(sha:string):Promise<{removed:boolean;wasActive:boolean;sourceFilePreserved:boolean}>
   scan_sources(sha: string): Promise<DeepScanResult>
   get_mod_scan_diagnostic(sha: string, withOllama?: boolean): Promise<ModScanDiagnostic>
   compare_mod_layouts(sha: string): Promise<IsoLayoutComparison>
@@ -926,6 +928,8 @@ interface ProtectedNativeAPI {
   record_window_observation(token: string, sha: string, slot: number, rank: string, rewardId: number, playedIds: number[]): Promise<WindowObservationResult>
   record_duel_result(token: string, opponentId: number, observedRank: string, cardId: number, observedPoints?: number | null, victoryType?: string, captureId?: string | null): Promise<DuelEvidence>
   activate_mod(token: string, sha: string, acknowledge: boolean): Promise<DesktopState>
+  rename_mod(token:string,sha:string,displayName:string):Promise<{sha256:string;displayName:string}>
+  remove_mod(token:string,sha:string):Promise<{removed:boolean;wasActive:boolean;sourceFilePreserved:boolean}>
   scan_sources(token: string, sha: string): Promise<DeepScanResult>
   get_mod_scan_diagnostic(token: string, sha: string, withOllama?: boolean): Promise<ModScanDiagnostic>
   compare_mod_layouts(token: string, sha: string): Promise<IsoLayoutComparison>
@@ -1002,6 +1006,8 @@ export function desktopApi(): DesktopAPI | null {
     record_duel_result: (opponentId, observedRank, cardId, observedPoints, victoryType, captureId) =>
       native.record_duel_result(token, opponentId, observedRank, cardId, observedPoints, victoryType, captureId),
     activate_mod: (sha, acknowledge) => native.activate_mod(token, sha, acknowledge),
+    rename_mod: (sha, displayName) => native.rename_mod(token,sha,displayName),
+    remove_mod: (sha) => native.remove_mod(token,sha),
     scan_sources: (sha) => native.scan_sources(token, sha),
     get_mod_scan_diagnostic: (sha,withOllama) => native.get_mod_scan_diagnostic(token,sha,withOllama),
     compare_mod_layouts: (sha) => native.compare_mod_layouts(token,sha),
