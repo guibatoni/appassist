@@ -426,7 +426,8 @@ class DueltraceWebBridge:
             return {
                 "connected":True,"source":"DUELTRACE Windows / dados locais",
                 "activeSha":active.get("sha256") if profile else None,
-                "activeName":entry.get("file_name") if entry and profile else None,
+                "activeName":(entry.get("display_name") or entry.get("file_name"))
+                    if entry and profile else None,
                 "mods":mods,
                 "cards":self._cards(profile),
                 "fusionCount":len(profile.get("fusion_recipes",[]))
