@@ -1261,13 +1261,14 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
   const [search,setSearch]=useState("")
   const [sort,setSort]=useState<"id"|"atk"|"def"|"type"|"name">("id")
   const [cardType,setCardType]=useState("")
+  const [pageSize,setPageSize]=useState(20)
   const [page,setPage]=useState(0)
   const [selectedId,setSelectedId]=useState<number|null>(null)
   const types=useMemo(()=>Array.from(new Set(cards.map(c=>c.type||c.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"pt-BR")),[cards])
   useEffect(()=>{setSearch("");setSort("id");setCardType("");setPage(0);setSelectedId(null)},[sha])
   const visible=useMemo(()=>{
     const q=search.trim().toLocaleLowerCase("pt-BR")
-    const filtered=cards.filter(c=>(!q||(String(c.id)+" "+c.name+" "+c.type+" "+c.category).toLocaleLowerCase("pt-BR").includes(q))
+    const filtered=cards.filter(c=>(!q||(String(c.id)+" "+c.name+" "+c.type+" "+c.category+" "+(c.effect??"")+" "+(c.description??"")).toLocaleLowerCase("pt-BR").includes(q))
       &&(!cardType||(c.type||c.category)===cardType))
     const stat=(a:LocalCard,b:LocalCard,key:"atk"|"def")=>{
       const av=a[key],bv=b[key]
@@ -1282,7 +1283,7 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
     return filtered
   },[cards,search,sort,cardType])
   const chosen=visible.find(c=>c.id===selectedId)??visible[0]??null
-  const pages=Math.max(1,Math.ceil(visible.length/32))
+  const pages=Math.max(1,Math.ceil(visible.length/pageSize))
   return <>
     <Heading title="Biblioteca de Cartas" subtitle="Explore, pesquise e consulte os detalhes das cartas"/>
     <section className="panel rounded-xl p-4">
@@ -1290,7 +1291,7 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
         <label className="field flex min-w-56 flex-1 items-center gap-2 px-3 py-2">
           <Search className="size-4 text-primary"/><span className="sr-only">Buscar carta</span>
           <input className="w-full bg-transparent outline-none" value={search}
-            onChange={e=>{setSearch(e.target.value);setPage(0)}} placeholder="Buscar por nome, tipo ou ID"/>
+            onChange={e=>{setSearch(e.target.value);setPage(0)}} placeholder="Buscar nome, ID, tipo, efeito ou descrição"/>
         </label>
         <select className="field px-3 py-2" value={sort} aria-label="Ordenar" onChange={e=>{setSort(e.target.value as typeof sort);setPage(0)}}>
           <option value="id">ID</option><option value="atk">Maior ataque</option><option value="def">Maior defesa</option><option value="type">Tipo</option><option value="name">Alfabética (A–Z)</option>
@@ -1300,12 +1301,19 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
           <option value="">Todos os tipos</option>
           {types.map(t=><option key={t} value={t}>{t}</option>)}
         </select>
+        <label className="flex items-center gap-2 text-xs text-muted">
+          Cartas por página
+          <select className="field px-3 py-2" aria-label="Cartas por página"
+            value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(0)}}>
+            {[10,20,30,40,50].map(n=><option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
         <span className="self-center text-sm text-muted">{visible.length} / {cards.length} cartas</span>
       </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
         <div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-            {visible.slice(page*32,(page+1)*32).map(card=><button type="button" key={card.id}
+            {visible.slice(page*pageSize,(page+1)*pageSize).map(card=><button type="button" key={card.id}
               className={"rounded-lg border p-2 text-center transition hover:border-primary "+(chosen?.id===card.id?"border-primary bg-primary/10":"border-line/70 bg-panel-strong/60")}
               onClick={()=>setSelectedId(card.id)}>
               <CardThumbnail key={String(sha)+"-"+card.id} card={card} sha={sha}/>
