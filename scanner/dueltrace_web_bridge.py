@@ -37,6 +37,7 @@ from dueltrace_drops import get_drop_catalog, get_card_drop_sources
 from dueltrace_drop_rank_evidence import rank_drop_report
 from dueltrace_rank_system import available_ranks,rank_system,rank_label_for_existing_score
 from dueltrace_mips_duel_trace import inspect_duel_mips_trace, MAX_TRACE_BYTES
+from dueltrace_opponent_mips_trace import inspect_opponent_mips_trace
 from dueltrace_rank_memory_trace import inspect_rank_memory_trace
 from dueltrace_rank_export import build_rank_evidence_report
 from dueltrace_rank_duel_verification import compare_rank_observations
@@ -1167,21 +1168,25 @@ class DueltraceWebBridge:
             table_evidence=inspect_rank_memory_trace(
                 raw_trace,profile.get("rank_points"),
                 profile.get("rank_mips_evidence"))
-            if not report["available"]:
-                return {"cancelled":False,**report}
+            opponent_evidence=inspect_opponent_mips_trace(raw_trace)
+            if not report["available"] and not opponent_evidence["available"]:
+                return {"cancelled":False,**report,
+                        "opponentFieldEvidence":opponent_evidence}
             result={
                 "record_id":str(uuid4()),
                 "duel_id":duel_id,
                 "created_at":datetime.now(timezone.utc).isoformat(),
                 "source":"trace_exportado_do_emulador",
-                "status":report["status"],
+                "status":(report["status"] if report["available"] else
+                          "opponent_field_trace_only"),
                 "executionEvidence":report["executionEvidence"],
                 "executedCandidates":report["executedCandidates"],
                 "instructionSamples":report["instructionSamples"],
                 "distinctPCs":report["distinctPCs"],
                 "rankRoutineConfirmed":False,
-                "traceSha256":report["traceSha256"],
+                "traceSha256":report.get("traceSha256") or hashlib.sha256(raw_trace).hexdigest(),
                 "rankTableEvidence":table_evidence,
+                "opponentFieldEvidence":opponent_evidence,
                 "note":report["note"],
             }
             dest=self._trace_results_path(sha)
