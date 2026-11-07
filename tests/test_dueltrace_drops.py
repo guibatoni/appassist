@@ -88,6 +88,17 @@ class DropCatalogTests(unittest.TestCase):
         p["drops_provenance"]["rom_sha256"]=p["rom_sha256"]
         self.assertTrue(get_drop_catalog(p)["available"])
 
+    def test_text_search_includes_effect_and_description_from_same_iso(self):
+        p=fake_profile()
+        p["cards"][1]["description_text"]="Invoca um dragão de fogo."
+        p["cards"][2]["effect_text"]="Concede proteção mágica."
+        self.assertEqual(get_drop_catalog(p,query="dragão de fogo")["total"],39)
+        self.assertEqual(get_drop_catalog(p,query="PROTEÇÃO MÁGICA")["total"],39)
+        self.assertEqual(get_drop_catalog(p,query="feitiço desconhecido")["total"],0)
+        self.assertEqual(get_drop_catalog(p,query="Carta 3")["total"],39)
+        self.assertEqual(len(get_drop_catalog(p,query="dragão",limit=10)["rows"]),10)
+        self.assertEqual(len(get_drop_catalog(p,query="dragão",offset=30,limit=10)["rows"]),9)
+
     def test_complete_verified_catalogue_is_required_even_for_unreferenced_cards(self):
         p=fake_profile()
         self.assertTrue(get_drop_catalog(p)["available"])  # Legacy complete profile, no new provenance field.
