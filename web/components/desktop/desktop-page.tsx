@@ -11,7 +11,7 @@ import {DropsPage} from "./drops-page"
 import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison, IsoForensicAudit} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison, IsoForensicAudit, MipsTraceResult} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -485,6 +485,7 @@ function LiveDiagnosticsPanel({sha}:{sha:string|null}) {
   const [syncRepo,setSyncRepo]=useState("")
   const [syncToken,setSyncToken]=useState("")
   const [syncConsent,setSyncConsent]=useState(false)
+  const [mipsTrace,setMipsTrace]=useState<MipsTraceResult|null>(null)
 
   useEffect(()=>{
     let active=true
@@ -507,6 +508,23 @@ function LiveDiagnosticsPanel({sha}:{sha:string|null}) {
     const interval=window.setInterval(()=>void refresh(),3000)
     return ()=>{active=false;window.clearInterval(interval)}
   },[sha])
+
+  useEffect(()=>setMipsTrace(null),[sha])
+
+  const importMipsTrace=async()=>{
+    const api=desktopApi()
+    if(!api||busy||!sha)return
+    setBusy(true);setError(null);setMessage("")
+    try{
+      const next=await api.import_rank_trace()
+      if(next.cancelled)return
+      setMipsTrace(next)
+      setMessage(next.opponentFieldEvidence?.available
+        ?"Trace importado localmente. Leituras de memória são apenas candidatas."
+        :"Trace importado, mas sem cobertura suficiente de instruções MIPS.")
+    }catch(e){setError(e instanceof Error?e.message:"Falha ao importar o trace MIPS.")}
+    finally{setBusy(false)}
+  }
 
   const toggle=async()=>{
     const api=desktopApi()
@@ -590,12 +608,51 @@ function LiveDiagnosticsPanel({sha}:{sha:string|null}) {
         disabled={busy||!status?.readyToCopy}>
         Copiar relatório para o ChatGPT
       </button>
+      <button className="btn-ghost" type="button" onClick={()=>void importMipsTrace()}
+        disabled={busy||!sha||!desktopApi()}>
+        Importar trace MIPS (.log/.txt)
+      </button>
     </div>
     <p className="mt-2 text-xs text-muted">
       Amostras: {status?.sampleCount??0} · Mudanças relevantes: {status?.changeCount??0}
       {" "}· Última leitura: {status?.lastObservedAtUTC?
         new Date(status.lastObservedAtUTC).toLocaleTimeString("pt-BR"):"—"}
     </p>
+    {mipsTrace?.opponentFieldEvidence&&
+      <div className="mt-3 rounded-lg border border-line/70 bg-background/50 p-3">
+        <p className="text-sm font-semibold text-primary">Etapa 32 — Análise MIPS de adversário</p>
+        <p className="mt-1 text-xs text-muted">
+          Trace: {mipsTrace.opponentFieldEvidence.instructionSamples} instruções com PC,
+          {" "}{mipsTrace.opponentFieldEvidence.distinctPCs} PCs distintos.
+          {" "}Endereço clássico 0x8009B361:{" "}
+          {mipsTrace.opponentFieldEvidence.legacyFieldReadEvents} leituras e{" "}
+          {mipsTrace.opponentFieldEvidence.legacyFieldWriteEvents} escritas.
+          {" "}Endereços alternativos candidatos: {mipsTrace.opponentFieldEvidence.candidateAddressCount}.
+        </p>
+        {mipsTrace.opponentFieldEvidence.candidateAddresses.length>0&&
+          <p className="mt-1 text-xs text-muted">
+            Endereços para investigação:{" "}
+            {mipsTrace.opponentFieldEvidence.candidateAddresses.map(x=>x.address).join(", ")}
+          </p>}
+        {mipsTrace.rankTableEvidence?.tableReadsObserved&&
+          <p className="mt-1 text-xs text-muted">
+            Pares de limiar/pontos observados próximos a código MIPS candidato:
+            {" "}{mipsTrace.rankTableEvidence.matchedPairs}.
+          </p>}
+        <p className="mt-1 text-xs text-gold">
+          Endereços, valores e execução de PCs são indícios de um log externo.
+          Não confirmam o ID real, a janela de drops, a rotina de RANK ou a ISO executada.
+          Nenhum trace é enviado automaticamente.
+        </p>
+      </div>}
+    {status?.forensicReview?.candidateObservedInEvents!==undefined&&
+      status.forensicReview.candidateObservedInEvents>=10&&
+      status.forensicReview.rankSnapshotEvents===0&&
+      <p className="mt-2 text-xs text-gold" role="status">
+        Observamos IDs candidatos, mas nenhum snapshot de RANK nesta sessão.
+        O diagnóstico apenas lê snapshots produzidos pelo painel de RANK,
+        sem iniciar calibração por conta própria.
+      </p>}
     {status?.forensicReview?.candidateStableDespiteHandAndLpFieldChanges&&
       <p role="status" className="mt-2 text-xs text-gold">
         Evidência provisória: o byte candidato {status.forensicReview.candidateIds.join(", ")}
