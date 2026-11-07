@@ -13,9 +13,7 @@ becomes verified from these structural observations.
 from __future__ import annotations
 
 import hashlib
-import struct
-
-from dueltrace_mod_family_probe import decode_matrix, verify_block
+from dueltrace_mod_family_probe import decode_matrix
 
 CARD_COUNT = 722
 DUELISTS = 39
@@ -51,7 +49,7 @@ def _valid_matrix(blob, at, codec):
 
 def _read_run(wa, base):
     """Validate 39 complete records after the known unused record-zero."""
-    if base < BLOCK_BYTES or base % BLOCK_BYTES not in (0,):
+    if base < BLOCK_BYTES or base % 2048 != 0:
         # The resource may be relocated to an unaligned offset in a future
         # mod; do not silently accept it under this known-layout adapter.
         return None
