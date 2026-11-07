@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import {useEffect, useMemo, useState} from "react"
-import {ChevronLeft, ChevronRight, Database, RefreshCcw, Search, ShieldCheck} from "lucide-react"
+import {ChevronLeft, ChevronRight, RefreshCcw, Search} from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi} from "@/lib/desktop"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
@@ -58,13 +58,13 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [sort,setSort]=useState<"id"|"atk"|"def"|"type"|"name">("id")
   const [cardType,setCardType]=useState("")
   const [offset,setOffset]=useState(0)
+  const [pageSize,setPageSize]=useState(20)
   const [revision,setRevision]=useState(0)
   const [result,setResult]=useState<DropsPage|null>(null)
   const [loading,setLoading]=useState(false)
   const [error,setError]=useState<string|null>(null)
   const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
   const cardsById=useMemo(()=>new Map(cards.map(card=>[card.id,card])),[cards])
-  const pageSize=36
 
   // Nunca reutilizar filtros de um mod em outro perfil SHA.
   useEffect(()=>{
@@ -97,7 +97,7 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       }finally{if(mounted)setLoading(false)}
     },200)
     return()=>{mounted=false;window.clearTimeout(timer)}
-  },[sha,opponent,rankFilter,query,offset,sort,cardType,revision])
+  },[sha,opponent,rankFilter,query,offset,sort,cardType,pageSize,revision])
 
   useEffect(()=>{setPreview(null)},[opponent,rankFilter,query,sort,cardType,offset,revision])
 
@@ -108,13 +108,9 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   return <div className="flex flex-col gap-4">
     <header className="panel rounded-xl border-gold/40 bg-gradient-to-r from-[#142b51] to-[#061126] px-5 py-4">
       <h1 className="font-display text-2xl font-bold text-gold sm:text-3xl">Biblioteca de Drops</h1>
-      <p className="mt-1 text-sm text-muted">Oponentes e probabilidades extraídos automaticamente dos arquivos da ISO ativa</p>
+      <p className="mt-1 text-sm text-muted">Encontre cartas e recompensas dos adversários</p>
     </header>
     <section className="panel rounded-xl p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
-        <span className="inline-flex items-center gap-2"><Database className="size-4 text-primary"/> {result?.source??"WA_MRG.MRG + SLUS_014.11"}</span>
-        <span className="inline-flex items-center gap-2"><ShieldCheck className="size-4 text-primary"/> Sem dados herdados de outros mods</span>
-      </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <label className="flex flex-col gap-1 text-xs text-muted">Oponente
           <select className="field w-full px-3 py-2 text-sm" value={opponent}
@@ -133,7 +129,7 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         <label className="flex flex-col gap-1 text-xs text-muted">Buscar carta
           <span className="field flex items-center gap-2 px-3 py-2"><Search className="size-4 text-primary"/>
             <input value={query} onChange={e=>{setQuery(e.target.value);setOffset(0)}}
-              placeholder="Nome ou ID da carta" className="min-w-0 flex-1 bg-transparent text-sm outline-none"/>
+              placeholder="Nome, ID, efeito ou descrição" className="min-w-0 flex-1 bg-transparent text-sm outline-none"/>
           </span>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted">Ordenar cartas
@@ -151,19 +147,19 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             {types.map(t=><option key={t} value={t}>{t}</option>)}
           </select>
         </label>
+        <label className="flex flex-col gap-1 text-xs text-muted">Itens por página
+          <select className="field w-full px-3 py-2 text-sm" aria-label="Drops por página"
+            value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setOffset(0)}}>
+            {[10,20,30,40,50].map(n=><option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
         <button type="button" className="btn-ghost self-end" onClick={()=>setRevision(x=>x+1)}
           aria-label="Recarregar drops"><RefreshCcw className="size-4"/> Atualizar</button>
       </div>
       {loading&&<p className="mt-3 text-xs text-primary" role="status">Consultando tabelas do mod ativo…</p>}
       {error&&<p className="mt-3 text-sm text-danger" role="alert">{error}</p>}
-      {result&&!result.available&&<p className="mt-4 rounded-lg border border-gold/30 p-4 text-sm text-gold">{result.status}. Use a ISO compatível na Biblioteca de Mods e reanalise os dados.</p>}
+      {result&&!result.available&&<p className="mt-4 rounded-lg border border-line/50 p-4 text-sm text-muted">Nenhum drop disponível neste mod. Use Atualizar dados na Biblioteca de Mods.</p>}
       {result?.available&&<>
-        <p className="mt-3 text-xs text-muted">{result.status}</p>
-        <p className="mt-1 text-xs text-primary">
-          {result.rankSystem==="x15"
-            ?"Remaster X15: Z-POW / S-POW / S-TEC."
-            :"Sistema original: 10 RANKs distribuídos em 3 tabelas. Em mods desconhecidos, conferir alterações do SLUS em duelo."}
-        </p>
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
           {result.rows.map(row=><DropCard key={row.opponentId+"-"+row.group+"-"+row.cardId}
             row={row} sha={sha} cardDetails={cardsById.get(row.cardId)??null} onPreview={setPreview}/>)}
