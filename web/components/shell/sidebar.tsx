@@ -13,21 +13,6 @@ const navItems = [
   { label: "Drops", href: "/drops", icon: Gift, enabled: true },
 ]
 
-function EyeOfHorus() {
-  return (
-    <svg viewBox="0 0 120 80" className="w-28 drop-shadow-[0_0_12px_rgb(245_184_61/0.6)]" aria-hidden="true">
-      <g fill="none" stroke="#f5b83d" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M8 22c20-14 60-16 96-4" />
-        <path d="M16 38c16-14 52-14 72 0-20 12-52 12-72 0z" />
-        <circle cx="52" cy="38" r="8" fill="#f5b83d" />
-        <path d="M88 38h22" />
-        <path d="M46 48l-6 22c-2 6-10 6-12 0" />
-        <path d="M60 48l20 20" />
-      </g>
-    </svg>
-  )
-}
-
 export function Sidebar() {
   const pathname = usePathname()
 
@@ -65,19 +50,6 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      <div className="relative mt-8 hidden flex-col items-center gap-4 lg:flex" aria-hidden="true">
-        <div className="h-24 w-px bg-gradient-to-b from-transparent via-gold to-gold/40" />
-        <EyeOfHorus />
-        <div className="flex items-end gap-1.5">
-          {[40, 64, 88, 56, 36].map((h, i) => (
-            <span
-              key={i}
-              className="w-4 bg-gradient-to-t from-primary/80 to-white/90 shadow-[0_0_16px_rgb(56_200_255/0.8)]"
-              style={{ height: h, clipPath: "polygon(50% 0, 100% 18%, 100% 100%, 0 100%, 0 18%)" }}
-            />
-          ))}
-        </div>
-      </div>
     </aside>
   )
 }
