@@ -24,6 +24,8 @@ class ProtectedDesktopApi:
         self._native_window_lock=threading.RLock()
         self._native_maximized=False
         self._native_close_requested=False
+        self._tool_window_open=None
+        self._tool_window_close=None
 
     def _authorize(self, credential):
         if not isinstance(credential,str) or not hmac.compare_digest(
@@ -64,6 +66,25 @@ class ProtectedDesktopApi:
                     target=close_after_response,name="dueltrace-window-close",
                     daemon=True).start()
             return {"maximized":self._native_maximized}
+
+    def open_tool_window(self, credential, kind):
+        """Open only one of two local, authenticated auxiliary windows."""
+        self._authorize(credential)
+        if type(kind) is not str or kind not in ("calculadora", "fusoes"):
+            raise ValueError("Ferramenta desconhecida.")
+        callback=self._tool_window_open
+        if not callable(callback):
+            raise RuntimeError("Janelas auxiliares indisponíveis nesta plataforma.")
+        return callback(kind)
+
+    def close_tool_window(self, credential, kind):
+        self._authorize(credential)
+        if type(kind) is not str or kind not in ("calculadora", "fusoes"):
+            raise ValueError("Ferramenta desconhecida.")
+        callback=self._tool_window_close
+        if not callable(callback):
+            raise RuntimeError("Janelas auxiliares indisponíveis nesta plataforma.")
+        return callback(kind)
 
     def check_updates(self, credential):
         self._authorize(credential)
