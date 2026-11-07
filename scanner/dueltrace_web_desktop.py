@@ -244,8 +244,8 @@ def main():
         tool_windows={}
         tool_windows_lock=threading.RLock()
         tool_routes={
-            "calculadora":("Calculadora de SPOILS — DUELTRACE",510,720),
-            "fusoes":("Dicas de fusões — DUELTRACE",570,730),
+            "calculadora":("RANK ao vivo — DUELTRACE",390,280),
+            "fusoes":("Dicas de fusões — DUELTRACE",440,600),
         }
         def open_tool_window(kind):
             # The native JS API already checked the exact allowlisted kind.
@@ -263,7 +263,8 @@ def main():
                     title,
                     url="about:blank",
                     js_api=api,width=width,height=height,
-                    min_size=(390,440),resizable=True,
+                    min_size=((330,230) if kind=="calculadora"
+                              else (380,380)),resizable=True,
                     on_top=True,background_color="#040a1a",
                     frameless=False)
                 child.events.loaded+=secure_loaded
