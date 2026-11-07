@@ -46,7 +46,7 @@ function DropCard({row,sha,cardDetails,onPreview}:{
     </div>
     <div className="shrink-0 text-right">
       <p className="font-display text-xl font-semibold tabular-nums text-primary">{row.chancePercent.toLocaleString("pt-BR",{maximumFractionDigits:4})}%</p>
-      <p className="text-xs text-muted">{row.weight}/2048</p>
+
     </div>
   </button>
 }
