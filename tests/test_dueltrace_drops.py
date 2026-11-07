@@ -146,6 +146,34 @@ class DropCatalogTests(unittest.TestCase):
             with self.subTest(kw=kw),self.assertRaises(ValueError):
                 get_drop_catalog(p,**kw)
 
+    def test_alpha_reward_catalogue_is_separate_from_verified_profiles(self):
+        p=fake_profile()
+        p["supported_features"]["drops"]=False
+        p["verified"]["tabelas_drops"]="pendente"
+        p["verified"]["oponentes"]="pendente"
+        self.assertFalse(get_drop_catalog(p)["available"])
+        p["alpha_discovery"]={
+            "state":"retail_sentinel_39_reward_records",
+            "source":"local_iso_sha256_matched",
+            "rom_sha256":p["rom_sha256"],
+        }
+        candidate=get_drop_catalog(p,opponent_id=1,rank="S-POW")
+        self.assertTrue(candidate["available"])
+        self.assertTrue(candidate["provisional"])
+        self.assertEqual(candidate["rows"][0]["opponentId"],1)
+        self.assertFalse(candidate["opponentMappingVerified"])
+        self.assertFalse(candidate["rankLabelsVerified"])
+        self.assertFalse(candidate["mayActivateDrops"])
+        from dueltrace_drops import get_card_drop_sources
+        sources=get_card_drop_sources(p,1)
+        self.assertTrue(sources["available"])
+        self.assertTrue(sources["provisional"])
+        p["alpha_discovery"]["rom_sha256"]="f"*64
+        self.assertFalse(get_drop_catalog(p)["available"])
+        p["alpha_discovery"]["rom_sha256"]=p["rom_sha256"]
+        p["verified"]["cartas"]="pendente"
+        self.assertFalse(get_drop_catalog(p)["available"])
+
     def test_unverified_profile_never_displays_drops(self):
         p=fake_profile()
         p["supported_features"]["drops"]=False
