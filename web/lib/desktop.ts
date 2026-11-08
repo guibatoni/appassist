@@ -795,7 +795,11 @@ export type RankComparison = {
   }>
 }
 
+export type UpdateNoteGroup={title:string;items:string[]}
+
 export type UpdateCheck = {
+  patchNotes?: UpdateNoteGroup[]
+  patchNotesVersion?: string | null
   currentVersion: string
   channel: "stable" | "preview"
   latestStable: string | null
