@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { CheckCircle2, Download, RefreshCw, ShieldAlert, X } from "lucide-react"
+import { BookOpen, CheckCircle2, Download, RefreshCw, ShieldAlert, X } from "lucide-react"
+import { UpdatePatchNotes } from "./update-patch-notes"
 import { desktopApi, type UpdateCheck } from "@/lib/desktop"
 
 /**
@@ -12,6 +13,7 @@ import { desktopApi, type UpdateCheck } from "@/lib/desktop"
 export function UpdateChecker() {
   const [result, setResult] = useState<UpdateCheck | null>(null)
   const [visible, setVisible] = useState(false)
+  const [notesOpen, setNotesOpen] = useState(false)
   const [checking, setChecking] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -110,6 +112,15 @@ export function UpdateChecker() {
   const available = result?.updateAvailable === true
   const canDownload = available &&
     (result?.automaticPortableReady === true || result?.automaticPreviewReady === true)
+  const statusText = available ?
+    (canDownload ? "Nova versão disponível para download." :
+      "Nova versão identificada; pacote ainda indisponível.") :
+    result?.status === "unavailable" ? "Não foi possível consultar novas versões." :
+    result?.previewError ? "Não foi possível verificar as versões Preview." :
+    "Nenhuma atualização nova disponível."
+  const notesVersion = result?.patchNotesVersion ??
+    (result?.currentVersion ?? "")
+  const patchNotes = result?.patchNotes ?? []
   return <div className="relative">
     <button type="button"
       className="btn-ghost inline-flex items-center gap-2 rounded-lg border border-primary/30 px-3 py-2 text-xs font-semibold transition-colors hover:border-primary hover:text-white disabled:cursor-wait disabled:opacity-60"
@@ -133,54 +144,53 @@ export function UpdateChecker() {
         </div>
         <div aria-live="polite" className="mt-3">
           {checking ?
-            <p className="text-muted">Consultando lançamentos oficiais no GitHub…</p> :
+            <p className="text-muted">Verificando atualizações…</p> :
             problem ?
-              <p className="flex items-start gap-2 text-gold"><ShieldAlert className="size-4 shrink-0"/>{problem}</p> :
+              <p className="flex items-start gap-2 text-gold">
+                <ShieldAlert className="size-4 shrink-0"/>{problem}
+              </p> :
               result ? <>
-                <div className="flex items-center gap-2 text-xs text-muted">
-                  <span>Instalada: <strong className="text-white">v{result.currentVersion} {result.channel === "preview" ? "Preview" : "Estável"}</strong></span>
-                </div>
+                <p className="text-xs text-muted">
+                  Instalada: <strong className="text-white">
+                    v{result.currentVersion} {result.channel === "preview" ? "Preview" : "Estável"}
+                  </strong>
+                </p>
                 {available&&<p className="mt-1 text-xs text-muted">
-                  Nova versão: <strong className="text-white">
+                  Disponível: <strong className="text-white">
                     {result.automaticPortableReady ? result.latestStable :
                       result.previewVersion ? `v${result.previewVersion} Preview` :
-                        result.latestStable ?? "Disponível"}
+                        result.latestStable ?? "Nova versão"}
                   </strong>
                 </p>}
-                {result.previewError && !available &&
-                  <p className="mt-2 text-xs text-gold" role="status">{result.previewError}</p>}
-                <p className={"mt-3 flex items-start gap-2 text-sm " + (available ? "text-gold" : "text-foreground/85")}>
-                  {available ? <Download className="size-5 shrink-0"/> : <CheckCircle2 className="size-5 shrink-0 text-primary"/>}
-                  {result.message}
+                <p className={"mt-3 flex items-start gap-2 " +
+                  (available ? "text-gold" : "text-foreground/85")}>
+                  {available ? <Download className="size-5 shrink-0"/> :
+                    <CheckCircle2 className="size-5 shrink-0 text-primary"/>}
+                  {statusText}
                 </p>
-                {available && <>
-                  <button type="button" disabled={!canDownload||installing||checking}
-                    onClick={()=>void installOfficialUpdate()}
-                    className="btn-gold mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-label="Baixar atualizações do DUELTRACE">
-                    <Download className="size-4"/>
-                    {installing?"Baixando e verificando…":"Baixar atualizações"}
-                  </button>
-                  {!canDownload&&<p className="mt-2 text-xs text-gold" role="status">
-                    {result.automaticInstallReason ||
-                      "Aguarde a publicação de um pacote ZIP oficial verificável."}
-                  </p>}
-                </>}
-                <p className="mt-2 text-xs text-muted">
-                  Após baixar e verificar o pacote, o DUELTRACE fecha, substitui
-                  os arquivos na pasta onde já está instalado e reinicia sozinho.
-                  Seus mods, arquivos pessoais e configurações permanecem preservados.
-                </p>
-                {installFeedback&&<p className="mt-2 text-xs text-gold" role="status">
-                  {installFeedback}
-                </p>}
               </> :
               <p className="text-muted">Nenhuma consulta realizada.</p>}
         </div>
-        <p className="mt-3 border-t border-line/50 pt-2 text-xs text-muted">
-          As atualizações são baixadas de releases oficiais e têm integridade
-          verificada. Previews sem assinatura exigem os cuidados normais do Windows.
-        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button type="button" disabled={!canDownload||installing||checking}
+            onClick={()=>void installOfficialUpdate()}
+            className="btn-gold inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Atualizar agora">
+            <Download className="size-4"/>
+            {installing?"Baixando atualização…":"Atualizar agora"}
+          </button>
+          <button type="button" disabled={checking}
+            onClick={()=>setNotesOpen(true)}
+            className="btn-ghost inline-flex items-center gap-2 rounded-lg border border-primary/40 px-3 py-2 text-xs transition-colors hover:border-primary disabled:opacity-50"
+            aria-label="Abrir patch notes">
+            <BookOpen className="size-4 text-primary"/>Patch notes
+          </button>
+        </div>
+        {installFeedback&&<p className="mt-3 text-xs text-gold" role="status">
+          {installFeedback}
+        </p>}
       </section>}
+    <UpdatePatchNotes open={notesOpen} onClose={()=>setNotesOpen(false)}
+      version={notesVersion} notes={patchNotes}/>
   </div>
 }
