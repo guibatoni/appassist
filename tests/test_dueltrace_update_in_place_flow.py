@@ -14,7 +14,7 @@ INSTALLER=(ROOT/"scanner/dueltrace_preview_installer.py").read_text(encoding="ut
 
 class UpdateInPlaceFlowTests(unittest.TestCase):
     def test_explicit_download_button_and_no_installer_redirect(self):
-        self.assertIn('"Baixar atualizações"',UI)
+        self.assertIn('"Atualizar agora"',UI)
         self.assertIn('check_updates()',UI)
         self.assertIn('install_portable_update()',UI)
         self.assertIn('install_preview_update()',UI)
