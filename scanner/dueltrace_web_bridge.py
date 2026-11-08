@@ -332,12 +332,26 @@ class DueltraceWebBridge:
         }
 
     def check_updates(self):
-        """Detecta Preview e release estável; instalador somente com confiança."""
-        # Pacotes Preview públicos ficam em Releases (não em artifacts de Actions).
-        # Evita a consulta extra ao endpoint Actions, frequentemente limitada.
+        """Identifica apenas atualizações oficiais verificáveis da pasta atual."""
         status=check_for_updates(preview_fetcher=lambda:None)
         status["automaticPreviewReady"]=False
         status["automaticPortableReady"]=False
+
+        # Prefere release estável portátil quando for mais recente e válida.
+        # Não usa instalador tradicional, que pode criar outra instalação.
+        stable_available=status.get("status")=="update_available"
+        if stable_available:
+            try:
+                candidate=fetch_portable_stable_package(
+                    current_version=CURRENT_VERSION)
+                if candidate is not None:
+                    status["automaticPortableReady"]=True
+                    status["automaticInstallReason"]=(
+                        "ZIP estável verificado para substituir arquivos na pasta atual.")
+            except (OSError,ValueError,TypeError):
+                status["automaticInstallReason"]=(
+                    "Não foi encontrado ZIP estável com integridade verificável.")
+
         try:
             candidate=fetch_latest_preview_package(
                 current_version=CURRENT_VERSION,
@@ -350,48 +364,30 @@ class DueltraceWebBridge:
                     "previewBuildSha":candidate["sha"][:10],
                     "previewPage":candidate["page"],
                     "automaticPreviewReady":True,
-                    "updateAvailable":True,
-                    "status":"preview_update_available",
                     "previewError":None,
-                    "message":(
-                        f"Preview v{candidate['version']} verificada no GitHub "
-                        "Releases. Basta clicar em Atualizar agora para instalar."),
                 })
+                if not status["automaticPortableReady"]:
+                    status.update({
+                        "updateAvailable":True,
+                        "status":"preview_update_available",
+                        "message":(
+                            f"Preview v{candidate['version']} verificada no GitHub "
+                            "Releases. Clique em Baixar atualizações para instalar."),
+                        "automaticInstallReason":(
+                            "Preview oficial com SHA-256 disponível para "
+                            "substituição na pasta atual."),
+                    })
         except (OSError,ValueError,TypeError):
             status["previewError"]=(
                 "Pré-lançamentos temporariamente indisponíveis. "
                 "Nenhum download foi iniciado.")
-        if status.get("status")=="update_available":
-            try:
-                candidate=fetch_portable_stable_package(current_version=CURRENT_VERSION)
-                if candidate is not None:
-                    status["automaticPortableReady"]=True
-                    status["automaticInstallReason"]=(
-                        "Versão estável portátil disponível, com hash SHA-256 "
-                        "e identidade de build. Assinatura digital não obrigatória.")
-            except (OSError,ValueError,TypeError):
-                status["automaticInstallReason"]=(
-                    "Release estável sem ZIP portátil verificável. "
-                    "Consulte as notas do GitHub.")
-            # Mantém opção assinada para versões antigas, sem torná-la requisito.
-            if not status["automaticPortableReady"] and trusted_installer_ready():
-                try:
-                    candidate=select_signed_installer(
-                        fetch_stable_release(),CURRENT_VERSION)
-                    if candidate is not None:
-                        status["automaticInstallReady"]=True
-                        status["automaticInstallReason"]=(
-                            "Instalador assinado opcional disponível.")
-                except (OSError,ValueError,TypeError):
-                    pass
-        elif status.get("automaticPreviewReady"):
+
+        # Sem pacote portátil verificável, o botão não pode instalar uma
+        # versão só porque foi detectada no GitHub.
+        if not (status["automaticPortableReady"] or status["automaticPreviewReady"]):
             status["automaticInstallReason"]=(
-                "Prévia pública com SHA-256 disponível. Não exige assinatura.")
-        else:
-            status["automaticInstallReason"]=(
-                "Não há pacote novo verificável no GitHub Releases. "
-                "Nenhuma assinatura digital é exigida para atualizações "
-                "em ZIP oficial com SHA-256.")
+                "Não há pacote ZIP oficial verificável para atualização "
+                "na pasta atual.")
         return status
 
     def install_signed_update(self):
