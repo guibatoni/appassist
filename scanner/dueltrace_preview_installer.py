@@ -20,6 +20,7 @@ from uuid import uuid4
 from urllib.parse import urlsplit
 
 from dueltrace_update_checker import CURRENT_VERSION, parse_version
+from dueltrace_patch_notes import summarize_patch_notes
 from dueltrace_preview_updates import (
     REPO_API, REPO_WEB, BUILD_INFO_FILE, _get_json, installed_preview_build_id,
 )
@@ -74,7 +75,8 @@ def select_preview_release(release: dict, current_version: str,
         raise UnsafeUpdate("URL, tamanho ou SHA-256 da Preview inválidos.")
     return {"tag":tag,"version":version,"run_id":run_id,"sha":sha,
             "url":url,"sha256":parsed.group(1),"size":a["size"],
-            "page":release["html_url"]}
+            "page":release["html_url"],
+            "patchNotes":summarize_patch_notes(release.get("body"))}
 
 
 def fetch_latest_preview_package(*, current_version: str = CURRENT_VERSION,
@@ -136,7 +138,8 @@ def select_portable_stable_release(release: dict, current_version: str,
     return {"tag":tag,"version":".".join(map(str,newer)),
             "run_id":None,"sha":sha,"url":url,
             "sha256":digest_match.group(1),"size":item["size"],
-            "page":release["html_url"],"channel":"stable"}
+            "page":release["html_url"],"channel":"stable",
+            "patchNotes":summarize_patch_notes(release.get("body"))}
 
 
 def fetch_portable_stable_package(*, current_version: str = CURRENT_VERSION,
