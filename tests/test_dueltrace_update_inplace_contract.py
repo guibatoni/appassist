@@ -22,12 +22,21 @@ class UpdateInPlaceContractTests(unittest.TestCase):
         self.assertIn('Remove-Item -LiteralPath $stage',updater)
         self.assertIn('ultima-atualizacao.log',updater)
 
-    def test_interface_prefers_portable_zip_and_explains_relaunch(self):
+    def test_interface_prefers_portable_zip_and_opens_local_notes(self):
         ui=(ROOT/"web/components/shell/update-checker.tsx").read_text(encoding="utf-8")
+        dialog=(ROOT/"web/components/shell/update-patch-notes.tsx").read_text(encoding="utf-8")
         self.assertLess(ui.index("if(fresh.automaticPortableReady)"),
-                        ui.index("else if(fresh.automaticInstallReady)"))
-        self.assertIn("reinicia automaticamente no mesmo local",ui)
+                        ui.index("else if(fresh.automaticPreviewReady)"))
+        self.assertNotIn("else if(fresh.automaticInstallReady)",ui)
         self.assertIn("Atualizar agora",ui)
+        self.assertIn("Patch notes",ui)
+        self.assertIn("<UpdatePatchNotes",ui)
+        self.assertIn("backdrop-blur-md",dialog)
+        self.assertIn('role="dialog"',dialog)
+        self.assertIn('aria-modal="true"',dialog)
+        self.assertNotIn("Ver builds Preview",ui)
+        self.assertNotIn("Ver versões estáveis",ui)
+        self.assertNotIn("Atualizações ZIP são instaladas",ui)
 
     def test_no_untrusted_package_can_skip_previous_security_check(self):
         updater=(ROOT/"scanner/dueltrace_preview_installer.py").read_text(encoding="utf-8")
