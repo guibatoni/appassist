@@ -1,19 +1,18 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ArrowUpRight, CheckCircle2, Download, RefreshCw, ShieldAlert, X } from "lucide-react"
+import { CheckCircle2, Download, RefreshCw, ShieldAlert, X } from "lucide-react"
 import { desktopApi, type UpdateCheck } from "@/lib/desktop"
 
 /**
- * Consulta automática após abertura; um clique inicia a instalação para
- * release estável assinada OU Preview oficial com SHA-256 e identidade do build.
- * Não altera as proteções do Windows nem executa artefatos Actions diretamente.
+ * Consulta automática e fluxo único: Atualizações > Baixar atualizações >
+ * fechar, substituir arquivos na pasta atual e reabrir. Somente ZIP portátil
+ * oficial verificado, sem criar outra pasta de instalação.
  */
 export function UpdateChecker() {
   const [result, setResult] = useState<UpdateCheck | null>(null)
   const [visible, setVisible] = useState(false)
   const [checking, setChecking] = useState(false)
-  const [opening, setOpening] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const [automaticNotice, setAutomaticNotice] = useState(false)
@@ -79,20 +78,6 @@ export function UpdateChecker() {
     }
   }
 
-  const openOfficialPage = async (runId?: number) => {
-    const api = desktopApi()
-    if (!api) return
-    setOpening(true)
-    try {
-      await api.open_updates_page(runId)
-      setProblem(null)
-    } catch {
-      setProblem("Não foi possível abrir o navegador padrão. Acesse github.com/guibatoni/appassist/actions ou /releases.")
-    } finally {
-      setOpening(false)
-    }
-  }
-
   const installOfficialUpdate = async () => {
     const api=desktopApi()
     if(!api || installing) return
@@ -104,14 +89,12 @@ export function UpdateChecker() {
       setResult(fresh)
       setAutomaticNotice(fresh.updateAvailable)
       let outcome:{started:boolean;status:string;version?:string}|null=null
-      // Sempre preferir atualização portátil in-place. Instalador assinado
-      // é a alternativa apenas quando nenhum ZIP oficial está disponível.
+      // Somente ZIP portátil in-place; instalador tradicional poderia escolher
+      // outra pasta e não faz parte deste botão.
       if(fresh.automaticPortableReady) {
         outcome=await api.install_portable_update()
       } else if(fresh.automaticPreviewReady) {
         outcome=await api.install_preview_update()
-      } else if(fresh.automaticInstallReady) {
-        outcome=await api.install_signed_update()
       } else {
         setInstallFeedback(fresh.automaticInstallReason ||
           "Nenhum pacote de atualização aprovado está disponível.")
@@ -125,14 +108,16 @@ export function UpdateChecker() {
   }
 
   const available = result?.updateAvailable === true
+  const canDownload = available &&
+    (result?.automaticPortableReady === true || result?.automaticPreviewReady === true)
   return <div className="relative">
     <button type="button"
       className="btn-ghost inline-flex items-center gap-2 rounded-lg border border-primary/30 px-3 py-2 text-xs font-semibold transition-colors hover:border-primary hover:text-white disabled:cursor-wait disabled:opacity-60"
       disabled={checking}
       onClick={() => void check()}
-      aria-label="Verificar atualizações do DUELTRACE">
+      aria-label="Abrir atualizações do DUELTRACE">
       <RefreshCw className={"size-4 text-primary" + (checking ? " animate-spin" : "")} />
-      <span>{checking ? "Verificando…" : automaticNotice ? "Nova versão disponível" : "Verificar atualizações"}</span>
+      <span>{checking ? "Verificando…" : automaticNotice ? "Nova atualização" : "Atualizações"}</span>
       {automaticNotice && <span aria-label="Atualização identificada"
         className="size-2 animate-pulse rounded-full bg-gold"/>}
     </button>
@@ -155,48 +140,46 @@ export function UpdateChecker() {
                 <div className="flex items-center gap-2 text-xs text-muted">
                   <span>Instalada: <strong className="text-white">v{result.currentVersion} {result.channel === "preview" ? "Preview" : "Estável"}</strong></span>
                 </div>
-                <p className="mt-1 text-xs text-muted">Última estável: <strong className="text-white">{result.latestStable ?? "Indisponível"}</strong></p>
-                <p className="mt-1 text-xs text-muted">Preview encontrada: <strong className="text-white">{result.previewVersion ? "v"+result.previewVersion : "Indisponível"}</strong></p>
-                <p className="mt-1 text-xs text-muted">Preview Windows: <strong className="text-white">{result.previewRunId ? `Build #${result.previewRunId} · ${result.previewBuildSha ?? "SHA indisponível"}` : "Não identificado"}</strong></p>
-                {result.previewError && <p className="mt-2 text-xs text-gold" role="status">{result.previewError}</p>}
+                {available&&<p className="mt-1 text-xs text-muted">
+                  Nova versão: <strong className="text-white">
+                    {result.automaticPortableReady ? result.latestStable :
+                      result.previewVersion ? `v${result.previewVersion} Preview` :
+                        result.latestStable ?? "Disponível"}
+                  </strong>
+                </p>}
+                {result.previewError && !available &&
+                  <p className="mt-2 text-xs text-gold" role="status">{result.previewError}</p>}
                 <p className={"mt-3 flex items-start gap-2 text-sm " + (available ? "text-gold" : "text-foreground/85")}>
                   {available ? <Download className="size-5 shrink-0"/> : <CheckCircle2 className="size-5 shrink-0 text-primary"/>}
                   {result.message}
                 </p>
-                <button type="button" disabled={installing||checking}
-                  onClick={()=>void installOfficialUpdate()}
-                  className="btn-gold mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50"
-                  aria-label="Atualizar DUELTRACE automaticamente pelo GitHub">
-                  <Download className="size-4"/>
-                  {installing?"Baixando e verificando atualização…":"Atualizar agora"}
-                </button>
+                {available && <>
+                  <button type="button" disabled={!canDownload||installing||checking}
+                    onClick={()=>void installOfficialUpdate()}
+                    className="btn-gold mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Baixar atualizações do DUELTRACE">
+                    <Download className="size-4"/>
+                    {installing?"Baixando e verificando…":"Baixar atualizações"}
+                  </button>
+                  {!canDownload&&<p className="mt-2 text-xs text-gold" role="status">
+                    {result.automaticInstallReason ||
+                      "Aguarde a publicação de um pacote ZIP oficial verificável."}
+                  </p>}
+                </>}
                 <p className="mt-2 text-xs text-muted">
-                  Atualizações ZIP são instaladas na pasta atual: o DUELTRACE fecha,
-                  substitui os arquivos e reinicia automaticamente no mesmo local.
-                  Arquivos temporários e backups ficam nos dados locais do Windows.
-                  Pacotes seguem verificação SHA-256 e identidade do build.
-                  Instaladores assinados, quando necessários, seguem seu próprio fluxo.
+                  Após baixar e verificar o pacote, o DUELTRACE fecha, substitui
+                  os arquivos na pasta onde já está instalado e reinicia sozinho.
+                  Seus mods, arquivos pessoais e configurações permanecem preservados.
                 </p>
                 {installFeedback&&<p className="mt-2 text-xs text-gold" role="status">
                   {installFeedback}
                 </p>}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" onClick={() => void openOfficialPage(result.previewRunId ?? 0)}
-                      disabled={opening} className="btn-gold inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50">
-                      {opening ? "Abrindo…" : (result.previewRunId != null ? "Abrir prévia no GitHub (manual)" : "Ver builds Preview")} <ArrowUpRight className="size-4"/>
-                    </button>
-                  <button type="button" onClick={() => void openOfficialPage()}
-                    disabled={opening} className="btn-ghost inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50">
-                    Ver versões estáveis <ArrowUpRight className="size-4"/>
-                  </button>
-                </div>
               </> :
               <p className="text-muted">Nenhuma consulta realizada.</p>}
         </div>
         <p className="mt-3 border-t border-line/50 pt-2 text-xs text-muted">
-          Atualizações Preview não assinadas têm risco maior que versões comerciais.
-          Não desative o Defender nem ignore alertas do Windows. O botão usa
-          pré-releases públicas do GitHub; builds legados permanecem em Actions.
+          As atualizações são baixadas de releases oficiais e têm integridade
+          verificada. Previews sem assinatura exigem os cuidados normais do Windows.
         </p>
       </section>}
   </div>
