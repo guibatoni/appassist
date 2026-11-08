@@ -336,6 +336,8 @@ class DueltraceWebBridge:
         status=check_for_updates(preview_fetcher=lambda:None)
         status["automaticPreviewReady"]=False
         status["automaticPortableReady"]=False
+        status["patchNotes"]=[]
+        status["patchNotesVersion"]=None
 
         # Prefere release estável portátil quando for mais recente e válida.
         # Não usa instalador tradicional, que pode criar outra instalação.
@@ -346,6 +348,8 @@ class DueltraceWebBridge:
                     current_version=CURRENT_VERSION)
                 if candidate is not None:
                     status["automaticPortableReady"]=True
+                    status["patchNotes"]=candidate.get("patchNotes",[])
+                    status["patchNotesVersion"]=candidate["version"]
                     status["automaticInstallReason"]=(
                         "ZIP estável verificado para substituir arquivos na pasta atual.")
             except (OSError,ValueError,TypeError):
@@ -370,6 +374,8 @@ class DueltraceWebBridge:
                     status.update({
                         "updateAvailable":True,
                         "status":"preview_update_available",
+                        "patchNotes":candidate.get("patchNotes",[]),
+                        "patchNotesVersion":candidate["version"],
                         "message":(
                             f"Preview v{candidate['version']} verificada no GitHub "
                             "Releases. Clique em Baixar atualizações para instalar."),
