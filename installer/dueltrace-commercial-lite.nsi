@@ -9,11 +9,11 @@ Unicode true
 !ifndef BUILD_DIR
   !error "Informe /DBUILD_DIR com a pasta real do PyInstaller."
 !endif
-!ifexist "${BUILD_DIR}\DUELTRACE-WebUI.exe"
+!if /FileExists "${BUILD_DIR}\DUELTRACE-WebUI.exe"
 !else
   !error "DUELTRACE-WebUI.exe não encontrado na pasta BUILD_DIR."
 !endif
-!ifexist "${BUILD_DIR}\_internal\dueltrace-build.json"
+!if /FileExists "${BUILD_DIR}\_internal\dueltrace-build.json"
 !else
   !error "Identidade de compilação ausente em _internal."
 !endif
