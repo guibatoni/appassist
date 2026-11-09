@@ -13,11 +13,12 @@ import time
 
 
 class ProtectedDesktopApi:
-    def __init__(self, bridge, token: str):
+    def __init__(self, bridge, token: str, *, license_gate=None):
         if not isinstance(token, str) or len(token)<32:
             raise ValueError("Token de sessão inválido")
         self._bridge=bridge
         self._token=token
+        self._license_gate=license_gate
         # Janela nativa só pode ser anexada pelo ponto de entrada Windows.
         # Ações expostas ao JS passam por token e uma lista estrita.
         self._native_window=None
@@ -27,10 +28,34 @@ class ProtectedDesktopApi:
         self._tool_window_open=None
         self._tool_window_close=None
 
-    def _authorize(self, credential):
+    def _authorize_session(self, credential):
         if not isinstance(credential,str) or not hmac.compare_digest(
                 credential,self._token):
             raise PermissionError("Acesso não autorizado à API local.")
+
+    def _authorize(self, credential):
+        self._authorize_session(credential)
+        if self._license_gate is not None:
+            self._license_gate.require_active()
+
+    def commercial_license_status(self, credential):
+        """Allowed before activation; never exposes the device fingerprint."""
+        self._authorize_session(credential)
+        if self._license_gate is None:
+            return {"edition":"alpha","active":True,"status":"not_required"}
+        return self._license_gate.status()
+
+    def commercial_activation_request(self, credential):
+        self._authorize_session(credential)
+        if self._license_gate is None:
+            raise PermissionError("A Alpha não utiliza licenças comerciais.")
+        return self._license_gate.request()
+
+    def commercial_activate_license(self, credential, license_json):
+        self._authorize_session(credential)
+        if self._license_gate is None:
+            raise PermissionError("A Alpha não utiliza licenças comerciais.")
+        return self._license_gate.activate(license_json)
 
     def window_control(self, credential, action):
         """Controles da moldura customizada, limitados à janela deste processo.
@@ -38,7 +63,7 @@ class ProtectedDesktopApi:
         Nunca aceita comandos arbitrários, caminhos ou IDs de outras janelas.
         O encerramento é assíncrono para liberar a resposta ao WebView.
         """
-        self._authorize(credential)
+        self._authorize_session(credential)
         if type(action) is not str or action not in (
                 "state","minimize","toggle_maximize","close"):
             raise ValueError("Comando da janela inválido.")
@@ -100,22 +125,32 @@ class ProtectedDesktopApi:
 
     def check_updates(self, credential):
         self._authorize(credential)
+        if self._license_gate is not None:
+            raise PermissionError("Atualizações comerciais exigem pacote próprio verificado.")
         return self._bridge.check_updates()
 
     def open_updates_page(self, credential, run_id=None):
         self._authorize(credential)
+        if self._license_gate is not None:
+            raise PermissionError("Atualizações comerciais exigem pacote próprio verificado.")
         return self._bridge.open_updates_page(run_id)
 
     def install_signed_update(self, credential):
         self._authorize(credential)
+        if self._license_gate is not None:
+            raise PermissionError("Atualizações comerciais exigem pacote próprio verificado.")
         return self._bridge.install_signed_update()
 
     def install_preview_update(self, credential):
         self._authorize(credential)
+        if self._license_gate is not None:
+            raise PermissionError("Atualizações comerciais exigem pacote próprio verificado.")
         return self._bridge.install_preview_update()
 
     def install_portable_update(self, credential):
         self._authorize(credential)
+        if self._license_gate is not None:
+            raise PermissionError("Atualizações comerciais exigem pacote próprio verificado.")
         return self._bridge.install_portable_update()
 
     def get_state(self, credential):

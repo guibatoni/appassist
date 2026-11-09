@@ -30,6 +30,8 @@ on:
       - 'scanner/**'
       - 'tests/**'
       - 'tools/security/**'
+      - 'tools/licensing/**'
+      - 'installer/**'
       - '.github/workflows/validar-webui-desktop.yml'
   pull_request:
     paths:
@@ -37,6 +39,8 @@ on:
       - 'scanner/**'
       - 'tests/**'
       - 'tools/security/**'
+      - 'tools/licensing/**'
+      - 'installer/**'
       - '.github/workflows/validar-webui-desktop.yml'
 
 permissions:
@@ -114,6 +118,20 @@ jobs:
           if (-not (Test-Path dist/DUELTRACE-WebUI/DUELTRACE-WebUI.exe)) { throw "Executável experimental ausente" }
           Copy-Item tools/security/AVISO-SEGURANCA-PREVIEW.txt dist/DUELTRACE-WebUI/LEIA-ME-SEGURANCA.txt
           Compress-Archive -Path dist/DUELTRACE-WebUI/* -DestinationPath dist/DUELTRACE-WebUI-Windows-Preview.zip -Force
+      - name: Empacotar executável Commercial Lite de teste isolado (somente PR)
+        if: ${{ github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'commercial/') }}
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onedir --noconsole --name DUELTRACE-Commercial --paths scanner --collect-all webview --add-data "web/out;web/out" --add-data "scanner/dueltrace-build.json;." scanner/dueltrace_commercial_entry.py
+          if ($LASTEXITCODE -ne 0) { throw "Build comercial não compilou." }
+          if (-not (Test-Path 'dist/DUELTRACE-Commercial/DUELTRACE-Commercial.exe')) {
+            throw "Executável Commercial Lite ausente."
+          }
+          # A edição de teste permanece travada: sem chave pública definitiva.
+          $public = Get-Content 'scanner/dueltrace_commercial_public_key.py' -Raw
+          if ($public -notmatch 'PUBLIC_KEY_B64 = ""') {
+            throw "Este workflow só pode produzir protótipo SEM chave pública comercial."
+          }
       - name: Compilar instalador NSIS experimental (somente PR commercial)
         if: ${{ github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'commercial/') }}
         shell: pwsh
@@ -124,13 +142,35 @@ jobs:
           $compilers = @('C:\Program Files (x86)\NSIS\makensis.exe', 'C:\Program Files\NSIS\makensis.exe')
           $compiler = $compilers | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $compiler) { throw "Compilador NSIS não encontrado." }
-          $package = (Resolve-Path 'dist/DUELTRACE-WebUI').Path
+          $package = (Resolve-Path 'dist/DUELTRACE-Commercial').Path
           & $compiler "/DBUILD_DIR=$package" 'installer/dueltrace-commercial-lite.nsi'
           if ($LASTEXITCODE -ne 0) { throw "Instalador NSIS de teste não compilou." }
           $setup = (Resolve-Path 'installer/DUELTRACE-Setup-TESTE.exe').Path
           if ((Get-Item $setup).Length -lt 1000000) { throw "Instalador de teste incompleto." }
           Start-MpScan -ScanType CustomScan -ScanPath $setup -ErrorAction Stop
-          Remove-Item -LiteralPath $setup -Force
+          $install = Join-Path $env:LOCALAPPDATA 'Programs/DUELTRACE-Commercial'
+          $preserved = Join-Path $env:LOCALAPPDATA 'ForbiddenMemoriesMultiMod/commercial/ci-preserve-test.txt'
+          New-Item -ItemType Directory -Path (Split-Path $preserved) -Force | Out-Null
+          Set-Content -LiteralPath $preserved -Value 'preservar' -Encoding utf8
+          try {
+            # Teste de instalação silenciosa, repetição e remoção sem apagar AppData.
+            $first = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+            if ($first.ExitCode -ne 0) { throw "Primeira instalação NSIS falhou." }
+            $exe = Join-Path $install 'DUELTRACE-Commercial.exe'
+            if (-not (Test-Path -LiteralPath $exe)) { throw "EXE comercial não instalado." }
+            $second = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+            if ($second.ExitCode -ne 0) { throw "Reinstalação no mesmo local falhou." }
+            $uninstaller = Join-Path $install 'Desinstalar DUELTRACE.exe'
+            $un = Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait -PassThru
+            if ($un.ExitCode -ne 0) { throw "Desinstalação NSIS falhou." }
+            if (Test-Path -LiteralPath $exe) { throw "EXE permaneceu após desinstalação." }
+            if (-not (Test-Path -LiteralPath $preserved)) { throw "Desinstalador apagou dados pessoais!" }
+          } finally {
+            if (Test-Path -LiteralPath $preserved) {
+              Remove-Item -LiteralPath $preserved -Force
+            }
+            if (Test-Path -LiteralPath $setup) { Remove-Item -LiteralPath $setup -Force }
+          }
 
       - name: Testar bloqueio de release pública sem editor autorizado
         shell: pwsh

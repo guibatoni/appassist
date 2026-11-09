@@ -50,7 +50,7 @@ def assets_path() -> Path:
         "ou use o executável Windows que inclui os arquivos estáticos.")
 
 
-def local_handler(directory: Path, bridge: DueltraceWebBridge):
+def local_handler(directory: Path, bridge: DueltraceWebBridge, *, license_gate=None):
     """Servidor restrito ao 127.0.0.1 com caminhos sanitizados."""
     class Handler(http.server.SimpleHTTPRequestHandler):
         def __init__(self,*args,**kwargs):
@@ -131,6 +131,12 @@ def local_handler(directory: Path, bridge: DueltraceWebBridge):
                 self.send_error(404,"Imagem não encontrada")
                 return
             if match:
+                if license_gate is not None:
+                    try:
+                        license_gate.require_active()
+                    except PermissionError:
+                        self.send_error(403, "Licença comercial não ativada")
+                        return
                 sha,cid=match.groups()
                 try:
                     active,entry,profile=bridge._active()
@@ -190,16 +196,21 @@ def local_handler(directory: Path, bridge: DueltraceWebBridge):
     return Handler
 
 
-def main():
+def main(*, commercial: bool = False):
     if sys.platform!="win32":
         raise OSError("A interface desktop nativa está disponível apenas no Windows.")
     import webview
 
     static=assets_path()
     bridge=DueltraceWebBridge()
+    license_gate=None
+    if commercial:
+        # Keep Alpha runnable without installing commercial cryptography dependencies.
+        from dueltrace_commercial_runtime import CommercialLicenseGate
+        license_gate=CommercialLicenseGate(bridge.catalog.home)
     token=secrets.token_urlsafe(32)
-    api=ProtectedDesktopApi(bridge,token)
-    handler=local_handler(static,bridge)
+    api=ProtectedDesktopApi(bridge,token,license_gate=license_gate)
+    handler=local_handler(static,bridge,license_gate=license_gate)
     server=http.server.ThreadingHTTPServer(("127.0.0.1",0),handler)
     server.daemon_threads=True
     server_thread=threading.Thread(target=server.serve_forever,
@@ -208,7 +219,8 @@ def main():
     url=f"http://127.0.0.1:{server.server_port}/"
     try:
         window=webview.create_window(
-            "DUELTRACE — MultiMod Companion",
+            ("DUELTRACE — Commercial Lite" if commercial else
+             "DUELTRACE — MultiMod Companion"),
             url=url,js_api=api,width=1450,height=870,
             min_size=(1100,700),background_color="#040a1a",
             frameless=True,easy_drag=False,resizable=True)
