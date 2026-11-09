@@ -32,3 +32,13 @@ backups_launcher/
 .updates/
 launcher_state.json
 launcher_config.json
+
+# Commercial Lite: NEVER commit issuer private material or customer licenses.
+*.pem
+*.p12
+*.pfx
+*.key
+licensing_secrets/
+license-output/
+activation-request*.json
+issued-license*.json

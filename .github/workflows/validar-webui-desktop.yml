@@ -62,7 +62,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Preparar Pillow para testes de extração de arte PS1
-        run: python -m pip install pillow==13.0.0 capstone==5.0.9
+        run: python -m pip install pillow==13.0.0 capstone==5.0.9 cryptography==50.0.2
       - name: Executar toda a suíte Python (inclui extração WA/SLUS)
         run: python -m unittest discover -s tests -p "test_*.py" -v
       - name: Instalar dependências Next.js
@@ -114,6 +114,24 @@ jobs:
           if (-not (Test-Path dist/DUELTRACE-WebUI/DUELTRACE-WebUI.exe)) { throw "Executável experimental ausente" }
           Copy-Item tools/security/AVISO-SEGURANCA-PREVIEW.txt dist/DUELTRACE-WebUI/LEIA-ME-SEGURANCA.txt
           Compress-Archive -Path dist/DUELTRACE-WebUI/* -DestinationPath dist/DUELTRACE-WebUI-Windows-Preview.zip -Force
+      - name: Compilar instalador NSIS experimental (somente PR commercial)
+        if: ${{ github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'commercial/') }}
+        shell: pwsh
+        run: |
+          # O instalador de teste NÃO é distribuído nem incluído nas Releases.
+          choco install nsis --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "Não foi possível instalar NSIS no runner." }
+          $compilers = @('C:\Program Files (x86)\NSIS\makensis.exe', 'C:\Program Files\NSIS\makensis.exe')
+          $compiler = $compilers | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $compiler) { throw "Compilador NSIS não encontrado." }
+          $package = (Resolve-Path 'dist/DUELTRACE-WebUI').Path
+          & $compiler "/DBUILD_DIR=$package" 'installer/dueltrace-commercial-lite.nsi'
+          if ($LASTEXITCODE -ne 0) { throw "Instalador NSIS de teste não compilou." }
+          $setup = (Resolve-Path 'installer/DUELTRACE-Setup-TESTE.exe').Path
+          if ((Get-Item $setup).Length -lt 1000000) { throw "Instalador de teste incompleto." }
+          Start-MpScan -ScanType CustomScan -ScanPath $setup -ErrorAction Stop
+          Remove-Item -LiteralPath $setup -Force
+
       - name: Testar bloqueio de release pública sem editor autorizado
         shell: pwsh
         run: |
