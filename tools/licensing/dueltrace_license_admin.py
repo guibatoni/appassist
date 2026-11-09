@@ -562,8 +562,9 @@ class LicenseManager(ctk.CTk):
         messagebox.showerror("Batoni Dev — Operação não concluída", detail, parent=self)
 
     def _password(self, title: str) -> str | None:
-        return simpledialog.askstring(title, "Senha da chave privada:", show="*",
-                                      parent=self)
+        result=_modal(self,title,"Informe sua senha privada da Batoni Dev.",
+                      kind="password")
+        return result if isinstance(result,str) else None
 
     def refresh_keys(self):
         paths = admin_paths(self.home)
@@ -711,6 +712,9 @@ class LicenseManager(ctk.CTk):
             self.ledger_tree.delete(item)
         try:
             records = list_issued(self.home)
+            self.total_var.set(str(len(records)))
+            self.device_total_var.set(str(len(
+                {row["device_hash"] for row in records})))
             query = self.filter_var.get().strip().lower()
             for row in reversed(records):
                 if query and query not in (row["order_ref"] + " " + row["license_id"]).lower():
