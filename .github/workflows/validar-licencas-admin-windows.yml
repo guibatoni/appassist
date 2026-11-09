@@ -1,0 +1,88 @@
+name: Validar Gerenciador de Licenças Batoni Dev (Windows TESTE)
+
+on:
+  pull_request:
+    paths:
+      - 'tools/licensing/**'
+      - 'tests/test_dueltrace_license_admin*.py'
+      - 'scanner/dueltrace_offline_license.py'
+      - '.github/workflows/validar-licencas-admin-windows.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  license-manager-windows:
+    name: Licenças offline e EXE administrador (sem chaves)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Preparar criptografia, empacotador e auditor
+        run: python -m pip install cryptography==50.0.2 pyinstaller==6.22.3 pip-audit
+
+      - name: Validar ciclo de licença e proteção de chaves
+        run: python -m unittest discover -s tests -p "test_dueltrace_license_admin*.py" -v
+
+      - name: Validar sintaxe do Gerenciador
+        run: python -m compileall -q tools/licensing scanner/dueltrace_offline_license.py
+
+      - name: Auditar dependências do ambiente admin
+        run: python -m pip_audit --local
+
+      - name: Impedir arquivos privados rastreados no repositório
+        shell: pwsh
+        run: |
+          $tracked = @(git ls-files -- '*.pem' '*.p12' '*.pfx' '*.key')
+          if ($tracked.Count -gt 0) { throw "Arquivos de chave privada rastreados no repositório: bloqueado." }
+          $public = Get-Content 'scanner/dueltrace_commercial_public_key.py' -Raw
+          if ($public -notmatch 'PUBLIC_KEY_B64 = ""') {
+            throw "Este CI não pode empacotar credenciais de produção."
+          }
+
+      - name: Empacotar BatoniDev-LicenseManager.exe sem terminal
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onedir --noconsole --name BatoniDev-LicenseManager --paths scanner --paths tools/licensing tools/licensing/dueltrace_license_admin.py
+          if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Gerenciador de Licenças." }
+          $exe = 'dist/BatoniDev-LicenseManager/BatoniDev-LicenseManager.exe'
+          if (-not (Test-Path -LiteralPath $exe)) { throw "Gerenciador Windows ausente." }
+          if ((Get-Item $exe).Length -lt 1000000) { throw "Executável incompleto." }
+
+      - name: Rejeitar segredos, auditar ZIP e examinar com Microsoft Defender
+        shell: pwsh
+        run: |
+          $folder = (Resolve-Path 'dist/BatoniDev-LicenseManager').Path
+          $forbidden = @(Get-ChildItem -LiteralPath $folder -Recurse -File |
+            Where-Object { $_.Name -match '(?i)(^issuer_ed25519_private|license\.json$|\.pem$|\.p12$|\.pfx$|\.key$)' })
+          if ($forbidden.Count -gt 0) { throw "Arquivo privado encontrado no executável." }
+          $zip = 'dist/BatoniDev-LicenseManager-Windows-TESTE.zip'
+          Compress-Archive -Path (Join-Path $folder '*') -DestinationPath $zip -Force
+          if ((Get-Item $zip).Length -lt 1000000) { throw "ZIP de teste incompleto." }
+          $status = Get-MpComputerStatus -ErrorAction Stop
+          if ($status.AntivirusEnabled -ne $true -or $status.AMServiceEnabled -ne $true) {
+            throw "Defender indisponível; bloqueando."
+          }
+          $start = Get-Date
+          Start-MpScan -ScanPath (Join-Path $folder 'BatoniDev-LicenseManager.exe') -ScanType CustomScan -ErrorAction Stop
+          Start-MpScan -ScanPath (Resolve-Path $zip).Path -ScanType CustomScan -ErrorAction Stop
+          $detections = @(Get-MpThreatDetection -ErrorAction Stop |
+            Where-Object { $_.InitialDetectionTime -ge $start })
+          if ($detections.Count -gt 0) { throw "Defender registrou ameaça: bloqueando." }
+          Get-FileHash -Algorithm SHA256 -Path $zip | Format-Table -AutoSize
+
+      - name: Disponibilizar pacote TESTE somente no PR privado
+        id: admin_artifact
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: BatoniDev-LicenseManager-Windows-TESTE
+          path: dist/BatoniDev-LicenseManager-Windows-TESTE.zip
+          if-no-files-found: error
+          retention-days: 7
