@@ -1,4 +1,4 @@
-; DUELTRACE Commercial Lite — INSTALADOR EXPERIMENTAL (não distribuir sem revisão).
+﻿; DUELTRACE Commercial Lite — INSTALADOR EXPERIMENTAL (não distribuir sem revisão).
 ; Build manual: makensis /DBUILD_DIR="C:\...\dist\DUELTRACE-WebUI" installer\dueltrace-commercial-lite.nsi
 ; NSIS (zlib/libpng & other permissive licenses). No administrator rights.
 ; Previous install location persists, preventing duplicate installation directories.
