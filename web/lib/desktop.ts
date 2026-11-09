@@ -826,7 +826,20 @@ export type WindowControlState={maximized:boolean}
 export type PopoutKind="calculadora"|"fusoes"
 export type PopoutState={opened?:boolean;closed?:boolean;reused?:boolean;kind:PopoutKind}
 
+export type CommercialLicenseStatus = {
+  edition: "alpha" | "commercial-lite"
+  active: boolean
+  status: "active" | "not_activated" | "invalid" | "device_unavailable" | "not_required"
+  licenseId?: string
+  expiresOn?: string | null
+}
+
+export type CommercialActivationRequest = {fileName:string;content:string}
+
 export interface DesktopAPI {
+  commercial_license_status():Promise<CommercialLicenseStatus>
+  commercial_activation_request():Promise<CommercialActivationRequest>
+  commercial_activate_license(jsonText:string):Promise<CommercialLicenseStatus>
   window_control(action:WindowControlAction):Promise<WindowControlState>
   get_alpha_discovery(sha:string):Promise<AlphaDiscovery>
   open_tool_window(kind:PopoutKind):Promise<PopoutState>
@@ -886,6 +899,9 @@ export interface DesktopAPI {
 }
 
 interface ProtectedNativeAPI {
+  commercial_license_status(token:string):Promise<CommercialLicenseStatus>
+  commercial_activation_request(token:string):Promise<CommercialActivationRequest>
+  commercial_activate_license(token:string,jsonText:string):Promise<CommercialLicenseStatus>
   window_control(token:string,action:WindowControlAction):Promise<WindowControlState>
   get_alpha_discovery(token:string,sha:string):Promise<AlphaDiscovery>
   open_tool_window(token:string,kind:PopoutKind):Promise<PopoutState>
@@ -959,6 +975,9 @@ export function desktopApi(): DesktopAPI | null {
   const token = window.__DUELTRACE_TOKEN__
   if (!native || typeof token !== "string" || token.length < 32) return null
   return {
+    commercial_license_status: () => native.commercial_license_status(token),
+    commercial_activation_request: () => native.commercial_activation_request(token),
+    commercial_activate_license: (jsonText) => native.commercial_activate_license(token,jsonText),
     window_control: (action) => native.window_control(token,action),
     get_alpha_discovery: (sha) => native.get_alpha_discovery(token,sha),
     open_tool_window: (kind) => native.open_tool_window(token,kind),
