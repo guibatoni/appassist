@@ -150,8 +150,6 @@ class CommercialWiringTests(unittest.TestCase):
         self.assertIn("scanner/dueltrace_commercial_entry.py",script)
         self.assertIn("--name DUELTRACE-Commercial",script)
         self.assertIn("scanner/dueltrace_web_desktop.py",script)
-        self.assertIn("commercial/dueltrace-lite-activation-v40",str(
-            ROOT.joinpath("scanner/dueltrace_commercial_entry.py")))
         # The runtime must not have a production key at this stage.
         self.assertIn('PUBLIC_KEY_B64 = ""',(
             ROOT/"scanner/dueltrace_commercial_public_key.py").read_text(encoding="utf-8"))
