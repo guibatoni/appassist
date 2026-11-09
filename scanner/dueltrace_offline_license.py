@@ -146,7 +146,7 @@ def verify_license(document: object, device_hash: str,
     if payload["device_hash"] != device_hash:
         raise LicenseError("Esta licença pertence a outro dispositivo.")
     now = today if today is not None else date.today()
-    if payload["issued_on"] > now:
+    if date.fromisoformat(payload["issued_on"]) > now:
         raise LicenseError("Data de emissão incompatível.")
     if payload["expires_on"] is not None and now > date.fromisoformat(payload["expires_on"]):
         raise LicenseError("Licença expirada.")
