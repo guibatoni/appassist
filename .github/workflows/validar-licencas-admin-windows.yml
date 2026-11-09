@@ -25,10 +25,13 @@ jobs:
           python-version: '3.12'
 
       - name: Preparar criptografia, empacotador e auditor
-        run: python -m pip install cryptography==50.0.2 pyinstaller==6.22.3 pip-audit
+        run: python -m pip install cryptography==50.0.2 pyinstaller==6.22.3 customtkinter==6.0.0 pip-audit
 
       - name: Validar ciclo de licença e proteção de chaves
         run: python -m unittest discover -s tests -p "test_dueltrace_license_admin*.py" -v
+
+      - name: Executar teste visual de navegação (Windows)
+        run: python tools/licensing/smoke_admin_ui.py
 
       - name: Validar sintaxe do Gerenciador
         run: python -m compileall -q tools/licensing scanner/dueltrace_offline_license.py
@@ -49,7 +52,7 @@ jobs:
       - name: Empacotar BatoniDev-LicenseManager.exe sem terminal
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --onedir --noconsole --name BatoniDev-LicenseManager --paths scanner --paths tools/licensing tools/licensing/dueltrace_license_admin.py
+          python -m PyInstaller --noconfirm --clean --onedir --noconsole --name BatoniDev-LicenseManager --collect-all customtkinter --paths scanner --paths tools/licensing tools/licensing/dueltrace_license_admin.py
           if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Gerenciador de Licenças." }
           $exe = 'dist/BatoniDev-LicenseManager/BatoniDev-LicenseManager.exe'
           if (-not (Test-Path -LiteralPath $exe)) { throw "Gerenciador Windows ausente." }
