@@ -18,7 +18,6 @@ from urllib.parse import unquote, urlsplit
 
 from dueltrace_web_bridge import DueltraceWebBridge
 from dueltrace_web_security import ProtectedDesktopApi
-from dueltrace_commercial_runtime import CommercialLicenseGate
 
 ART_PATTERN=re.compile(r"^/__art__/([0-9a-f]{64})/([0-9]{1,3})\.png$")
 CARD_PATTERN=re.compile(r"^/__card__/([0-9a-f]{64})/([0-9]{1,3})\.png$")
@@ -204,7 +203,11 @@ def main(*, commercial: bool = False):
 
     static=assets_path()
     bridge=DueltraceWebBridge()
-    license_gate=(CommercialLicenseGate(bridge.catalog.home) if commercial else None)
+    license_gate=None
+    if commercial:
+        # Keep Alpha runnable without installing commercial cryptography dependencies.
+        from dueltrace_commercial_runtime import CommercialLicenseGate
+        license_gate=CommercialLicenseGate(bridge.catalog.home)
     token=secrets.token_urlsafe(32)
     api=ProtectedDesktopApi(bridge,token,license_gate=license_gate)
     handler=local_handler(static,bridge,license_gate=license_gate)
