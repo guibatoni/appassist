@@ -136,5 +136,51 @@ class CommercialInstallerTests(unittest.TestCase):
             root/"tools/security/requirements-webui-build.txt").read_text(encoding="utf-8"))
 
 
+class OfflineIssuerTests(unittest.TestCase):
+    def test_offline_issuer_never_writes_cleartext_private_key(self):
+        from unittest.mock import patch
+        root=Path(__file__).resolve().parents[1]
+        sys.path.insert(0,str(root/"tools"/"licensing"))
+        import dueltrace_license_cli as cli
+        with tempfile.TemporaryDirectory() as td:
+            private=Path(td)/"private.pem"
+            public=Path(td)/"public.txt"
+            request=Path(td)/"request.json"
+            license_file=Path(td)/"issued-license.json"
+            password="This-is-a-test-only-strong-passphrase"
+            with patch.object(cli.getpass,"getpass",side_effect=[password,password]):
+                cli._keygen(private,public)
+            pem=private.read_bytes()
+            self.assertIn(b"ENCRYPTED PRIVATE KEY",pem)
+            self.assertNotIn(password.encode(),pem)
+            self.assertEqual(len(base64.b64decode(public.read_text().strip())),32)
+            data=activation_request("a"*64)
+            request.write_text(json.dumps(data),encoding="utf-8")
+            with patch.object(cli.getpass,"getpass",return_value=password):
+                cli._issue(private,request,license_file,None)
+            issued=json.loads(license_file.read_text(encoding="utf-8"))
+            status=verify_license(issued,data["device_hash"],
+                public_key_b64=public.read_text().strip())
+            self.assertTrue(status["active"])
+            self.assertIsNone(status["expiresOn"])
+            with self.assertRaises(LicenseError):
+                cli._keygen(private,public)
+
+    def test_bad_request_and_expiry_are_rejected(self):
+        from unittest.mock import patch
+        root=Path(__file__).resolve().parents[1]
+        sys.path.insert(0,str(root/"tools"/"licensing"))
+        import dueltrace_license_cli as cli
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)
+            request=base/"request.json"
+            request.write_text(json.dumps({
+                "schema":1,"product":"DUELTRACE","edition":"commercial-lite",
+                "request_id":"invalid","device_hash":"a"*64,
+            }),encoding="utf-8")
+            with self.assertRaises(LicenseError):
+                cli._read_request(request)
+
+
 if __name__=="__main__":
     unittest.main()
