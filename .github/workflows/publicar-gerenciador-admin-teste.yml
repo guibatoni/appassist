@@ -3,7 +3,7 @@ name: Publicar Gerenciador Batoni Dev TESTE (repositório privado)
 on:
   push:
     branches:
-      - commercial/dueltrace-license-manager-v41
+      - commercial/dueltrace-license-manager-redesign-v42
     paths:
       - 'tools/licensing/**'
       - 'tests/test_dueltrace_license_admin*.py'
@@ -32,7 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ($env:GITHUB_REF_NAME -ne 'commercial/dueltrace-license-manager-v41') {
+          if ($env:GITHUB_REF_NAME -ne 'commercial/dueltrace-license-manager-redesign-v42') {
             throw "Publicação autorizada apenas na branch privada de teste."
           }
           $repo = gh api "repos/$env:GITHUB_REPOSITORY" | ConvertFrom-Json
@@ -49,20 +49,22 @@ jobs:
           }
 
       - name: Instalar dependências fixadas
-        run: python -m pip install cryptography==50.0.2 pyinstaller==6.22.3 pip-audit
+        run: python -m pip install cryptography==50.0.2 pyinstaller==6.22.3 customtkinter==6.0.0 pip-audit
 
       - name: Testar emissor e auditar dependências
         shell: pwsh
         run: |
           python -m unittest discover -s tests -p "test_dueltrace_license_admin*.py" -v
           if ($LASTEXITCODE -ne 0) { throw "Falha nos testes de licenciamento." }
+          python tools/licensing/smoke_admin_ui.py
+          if ($LASTEXITCODE -ne 0) { throw "Falha no teste visual Windows." }
           python -m pip_audit --local
           if ($LASTEXITCODE -ne 0) { throw "Dependências vulneráveis." }
 
       - name: Compilar Gerenciador sem chave privada
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --onedir --noconsole --name BatoniDev-LicenseManager --paths scanner --paths tools/licensing tools/licensing/dueltrace_license_admin.py
+          python -m PyInstaller --noconfirm --clean --onedir --noconsole --name BatoniDev-LicenseManager --collect-all customtkinter --paths scanner --paths tools/licensing tools/licensing/dueltrace_license_admin.py
           if ($LASTEXITCODE -ne 0) { throw "Compilação Windows falhou." }
           $exe = 'dist/BatoniDev-LicenseManager/BatoniDev-LicenseManager.exe'
           if (-not (Test-Path -LiteralPath $exe)) { throw "Gerenciador ausente." }
@@ -103,7 +105,7 @@ jobs:
             throw "Repositório não privado: publicação negada."
           }
           $zip = (Resolve-Path 'dist/BatoniDev-LicenseManager-Windows-TESTE.zip').Path
-          $tag = "admin-test-v41-r$env:GITHUB_RUN_ID"
+          $tag = "admin-test-v42-r$env:GITHUB_RUN_ID"
           $hash = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           $size = (Get-Item -LiteralPath $zip).Length
           $notes = @"
@@ -116,7 +118,7 @@ jobs:
           "@
           $notesFile = Join-Path $env:RUNNER_TEMP 'admin-release-notes.txt'
           [System.IO.File]::WriteAllText($notesFile, $notes, [System.Text.UTF8Encoding]::new($false))
-          gh release create $tag $zip --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Batoni Dev License Manager TESTE — build $env:GITHUB_RUN_ID" --notes-file $notesFile --prerelease --latest=false
+          gh release create $tag $zip --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Batoni Dev License Manager REDESIGN TESTE — build $env:GITHUB_RUN_ID" --notes-file $notesFile --prerelease --latest=false
           if ($LASTEXITCODE -ne 0) { throw "Falha ao publicar no repositório privado." }
           $metadata = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or $metadata.target_commitish -ne $env:GITHUB_SHA) {
