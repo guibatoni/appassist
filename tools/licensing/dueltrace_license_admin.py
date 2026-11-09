@@ -164,7 +164,7 @@ class LicenseManager(ctk.CTk):
         self.request_var=tk.StringVar(value="Nenhum pedido selecionado.")
         self.total_var=tk.StringVar(value="0")
         self.device_total_var=tk.StringVar(value="0")
-        self.title("Batoni Dev — DUELTRACE License Manager")
+        self.title("Batoni Dev — Gerenciador de Licenças DUELTRACE")
         self.geometry("1180x780")
         self.minsize(950,670)
         self.configure(fg_color=BG)
@@ -329,7 +329,7 @@ class LicenseManager(ctk.CTk):
         branding.pack(side="left",fill="y",pady=10)
         name=_text(branding,"DUELTRACE",size=26,color=TEXT,bold=True)
         name.pack(anchor="w")
-        _text(branding,"BATONI DEV  ·  LICENSE MANAGER",size=11,
+        _text(branding,"BATONI DEV  ·  Gerenciador de Licenças",size=11,
               color=GOLD,bold=True).pack(anchor="w",pady=(0,2))
         self._bind_drag(header)
         self._bind_drag(canvas)
