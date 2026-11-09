@@ -127,7 +127,7 @@ jobs:
           $package = (Resolve-Path 'dist/DUELTRACE-WebUI').Path
           & $compiler "/DBUILD_DIR=$package" 'installer/dueltrace-commercial-lite.nsi'
           if ($LASTEXITCODE -ne 0) { throw "Instalador NSIS de teste não compilou." }
-          $setup = (Resolve-Path 'DUELTRACE-Setup-TESTE.exe').Path
+          $setup = (Resolve-Path 'installer/DUELTRACE-Setup-TESTE.exe').Path
           if ((Get-Item $setup).Length -lt 1000000) { throw "Instalador de teste incompleto." }
           Start-MpScan -ScanType CustomScan -ScanPath $setup -ErrorAction Stop
           Remove-Item -LiteralPath $setup -Force
