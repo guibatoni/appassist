@@ -1,8 +1,8 @@
-"""Batoni Dev — Local License Manager UI (owner ONLY, never customer release).
+"""Batoni Dev — DUELTRACE-style offline License Manager, owner-only.
 
-Standalone Tkinter GUI for encrypted key creation, offline issuance,
-verification, re-sending the original license, and a minimal sales ledger.
-This program never accesses Patreon, the Internet or the customer's ISO.
+Modern CustomTkinter shell matches the DUELTRACE palette and navigation.
+All signing, purchase checks and file protections remain in admin_core.
+No remote calls or customer-facing administration endpoints.
 """
 from __future__ import annotations
 
@@ -11,12 +11,11 @@ import os
 import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import filedialog, ttk
+import customtkinter as ctk
 
-# Source entry point needs access to the shared client verifier.
-# PyInstaller uses --paths scanner when packaging the admin EXE.
-if not getattr(sys, "frozen", False):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scanner"))
+if not getattr(sys,"frozen",False):
+    sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"scanner"))
 
 from dueltrace_offline_license import LicenseError
 from dueltrace_license_admin_core import (
@@ -26,195 +25,535 @@ from dueltrace_license_admin_core import (
     _public_b64,
 )
 
-BG = "#061123"
-SURFACE = "#0d1b34"
-PANEL = "#102442"
-TEXT = "#e9f1ff"
-MUTED = "#a5b8d0"
-GOLD = "#eac77f"
-CYAN = "#7fdcff"
-ERROR = "#f3a3a3"
+# Exact DUELTRACE theme tokens from web/app/globals.css.
+BG="#040a1a"
+SURFACE="#081530"
+PANEL="#0b1c3d"
+BORDER="#1b3f78"
+TEXT="#e6f0ff"
+MUTED="#8ea3c7"
+GOLD="#f5b83d"
+CYAN="#38c8ff"
+ERROR="#f0444f"
+SUCCESS="#2fd27a"
+
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
 
 
 def _downloads() -> Path:
-    path = Path.home() / "Downloads"
+    path=Path.home()/"Downloads"
     return path if path.is_dir() else Path.home()
 
 
-class LicenseManager(tk.Tk):
+def _text(parent, value, *, size=13, color=TEXT, bold=False, wrap=None,
+          textvariable=None, **kwargs):
+    font=ctk.CTkFont(family="Segoe UI",size=size,
+                     weight="bold" if bold else "normal")
+    options={"text_color":color,"font":font,"anchor":"w","justify":"left"}
+    if wrap is not None:
+        options["wraplength"]=wrap
+    if textvariable is not None:
+        options["textvariable"]=textvariable
+    else:
+        options["text"]=value
+    options.update(kwargs)
+    return ctk.CTkLabel(parent,**options)
+
+
+def _btn(parent, label, callback, *, primary=False, width=None):
+    options=dict(text=label,command=callback,height=39,corner_radius=9,
+                 font=ctk.CTkFont(family="Segoe UI",size=12,weight="bold"),
+                 border_width=1)
+    if primary:
+        options.update(fg_color="#372c1a",hover_color="#55431e",
+                       text_color=GOLD,border_color=GOLD)
+    else:
+        options.update(fg_color=PANEL,hover_color="#12365b",
+                       text_color=TEXT,border_color=BORDER)
+    if width is not None:
+        options["width"]=width
+    return ctk.CTkButton(parent,**options)
+
+
+def _modal(parent, title: str, body: str, kind="info") -> str | bool | None:
+    """DUELTRACE-styled native modal; no passwords written to disk/logs."""
+    window=ctk.CTkToplevel(parent)
+    window.title(title)
+    window.configure(fg_color=BG)
+    window.resizable(False,False)
+    window.transient(parent)
+    window.overrideredirect(True)
+    width,height=(490,300) if kind=="password" else (500,260)
+    px=parent.winfo_rootx()+max(0,(parent.winfo_width()-width)//2)
+    py=parent.winfo_rooty()+max(0,(parent.winfo_height()-height)//2)
+    window.geometry(f"{width}x{height}+{px}+{py}")
+    result={"value":None}
+    outer=ctk.CTkFrame(window,fg_color=SURFACE,corner_radius=16,
+                       border_width=2,border_color=GOLD if kind=="confirm" else BORDER)
+    outer.pack(fill="both",expand=True,padx=2,pady=2)
+    heading=ctk.CTkFrame(outer,fg_color="transparent")
+    heading.pack(fill="x",padx=22,pady=(19,8))
+    _text(heading,"◆",size=17,color=GOLD).pack(side="left",padx=(0,10))
+    _text(heading,title,size=17,color=TEXT,bold=True).pack(side="left")
+    _text(outer,body,size=12,color=MUTED,wrap=438).pack(
+        fill="x",padx=23,pady=(5,13))
+    secret=None
+    if kind=="password":
+        secret=ctk.CTkEntry(outer,show="*",height=41,corner_radius=9,
+                            fg_color=BG,border_color=BORDER,text_color=TEXT,
+                            font=ctk.CTkFont(family="Segoe UI",size=14))
+        secret.pack(fill="x",padx=23,pady=(1,14))
+    bar=ctk.CTkFrame(outer,fg_color="transparent")
+    bar.pack(side="bottom",fill="x",padx=22,pady=(3,19))
+    def finish(value):
+        result["value"]=value
+        window.grab_release()
+        window.destroy()
+    if kind in ("confirm","password"):
+        _btn(bar,"Cancelar",lambda:finish(None if kind=="password" else False),
+             width=115).pack(side="right",padx=(8,0))
+        _btn(bar,"Confirmar",lambda:finish(secret.get() if secret else True),
+             primary=True,width=130).pack(side="right")
+        window.bind("<Return>",lambda _e:finish(secret.get() if secret else True))
+    else:
+        _btn(bar,"Entendido",lambda:finish(True),primary=True,width=140).pack(side="right")
+        window.bind("<Return>",lambda _e:finish(True))
+    window.bind("<Escape>",lambda _e:finish(None if kind=="password" else False))
+    window.after(50,lambda:secret.focus_set() if secret else window.focus_force())
+    window.grab_set()
+    parent.wait_window(window)
+    return result["value"]
+
+
+class _BrandDialogs:
+    """Drop-in wrappers keep the original core operations untouched."""
+    @staticmethod
+    def showerror(title,body,*,parent):
+        return _modal(parent,title,body,"error")
+
+    @staticmethod
+    def showinfo(title,body,*,parent):
+        return _modal(parent,title,body,"info")
+
+    @staticmethod
+    def showwarning(title,body,*,parent):
+        return _modal(parent,title,body,"warning")
+
+    @staticmethod
+    def askyesno(title,body,*,parent):
+        return _modal(parent,title,body,"confirm") is True
+
+
+messagebox=_BrandDialogs()
+
+
+class LicenseManager(ctk.CTk):
+    """Frameless desktop shell with DUELTRACE visual identity."""
     def __init__(self, *, home: Path | None = None):
         super().__init__()
-        self.home = home if home is not None else default_admin_home()
-        self.current_request: dict | None = None
-        self.current_request_path: Path | None = None
-        self.order_var = tk.StringVar()
-        self.expiry_var = tk.StringVar()
-        self.confirmed_var = tk.BooleanVar(value=False)
-        self.filter_var = tk.StringVar()
-        self.status_var = tk.StringVar(value="Nenhuma operação de ativação iniciada.")
-        self.key_status_var = tk.StringVar(value="Verificando chaves...")
-        self.request_var = tk.StringVar(value="Nenhum pedido selecionado.")
-        self.title("Batoni Dev — Gerenciador de Licenças")
-        self.geometry("1010x735")
-        self.minsize(870, 650)
-        self.configure(background=BG)
-        self._configure_theme()
+        self.home=home if home is not None else default_admin_home()
+        self.current_request: dict | None=None
+        self.current_request_path: Path | None=None
+        self.order_var=tk.StringVar()
+        self.expiry_var=tk.StringVar()
+        self.confirmed_var=tk.BooleanVar(value=False)
+        self.filter_var=tk.StringVar()
+        self.status_var=tk.StringVar(value="Pronto para gerenciar licenças offline.")
+        self.key_status_var=tk.StringVar(value="Verificando chaves...")
+        self.request_var=tk.StringVar(value="Nenhum pedido selecionado.")
+        self.total_var=tk.StringVar(value="0")
+        self.device_total_var=tk.StringVar(value="0")
+        self.title("Batoni Dev — DUELTRACE License Manager")
+        self.geometry("1180x780")
+        self.minsize(950,670)
+        self.configure(fg_color=BG)
+        self._maximized=False
+        self._minimizing=False
+        self._prior_geometry=None
+        self._drag_anchor=None
+        self._current_page=None
         self._build_widgets()
-        self.filter_var.trace_add("write", lambda *_: self.refresh_history())
+        self._style_tree()
+        self.filter_var.trace_add("write",lambda *_:self.refresh_history())
         self.refresh_keys()
         self.refresh_history()
+        if os.name=="nt":
+            self.after(100,self._activate_frameless)
 
-    def _configure_theme(self):
-        style = ttk.Style(self)
+    def _activate_frameless(self):
+        try:
+            self.overrideredirect(True)
+        except tk.TclError:
+            pass
+
+    def _restore_caption_after_minimize(self,event=None):
+        if self._minimizing and os.name=="nt":
+            self._minimizing=False
+            self.after(70,self._activate_frameless)
+
+    def _minimize_window(self):
+        if os.name=="nt":
+            self._minimizing=True
+            self.overrideredirect(False)
+            self.iconify()
+            self.bind("<Map>",self._restore_caption_after_minimize,add="+")
+        else:
+            self.iconify()
+
+    def _work_area(self):
+        if os.name=="nt":
+            try:
+                import ctypes
+                class RECT(ctypes.Structure):
+                    _fields_=[("left",ctypes.c_long),("top",ctypes.c_long),
+                              ("right",ctypes.c_long),("bottom",ctypes.c_long)]
+                rect=RECT()
+                if ctypes.windll.user32.SystemParametersInfoW(48,0,
+                        ctypes.byref(rect),0):
+                    return (rect.left,rect.top,
+                            rect.right-rect.left,rect.bottom-rect.top)
+            except (OSError,AttributeError):
+                pass
+        return (0,0,self.winfo_screenwidth(),self.winfo_screenheight())
+
+    def _toggle_maximize(self):
+        if self._maximized:
+            if self._prior_geometry:
+                self.geometry(self._prior_geometry)
+            self._maximized=False
+            self.max_button.configure(text="□")
+        else:
+            self._prior_geometry=self.geometry()
+            x,y,w,h=self._work_area()
+            self.geometry(f"{w}x{h}+{x}+{y}")
+            self._maximized=True
+            self.max_button.configure(text="❐")
+
+    def _drag_begin(self,event):
+        if not self._maximized:
+            self._drag_anchor=(event.x_root-self.winfo_x(),
+                               event.y_root-self.winfo_y())
+
+    def _drag_move(self,event):
+        if self._drag_anchor is not None and not self._maximized:
+            x=event.x_root-self._drag_anchor[0]
+            y=event.y_root-self._drag_anchor[1]
+            self.geometry(f"+{x}+{y}")
+
+    def _drag_end(self,event=None):
+        self._drag_anchor=None
+
+    def _bind_drag(self,widget):
+        for item in (widget,):
+            item.bind("<ButtonPress-1>",self._drag_begin)
+            item.bind("<B1-Motion>",self._drag_move)
+            item.bind("<ButtonRelease-1>",self._drag_end)
+            item.bind("<Double-Button-1>",lambda _e:self._toggle_maximize())
+
+    def _style_tree(self):
+        style=ttk.Style(self)
         style.theme_use("clam")
-        style.configure(".", background=BG, foreground=TEXT, font=("Segoe UI", 10))
-        style.configure("TFrame", background=BG)
-        style.configure("Panel.TFrame", background=SURFACE)
-        style.configure("TLabel", background=BG, foreground=TEXT)
-        style.configure("Muted.TLabel", foreground=MUTED)
-        style.configure("Title.TLabel", foreground=GOLD, font=("Segoe UI Semibold", 20))
-        style.configure("Subtitle.TLabel", foreground=MUTED, font=("Segoe UI", 10))
-        style.configure("Heading.TLabel", foreground=CYAN, font=("Segoe UI Semibold", 12))
-        style.configure("TButton", background=PANEL, foreground=TEXT, padding=(13, 9),
-                        borderwidth=0, focuscolor=PANEL)
-        style.map("TButton", background=[("active", "#1b3c64"), ("disabled", "#122238")],
-                  foreground=[("disabled", "#66778f")])
-        style.configure("Gold.TButton", background="#bc9858", foreground="#071326",
-                        font=("Segoe UI Semibold", 10))
-        style.map("Gold.TButton", background=[("active", GOLD), ("disabled", "#45516c")])
-        style.configure("TEntry", fieldbackground="#0a1830", foreground=TEXT, insertcolor=TEXT)
-        style.configure("TCheckbutton", background=BG, foreground=TEXT)
-        style.map("TCheckbutton", background=[("active", BG)])
-        style.configure("TNotebook", background=BG, borderwidth=0, tabmargins=(0, 7, 0, 0))
-        style.configure("TNotebook.Tab", background=SURFACE, foreground=MUTED,
-                        padding=(22, 11))
-        style.map("TNotebook.Tab", background=[("selected", PANEL)],
-                  foreground=[("selected", GOLD)])
-        style.configure("Treeview", background=SURFACE, foreground=TEXT,
-                        fieldbackground=SURFACE, borderwidth=0, rowheight=31)
-        style.configure("Treeview.Heading", background=PANEL, foreground=CYAN,
-                        font=("Segoe UI Semibold", 9))
-        style.map("Treeview", background=[("selected", "#255481")])
+        style.configure("Admin.Treeview",background=SURFACE,
+                        foreground=TEXT,fieldbackground=SURFACE,
+                        borderwidth=0,relief="flat",rowheight=33,
+                        font=("Segoe UI",10))
+        style.configure("Admin.Treeview.Heading",background=PANEL,
+                        foreground=CYAN,borderwidth=0,
+                        font=("Segoe UI Semibold",10))
+        style.map("Admin.Treeview",
+                  background=[("selected","#164b72")],
+                  foreground=[("selected",TEXT)])
+        style.map("Admin.Treeview.Heading",
+                  background=[("active","#112d4f")])
+        self.ledger_tree.configure(style="Admin.Treeview")
 
     def _build_widgets(self):
-        header = ttk.Frame(self, padding=(26, 17, 26, 13))
-        header.pack(fill="x")
-        ttk.Label(header, text="BATONI DEV", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(header, text="Gerenciador de Licenças • DUELTRACE Commercial Lite",
-                  style="Subtitle.TLabel").pack(anchor="w", pady=(2, 1))
-
-        ttk.Separator(self, orient="horizontal").pack(fill="x", padx=25)
-        self.tabs = ttk.Notebook(self)
-        self.tabs.pack(fill="both", expand=True, padx=23, pady=(10, 0))
-        self.issue_tab = ttk.Frame(self.tabs, padding=18)
-        self.history_tab = ttk.Frame(self.tabs, padding=18)
-        self.security_tab = ttk.Frame(self.tabs, padding=18)
-        self.tabs.add(self.issue_tab, text="Emitir licença")
-        self.tabs.add(self.history_tab, text="Licenças emitidas")
-        self.tabs.add(self.security_tab, text="Chaves e segurança")
-
+        shell=ctk.CTkFrame(self,fg_color=BG,corner_radius=18,
+                           border_width=1,border_color=GOLD)
+        shell.pack(fill="both",expand=True,padx=13,pady=13)
+        self.shell=shell
+        self._build_titlebar(shell)
+        body=ctk.CTkFrame(shell,fg_color="transparent")
+        body.pack(fill="both",expand=True,padx=13,pady=(13,8))
+        body.grid_columnconfigure(1,weight=1)
+        body.grid_rowconfigure(0,weight=1)
+        self.sidebar=ctk.CTkFrame(body,width=235,fg_color=SURFACE,
+                                  border_color=BORDER,border_width=1,
+                                  corner_radius=14)
+        self.sidebar.grid(row=0,column=0,sticky="ns",padx=(0,13))
+        self.sidebar.grid_propagate(False)
+        self._build_sidebar(self.sidebar)
+        self.content=ctk.CTkFrame(body,fg_color="#061129",
+                                  border_color=BORDER,border_width=1,
+                                  corner_radius=14)
+        self.content.grid(row=0,column=1,sticky="nsew")
+        self.content.grid_rowconfigure(0,weight=1)
+        self.content.grid_columnconfigure(0,weight=1)
+        self.issue_tab=ctk.CTkScrollableFrame(self.content,fg_color="transparent",
+                         scrollbar_button_color="#315f89",
+                         scrollbar_button_hover_color=CYAN)
+        self.history_tab=ctk.CTkFrame(self.content,fg_color="transparent")
+        self.security_tab=ctk.CTkScrollableFrame(self.content,fg_color="transparent",
+                         scrollbar_button_color="#315f89",
+                         scrollbar_button_hover_color=CYAN)
+        self.pages={"issue":self.issue_tab,"history":self.history_tab,
+                    "security":self.security_tab}
+        self.nav_buttons={}
+        # Sidebar buttons are added after page definitions for reliable selection.
+        self._create_navigation()
         self._build_issue()
         self._build_history()
         self._build_security()
-        ttk.Separator(self, orient="horizontal").pack(fill="x", padx=24)
-        status = ttk.Frame(self, padding=(26, 10, 26, 13))
-        status.pack(fill="x")
-        ttk.Label(status, textvariable=self.status_var, style="Muted.TLabel",
-                  wraplength=920).pack(anchor="w")
+        self._show_page("issue")
+        status=ctk.CTkFrame(shell,fg_color=SURFACE,corner_radius=9,height=35)
+        status.pack(fill="x",padx=14,pady=(0,12))
+        _text(status,"●",size=12,color=SUCCESS).pack(side="left",padx=(11,7))
+        _text(status,"LOCAL / OFFLINE",size=10,color=CYAN,bold=True).pack(side="left")
+        _text(status,"  •  ",size=12,color=MUTED).pack(side="left")
+        _text(status,"",size=11,color=MUTED,textvariable=self.status_var,
+              wrap=810).pack(side="left",fill="x",expand=True,padx=(0,10))
+
+    def _build_titlebar(self,shell):
+        header=ctk.CTkFrame(shell,fg_color="#040b1f",corner_radius=13,height=88)
+        header.pack(fill="x",padx=2,pady=2)
+        header.pack_propagate(False)
+        canvas=tk.Canvas(header,width=67,height=65,bg="#040b1f",
+                         highlightthickness=0,borderwidth=0)
+        canvas.pack(side="left",padx=(23,11),pady=10)
+        canvas.create_polygon(5,7,61,7,33,57,outline=CYAN,fill="",
+                              width=3,smooth=False)
+        canvas.create_polygon(17,15,49,15,33,43,outline="#1a8fe0",fill="",
+                              width=2,smooth=False)
+        branding=ctk.CTkFrame(header,fg_color="transparent")
+        branding.pack(side="left",fill="y",pady=10)
+        name=_text(branding,"DUELTRACE",size=26,color=TEXT,bold=True)
+        name.pack(anchor="w")
+        _text(branding,"BATONI DEV  ·  LICENSE MANAGER",size=11,
+              color=GOLD,bold=True).pack(anchor="w",pady=(0,2))
+        self._bind_drag(header)
+        self._bind_drag(canvas)
+        self._bind_drag(branding)
+        self._bind_drag(name)
+        controls=ctk.CTkFrame(header,fg_color="transparent")
+        controls.pack(side="right",padx=(10,15),pady=12)
+        for label,callback,hover in (
+            ("—",self._minimize_window,"#13365b"),
+            ("□",self._toggle_maximize,"#13365b"),
+            ("×",self.destroy,"#6b2031"),
+        ):
+            button=ctk.CTkButton(controls,text=label,command=callback,
+                        width=37,height=34,corner_radius=8,
+                        fg_color="transparent",hover_color=hover,
+                        text_color=TEXT,font=ctk.CTkFont(size=20))
+            button.pack(side="left",padx=2)
+            if label=="□":self.max_button=button
+        badge=ctk.CTkFrame(header,fg_color="#0c2b31",border_color="#255f65",
+                           border_width=1,corner_radius=11)
+        badge.pack(side="right",padx=12,pady=19)
+        _text(badge,"●  GERENCIADOR OFFLINE",size=11,color=SUCCESS,
+              bold=True).pack(padx=12,pady=8)
+        sep=ctk.CTkFrame(shell,height=2,fg_color="#22415d",corner_radius=0)
+        sep.pack(fill="x",padx=15)
+
+    def _build_sidebar(self,side):
+        _text(side,"PAINEL BATONI DEV",size=11,color=MUTED,bold=True).pack(
+            anchor="w",padx=18,pady=(23,11))
+        _text(side,"Licenciamento",size=17,color=TEXT,bold=True).pack(
+            anchor="w",padx=18)
+        _text(side,"DUELTRACE Commercial Lite",size=10,color=MUTED).pack(
+            anchor="w",padx=18,pady=(2,20))
+        self.nav_holder=ctk.CTkFrame(side,fg_color="transparent")
+        self.nav_holder.pack(fill="x",padx=10)
+        filler=ctk.CTkFrame(side,fg_color="transparent")
+        filler.pack(fill="both",expand=True)
+        notice=ctk.CTkFrame(side,fg_color="#081f35",
+                            border_color="#1b4164",border_width=1,corner_radius=11)
+        notice.pack(fill="x",padx=12,pady=(0,15))
+        _text(notice,"◆  ASSINATURA ED25519",size=11,color=CYAN,
+              bold=True).pack(anchor="w",padx=13,pady=(13,5))
+        _text(notice,"Chaves guardadas somente no seu computador. "
+              "Nenhuma validação por IP.",size=11,color=MUTED,
+              wrap=180).pack(anchor="w",padx=13,pady=(0,13))
+
+    def _create_navigation(self):
+        for name,label in (
+            ("issue","◇   Emitir licença"),
+            ("history","▤   Licenças emitidas"),
+            ("security","♢   Chaves e segurança"),
+        ):
+            button=ctk.CTkButton(self.nav_holder,text=label,
+                     height=43,corner_radius=9,
+                     font=ctk.CTkFont(family="Segoe UI",size=13,weight="bold"),
+                     anchor="w",command=lambda item=name:self._show_page(item))
+            button.pack(fill="x",pady=4)
+            self.nav_buttons[name]=button
+
+    def _show_page(self,name):
+        if name not in self.pages:return
+        for key,page in self.pages.items():
+            page.grid_forget()
+            button=self.nav_buttons[key]
+            selected=key==name
+            button.configure(
+                fg_color="#15365b" if selected else "transparent",
+                hover_color="#15365b",text_color=CYAN if selected else MUTED,
+                border_width=1 if selected else 0,
+                border_color=CYAN if selected else BORDER)
+        self.pages[name].grid(row=0,column=0,sticky="nsew",padx=14,pady=14)
+        self._current_page=name
+
+    def _page_intro(self,frame,title,subtitle):
+        _text(frame,title,size=24,color=TEXT,bold=True).pack(
+            anchor="w",padx=8,pady=(10,2))
+        _text(frame,subtitle,size=12,color=MUTED,wrap=720).pack(
+            anchor="w",padx=8,pady=(0,18))
+
+    def _card(self,parent,*,title,description):
+        card=ctk.CTkFrame(parent,fg_color=SURFACE,corner_radius=13,
+                          border_width=1,border_color=BORDER)
+        card.pack(fill="x",padx=8,pady=(0,14))
+        head=ctk.CTkFrame(card,fg_color="transparent")
+        head.pack(fill="x",padx=20,pady=(16,4))
+        _text(head,title,size=15,color=GOLD,bold=True).pack(anchor="w")
+        _text(card,description,size=12,color=MUTED,wrap=710).pack(
+            anchor="w",fill="x",padx=20,pady=(0,15))
+        return card
 
     def _build_issue(self):
-        container = self.issue_tab
-        ttk.Label(container, text="1. Importe o pedido enviado pelo comprador",
-                  style="Heading.TLabel").pack(anchor="w", pady=(1, 9))
-        row = ttk.Frame(container)
-        row.pack(fill="x", pady=(0, 8))
-        ttk.Button(row, text="Selecionar pedido (.json)", command=self.select_request).pack(side="left")
-        ttk.Label(row, textvariable=self.request_var, style="Muted.TLabel",
-                  wraplength=630).pack(side="left", padx=14)
-        ttk.Separator(container).pack(fill="x", pady=(14, 18))
-
-        ttk.Label(container, text="2. Identifique a compra e confirme o pagamento",
-                  style="Heading.TLabel").pack(anchor="w", pady=(0, 9))
-        ttk.Label(container, text="ID da compra (ex.: PATREON-0001), sem nome, e-mail ou senha.",
-                  style="Muted.TLabel").pack(anchor="w")
-        ttk.Entry(container, textvariable=self.order_var, width=47).pack(anchor="w", pady=(5, 11))
-        ttk.Label(container, text="Validade (AAAA-MM-DD). Deixe vazio para licença permanente.",
-                  style="Muted.TLabel").pack(anchor="w")
-        ttk.Entry(container, textvariable=self.expiry_var, width=25).pack(anchor="w", pady=(5, 10))
-        ttk.Checkbutton(container,
-                        text="Confirmei o pagamento e os dados do pedido.",
-                        variable=self.confirmed_var).pack(anchor="w", pady=(8, 11))
-
-        ttk.Separator(container).pack(fill="x", pady=(9, 18))
-        ttk.Label(container, text="3. Emita a licença assinada",
-                  style="Heading.TLabel").pack(anchor="w", pady=(0, 10))
-        ttk.Button(container, text="Emitir licença (.json)", style="Gold.TButton",
-                   command=self.emit_license).pack(anchor="w")
-        ttk.Label(container,
-                  text="Até 2 computadores por compra. A licença original fica guardada localmente para reenvio. "
-                       "O arquivo privado de assinatura nunca acompanha a licença do comprador.",
-                  style="Muted.TLabel", wraplength=780, justify="left").pack(anchor="w", pady=(14, 0))
+        parent=self.issue_tab
+        self._page_intro(parent,"Emitir licença","Processo seguro em três etapas, "
+                         "sem servidores ou configurações técnicas.")
+        c=self._card(parent,title="01  ·  Importar pedido",
+                     description="Selecione o pedido JSON recebido do comprador.")
+        row=ctk.CTkFrame(c,fg_color="transparent")
+        row.pack(fill="x",padx=20,pady=(0,19))
+        _btn(row,"Selecionar pedido (.json)",self.select_request).pack(side="left")
+        _text(row,"",size=11,color=CYAN,textvariable=self.request_var,
+              wrap=325).pack(side="left",fill="x",expand=True,padx=(14,0))
+        c=self._card(parent,title="02  ·  Confirmar compra",
+                     description="Informe o identificador de venda. "
+                     "O aplicativo não consulta Patreon automaticamente.")
+        fields=ctk.CTkFrame(c,fg_color="transparent")
+        fields.pack(fill="x",padx=20,pady=(0,7))
+        left=ctk.CTkFrame(fields,fg_color="transparent")
+        left.pack(side="left",fill="x",expand=True,padx=(0,12))
+        right=ctk.CTkFrame(fields,fg_color="transparent")
+        right.pack(side="left",fill="x",expand=True)
+        _text(left,"ID DA COMPRA",size=10,color=CYAN,bold=True).pack(anchor="w")
+        ctk.CTkEntry(left,textvariable=self.order_var,height=40,corner_radius=8,
+                     placeholder_text="PATREON-0001",fg_color=BG,
+                     border_color=BORDER,text_color=TEXT).pack(fill="x",pady=(6,0))
+        _text(right,"VALIDADE (OPCIONAL)",size=10,color=CYAN,bold=True).pack(anchor="w")
+        ctk.CTkEntry(right,textvariable=self.expiry_var,height=40,
+                     corner_radius=8,placeholder_text="AAAA-MM-DD",
+                     fg_color=BG,border_color=BORDER,text_color=TEXT).pack(
+                     fill="x",pady=(6,0))
+        ctk.CTkCheckBox(c,text="Pagamento conferido e confirmado",
+                variable=self.confirmed_var,fg_color="#a47d31",
+                hover_color=GOLD,border_color=BORDER,text_color=TEXT,
+                font=ctk.CTkFont(size=12)).pack(anchor="w",padx=20,pady=(8,19))
+        c=self._card(parent,title="03  ·  Assinar e emitir",
+                     description="A assinatura é criada com a sua chave privada "
+                     "criptografada. Envie ao comprador apenas o arquivo JSON.")
+        _btn(c,"◆   Emitir licença assinada",self.emit_license,
+             primary=True).pack(anchor="w",padx=20,pady=(0,17))
+        _text(parent,"Máximo de dois computadores por compra. "
+              "O histórico e a chave privada permanecem locais.",
+              size=11,color=MUTED,wrap=720).pack(anchor="w",padx=15,pady=(0,16))
 
     def _build_history(self):
-        ttk.Label(self.history_tab, text="Histórico local de licenças",
-                  style="Heading.TLabel").pack(anchor="w")
-        ttk.Label(self.history_tab,
-                  text="Acompanhe o ID da compra e reenvie uma licença já emitida, sem criar outra ativação.",
-                  style="Muted.TLabel", wraplength=840).pack(anchor="w", pady=(5, 14))
-        controls = ttk.Frame(self.history_tab)
-        controls.pack(fill="x", pady=(0, 12))
-        ttk.Label(controls, text="Buscar compra ou licença:").pack(side="left")
-        ttk.Entry(controls, textvariable=self.filter_var, width=32).pack(side="left", padx=(9, 12))
-        ttk.Button(controls, text="Atualizar", command=self.refresh_history).pack(side="left")
-        columns = ("order_ref", "license_id", "device", "issued_on", "expires_on")
-        self.ledger_tree = ttk.Treeview(self.history_tab, columns=columns,
-                                        show="headings", height=12, selectmode="browse")
-        for name, label, width in (
-            ("order_ref", "Compra", 145),
-            ("license_id", "ID da licença", 285),
-            ("device", "Dispositivo", 130),
-            ("issued_on", "Emissão", 95),
-            ("expires_on", "Validade", 110),
+        parent=self.history_tab
+        self._page_intro(parent,"Licenças emitidas",
+            "Pesquise compras e reenvie licenças existentes sem gastar outra ativação.")
+        metrics=ctk.CTkFrame(parent,fg_color="transparent")
+        metrics.pack(fill="x",padx=8,pady=(0,15))
+        for label,var in (("LICENÇAS EMITIDAS",self.total_var),
+                          ("COMPUTADORES",self.device_total_var)):
+            card=ctk.CTkFrame(metrics,fg_color=SURFACE,
+                corner_radius=11,border_color=BORDER,border_width=1)
+            card.pack(side="left",fill="x",expand=True,padx=(0,12))
+            _text(card,label,size=11,color=MUTED,bold=True).pack(
+                anchor="w",padx=18,pady=(15,3))
+            _text(card,"",size=25,color=GOLD,bold=True,
+                  textvariable=var).pack(anchor="w",padx=18,pady=(0,16))
+        search=ctk.CTkFrame(parent,fg_color=SURFACE,
+                            corner_radius=11,border_width=1,border_color=BORDER)
+        search.pack(fill="x",padx=8,pady=(0,14))
+        _text(search,"PESQUISAR POR COMPRA OU LICENÇA",size=10,
+              color=CYAN,bold=True).pack(anchor="w",padx=15,pady=(12,5))
+        searchline=ctk.CTkFrame(search,fg_color="transparent")
+        searchline.pack(fill="x",padx=15,pady=(0,13))
+        ctk.CTkEntry(searchline,textvariable=self.filter_var,height=40,
+                corner_radius=8,placeholder_text="Nome da compra ou ID",
+                fg_color=BG,border_color=BORDER,
+                text_color=TEXT).pack(side="left",fill="x",expand=True,padx=(0,9))
+        _btn(searchline,"Atualizar",self.refresh_history,width=105).pack(side="right")
+        table_frame=ctk.CTkFrame(parent,fg_color=SURFACE,corner_radius=12,
+                border_width=1,border_color=BORDER)
+        table_frame.pack(fill="both",expand=True,padx=8,pady=(0,12))
+        columns=("order_ref","license_id","device","issued_on","expires_on")
+        self.ledger_tree=ttk.Treeview(table_frame,columns=columns,show="headings",
+                           height=11,selectmode="browse")
+        for name,label,width in (
+            ("order_ref","Compra",128),
+            ("license_id","ID da licença",265),
+            ("device","Dispositivo",122),
+            ("issued_on","Emissão",96),
+            ("expires_on","Validade",107),
         ):
-            self.ledger_tree.heading(name, text=label)
-            self.ledger_tree.column(name, width=width, minwidth=65, stretch=name=="license_id")
-        self.ledger_tree.pack(fill="both", expand=True)
-        ttk.Button(self.history_tab, text="Reenviar licença selecionada (.json)",
-                   command=self.resend_license).pack(anchor="w", pady=(13, 0))
+            self.ledger_tree.heading(name,text=label)
+            self.ledger_tree.column(name,width=width,minwidth=70,
+                                    stretch=name=="license_id")
+        self.ledger_tree.pack(side="left",fill="both",expand=True,padx=(12,0),pady=13)
+        scroll=ctk.CTkScrollbar(table_frame,orientation="vertical",
+                command=self.ledger_tree.yview,
+                button_color="#315f89",button_hover_color=CYAN)
+        scroll.pack(side="right",fill="y",padx=(1,9),pady=14)
+        self.ledger_tree.configure(yscrollcommand=scroll.set)
+        _btn(parent,"◇   Reenviar licença selecionada",self.resend_license,
+             primary=True).pack(anchor="w",padx=8,pady=(0,15))
 
     def _build_security(self):
-        ttk.Label(self.security_tab, text="Proteção de chaves",
-                  style="Heading.TLabel").pack(anchor="w", pady=(0, 9))
-        ttk.Label(self.security_tab, textvariable=self.key_status_var,
-                  style="Muted.TLabel", wraplength=810).pack(anchor="w", pady=(0, 18))
-        row = ttk.Frame(self.security_tab)
-        row.pack(fill="x", pady=(0, 14))
-        ttk.Button(row, text="Criar chaves privadas e públicas",
-                   style="Gold.TButton", command=self.setup_keys).pack(side="left")
-        ttk.Button(row, text="Exportar chave pública",
-                   command=self.export_public).pack(side="left", padx=9)
-        ttk.Button(row, text="Recuperar chave pública",
-                   command=self.recover_public).pack(side="left")
-        ttk.Separator(self.security_tab).pack(fill="x", pady=(15, 18))
-        ttk.Label(self.security_tab, text="Verificar arquivo de licença",
-                  style="Heading.TLabel").pack(anchor="w")
-        ttk.Button(self.security_tab, text="Validar assinatura (.json)",
-                   command=self.verify_license).pack(anchor="w", pady=(11, 18))
-        ttk.Label(self.security_tab, text="Pasta local protegida pelo perfil do Windows:",
-                  style="Muted.TLabel").pack(anchor="w")
-        ttk.Label(self.security_tab, text=str(self.home), wraplength=790).pack(anchor="w", pady=(5, 13))
-        ttk.Button(self.security_tab, text="Abrir pasta local",
-                   command=self.open_local_folder).pack(anchor="w")
-        ttk.Separator(self.security_tab).pack(fill="x", pady=(20, 17))
-        guidance = (
-            "Atenção: a chave privada só deve existir no seu PC. Faça uma cópia "
-            "criptografada em mídia segura e guarde a senha separadamente. Nunca "
-            "publique o arquivo .pem, nem o envie no GitHub ou ao comprador. "
-            "A chave pública pode ser usada no build comercial. Este painel "
-            "não recebe pagamentos nem verifica automaticamente o Patreon."
-        )
-        ttk.Label(self.security_tab, text=guidance, style="Muted.TLabel",
-                  wraplength=820, justify="left").pack(anchor="w")
+        parent=self.security_tab
+        self._page_intro(parent,"Chaves e segurança",
+             "Gerencie sua assinatura digital sem expor a chave privada.")
+        card=self._card(parent,title="◆  Identidade de assinatura",
+               description="Sua chave privada Ed25519 fica criptografada e "
+               "armazenada somente neste computador.")
+        _text(card,"",size=12,color=CYAN,wrap=680,
+              textvariable=self.key_status_var).pack(
+              fill="x",anchor="w",padx=20,pady=(0,12))
+        row=ctk.CTkFrame(card,fg_color="transparent")
+        row.pack(fill="x",padx=19,pady=(0,18))
+        _btn(row,"Criar chaves",self.setup_keys,primary=True).pack(
+             side="left",padx=(0,9))
+        _btn(row,"Exportar chave pública",self.export_public).pack(
+             side="left",padx=(0,9))
+        _btn(row,"Recuperar chave pública",self.recover_public).pack(side="left")
+        card=self._card(parent,title="◇  Verificar autenticidade",
+               description="Confira localmente se uma licença foi realmente "
+               "assinada com a chave correspondente.")
+        _btn(card,"Validar licença (.json)",self.verify_license).pack(
+             anchor="w",padx=19,pady=(0,17))
+        card=self._card(parent,title="▣  Dados armazenados no Windows",
+               description="A pasta contém seu histórico, chave privada "
+               "criptografada e arquivos emitidos. Nunca a envie ao GitHub.")
+        _text(card,str(self.home),size=11,color=CYAN,wrap=680).pack(
+              anchor="w",padx=19,pady=(0,12))
+        _btn(card,"Abrir pasta local",self.open_local_folder).pack(
+             anchor="w",padx=19,pady=(0,17))
+        note=ctk.CTkFrame(parent,fg_color="#211c19",corner_radius=11,
+                          border_width=1,border_color="#775d30")
+        note.pack(fill="x",padx=8,pady=(0,13))
+        _text(note,"◆  IMPORTANTE PARA A BATONI DEV",size=12,
+              color=GOLD,bold=True).pack(anchor="w",padx=17,pady=(14,6))
+        _text(note,"Faça backup criptografado da chave privada e guarde a "
+              "senha separadamente. Só a chave pública é exportável. "
+              "Este gerenciador não se conecta ao Patreon nem cria "
+              "licenças automaticamente após uma venda.",
+              size=12,color=MUTED,wrap=700).pack(
+              anchor="w",padx=17,pady=(0,16))
 
     def _error(self, exc: Exception) -> None:
         detail = str(exc) if isinstance(exc, (LicenseError, OSError, ValueError)) else (
