@@ -7,6 +7,7 @@ This verifier is deliberately fail-closed until a real public key is set.
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import json
 import os
@@ -115,7 +116,7 @@ def _decode_public_key(key_b64: str) -> Ed25519PublicKey:
         if len(key) != 32:
             raise ValueError()
         return Ed25519PublicKey.from_public_bytes(key)
-    except (ValueError, TypeError) as exc:
+    except (ValueError, TypeError, binascii.Error) as exc:
         raise LicenseError("Chave pública comercial inválida.") from exc
 
 
