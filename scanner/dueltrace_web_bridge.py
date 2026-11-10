@@ -12,6 +12,7 @@ import json
 import hashlib
 import re
 from uuid import uuid4
+from unicodedata import combining, normalize
 from datetime import datetime, timezone
 from pathlib import Path
 from time import monotonic
@@ -1229,7 +1230,10 @@ class DueltraceWebBridge:
             if not recipes:
                 return {"total":0,"offset":offset,"rows":[]}
             cards={c["id"]:c for c in self._cards(profile)}
-            q=query.strip().casefold()
+            def search_text(text):
+                return "".join(ch for ch in normalize("NFKD",text.casefold())
+                               if not combining(ch))
+            q=search_text(query.strip())
             rows=[]
             for item in recipes:
                 try:
@@ -1260,7 +1264,7 @@ class DueltraceWebBridge:
                             if isinstance(value,str):
                                 texts.append(value)
                 searched_id=q.removeprefix("#")
-                if q and not (any(q in text.casefold() for text in texts)
+                if q and not (any(q in search_text(text) for text in texts)
                               or searched_id in tuple(str(cid) for cid in search_ids)):
                     continue
                 rows.append({
