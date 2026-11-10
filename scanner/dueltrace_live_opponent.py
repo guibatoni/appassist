@@ -15,6 +15,7 @@ from ctypes import wintypes
 from dueltrace_live_hand import (
     PROCESS_QUERY_INFORMATION, PROCESS_VM_READ, HAND_ADDRESS, HAND_BYTES,
     discover_epsxe_pids, _windows_kernel32, decode_hand,
+    _PID_HAND_ADDRESS_CACHE,
 )
 
 OPPONENT_OFFSET = 0x9B361
@@ -61,7 +62,7 @@ def _note_validation(stats, reason):
         stats[reason] = stats.get(reason, 0) + 1
 
 
-def _hand_anchor(read_at, base):
+def _hand_anchor(read_at, base, *, known_hand_address=HAND_ADDRESS):
     """Correlate PSX hand bytes with the ALREADY proven ePSXe hand reader.
 
     This requires a valid five-card layout at both addresses and exact
@@ -69,7 +70,7 @@ def _hand_anchor(read_at, base):
     become an opponent ID merely because the history layout changed.
     """
     candidate = read_at(base + HAND_OFFSET, HAND_BYTES)
-    known = read_at(HAND_ADDRESS, HAND_BYTES)
+    known = read_at(known_hand_address, HAND_BYTES)
     if (not isinstance(candidate, bytes) or len(candidate) != HAND_BYTES
             or not isinstance(known, bytes) or len(known) != HAND_BYTES
             or candidate != known):
@@ -78,7 +79,8 @@ def _hand_anchor(read_at, base):
     return decoded if decoded is not None and len(decoded) == 5 else None
 
 
-def _valid_psx_sample(read_at, base: int, stats=None) -> dict | None:
+def _valid_psx_sample(read_at, base: int, stats=None, *,
+                      known_hand_address=HAND_ADDRESS) -> dict | None:
     """Validate a candidate host mapping without identifying the ISO.
 
     read_at(address,size) returns bytes or None. Strictly disallows
@@ -89,7 +91,8 @@ def _valid_psx_sample(read_at, base: int, stats=None) -> dict | None:
         return None
     opponent = read_at(base + OPPONENT_OFFSET, 1)
     duel = read_at(base + LP_BASE_OFFSET, 0x30)
-    verified_hand = _hand_anchor(read_at, base)
+    verified_hand = _hand_anchor(
+        read_at, base, known_hand_address=known_hand_address)
     # Record the known-good hand match EVEN when the presumed opponent or
     # LP offsets fail. This distinguishes a good RAM anchor from a bad
     # game-specific field layout without endorsing any opponent ID.
@@ -227,11 +230,14 @@ def _candidate_bases(kernel, handle) -> tuple[list[int], dict]:
     }
 
 
-def _read_sample_twice(read_at, base, stats=None):
-    first = _valid_psx_sample(read_at, base, stats)
+def _read_sample_twice(read_at, base, stats=None, *,
+                       known_hand_address=HAND_ADDRESS):
+    first = _valid_psx_sample(
+        read_at, base, stats, known_hand_address=known_hand_address)
     if first is None:
         return None
-    second = _valid_psx_sample(read_at, base, stats)
+    second = _valid_psx_sample(
+        read_at, base, stats, known_hand_address=known_hand_address)
     if (second is None
             or first["runtimeOpponentId"] != second["runtimeOpponentId"]
             or first["playerLP"] != second["playerLP"]
@@ -313,9 +319,12 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
             ok = kernel.ReadProcessMemory(
                 handle, ctypes.c_void_p(addr),buffer,count,ctypes.byref(n))
             return buffer.raw if ok and n.value == count else None
+        known_hand_address = _PID_HAND_ADDRESS_CACHE.get(pid, HAND_ADDRESS)
         cached_base = _PID_BASE_CACHE.get(pid)
         if cached_base is not None:
-            observed = _read_sample_twice(read_at_native, cached_base)
+            observed = _read_sample_twice(
+                read_at_native, cached_base,
+                known_hand_address=known_hand_address)
             if observed:
                 return {
                     **fail,"ready":True,"status":"runtime_id_candidate",
@@ -337,7 +346,8 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
         # when the full five-card hand decodes identically at both offsets.
         hint_stats = {}
         hinted = _read_sample_twice(
-            read_at_native, LEGACY_HOST_BASE_HINT, hint_stats)
+            read_at_native, LEGACY_HOST_BASE_HINT, hint_stats,
+            known_hand_address=known_hand_address)
         if hinted is not None and hinted["validationMethod"] == "known_hand_anchor":
             _PID_BASE_CACHE[pid] = LEGACY_HOST_BASE_HINT
             return {
@@ -352,11 +362,33 @@ def probe_live_opponent(*, preferred_pid: int | None = None,
                 # misleadingly exported as False by the sanitizer.
                 "knownHandAnchorAtHint":True,
             }
+        # A mão dinâmica validada por DUAS leituras permite validar o
+        # mesmo deslocamento PS1 contra o layout deste ePSXe, sem depender
+        # de endereço fixo nem aceitar IDs do oponente sem LP plausíveis.
+        if known_hand_address != HAND_ADDRESS:
+            dynamic_base = known_hand_address - HAND_OFFSET
+            if dynamic_base >= 0x10000:
+                dynamic = _read_sample_twice(
+                    read_at_native, dynamic_base,
+                    known_hand_address=known_hand_address)
+                if dynamic is not None and dynamic["validationMethod"]=="known_hand_anchor":
+                    _PID_BASE_CACHE[pid]=dynamic_base
+                    return {
+                        **fail,"ready":True,"status":"runtime_id_candidate",
+                        "runtimeOpponentId":dynamic["runtimeOpponentId"],
+                        "playerLP":dynamic["playerLP"],
+                        "opponentLP":dynamic["opponentLP"],
+                        "validationMethod":"dynamic_hand_anchor",
+                        "mappingValidatedByIndependentFields":True,
+                        "knownHandAnchorAtHint":False,
+                    }
         bases, scan_diagnostic = _candidate_bases(kernel,handle)
         failure_counts = {}
         found = []
         for base in bases:
-            item = _read_sample_twice(read_at_native,base,failure_counts)
+            item = _read_sample_twice(
+                read_at_native,base,failure_counts,
+                known_hand_address=known_hand_address)
             if item:
                 found.append(item)
                 if len(found) > 1:

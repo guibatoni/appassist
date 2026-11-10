@@ -115,6 +115,64 @@ class RuntimeOpponentTests(unittest.TestCase):
         self.assertFalse(probe["romIdentityVerified"])
         self.assertFalse(probe["mayActivateDrops"])
 
+    def test_dynamic_ePSXe_ram_layout_reuses_validated_hand_anchor(self):
+        # Simulates another Windows ePSXe version where the PSX RAM base
+        # moved, including one with a non-page-aligned module-data offset.
+        import ctypes
+        from unittest.mock import Mock
+        from dueltrace_live_hand import (
+            _PID_HAND_ADDRESS_CACHE, HAND_ADDRESS, HAND_BYTES)
+        from dueltrace_live_opponent import (
+            _PID_BASE_CACHE, HAND_OFFSET, _valid_psx_sample)
+        pid=202018
+        base=0x162A579A0
+        known_address=base+HAND_OFFSET
+        hand=bytearray(HAND_BYTES)
+        for idx,cid in enumerate((449,145,447,629,468)):
+            struct.pack_into("<H",hand,idx*28,cid)
+            struct.pack_into("<I",hand,idx*28+12,idx)
+        duel=bytearray(0x30)
+        duel[4:6]=(8100).to_bytes(2,"little")
+        duel[0x24:0x26]=(7300).to_bytes(2,"little")
+        duel[0x0A:0x0F]=bytes([0,1,2,3,4])
+        values={
+            (known_address,HAND_BYTES):bytes(hand),
+            (base+OPPONENT_OFFSET,1):bytes([13]),
+            (base+LP_BASE_OFFSET,0x30):bytes(duel),
+            (base+DRAW_HISTORY_OFFSET,DRAW_SAMPLE_SIZE):bytes(DRAW_SAMPLE_SIZE),
+        }
+        def reader(addr,size):
+            return values.get((addr,size))
+        sample=_valid_psx_sample(
+            reader,base,known_hand_address=known_address)
+        self.assertIsNotNone(sample)
+        self.assertEqual(sample["validationMethod"],"known_hand_anchor")
+        self.assertIsNone(
+            _valid_psx_sample(reader,base,known_hand_address=HAND_ADDRESS))
+        kernel=Mock()
+        kernel.OpenProcess.return_value=99
+        def mockread(_handle,address,buffer,size,nread):
+            payload=reader(address.value,size)
+            if payload is None:return False
+            ctypes.memmove(buffer,payload,size)
+            ctypes.cast(nread,ctypes.POINTER(ctypes.c_size_t)).contents.value=size
+            return True
+        kernel.ReadProcessMemory.side_effect=mockread
+        _PID_HAND_ADDRESS_CACHE[pid]=known_address
+        _PID_BASE_CACHE.pop(pid,None)
+        try:
+            result=probe_live_opponent(kernel=kernel,pids=[pid])
+            self.assertTrue(result["ready"],result)
+            self.assertEqual(result["runtimeOpponentId"],13)
+            self.assertEqual(result["validationMethod"],"dynamic_hand_anchor")
+            self.assertFalse(result["romIdentityVerified"])
+            self.assertFalse(result["mayActivateDrops"])
+            self.assertFalse(result["mayActivateRank"])
+            kernel.CloseHandle.assert_called_once_with(99)
+        finally:
+            _PID_HAND_ADDRESS_CACHE.pop(pid,None)
+            _PID_BASE_CACHE.pop(pid,None)
+
     def test_native_fast_hint_reports_anchor_success_without_a_scan(self):
         # Exercise the native kernel-adapter path (the injected read_at path
         # does not run the successful hint branch). No real Windows process.

@@ -20,7 +20,7 @@ from auto_mods import ModCatalog, atomic_json, load_json
 from card_catalog import CARD_CATEGORIES
 from mod_autopilot import ModAutopilot, profile_summary, discover_images
 from dueltrace_intelligence import MultiModIntelligence
-from dueltrace_live_hand import (read_hand_from_epsxe, build_fusion_index,
+from dueltrace_live_hand import (is_epsxe_process_name, read_hand_from_epsxe, build_fusion_index,
                                  suggest_hand_pairs)
 from dueltrace_fusion_planner import plan_fusion_chains, describe_route
 from dueltrace_diagnostics import art_diagnostic, mod_diagnostic, format_diagnostic
@@ -1131,7 +1131,7 @@ class DueltraceDesktop(tk.Tk):
         if not picked:
             return
         exe=Path(picked)
-        if not exe.is_file() or exe.suffix.lower()!=".exe" or "epsxe" not in exe.stem.lower():
+        if not exe.is_file() or not is_epsxe_process_name(exe.name):
             messagebox.showerror(
                 "Executável inválido","Selecione o aplicativo ePSXe.exe do Windows.",
                 parent=self)

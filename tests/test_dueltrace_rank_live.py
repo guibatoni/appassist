@@ -93,6 +93,21 @@ class RankRulesTests(unittest.TestCase):
         self.assertEqual(kernel.addresses,[(CANDIDATE_RANK_ADDRESS,RECORD_BYTES)]*2)
         self.assertEqual(kernel.closed,[789])
 
+    def test_x15_candidate_is_relocated_only_after_validated_hand_address(self):
+        from dueltrace_live_hand import HAND_ADDRESS, _PID_HAND_ADDRESS_CACHE
+        pid=21918
+        relocated=0x112345678
+        _PID_HAND_ADDRESS_CACHE[pid]=relocated
+        try:
+            blob=make_record(lp=8000,turns=2)
+            kernel=FakeKernel([blob,blob])
+            sample=read_rank_candidate(kernel=kernel,pids=[pid])
+            self.assertTrue(sample["ready"])
+            expected=CANDIDATE_RANK_ADDRESS+(relocated-HAND_ADDRESS)
+            self.assertEqual(kernel.addresses,[(expected,RECORD_BYTES)]*2)
+        finally:
+            _PID_HAND_ADDRESS_CACHE.pop(pid,None)
+
     def test_custom_mod_reader_uses_its_own_host_address_not_ps1_virtual(self):
         from dueltrace_rank_live import read_rank_from_verified_binding
         binding={
