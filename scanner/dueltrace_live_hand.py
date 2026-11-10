@@ -8,7 +8,13 @@ from __future__ import annotations
 
 import ctypes
 import sys
+import re
+import time
 from ctypes import wintypes
+
+from dueltrace_epsxe_memory import (
+    HAND_OFFSET, readable_regions, discover_hand_addresses, choose_stable_hand,
+)
 
 from fusion_ram_probe import decode_hand
 
@@ -17,6 +23,23 @@ HAND_BYTES = 140
 PROCESS_VM_READ = 0x0010
 PROCESS_QUERY_INFORMATION = 0x0400
 TH32CS_SNAPPROCESS = 0x00000002
+
+# Cache host pointers ONLY while in this process, and revalidate on every read.
+# RAM layouts depend on emulator release, plugins and ASLR, not on ISO name.
+_PID_HAND_ADDRESS_CACHE: dict[int,int] = {}
+_LAST_FAILED_SCAN: dict[int,float] = {}
+RESCAN_AFTER_SECONDS = 7.0
+EPSXE_IMAGE_PATTERN = re.compile(
+    r"epsxe(?:[ ._-]?v?\\d+(?:[._-]\\d+)*)?(?:[._-](?:x86|x64|win32|win64|32|64))?\\.exe\\Z",
+    re.IGNORECASE,
+)
+
+
+def is_epsxe_process_name(name: str) -> bool:
+    """Recognize official image and version-suffixed copies, never arbitrary EXEs."""
+    return (type(name) is str and 0 < len(name) <= 90
+            and EPSXE_IMAGE_PATTERN.fullmatch(name) is not None)
+
 
 if sys.platform == "win32":
     class PROCESSENTRY32W(ctypes.Structure):
@@ -112,7 +135,7 @@ def discover_epsxe_pids(kernel=None) -> list[int]:
         entry.dwSize=ctypes.sizeof(PROCESSENTRY32W)
         ok=kernel.Process32FirstW(handle,ctypes.byref(entry))
         while ok:
-            if entry.szExeFile.casefold()=="epsxe.exe":
+            if is_epsxe_process_name(entry.szExeFile):
                 found.append(int(entry.th32ProcessID))
             ok=kernel.Process32NextW(handle,ctypes.byref(entry))
     finally:
@@ -121,11 +144,13 @@ def discover_epsxe_pids(kernel=None) -> list[int]:
 
 
 def read_hand_from_epsxe(*, preferred_pid: int | None=None,
-                         kernel=None, pids=None) -> dict:
-    """Lê estritamente 140 bytes em um ePSXe e valida os cinco slots.
+                         kernel=None, pids=None,
+                         candidate_addresses=None, monotonic=time.monotonic) -> dict:
+    """Read 5 battle cards from old or new Windows ePSXe memory layouts.
 
-    O PID preferido deve estar presente na lista de processos ePSXe.
-    Nunca reaproveita uma mão antiga após falha.
+    Legacy host address is fast path; if unreadable, scan ONLY the selected
+    emulator's readable memory for the strict 5×28-byte structure, twice.
+    Never infer emulator version or ROM identity from an arbitrary PID.
     """
     kernel=kernel or _windows_kernel32()
     candidates=discover_epsxe_pids(kernel) if pids is None else list(pids)
@@ -141,7 +166,7 @@ def read_hand_from_epsxe(*, preferred_pid: int | None=None,
     else:
         return {"ready":False,"status":"Há vários processos ePSXe; feche os extras",
                 "hand_ids":None,"pid":None}
-    if type(pid) is not int or pid <= 0:
+    if type(pid) is not int or pid<=0:
         return {"ready":False,"status":"PID de emulador inválido",
                 "hand_ids":None,"pid":None}
     kernel.OpenProcess.argtypes=[wintypes.DWORD,wintypes.BOOL,wintypes.DWORD]
@@ -157,26 +182,69 @@ def read_hand_from_epsxe(*, preferred_pid: int | None=None,
         return {"ready":False,"status":"Acesso de leitura negado ao ePSXe",
                 "hand_ids":None,"pid":pid}
     try:
-        def read_sample():
-            buffer=ctypes.create_string_buffer(HAND_BYTES)
-            read=ctypes.c_size_t(0)
-            ok=kernel.ReadProcessMemory(handle,ctypes.c_void_p(HAND_ADDRESS),
-                                        buffer,HAND_BYTES,ctypes.byref(read))
-            if not ok or read.value != HAND_BYTES:
+        def read_at(address,size):
+            if (type(address) is not int or address<0x10000
+                    or type(size) is not int or not 0<size<=256*1024+140):
                 return None
-            return decode_hand(buffer.raw)
+            buffer=ctypes.create_string_buffer(size)
+            read=ctypes.c_size_t(0)
+            ok=kernel.ReadProcessMemory(handle,ctypes.c_void_p(address),
+                                        buffer,size,ctypes.byref(read))
+            return buffer.raw if ok and read.value==size else None
 
-        # Duas amostras consecutivas evitam mostrar uma mão parcialmente
-        # atualizada pelo jogo durante a leitura, sem acessar outras áreas RAM.
-        first=read_sample()
-        if first is None:
-            return {"ready":False,"status":"Mão indisponível ou fora de duelo",
+        # Prefer the original known 2.0.x address and recheck twice.
+        first=decode_hand(read_at(HAND_ADDRESS,HAND_BYTES))
+        if first is not None:
+            second=decode_hand(read_at(HAND_ADDRESS,HAND_BYTES))
+            if second is None or second!=first:
+                return {"ready":False,
+                        "status":"Mão em transição — aguardando estabilidade",
+                        "hand_ids":None,"pid":pid}
+            _PID_HAND_ADDRESS_CACHE[pid]=HAND_ADDRESS
+            _LAST_FAILED_SCAN.pop(pid,None)
+            return {"ready":True,"status":"Mão estável: duas leituras válidas",
+                    "hand_ids":second,"pid":pid,"ramLayout":"legacy"}
+
+        cached=_PID_HAND_ADDRESS_CACHE.get(pid)
+        if cached is not None and cached!=HAND_ADDRESS:
+            result=choose_stable_hand(read_at,[cached])
+            if result["hand_ids"] is not None:
+                return {"ready":True,
+                        "status":"Mão estável em layout ePSXe alternativo",
+                        "hand_ids":result["hand_ids"],"pid":pid,
+                        "ramLayout":"dynamic"}
+        _PID_HAND_ADDRESS_CACHE.pop(pid,None)
+        if candidate_addresses is not None:
+            addresses=list(candidate_addresses)
+        else:
+            now=monotonic()
+            last=_LAST_FAILED_SCAN.get(pid)
+            if last is not None and now-last<RESCAN_AFTER_SECONDS:
+                return {"ready":False,
+                        "status":"Procurando RAM da versão do ePSXe; entre em um duelo",
+                        "hand_ids":None,"pid":pid}
+            # Scan is bounded by 48 MiB and memory read is always read-only.
+            regions=readable_regions(kernel,handle)
+            addresses=discover_hand_addresses(read_at,regions)
+        result=choose_stable_hand(read_at,addresses)
+        if result["hand_ids"] is not None:
+            _PID_HAND_ADDRESS_CACHE[pid]=result["address"]
+            _LAST_FAILED_SCAN.pop(pid,None)
+            if len(_PID_HAND_ADDRESS_CACHE)>32:
+                _PID_HAND_ADDRESS_CACHE.clear()
+                _PID_HAND_ADDRESS_CACHE[pid]=result["address"]
+            return {"ready":True,"status":"Mão reconhecida nesta versão do ePSXe",
+                    "hand_ids":result["hand_ids"],"pid":pid,"ramLayout":"dynamic"}
+        if candidate_addresses is None:
+            _LAST_FAILED_SCAN[pid]=monotonic()
+            if len(_LAST_FAILED_SCAN)>32:
+                _LAST_FAILED_SCAN.clear()
+        if result["status"]=="ambiguous_ram_mapping":
+            return {"ready":False,
+                    "status":"RAM ambígua; não é seguro selecionar um endereço",
                     "hand_ids":None,"pid":pid}
-        second=read_sample()
-        if second is None or second != first:
-            return {"ready":False,"status":"Mão em transição — aguardando estabilidade",
-                    "hand_ids":None,"pid":pid}
-        return {"ready":True,"status":"Mão estável: duas leituras válidas",
-                "hand_ids":second,"pid":pid}
+        return {"ready":False,
+                "status":"Mão indisponível; entre em duelo para reconhecer a RAM",
+                "hand_ids":None,"pid":pid}
     finally:
         kernel.CloseHandle(handle)
