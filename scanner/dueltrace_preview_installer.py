@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import urllib.request
+import urllib.error
 import zipfile
 from pathlib import Path
 from uuid import uuid4
@@ -82,7 +83,18 @@ def select_preview_release(release: dict, current_version: str,
 def fetch_latest_preview_package(*, current_version: str = CURRENT_VERSION,
                                  installed_run_id: int | None = None,
                                  fetcher=None) -> dict | None:
-    data=(fetcher or (lambda:_get_json(PREVIEW_LIST,list)))()
+    private_cli=False
+    if fetcher is not None:
+        data=fetcher()
+    else:
+        try:
+            data=_get_json(PREVIEW_LIST,list)
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (401,403,404):
+                raise
+            from dueltrace_private_update_source import read_private_release_metadata
+            data=read_private_release_metadata()
+            private_cli=True
     if not isinstance(data,list):
         raise UnsafeUpdate("Lista de pré-releases do GitHub inválida.")
     eligible=[]
@@ -95,6 +107,8 @@ def fetch_latest_preview_package(*, current_version: str = CURRENT_VERSION,
         try:
             candidate=select_preview_release(r,current_version,installed_run_id)
             if candidate:
+                if private_cli:
+                    candidate["transport"]="gh_cli"
                 eligible.append(candidate)
         except UnsafeUpdate:
             continue
@@ -146,8 +160,11 @@ def fetch_portable_stable_package(*, current_version: str = CURRENT_VERSION,
                                  installed_channel: str = "preview",
                                  fetcher=None) -> dict | None:
     from dueltrace_update_checker import fetch_stable_release
-    return select_portable_stable_release(
-        (fetcher or fetch_stable_release)(),current_version,installed_channel)
+    release=(fetcher or fetch_stable_release)()
+    candidate=select_portable_stable_release(release,current_version,installed_channel)
+    if candidate and release.get("_dueltrace_source")=="gh_cli":
+        candidate["transport"]="gh_cli"
+    return candidate
 
 
 def install_portable_stable_release(*, data_home: Path,
@@ -166,6 +183,20 @@ def install_portable_stable_release(*, data_home: Path,
 def download_preview_zip(info: dict, destination: Path, *, opener=None) -> Path:
     if destination.exists() or destination.is_symlink():
         raise UnsafeUpdate("Destino de download já existe.")
+    transport=info.get("transport")
+    if transport not in (None,"gh_cli"):
+        raise UnsafeUpdate("Transporte de atualização não autorizado.")
+    if transport=="gh_cli":
+        # Authenticated GitHub CLI is local to the maintainer's PC; the ZIP
+        # still passes the same SHA-256 + embedded build identity checks.
+        if opener is not None:
+            raise UnsafeUpdate("Transporte privado não aceita opener externo.")
+        from dueltrace_private_update_source import (
+            download_private_zip, ZIP_ASSET, STABLE_ZIP_ASSET)
+        asset=(STABLE_ZIP_ASSET if info.get("channel")=="stable" else ZIP_ASSET)
+        return download_private_zip(
+            info["tag"], asset, destination,
+            sha256=info["sha256"], expected_size=info["size"])
     req=urllib.request.Request(info["url"],headers={
         "User-Agent":"DUELTRACE-Preview-Update/0.8.5",
         "Accept":"application/octet-stream"})
