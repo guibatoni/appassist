@@ -825,6 +825,11 @@ class BridgeTests(unittest.TestCase):
                          search_scope="result")["rows"][0]["result"],7)
         self.assertEqual(self.bridge.get_fusions("#7",0,20,
                          search_scope="result")["total"],1)
+        # ID que só existe como resultado não deve entrar no filtro de material.
+        self.assertEqual(self.bridge.get_fusions("#8",0,20,
+                         search_scope="result")["total"],1)
+        self.assertEqual(self.bridge.get_fusions("#8",0,20,
+                         search_scope="material")["total"],0)
         protected=ProtectedDesktopApi(self.bridge,"s"*64)
         self.assertEqual(protected.get_fusions("s"*64,"#7",0,20,
                          "id","","material")["rows"][0]["result"],8)
