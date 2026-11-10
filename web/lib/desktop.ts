@@ -410,6 +410,8 @@ export type FusionRow = {
 
 export type FusionPage = { total: number; offset: number; rows: FusionRow[]; provisional?:boolean; status?:string }
 
+export type FusionSearchScope = "all" | "result" | "material"
+
 export type DropRow = {
   opponentId: number
   opponentName: string
@@ -852,7 +854,7 @@ export interface DesktopAPI {
   capture_rank_prediction(): Promise<RankCapture>
   get_pending_rank_capture(): Promise<RankCapture>
   get_rank_comparison(): Promise<RankComparison>
-  get_fusions(query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
+  get_fusions(query: string, offset: number, limit: number, sort?: string, cardType?: string, searchScope?: FusionSearchScope): Promise<FusionPage>
   get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
   get_card_drop_sources(cardId: number): Promise<CardDropSources>
   get_rank_trace_status(): Promise<MipsTraceResult>
@@ -911,7 +913,7 @@ interface ProtectedNativeAPI {
   capture_rank_prediction(token: string): Promise<RankCapture>
   get_pending_rank_capture(token: string): Promise<RankCapture>
   get_rank_comparison(token: string): Promise<RankComparison>
-  get_fusions(token: string, query: string, offset: number, limit: number, sort?: string, cardType?: string): Promise<FusionPage>
+  get_fusions(token: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, searchScope?: FusionSearchScope): Promise<FusionPage>
   get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
   get_card_drop_sources(token: string, cardId: number): Promise<CardDropSources>
   get_rank_trace_status(token: string): Promise<MipsTraceResult>
@@ -985,7 +987,8 @@ export function desktopApi(): DesktopAPI | null {
     capture_rank_prediction: () => native.capture_rank_prediction(token),
     get_pending_rank_capture: () => native.get_pending_rank_capture(token),
     get_rank_comparison: () => native.get_rank_comparison(token),
-    get_fusions: (query, offset, limit, sort, cardType) => native.get_fusions(token, query, offset, limit, sort, cardType),
+    get_fusions: (query, offset, limit, sort, cardType, searchScope) =>
+      native.get_fusions(token, query, offset, limit, sort, cardType, searchScope),
     get_drops: (opponentId, group, query, offset, limit, sort, cardType, rank) => native.get_drops(token, opponentId, group, query, offset, limit, sort, cardType, rank),
     get_card_drop_sources: (cardId) => native.get_card_drop_sources(token, cardId),
     get_rank_trace_status: () => native.get_rank_trace_status(token),
