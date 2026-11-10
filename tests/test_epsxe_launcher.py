@@ -30,6 +30,20 @@ class EpsxeTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 command_for_epsxe(rom,rom)
 
+    def test_versioned_ePSXe_executable_paths_are_accepted(self):
+        with tempfile.TemporaryDirectory() as temp:
+            exe,rom=self.setup_files(temp)
+            for name in ("ePSXe 2.0.18.exe","ePSXe-1.9.25.exe","ePSXe_x64.exe"):
+                candidate=exe.parent/name
+                candidate.write_bytes(b"mock emulator")
+                argv,cwd=command_for_epsxe(candidate,rom)
+                self.assertEqual(argv[0],str(candidate.resolve()))
+                self.assertEqual(cwd,candidate.parent.resolve())
+            lookalike=exe.parent/"not-ePSXe-malware.exe"
+            lookalike.write_bytes(b"not emulator")
+            with self.assertRaises(ValueError):
+                command_for_epsxe(lookalike,rom)
+
     def test_launch_needs_matching_active_profile_and_validates_image(self):
         with tempfile.TemporaryDirectory() as temp:
             exe,rom=self.setup_files(temp)
