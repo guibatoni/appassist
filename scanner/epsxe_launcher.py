@@ -10,12 +10,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from dueltrace_live_hand import is_epsxe_process_name
+
 
 def command_for_epsxe(executable: str | Path, image: str | Path) -> tuple[list[str], Path]:
     """ePSXe moderno aceita -nogui -loadiso, com o caminho como 1 argumento."""
     exe = Path(executable).expanduser().resolve(strict=True)
     rom = Path(image).expanduser().resolve(strict=True)
-    if not exe.is_file() or exe.suffix.lower() != ".exe" or "epsxe" not in exe.stem.lower():
+    if not exe.is_file() or not is_epsxe_process_name(exe.name):
         raise ValueError("Selecione o arquivo ePSXe.exe instalado no Windows.")
     if not rom.is_file() or rom.suffix.lower() not in {".iso",".bin"}:
         raise ValueError("Selecione uma imagem ISO/BIN já analisada.")
