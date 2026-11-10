@@ -157,9 +157,7 @@ def read_rank_candidate(*, preferred_pid=None, kernel=None, pids=None) -> dict:
         # was independently validated in THIS running ePSXe process.
         known_hand=_PID_HAND_ADDRESS_CACHE.get(pid)
         candidate_address=CANDIDATE_RANK_ADDRESS
-        if (type(known_hand) is int and known_hand>=HAND_ADDRESS):
-            candidate_address=CANDIDATE_RANK_ADDRESS+(known_hand-HAND_ADDRESS)
-        elif type(known_hand) is int and known_hand>=0x10000:
+        if type(known_hand) is int and known_hand>=0x10000:
             candidate_address=CANDIDATE_RANK_ADDRESS+(known_hand-HAND_ADDRESS)
         if not 0x10000<=candidate_address<0x7FFFFFFEFFFF:
             return {"ready":False,"status":"Endereço de RANK fora da RAM reconhecida",
