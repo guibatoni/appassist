@@ -47,13 +47,23 @@ def fetch_stable_release() -> dict:
         "X-GitHub-Api-Version": "2022-11-28",
     })
     opener = urllib.request.build_opener(NoRedirect())
-    with opener.open(request, timeout=7) as response:
-        if response.status != 200 or response.geturl() != RELEASE_API:
-            raise ValueError("Resposta inesperada do servidor de versões.")
-        length = response.headers.get("Content-Length")
-        if length and int(length) > MAX_RESPONSE_BYTES:
-            raise ValueError("Resposta de atualização excede limite.")
-        body = response.read(MAX_RESPONSE_BYTES + 1)
+    try:
+        with opener.open(request, timeout=7) as response:
+            if response.status != 200 or response.geturl() != RELEASE_API:
+                raise ValueError("Resposta inesperada do servidor de versões.")
+            length = response.headers.get("Content-Length")
+            if length and int(length) > MAX_RESPONSE_BYTES:
+                raise ValueError("Resposta de atualização excede limite.")
+            body = response.read(MAX_RESPONSE_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        if exc.code not in (401,403,404):
+            raise
+        # GitHub private repos are invisible to anonymous requests.
+        # Use a locally authorized GitHub CLI, NEVER a token in the binary.
+        from dueltrace_private_update_source import read_private_release_metadata
+        result = dict(read_private_release_metadata(stable=True))
+        result["_dueltrace_source"] = "gh_cli"
+        return result
     if len(body) > MAX_RESPONSE_BYTES:
         raise ValueError("Resposta de atualização excede limite.")
     data = json.loads(body.decode("utf-8"))
