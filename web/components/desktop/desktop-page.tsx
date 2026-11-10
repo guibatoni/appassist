@@ -12,7 +12,7 @@ import {RankScoreDisplay} from "./rank-score-display"
 import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
-import type {LocalCard, HandState, FusionPage, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison, IsoForensicAudit, MipsTraceResult, AlphaDiscovery} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, FusionSearchScope, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison, IsoForensicAudit, MipsTraceResult, AlphaDiscovery} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -1418,6 +1418,7 @@ function FusionIllustration({id,name,sha,card,role,onPreview}:{
 
 function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [query,setQuery]=useState("")
+  const [searchScope,setSearchScope]=useState<FusionSearchScope>("all")
   const [sort,setSort]=useState<"id"|"atk"|"def"|"type"|"name">("id")
   const [cardType,setCardType]=useState("")
   const [offset,setOffset]=useState(0)
@@ -1427,8 +1428,8 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
   const cardsById=useMemo(()=>new Map(cards.map(c=>[c.id,c])),[cards])
   const types=useMemo(()=>Array.from(new Set(cards.map(c=>c.type||c.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"pt-BR")),[cards])
-  useEffect(()=>{setQuery("");setSort("id");setCardType("");setOffset(0);setRecords(null)},[sha])
-  useEffect(()=>{setPreview(null)},[sha,query,offset,sort,cardType])
+  useEffect(()=>{setQuery("");setSearchScope("all");setSort("id");setCardType("");setOffset(0);setRecords(null)},[sha])
+  useEffect(()=>{setPreview(null)},[sha,query,searchScope,offset,sort,cardType])
   useEffect(()=>{
     let mounted=true
     setRecords(null)
@@ -1436,20 +1437,37 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       const api=desktopApi()
       if(!api){if(mounted)setRecords(null);return}
       try{
-        const result=await api.get_fusions(query,offset,pageSize,sort,cardType)
+        const result=await api.get_fusions(query,offset,pageSize,sort,cardType,searchScope)
         if(mounted){setRecords(result);setError(null)}
       }catch(e){if(mounted)setError(e instanceof Error?e.message:"Falha ao carregar fusões")}
     },220)
     return()=>{mounted=false;window.clearTimeout(id)}
-  },[sha,query,offset,sort,cardType,pageSize])
+  },[sha,query,searchScope,offset,sort,cardType,pageSize])
   return <>
     <Heading title="Biblioteca de Fusões" subtitle="Encontre combinações e resultados de fusão"/>
     <section className="panel rounded-xl p-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="field flex min-w-56 flex-1 items-center gap-2 px-3 py-2">
-          <Search className="size-4 text-primary"/>
-          <input className="w-full bg-transparent outline-none" placeholder="Buscar cartas, efeitos ou descrições"
-            value={query} onChange={e=>{setQuery(e.target.value);setOffset(0)}}/>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-xs text-muted">
+          Pesquisar em
+          <select className="field min-h-10 px-3 py-2 text-sm text-foreground"
+            aria-label="Pesquisar fusões em" value={searchScope}
+            onChange={e=>{setSearchScope(e.target.value as FusionSearchScope);setOffset(0)}}>
+            <option value="all">Resultado ou material</option>
+            <option value="result">Resultado final da fusão</option>
+            <option value="material">Material da fusão</option>
+          </select>
+        </label>
+        <label className="flex min-w-56 flex-1 flex-col gap-1 text-xs text-muted">
+          Nome ou ID da carta
+          <span className="field flex min-h-10 items-center gap-2 px-3 py-2">
+            <Search className="size-4 shrink-0 text-primary" aria-hidden="true"/>
+            <input className="w-full bg-transparent text-sm text-foreground outline-none"
+              aria-label="Buscar fusões por nome ou ID" maxLength={100}
+              placeholder={searchScope==="result"?"Nome ou ID do resultado":
+                searchScope==="material"?"Nome ou ID do material":
+                  "Buscar resultado ou qualquer material"}
+              value={query} onChange={e=>{setQuery(e.target.value);setOffset(0)}}/>
+          </span>
         </label>
         <label className="text-xs text-muted">Ordenar resultado
           <select className="field ml-2 px-2 py-2 text-sm" value={sort}
