@@ -111,7 +111,7 @@ class EpsxeCompatibilityTests(unittest.TestCase):
 
     def test_scanner_finds_hand_at_unaligned_unknown_module_base(self):
         # The PS1 RAM base is deliberately NOT 64KB-aligned (typical PE .data).
-        for base in (0x5659A0,0x1580A020,0x1234000A579A0):
+        for base in (0x5659A0,0x1580A020,0x12340A579A0):
             with self.subTest(base=hex(base)):
                 hand_host=base+HAND_OFFSET
                 region_start=hand_host-0x90000
