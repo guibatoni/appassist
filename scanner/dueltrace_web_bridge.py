@@ -395,7 +395,7 @@ class DueltraceWebBridge:
         # versão só porque foi detectada no GitHub.
         if not (status["automaticPortableReady"] or status["automaticPreviewReady"]):
             status["automaticInstallReason"]=(
-                status["previewError"] or
+                status.get("previewError") or
                 "Não há pacote ZIP oficial verificável para atualização "
                 "na pasta atual.")
         return status
