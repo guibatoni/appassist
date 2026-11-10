@@ -2452,9 +2452,9 @@ class DueltraceWebBridge:
         files=self._file_picker("epsxe")
         if not files:
             return {"cancelled":True}
-        from epsxe_launcher import command_for_epsxe
+        from dueltrace_live_hand import is_epsxe_process_name
         path=Path(files[0]).resolve(strict=True)
-        if not path.is_file() or path.suffix.lower()!=".exe" or "epsxe" not in path.stem.casefold():
+        if not path.is_file() or not is_epsxe_process_name(path.name):
             raise ValueError("Selecione o executável ePSXe.exe.")
         from auto_mods import atomic_json
         with self._lock:
