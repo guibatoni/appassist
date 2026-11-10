@@ -825,9 +825,16 @@ class BridgeTests(unittest.TestCase):
                          search_scope="result")["rows"][0]["result"],7)
         self.assertEqual(self.bridge.get_fusions("#7",0,20,
                          search_scope="result")["total"],1)
+        protected=ProtectedDesktopApi(self.bridge,"s"*64)
+        self.assertEqual(protected.get_fusions("s"*64,"#7",0,20,
+                         "id","","material")["rows"][0]["result"],8)
+        with self.assertRaises(PermissionError):
+            protected.get_fusions("bad","#7",0,20,"id","","material")
 
         # Resultado e material com o mesmo nome devem continuar distintos.
         self.assertEqual(self.bridge.get_fusions("FUSÃO",0,20,
+                         search_scope="result")["total"],2)
+        self.assertEqual(self.bridge.get_fusions("fusao",0,20,
                          search_scope="result")["total"],2)
         self.assertEqual(self.bridge.get_fusions("FUSÃO",0,20,
                          search_scope="material")["total"],1)
