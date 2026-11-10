@@ -800,6 +800,77 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(self.bridge.get_fusions("flor lunar secreta",0,20)["total"],2)
         self.assertEqual(self.bridge.get_fusions("carta ausente",0,20)["total"],0)
 
+    def test_fusions_can_search_only_result_or_either_material(self):
+        # Perfil sintético: 1 + 2 -> 7 e 7 + 3 -> 8.
+        result=self.bridge.get_fusions("Fusão avançada",0,20,
+                                      search_scope="result")
+        self.assertEqual(result["total"],1)
+        self.assertEqual(result["rows"][0]["result"],8)
+        self.assertEqual(self.bridge.get_fusions("Fusão avançada",0,20,
+                         search_scope="material")["total"],0)
+
+        materials=self.bridge.get_fusions("Carta comprovada",0,20,
+                                          search_scope="material")
+        self.assertEqual(materials["total"],1)
+        self.assertEqual(materials["rows"][0]["result"],7)
+        self.assertEqual(self.bridge.get_fusions("Carta comprovada",0,20,
+                         search_scope="result")["total"],0)
+
+        # Material A e B são equivalentes; IDs não vazam de outro papel.
+        self.assertEqual(self.bridge.get_fusions("Outra carta",0,20,
+                         search_scope="material")["total"],1)
+        self.assertEqual(self.bridge.get_fusions("#7",0,20,
+                         search_scope="material")["rows"][0]["result"],8)
+        self.assertEqual(self.bridge.get_fusions("7",0,20,
+                         search_scope="result")["rows"][0]["result"],7)
+        self.assertEqual(self.bridge.get_fusions("#7",0,20,
+                         search_scope="result")["total"],1)
+        protected=ProtectedDesktopApi(self.bridge,"s"*64)
+        self.assertEqual(protected.get_fusions("s"*64,"#7",0,20,
+                         "id","","material")["rows"][0]["result"],8)
+        with self.assertRaises(PermissionError):
+            protected.get_fusions("bad","#7",0,20,"id","","material")
+
+        # Resultado e material com o mesmo nome devem continuar distintos.
+        self.assertEqual(self.bridge.get_fusions("FUSÃO",0,20,
+                         search_scope="result")["total"],2)
+        self.assertEqual(self.bridge.get_fusions("fusao",0,20,
+                         search_scope="result")["total"],2)
+        self.assertEqual(self.bridge.get_fusions("FUSÃO",0,20,
+                         search_scope="material")["total"],1)
+        self.assertEqual(self.bridge.get_fusions("",0,20,
+                         search_scope="result")["total"],2)
+        self.assertEqual(self.bridge.get_fusions("",0,20,
+                         search_scope="material")["total"],2)
+
+    def test_fusion_scope_filters_before_pagination_and_preserves_sort(self):
+        self.assertEqual(self.bridge.get_fusions("Fusão",0,1,
+                         search_scope="result")["total"],2)
+        page=self.bridge.get_fusions("Fusão",1,1,"id","", "result")
+        self.assertEqual(page["total"],2)
+        self.assertEqual(len(page["rows"]),1)
+        self.assertEqual(page["rows"][0]["result"],8)
+        self.assertEqual(self.bridge.get_fusions("Fusão",0,20,
+                         search_scope="material")["total"],1)
+        self.assertEqual(self.bridge.get_fusions("Fusão",0,20,
+                         search_scope="result")["total"],2)
+        for bad in (None,0,True,[],{}, "all,material", "any", "RESULT"):
+            with self.subTest(bad=bad),self.assertRaises(ValueError):
+                self.bridge.get_fusions("",0,20,search_scope=bad)
+
+    def test_scope_search_does_not_match_descriptions_of_other_roles(self):
+        self.profile["cards"][0]["description_text"]="Vento luminosa"
+        self.profile["cards"][0]["description_source"]="SLUS:test"
+        atomic_json(self.profile_path,self.profile)
+        # A busca geral legada mantém descrição, mas pesquisa específica
+        # evita confundir descrição/efeito com nome da carta selecionada.
+        self.assertEqual(self.bridge.get_fusions("Vento luminosa",0,20,
+                         search_scope="all")["total"],1)
+        self.assertEqual(self.bridge.get_fusions("Vento luminosa",0,20,
+                         search_scope="result")["total"],0)
+        self.assertEqual(self.bridge.get_fusions("Vento luminosa",0,20,
+                         search_scope="material")["total"],0)
+
     def test_fusions_sort_type_filter_and_page_stay_consistent(self):
         self.profile["cards"][5]["type_label"]="Dragão"
         self.profile["cards"][6]["type_label"]="Mago"

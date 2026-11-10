@@ -63,11 +63,24 @@ class PublicUiContractTests(unittest.TestCase):
         self.assertNotIn("previewPosition",source)
         self.assertNotIn("getBoundingClientRect",source)
 
+    def test_fusion_search_scope_filters_by_result_or_material(self):
+        source=self.fusions
+        self.assertIn('const [searchScope,setSearchScope]',source)
+        self.assertIn('aria-label="Pesquisar fusões em"',source)
+        self.assertIn('<option value="all">Resultado ou material</option>',source)
+        self.assertIn('<option value="result">Resultado final da fusão</option>',source)
+        self.assertIn('<option value="material">Material da fusão</option>',source)
+        self.assertIn('aria-label="Buscar fusões por nome ou ID"',source)
+        self.assertIn('api.get_fusions(query,offset,pageSize,sort,cardType,searchScope)',source)
+        self.assertIn('setSearchScope("all")',source)
+        self.assertIn('[sha,query,searchScope,offset,sort,cardType,pageSize]',source)
+        self.assertIn('setOffset(0)',source)
+
     def test_fusions_keep_exact_source_card_and_sha(self):
         source=self.fusions
         self.assertIn("card:displayed,anchor:event.currentTarget",source)
         self.assertIn('<CardHoverPreview selection={preview} sha={sha}',source)
-        self.assertIn("useEffect(()=>{setPreview(null)},[sha,query,offset,sort,cardType])",source)
+        self.assertIn("useEffect(()=>{setPreview(null)},[sha,query,searchScope,offset,sort,cardType])",source)
 
 
 

@@ -111,7 +111,7 @@ class SharedCardPreviewTests(unittest.TestCase):
         self.assertIn('w-40 shrink-0 sm:w-48',self.overlay)
         self.assertIn('sizes="192px"',self.overlay)
         self.assertIn('w-[min(94vw,500px)]',self.overlay)
-        self.assertIn('useEffect(()=>{setPreview(null)},[sha,query,offset,sort,cardType])',self.fusions)
+        self.assertIn('useEffect(()=>{setPreview(null)},[sha,query,searchScope,offset,sort,cardType])',self.fusions)
         self.assertIn('setPreview(null)',self.drops)
         self.assertIn('fallbackDrop:row',self.drops)
 

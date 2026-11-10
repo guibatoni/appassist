@@ -177,9 +177,10 @@ class ProtectedDesktopApi:
             source_sha,target_sha,query,offset,limit,confidence)
 
     def get_fusions(self, credential, query="", offset=0, limit=100,
-                    sort="id", card_type=""):
+                    sort="id", card_type="", search_scope="all"):
         self._authorize(credential)
-        return self._bridge.get_fusions(query,offset,limit,sort,card_type)
+        return self._bridge.get_fusions(
+            query,offset,limit,sort,card_type,search_scope)
 
     def get_drops(self, credential, opponent_id=0, group="", query="",
                   offset=0, limit=36, sort="id", card_type="", rank=""):
