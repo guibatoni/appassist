@@ -14,6 +14,7 @@ from ctypes import wintypes
 from dueltrace_live_hand import (
     PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
     discover_epsxe_pids, _windows_kernel32,
+    HAND_ADDRESS, _PID_HAND_ADDRESS_CACHE,
 )
 from scanner_multiiso import X15_SHA
 
@@ -151,11 +152,23 @@ def read_rank_candidate(*, preferred_pid=None, kernel=None, pids=None) -> dict:
         return {"ready":False,"status":"Acesso de leitura à RAM negado",
                 "pid":pid,"counters":None}
     try:
+        # This is a candidate X15-only record, not a proven generic mod binding.
+        # Translate its PS1-relative displacement only after the five-card hand
+        # was independently validated in THIS running ePSXe process.
+        known_hand=_PID_HAND_ADDRESS_CACHE.get(pid)
+        candidate_address=CANDIDATE_RANK_ADDRESS
+        if (type(known_hand) is int and known_hand>=HAND_ADDRESS):
+            candidate_address=CANDIDATE_RANK_ADDRESS+(known_hand-HAND_ADDRESS)
+        elif type(known_hand) is int and known_hand>=0x10000:
+            candidate_address=CANDIDATE_RANK_ADDRESS+(known_hand-HAND_ADDRESS)
+        if not 0x10000<=candidate_address<0x7FFFFFFEFFFF:
+            return {"ready":False,"status":"Endereço de RANK fora da RAM reconhecida",
+                    "pid":pid,"counters":None}
         def sample():
             buffer=ctypes.create_string_buffer(RECORD_BYTES)
             read=ctypes.c_size_t()
             ok=kernel.ReadProcessMemory(
-                handle,ctypes.c_void_p(CANDIDATE_RANK_ADDRESS),
+                handle,ctypes.c_void_p(candidate_address),
                 buffer,RECORD_BYTES,ctypes.byref(read))
             if not ok or read.value!=RECORD_BYTES:
                 return None
