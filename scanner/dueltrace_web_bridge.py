@@ -1205,8 +1205,12 @@ class DueltraceWebBridge:
             return self.get_rank()
 
     def get_fusions(self, query="", offset=0, limit=100,
-                    sort="id", card_type=""):
-        """Filtro aplicado ao RESULTADO da fusão e antes da paginação."""
+                    sort="id", card_type="", search_scope="all"):
+        """Busca em resultado e/ou materiais da ISO ativa antes da paginação.
+
+        'all' mantém a pesquisa legada (inclui efeito e descrição);
+        'result' e 'material' procuram apenas nome ou ID da carta escolhida.
+        """
         if type(query) is not str or len(query)>100:
             raise ValueError("Consulta inválida")
         if type(offset) is not int or offset<0 or offset>1000000:
@@ -1214,6 +1218,8 @@ class DueltraceWebBridge:
         if type(limit) is not int or not 1<=limit<=150:
             raise ValueError("Limite inválido")
         validate_sort(sort,card_type)
+        if type(search_scope) is not str or search_scope not in ("all","result","material"):
+            raise ValueError("Campo de pesquisa de fusões inválido")
         with self._lock:
             active,entry,profile=self._active()
             if not profile:
@@ -1237,15 +1243,25 @@ class DueltraceWebBridge:
                     continue
                 names=[cards.get(cid,{}).get("name") or f"Carta #{cid}"
                        for cid in (a,b,result)]
-                texts=list(names)
-                for cid in (a,b,result):
-                    card=cards.get(cid,{})
-                    for field in ("effect","description"):
-                        value=card.get(field)
-                        if isinstance(value,str):
-                            texts.append(value)
+                if search_scope=="result":
+                    search_ids=(result,)
+                    texts=[names[2]]
+                elif search_scope=="material":
+                    search_ids=(a,b)
+                    texts=names[:2]
+                else:
+                    search_ids=(a,b,result)
+                    texts=list(names)
+                    # Busca geral existente: inclui efeitos e descrições.
+                    for cid in (a,b,result):
+                        card=cards.get(cid,{})
+                        for field in ("effect","description"):
+                            value=card.get(field)
+                            if isinstance(value,str):
+                                texts.append(value)
+                searched_id=q.removeprefix("#")
                 if q and not (any(q in text.casefold() for text in texts)
-                              or q in (str(a),str(b),str(result))):
+                              or searched_id in tuple(str(cid) for cid in search_ids)):
                     continue
                 rows.append({
                     "a":a,"b":b,"result":result,
