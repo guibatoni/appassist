@@ -115,8 +115,8 @@ export function UpdateChecker() {
   const statusText = available ?
     (canDownload ? "Nova versão disponível para download." :
       "Nova versão identificada; pacote ainda indisponível.") :
+    result?.previewError ? result.previewError :
     result?.status === "unavailable" ? "Não foi possível consultar novas versões." :
-    result?.previewError ? "Não foi possível verificar as versões Preview." :
     "Nenhuma atualização nova disponível."
   const notesVersion = result?.patchNotesVersion ??
     (result?.currentVersion ?? "")

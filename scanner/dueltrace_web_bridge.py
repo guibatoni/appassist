@@ -61,6 +61,7 @@ from dueltrace_preview_installer import (
     fetch_portable_stable_package, install_portable_stable_release
 )
 from dueltrace_preview_updates import installed_preview_build_id
+from dueltrace_private_update_source import PrivateUpdateUnavailable
 
 
 class DueltraceWebBridge:
@@ -379,13 +380,14 @@ class DueltraceWebBridge:
                         "patchNotesVersion":candidate["version"],
                         "message":(
                             f"Preview v{candidate['version']} verificada no GitHub "
-                            "Releases. Clique em Baixar atualizações para instalar."),
+                            "Releases. Clique em Atualizar agora para instalar."),
                         "automaticInstallReason":(
                             "Preview oficial com SHA-256 disponível para "
                             "substituição na pasta atual."),
                     })
-        except (OSError,ValueError,TypeError):
+        except (OSError,ValueError,TypeError) as exc:
             status["previewError"]=(
+                str(exc) if isinstance(exc,PrivateUpdateUnavailable) else
                 "Pré-lançamentos temporariamente indisponíveis. "
                 "Nenhum download foi iniciado.")
 
@@ -393,6 +395,7 @@ class DueltraceWebBridge:
         # versão só porque foi detectada no GitHub.
         if not (status["automaticPortableReady"] or status["automaticPreviewReady"]):
             status["automaticInstallReason"]=(
+                status.get("previewError") or
                 "Não há pacote ZIP oficial verificável para atualização "
                 "na pasta atual.")
         return status
