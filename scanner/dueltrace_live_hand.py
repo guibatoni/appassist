@@ -30,7 +30,7 @@ _PID_HAND_ADDRESS_CACHE: dict[int,int] = {}
 _LAST_FAILED_SCAN: dict[int,float] = {}
 RESCAN_AFTER_SECONDS = 7.0
 EPSXE_IMAGE_PATTERN = re.compile(
-    r"epsxe(?:[ ._-]?v?\\d+(?:[._-]\\d+)*)?(?:[._-](?:x86|x64|win32|win64|32|64))?\\.exe\\Z",
+    r"epsxe(?:[ ._-]?v?\d+(?:[._-]\d+)*)?(?:[._-](?:x86|x64|win32|win64|32|64))?\.exe\Z",
     re.IGNORECASE,
 )
 
