@@ -72,6 +72,7 @@ try {
     if ($buildId -ge 1000000000000000) { throw "Build ID muito grande." }
     $tag="preview-v$version-r$buildId"
     Write-Host "DUELTRACE local: $tag | fonte privada $sourceSha"
+    $env:DUELTRACE_SOURCE_SHA=$sourceSha
 
     Invoke-Checked "python" @("-m","pip","install","-r","tools/security/requirements-webui-build.txt","pip-audit")
     Invoke-Checked "python" @("-m","pip_audit","--local")
