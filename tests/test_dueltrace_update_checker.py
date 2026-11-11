@@ -15,7 +15,7 @@ from dueltrace_update_checker import (
 def release(tag="v0.6.6", **extra):
     return {
         "tag_name":tag,
-        "html_url":"https://github.com/guibatoni/appassist/releases/tag/"+tag,
+        "html_url":"https://github.com/guibatoni/dueltrace-releases/releases/tag/"+tag,
         "draft":False,
         "prerelease":False,
         **extra,
