@@ -98,6 +98,24 @@ class WindowsBuildKitTests(unittest.TestCase):
         self.assertIn("SHA-256 ZIP: $digest",PUBLISHER)
         self.assertEqual(PUBLISHER.count("DOWNLOAD DIRETO"),1)
 
+    def test_powershell_diagnostic_stage_colon_is_parsed_safely(self):
+        import re
+        self.assertIn('Falha na etapa ${stage}:',PUBLISHER)
+        self.assertNotIn('Falha na etapa $stage:',PUBLISHER)
+        # Unbraced variables adjacent to ':' cause InvalidVariableReferenceWithDrive
+        # in Windows PowerShell 5.1, except for explicit drive scopes.
+        for script in (WINDOWS,PUBLISHER,
+                       (RELEASE/"python_build_bootstrap.ps1").read_text(
+                           encoding="utf-8")):
+            invalid=[
+                match.group(0) for match in re.finditer(
+                    r"\\$([A-Za-z_][A-Za-z0-9_]*):",script)
+                if match.group(1) not in {
+                    "env","script","global","local","private","using"
+                }
+            ]
+            self.assertEqual(invalid,[])
+
     def test_failure_reports_real_python_step_and_keeps_local_logs(self):
         self.assertIn("dist/build-diagnostics",PUBLISHER)
         self.assertIn("ULTIMA_FALHA.txt",PUBLISHER)
