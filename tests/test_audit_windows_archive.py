@@ -52,7 +52,10 @@ class ArchiveSecurityTests(unittest.TestCase):
 
     def test_private_rom_and_secrets_rejected(self):
         for name in ("DATA/WA_MRG.MRG", "DATA/SLUS_014.11",
-                     "rom.iso", "backup.mcr", "secret.pfx"):
+                     "rom.iso", "disc.bin", "disc.img", "memory.mcd",
+                     "save.state", "backup.mcr", "secret.pfx",
+                     "source.py", "source.pyc", "install.ps1",
+                     ".git/config", "user_data/config.json"):
             with self.subTest(name=name):
                 self.pack(extra={name: b"private"})
                 with self.assertRaises(ValueError):
