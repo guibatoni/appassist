@@ -129,13 +129,14 @@ class ResponsiveUiContracts(unittest.TestCase):
         self.assertIn("dueltrace-main",SHELL)
         self.assertIn("container-type: inline-size",CSS)
         for selector in (".dt-hand-grid", ".dt-adaptive-cards",
-                         ".dt-adaptive-drops",".dt-library-layout"):
+                         ".dt-adaptive-drops"):
             self.assertIn(selector,CSS)
         self.assertIn("@container (min-width: 1050px)",CSS)
         self.assertIn('className="dt-hand-grid"',MAIN)
         self.assertIn('className="dt-adaptive-cards"',MAIN)
         self.assertIn('className="dt-adaptive-drops"',DROPS)
-        self.assertIn('className="dt-library-layout mt-4"',MAIN)
+        self.assertIn('className="mt-4 grid grid-cols-2',MAIN)
+        self.assertNotIn("function CardDropSourcesPanel(",MAIN)
         self.assertIn('max-w-[2100px]',SHELL)
 
     def test_popups_and_updater_remain_fully_visible(self):
