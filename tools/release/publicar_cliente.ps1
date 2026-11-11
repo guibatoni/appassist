@@ -113,10 +113,7 @@ if ($LASTEXITCODE -ne 0 -or !$public -or $public.private -or
     $public.full_name -cne $publicRepo) {
     throw "Repositório de atualizações público não configurado."
 }
-# Prevent silently replacing a package that customers may have downloaded.
-$previous=gh api "repos/$publicRepo/releases/tags/$PrivateTag" 2>$null
-if ($LASTEXITCODE -eq 0) { throw "Já existe uma release com esta tag; sem sobrescrita." }
-
+# gh release create is create-only: existing tags are never overwritten.
 $zip=(Resolve-Path $publicZip).Path
 $digest=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 $notes=(Get-Content "docs/DUELTRACE_UPDATE_NOTES.md" -Raw -Encoding UTF8).Trim()
