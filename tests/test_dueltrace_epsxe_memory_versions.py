@@ -22,6 +22,7 @@ from dueltrace_epsxe_memory import (
 from dueltrace_live_hand import (
     HAND_ADDRESS, is_epsxe_process_name, read_hand_from_epsxe,
     _PID_HAND_ADDRESS_CACHE, _LAST_FAILED_SCAN, _PID_SCAN_PROGRESS,
+    _PID_PENDING_HANDS, _PID_CONFIRMED_READ_FAILURES,
 )
 
 
@@ -92,6 +93,10 @@ class EpsxeCompatibilityTests(unittest.TestCase):
         _PID_HAND_ADDRESS_CACHE.clear()
         _LAST_FAILED_SCAN.clear()
         _PID_SCAN_PROGRESS.clear()
+        _PID_PENDING_HANDS.clear()
+        _PID_CONFIRMED_READ_FAILURES.clear()
+        self.addCleanup(_PID_PENDING_HANDS.clear)
+        self.addCleanup(_PID_CONFIRMED_READ_FAILURES.clear)
         self.addCleanup(_PID_HAND_ADDRESS_CACHE.clear)
         self.addCleanup(_LAST_FAILED_SCAN.clear)
         self.addCleanup(_PID_SCAN_PROGRESS.clear)
@@ -147,20 +152,34 @@ class EpsxeCompatibilityTests(unittest.TestCase):
                 image[hand_host-region:hand_host-region+HAND_BYTES]=hand_blob(cards)
                 kernel=MappedKernel(region,bytes(image))
                 sample=read_hand_from_epsxe(kernel=kernel,pids=[pid],monotonic=lambda:100.0)
-                self.assertTrue(sample["ready"],sample)
-                self.assertEqual(sample["hand_ids"],cards)
-                self.assertEqual(sample["ramLayout"],"dynamic")
+                self.assertFalse(sample["ready"])
+                self.assertIsNone(sample["hand_ids"])
+                self.assertNotIn(pid,_PID_HAND_ADDRESS_CACHE)
+                self.assertIn(hand_host,_PID_PENDING_HANDS[pid])
+
+                # A genuine hand change during a subsequent game turn proves
+                # the address is active. Two immediate static reads never do.
+                next_cards=[449,145,447,629,469]
+                image[hand_host-region:hand_host-region+HAND_BYTES]=hand_blob(next_cards)
+                kernel.data=bytes(image)
+                observed=read_hand_from_epsxe(kernel=kernel,pids=[pid],
+                                              monotonic=lambda:100.5)
+                self.assertTrue(observed["ready"],observed)
+                self.assertEqual(observed["hand_ids"],next_cards)
+                self.assertEqual(observed["ramLayout"],"dynamic")
                 self.assertEqual(_PID_HAND_ADDRESS_CACHE[pid],hand_host)
-                self.assertEqual(kernel.closed,[55])
+                self.assertEqual(kernel.closed,[55,55])
                 self.assertFalse(kernel.opened[0][1])
                 self.assertFalse(hasattr(kernel,"WriteProcessMemory"))
 
-                # No scanning on next poll, yet double validation persists.
+                # Now the proven mapping is read with only two 140-byte
+                # samples; there is no need to scan process memory again.
                 kernel.read_addresses.clear()
+                before=kernel.VirtualQueryEx.call_count
                 again=read_hand_from_epsxe(kernel=kernel,pids=[pid])
-                self.assertEqual(again["hand_ids"],cards)
-                self.assertFalse(kernel.VirtualQueryEx.call_count==0)
-                self.assertEqual(len(kernel.read_addresses),3)  # legacy + cached 2
+                self.assertEqual(again["hand_ids"],next_cards)
+                self.assertEqual(kernel.VirtualQueryEx.call_count,before)
+                self.assertEqual(kernel.read_addresses,[(hand_host,HAND_BYTES)]*2)
 
     def test_ambiguous_hand_signatures_fail_closed(self):
         base=0x500000
@@ -174,7 +193,7 @@ class EpsxeCompatibilityTests(unittest.TestCase):
                                        base+0x110000,base+0x190000])
         self.assertFalse(result["ready"])
         self.assertIsNone(result["hand_ids"])
-        self.assertIn("ambígua",result["status"])
+        self.assertIn("Múltiplos candidatos",result["status"])
         self.assertNotIn(445,_PID_HAND_ADDRESS_CACHE)
 
     def test_stale_mappings_never_expose_previous_hand(self):
@@ -184,12 +203,24 @@ class EpsxeCompatibilityTests(unittest.TestCase):
         memory=bytearray(0x200000)
         memory[HAND_OFFSET:HAND_OFFSET+HAND_BYTES]=hand_blob([1,2,3,4,5])
         kernel=MappedKernel(base,bytes(memory))
-        first=read_hand_from_epsxe(kernel=kernel,pids=[pid])
-        self.assertTrue(first["ready"])
+        first=read_hand_from_epsxe(kernel=kernel,pids=[pid],
+                                   monotonic=lambda:100.0)
+        self.assertFalse(first["ready"])
+        memory[HAND_OFFSET:HAND_OFFSET+HAND_BYTES]=hand_blob([1,2,3,4,6])
+        kernel.data=bytes(memory)
+        second=read_hand_from_epsxe(kernel=kernel,pids=[pid],
+                                    monotonic=lambda:100.5)
+        self.assertTrue(second["ready"])
+        self.assertEqual(second["hand_ids"],[1,2,3,4,6])
         kernel.data=bytes(len(memory))
-        second=read_hand_from_epsxe(kernel=kernel,pids=[pid])
-        self.assertFalse(second["ready"])
-        self.assertIsNone(second["hand_ids"])
+        transient=read_hand_from_epsxe(kernel=kernel,pids=[pid],
+                                      monotonic=lambda:101.0)
+        self.assertFalse(transient["ready"])
+        self.assertIsNone(transient["hand_ids"])
+        lost=read_hand_from_epsxe(kernel=kernel,pids=[pid],
+                                 monotonic=lambda:106.0)
+        self.assertFalse(lost["ready"])
+        self.assertIsNone(lost["hand_ids"])
         self.assertNotIn(pid,_PID_HAND_ADDRESS_CACHE)
 
     def test_resumable_scan_finds_hand_beyond_first_read_budget(self):
@@ -248,8 +279,17 @@ class EpsxeCompatibilityTests(unittest.TestCase):
             kernel.read_addresses.clear()
             second=read_hand_from_epsxe(kernel=kernel,pids=[pid],
                                         monotonic=lambda:106.0)
-        self.assertTrue(second["ready"],second)
-        self.assertEqual(second["hand_ids"],cards)
+            self.assertFalse(second["ready"],second)
+            self.assertIsNone(second["hand_ids"])
+            self.assertIn(base+actual_offset,_PID_PENDING_HANDS[pid])
+            # The next real hand change, not two static reads, confirms RAM.
+            updated=[461,16,635,10,124]
+            image[actual_offset:actual_offset+HAND_BYTES]=hand_blob(updated)
+            kernel.data=bytes(image)
+            third=read_hand_from_epsxe(kernel=kernel,pids=[pid],
+                                       monotonic=lambda:106.5)
+        self.assertTrue(third["ready"],third)
+        self.assertEqual(third["hand_ids"],updated)
         self.assertNotIn(pid,_PID_SCAN_PROGRESS)
         self.assertEqual(_PID_HAND_ADDRESS_CACHE[pid],base+actual_offset)
         # No rescan of region start: only probes, legacy and continuation.
@@ -269,6 +309,66 @@ class EpsxeCompatibilityTests(unittest.TestCase):
         matches=probe_region_hand_anchors(reader,[(base,len(mem))])
         self.assertEqual(matches,[base+HAND_OFFSET])
         self.assertEqual(choose_stable_hand(reader,matches)["hand_ids"],cards)
+
+    def test_static_fake_hand_is_not_cached_and_live_hand_wins(self):
+        pid=3432
+        base=0x700000
+        static_offset=0x150000
+        live_offset=0x1B0000
+        image=bytearray(0x300000)
+        static=[16,33,77,145,449]
+        live=[12,44,66,88,100]
+        image[static_offset:static_offset+HAND_BYTES]=hand_blob(static)
+        image[live_offset:live_offset+HAND_BYTES]=hand_blob(live)
+        kernel=MappedKernel(base,bytes(image))
+        early=read_hand_from_epsxe(kernel=kernel,pids=[pid],
+                                  candidate_addresses=[base+static_offset,
+                                                       base+live_offset],
+                                  monotonic=lambda:100)
+        self.assertFalse(early["ready"])
+        self.assertIsNone(early["hand_ids"])
+        self.assertIn(base+static_offset,_PID_PENDING_HANDS[pid])
+        self.assertIn(base+live_offset,_PID_PENDING_HANDS[pid])
+        self.assertNotIn(pid,_PID_HAND_ADDRESS_CACHE)
+
+        # A static decoy can survive hundreds of valid reads. It must never
+        # win over the copy that actually changes when the player draws.
+        unchanged=read_hand_from_epsxe(kernel=kernel,pids=[pid],
+                                       candidate_addresses=[],
+                                       monotonic=lambda:105)
+        self.assertFalse(unchanged["ready"])
+        self.assertNotIn(pid,_PID_HAND_ADDRESS_CACHE)
+
+        new_hand=[12,44,66,88,101]
+        image[live_offset:live_offset+HAND_BYTES]=hand_blob(new_hand)
+        kernel.data=bytes(image)
+        proven=read_hand_from_epsxe(kernel=kernel,pids=[pid],
+                                    candidate_addresses=[],monotonic=lambda:110)
+        self.assertTrue(proven["ready"],proven)
+        self.assertEqual(proven["hand_ids"],new_hand)
+        self.assertEqual(_PID_HAND_ADDRESS_CACHE[pid],base+live_offset)
+
+    def test_multiple_changing_copies_are_not_silently_selected(self):
+        pid=3555
+        base=0x600000
+        memory=bytearray(0x300000)
+        a,b=0x110000,0x1A0000
+        for off in (a,b):
+            memory[off:off+HAND_BYTES]=hand_blob([1,2,3,4,5])
+        kernel=MappedKernel(base,bytes(memory))
+        first=read_hand_from_epsxe(
+            kernel=kernel,pids=[pid],
+            candidate_addresses=[base+a,base+b],monotonic=lambda:100)
+        self.assertFalse(first["ready"])
+        for off in (a,b):
+            memory[off:off+HAND_BYTES]=hand_blob([1,2,3,4,6])
+        kernel.data=bytes(memory)
+        second=read_hand_from_epsxe(
+            kernel=kernel,pids=[pid],candidate_addresses=[],
+            monotonic=lambda:101)
+        self.assertFalse(second["ready"])
+        self.assertIn("ambíguo",second["status"])
+        self.assertNotIn(pid,_PID_HAND_ADDRESS_CACHE)
 
     def test_scan_bounds_reject_unlimited_read_and_spurious_data(self):
         reads=[]
