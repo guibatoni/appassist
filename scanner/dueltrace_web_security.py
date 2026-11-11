@@ -296,9 +296,9 @@ class ProtectedDesktopApi:
         return self._bridge.get_drops(opponent_id,group,query,offset,limit,sort,card_type,rank)
 
     def get_card_fusions(self, credential, card_id, offset=0, limit=8,
-                         sort="atk"):
+                         sort="atk", role="material"):
         self._authorize(credential)
-        return self._bridge.get_card_fusions(card_id, offset, limit, sort)
+        return self._bridge.get_card_fusions(card_id, offset, limit, sort, role)
 
     def get_card_drop_sources(self, credential, card_id):
         self._authorize(credential)
