@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 Interactive helper for the DUELTRACE developer on Windows.
 Never distributes source code, ISOs, GitHub credentials or signing keys.
