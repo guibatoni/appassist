@@ -297,6 +297,34 @@ class EpsxeCompatibilityTests(unittest.TestCase):
             address==base and length>=1024*1024
             for address,length in kernel.read_addresses))
 
+    def test_scan_makes_progress_when_two_static_decoys_are_found(self):
+        # Previously the cursor moved by ONE byte from the start of a chunk
+        # and rediscovered the exact same two static decoys forever.
+        base=0x500000
+        memory=bytearray(0x200000)
+        decoys=(0x12000,0x1C000)
+        actual=0x145000
+        for pos in decoys:
+            memory[pos:pos+HAND_BYTES]=hand_blob([11,22,33,44,55])
+        memory[actual:actual+HAND_BYTES]=hand_blob([1,2,3,4,5])
+        def reader(address,length):
+            rel=address-base
+            return bytes(memory[rel:rel+length]) if (
+                0<=rel and rel+length<=len(memory)) else None
+        cursor=None
+        seen=[]
+        for _ in range(8):
+            page=discover_hand_addresses(
+                reader,[(base,len(memory))],budget=1024*1024,
+                cursor=cursor,report_progress=True)
+            seen.extend(page["addresses"])
+            cursor=page["cursor"]
+            if base+actual in seen:
+                break
+            self.assertIsNotNone(cursor)
+        self.assertIn(base+actual,seen)
+        self.assertEqual(len(seen),len(set(seen)))
+
     def test_small_anchor_probes_find_playstation_ram_fast(self):
         base=0x700000
         mem=bytearray(0x200000)
