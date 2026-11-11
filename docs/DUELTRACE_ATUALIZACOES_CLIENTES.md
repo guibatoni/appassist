@@ -23,7 +23,7 @@ encadeada de desenvolvimento.
 Pré-requisitos no **Windows do desenvolvedor** (não no PC dos clientes):
 
 - Git e um checkout limpo do repositório privado `guibatoni/appassist`.
-- Python 3.14 (incluindo 3.14.6) ou 3.12 já instalado, com acesso ao PyPI, Node.js 22 e npm. O script não instala nem altera a versão do interpretador do Windows; usa ambiente virtual privado.
+- Python 3.14 (incluindo 3.14.6) ou 3.12 já instalado, com acesso ao PyPI, Node.js 22/24/26 e npm. O script não instala nem altera a versão do interpretador do Windows; usa ambiente virtual privado.
 - Windows 10/11, Windows SDK com `signtool.exe`, Microsoft Defender ativo e
   atualizado, internet para auditorias e carimbo de tempo da assinatura.
 - Para **publicar**, certificado real Authenticode de editor confiável,
