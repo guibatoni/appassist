@@ -17,13 +17,13 @@ export function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="min-w-0 lg:w-56 lg:shrink-0">
+    <aside className="dt-nav-sidebar min-w-0 lg:w-56 lg:shrink-0">
       <nav aria-label="Navegação principal">
-        <ul className="grid grid-cols-3 gap-1 min-[600px]:grid-cols-5 lg:flex lg:flex-col lg:gap-1.5">
+        <ul className="dt-nav-list grid grid-cols-3 gap-1 min-[600px]:grid-cols-5 lg:flex lg:flex-col lg:gap-1.5">
           {navItems.map(({ label, href, icon: Icon, enabled }) => {
             const active = pathname.startsWith(href)
             const className = cn(
-              "group flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 text-center text-[11px] leading-tight transition-all min-[600px]:text-xs lg:flex-row lg:justify-start lg:gap-3 lg:px-4 lg:py-3 lg:text-left lg:text-[15px]",
+              "dt-nav-link group flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 text-center text-[11px] leading-tight transition-all min-[600px]:text-xs lg:flex-row lg:justify-start lg:gap-3 lg:px-4 lg:py-3 lg:text-left lg:text-[15px]",
               active
                 ? "border-primary bg-gradient-to-r from-primary/30 to-primary/5 font-semibold text-white shadow-[0_0_18px_rgb(56_200_255/0.45),inset_0_0_12px_rgb(56_200_255/0.25)]"
                 : "border-transparent text-foreground/85 hover:border-line hover:bg-primary/5 hover:text-white",
