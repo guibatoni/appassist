@@ -46,3 +46,6 @@ scanner/dueltrace-build.json
 
 # Ambiente Python 3.12 exclusivo de compilacao (sem alterar Python 3.14 do Windows)
 .dueltrace-build-py312/
+
+# Ambiente Python 3.14 local do compilador, sem instalar outro Python
+.dueltrace-build-py314/
