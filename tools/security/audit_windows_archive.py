@@ -13,6 +13,7 @@ GAME_FILE = re.compile(r"^(?:WA_MRG\.MRG|SLUS_014\.11)$", re.I)
 # Executable Windows package must never embed user ROMs, saves or disc images.
 GAME_SUFFIXES = {".iso", ".bin", ".img", ".cue", ".chd", ".ccd", ".mcr", ".mcd", ".sav", ".state"}
 SECRET_SUFFIXES = {".pfx", ".p12", ".pem", ".key"}
+SOURCE_SUFFIXES = {".py", ".pyc", ".pyo", ".ps1", ".cmd", ".sh"}
 
 
 def _sha256(stream) -> str:
@@ -86,6 +87,12 @@ def _check_name(name: str) -> None:
         raise ValueError("Arquivo privado do jogo dentro do pacote.")
     if suffix in SECRET_SUFFIXES or leaf.lower() in (".env", "id_rsa"):
         raise ValueError("Possível chave ou segredo dentro do pacote.")
+    if suffix in SOURCE_SUFFIXES:
+        raise ValueError("Código-fonte ou script de desenvolvimento no ZIP de clientes.")
+    if any(part.casefold() in (".git", "__pycache__", "tests", "user_data",
+                               "backups", "private", "analises")
+           for part in parts):
+        raise ValueError("Diretório privado ou de desenvolvimento no ZIP.")
 
 
 def main() -> None:
