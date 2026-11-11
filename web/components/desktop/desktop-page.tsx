@@ -10,8 +10,8 @@ import {cardArt, cardWithFrame, desktopApi, useDesktopState} from "@/lib/desktop
 import {DropsPage} from "./drops-page"
 import {RankScoreDisplay} from "./rank-score-display"
 import {copyOpponentReport} from "@/lib/opponent-report"
-import {CardHoverPreview} from "./card-hover-preview"
-import type {CardPreviewSelection} from "./card-hover-preview"
+import {CardInfoDialog} from "./card-info-dialog"
+import type {CardPreviewSelection} from "./card-info-dialog"
 import type {LocalCard, HandState, FusionPage, FusionSearchScope, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison, IsoForensicAudit, MipsTraceResult, AlphaDiscovery} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
@@ -101,6 +101,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [showAll,setShowAll]=useState(false)
   const [tipsVisible,setTipsVisible]=useState(true)
   const [tipsError,setTipsError]=useState(false)
+  const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
   const [preferenceError,setPreferenceError]=useState(false)
   useEffect(()=>{
     let mounted=true
@@ -136,6 +137,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
     return()=>{mounted=false;window.clearInterval(interval)}
   },[sha])
   useEffect(()=>setShowAll(false),[mode,sha])
+  useEffect(()=>setPreview(null),[sha])
   const combinations=mode==="pairs"?hand?.pairs??[]:hand?.chains??[]
   const visibleCombinations=showAll?combinations:combinations.slice(0,6)
   return <div className="space-y-4">
@@ -157,15 +159,17 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         <div className="dt-hand-grid">
           {Array.from({length:5},(_,slot)=>{
             const card=hand?.ready?hand.hand[slot]??null:null
-            return <div key={slot}
-              className="min-w-0 rounded-lg border border-line/60 bg-background/50 px-2 py-3">
+            return <button type="button" key={slot}
+              aria-label={card?`Ver informações de ${card.name}`:`Posição ${slot+1} sem carta`}
+              disabled={!card} onClick={()=>{if(card)setPreview({card})}}
+              className="min-w-0 rounded-lg border border-line/60 bg-background/50 px-2 py-3 text-left transition-colors hover:border-primary/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-default disabled:hover:border-line/60">
               <p className="mb-2 text-center text-[11px] text-gold">{slot+1}</p>
               <CardThumbnail card={card} sha={sha}/>
               <p className="mt-2 min-h-8 break-words text-center text-xs font-semibold text-white">
                 {card?.name??"Aguardando"}
               </p>
               <MonsterStats card={card} className="text-center"/>
-            </div>
+            </button>
           })}
         </div>
         {!hand?.ready&&<p className="mt-3 text-center text-xs text-muted">
@@ -213,7 +217,10 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
                     {key:"a",name:"Material",card:hand.hand[item.slot_a-1]??cardsById.get(item.a)??null},
                     {key:"b",name:"Material",card:hand.hand[item.slot_b-1]??cardsById.get(item.b)??null},
                     {key:"result",name:"Resultado",card:cardsById.get(item.result)??null},
-                  ]).map(part=><div key={part.key} className="min-w-0 text-center">
+                  ]).map(part=><button type="button" key={part.key}
+                    disabled={!part.card} onClick={()=>{if(part.card)setPreview({card:part.card})}}
+                    aria-label={`Ver informações de ${part.card?.name??part.name}`}
+                    className="min-w-0 rounded-md text-center hover:bg-primary/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-default">
                     <p className="mb-1 text-[10px] uppercase text-muted">{part.name}</p>
                     <div className="mx-auto w-16"><CardThumbnail card={part.card} sha={sha}/></div>
                     <p className="mt-1 line-clamp-2 text-xs font-semibold text-white">
@@ -222,7 +229,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
                     <p className="text-[10px] text-gold">
                       #{part.card?.id??(part.key==="result"?item.result:"—")}
                     </p>
-                  </div>)}
+                  </button>)}
                 </div>
                 <MonsterStats card={cardsById.get(item.result)??null} className="mt-2"/>
               </div>)}
@@ -233,19 +240,25 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
                 <div className="mt-2 flex max-w-full flex-wrap justify-center gap-2">
                   {item.slot_order.map((slot,j)=>{
                     const card=hand.hand[slot-1]??null
-                    return <div key={j} className="w-16 text-center">
+                    return <button type="button" key={j}
+                      disabled={!card} onClick={()=>{if(card)setPreview({card})}}
+                      aria-label={card?`Ver informações de ${card.name}`:`Carta na posição ${slot} indisponível`}
+                      className="w-16 rounded-md text-center hover:bg-primary/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-default">
                       <div><CardThumbnail card={card} sha={sha}/></div>
                       <p className="mt-1 line-clamp-2 text-[10px] text-white">
                         {card?.name??`Carta ${slot}`}
                       </p>
-                    </div>
+                    </button>
                   })}
-                  <div className="w-16 text-center">
+                  <button type="button" disabled={!cardsById.has(item.result)}
+                    onClick={()=>{const card=cardsById.get(item.result);if(card)setPreview({card})}}
+                    aria-label={`Ver informações de ${item.result_name}`}
+                    className="w-16 rounded-md text-center hover:bg-primary/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-default">
                     <div><CardThumbnail card={cardsById.get(item.result)??null} sha={sha}/></div>
                     <p className="mt-1 line-clamp-2 text-[10px] font-semibold text-gold">
                       {item.result_name}
                     </p>
-                  </div>
+                  </button>
                 </div>
                 <MonsterStats card={cardsById.get(item.result)??null} className="mt-2"/>
                 <ol className="mt-2 space-y-1 text-xs text-muted">{item.steps.map((step,j)=>
@@ -261,6 +274,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       {tipsVisible&&hand?.ready&&mode==="chains"&&hand.chainsComplete===false&&
         <p className="mt-2 text-xs text-gold">Busca parcial: limite de combinações atingido.</p>}
     </section>
+    <CardInfoDialog selection={preview} sha={sha} onClose={()=>setPreview(null)}/>
   </div>
 }
 
@@ -1247,11 +1261,6 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
   const [pageSize,setPageSize]=useState(20)
   const [page,setPage]=useState(0)
   const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
-  // A visualização pode ser fixada por clique para explorar/paginar as fusões.
-  // Sair do hover não fecha uma janela fixada.
-  const onPreview=(next:CardPreviewSelection|null)=>{
-    setPreview(current=>current?.pinned&&!next?.pinned?current:next)
-  }
   const types=useMemo(()=>Array.from(new Set(cards.map(c=>c.type||c.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"pt-BR")),[cards])
   useEffect(()=>{setSearch("");setSort("id");setCardType("");setPage(0);setPreview(null)},[sha])
   const visible=useMemo(()=>{
@@ -1302,11 +1311,7 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
         {visible.slice(page*pageSize,(page+1)*pageSize).map(card=><button type="button" key={card.id}
           aria-label={`Ver informações e fusões de ${card.name}`}
           className="rounded-lg border border-line/70 bg-panel-strong/60 p-2 text-center transition hover:border-primary hover:bg-primary/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-          onMouseEnter={event=>onPreview({card,anchor:event.currentTarget})}
-          onMouseLeave={()=>onPreview(null)}
-          onFocus={event=>onPreview({card,anchor:event.currentTarget})}
-          onBlur={()=>onPreview(null)}
-          onClick={event=>onPreview({card,anchor:event.currentTarget,pinned:true})}>
+          onClick={()=>setPreview({card})}>
           <CardThumbnail key={String(sha)+"-"+card.id} card={card} sha={sha}/>
           <p className="mt-2 min-h-9 text-xs font-semibold text-white">{card.name}</p>
           <MonsterStats card={card} className="mt-1 text-center"/>
@@ -1318,7 +1323,7 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
         <span className="text-xs text-muted">{page+1} / {pages}</span>
         <button type="button" className="btn-ghost disabled:opacity-30" disabled={page+1>=pages} onClick={()=>setPage(x=>x+1)}>Próxima<ChevronRight className="size-4"/></button>
       </div>
-      <CardHoverPreview selection={preview} sha={sha} onClose={()=>setPreview(null)}/>
+      <CardInfoDialog selection={preview} sha={sha} onClose={()=>setPreview(null)}/>
     </section>
   </>
 }
@@ -1334,10 +1339,7 @@ function FusionIllustration({id,name,sha,card,role,onPreview}:{
   return <div className="flex min-w-0 flex-col items-center gap-1.5">
     <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{role}</span>
     <button type="button" aria-label={`Ver detalhes e drops de ${name}`}
-      onMouseEnter={event=>onPreview({card:displayed,anchor:event.currentTarget})}
-      onMouseLeave={()=>onPreview(null)}
-      onFocus={event=>onPreview({card:displayed,anchor:event.currentTarget})}
-      onBlur={()=>onPreview(null)}
+      onClick={()=>onPreview({card:displayed})}
       className="group flex min-w-0 w-full flex-col items-center gap-1.5 rounded-md p-1 transition-all duration-200 hover:bg-primary/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
       <div className="w-11 origin-center transition-transform duration-200 group-hover:scale-105 group-focus-visible:scale-105 min-[390px]:w-14 sm:w-20">
         <CardThumbnail key={String(sha)+"-"+id} card={displayed} sha={sha}/>
@@ -1459,7 +1461,7 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             onClick={()=>setOffset(x=>x+pageSize)}>Próxima <ChevronRight className="size-4"/></button>
         </div>
       </div>
-      <CardHoverPreview selection={preview} sha={sha} onClose={()=>setPreview(null)}/>
+      <CardInfoDialog selection={preview} sha={sha} onClose={()=>setPreview(null)}/>
     </section>
   </>
 }
