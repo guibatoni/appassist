@@ -31,6 +31,13 @@ class WindowsBuildKitTests(unittest.TestCase):
                 self.assertIn("if errorlevel 1",source)
                 self.assertIn("pause",source)
 
+    def test_node_26_is_accepted_without_installing_node_22(self):
+        self.assertIn('^v(?:22|24|26)',WINDOWS)
+        self.assertNotIn("Utilize Node.js 22 (encontrado:",WINDOWS)
+        self.assertNotIn('Instale Node.js 22.',WINDOWS)
+        self.assertIn("node --version",WINDOWS)
+        self.assertIn("Node.js 22, 24 ou 26",WINDOWS)
+
     def test_system_python_314_is_accepted_without_python_312_install(self):
         helper=(RELEASE/"python_build_bootstrap.ps1").read_text(encoding="utf-8")
         ignore=(ROOT/".gitignore").read_text(encoding="utf-8")
