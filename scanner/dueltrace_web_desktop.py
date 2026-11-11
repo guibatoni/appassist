@@ -18,6 +18,9 @@ from urllib.parse import unquote, urlsplit
 
 from dueltrace_web_bridge import DueltraceWebBridge
 from dueltrace_web_security import ProtectedDesktopApi
+from dueltrace_display_layout import (
+    window_geometry, tool_geometry, windows_work_area,
+)
 
 ART_PATTERN=re.compile(r"^/__art__/([0-9a-f]{64})/([0-9]{1,3})\.png$")
 CARD_PATTERN=re.compile(r"^/__card__/([0-9a-f]{64})/([0-9]{1,3})\.png$")
@@ -195,6 +198,8 @@ def main():
         raise OSError("A interface desktop nativa está disponível apenas no Windows.")
     import webview
 
+    work_width,work_height=windows_work_area()
+    main_size=window_geometry(work_width,work_height)
     static=assets_path()
     bridge=DueltraceWebBridge()
     token=secrets.token_urlsafe(32)
@@ -209,8 +214,10 @@ def main():
     try:
         window=webview.create_window(
             "DUELTRACE — MultiMod Companion",
-            url=url,js_api=api,width=1450,height=870,
-            min_size=(1100,700),background_color="#040a1a",
+            url=url,js_api=api,
+            width=main_size["width"],height=main_size["height"],
+            min_size=(main_size["min_width"],main_size["min_height"]),
+            background_color="#040a1a",
             frameless=True,easy_drag=False,resizable=True)
         if window is None:
             raise RuntimeError("Não foi possível criar a janela do DUELTRACE.")
@@ -250,6 +257,10 @@ def main():
         def open_tool_window(kind):
             # The native JS API already checked the exact allowlisted kind.
             title,width,height=tool_routes[kind]
+            tool_size=tool_geometry(
+                work_width,work_height,width,height,
+                min_width=330 if kind=="calculadora" else 380,
+                min_height=230 if kind=="calculadora" else 380)
             with tool_windows_lock:
                 existing=tool_windows.get(kind)
                 if existing is not None:
@@ -262,9 +273,8 @@ def main():
                 child=webview.create_window(
                     title,
                     url="about:blank",
-                    js_api=api,width=width,height=height,
-                    min_size=((330,230) if kind=="calculadora"
-                              else (380,380)),resizable=True,
+                    js_api=api,width=tool_size["width"],height=tool_size["height"],
+                    min_size=tool_size["min_size"],resizable=True,
                     on_top=True,background_color="#040a1a",
                     frameless=False)
                 child.events.loaded+=secure_loaded
