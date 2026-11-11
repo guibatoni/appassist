@@ -1,4 +1,4 @@
-# Código-fonte público; não subir arquivos do jogo nem dados privados
+# Código-fonte privado; não versionar ROMs, credenciais nem dados de clientes
 *.bin
 *.iso
 *.cue
