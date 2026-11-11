@@ -62,7 +62,7 @@ class WindowsBuildKitTests(unittest.TestCase):
         self.assertLess(len(PUBLISHER),20000)
         self.assertEqual(PUBLISHER.count("function Invoke-Checked("),1)
         self.assertEqual(PUBLISHER.count("Push-Location $workspace"),1)
-        self.assertEqual(PUBLISHER.count("DUELTRACE-WebUI.exe"),3)
+        self.assertEqual(PUBLISHER.count("DUELTRACE-WebUI.exe"),1)
         self.assertIn("if ($LASTEXITCODE -ne 0 -or !$trustedOrigin)",PUBLISHER)
         self.assertIn("$notes=(Get-Content",PUBLISHER)
         self.assertIn("--draft",PUBLISHER)
