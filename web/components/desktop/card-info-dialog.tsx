@@ -38,13 +38,20 @@ export function CardInfoDialog({selection,sha,onClose}:{
   const [fusionError,setFusionError]=useState(false)
   const [fusionSort,setFusionSort]=useState<"atk"|"name"|"id">("atk")
   const [fusionPage,setFusionPage]=useState(0)
+  const [resultFusions,setResultFusions]=useState<CardFusionSuggestions|null>(null)
+  const [resultFusionError,setResultFusionError]=useState(false)
+  const [resultFusionSort,setResultFusionSort]=useState<"atk"|"name"|"id">("atk")
+  const [resultFusionPage,setResultFusionPage]=useState(0)
   const card=selection?.card??null
   const cardId=card?.id??null
   useEffect(()=>{onCloseRef.current=onClose},[onClose])
 
   useEffect(()=>setMounted(true),[])
 
-  useEffect(()=>{setFusionSort("atk");setFusionPage(0)},[sha,cardId])
+  useEffect(()=>{
+    setFusionSort("atk");setFusionPage(0)
+    setResultFusionSort("atk");setResultFusionPage(0)
+  },[sha,cardId])
 
   // Requests are tied to the selected ISO and card ID: never reuse data from
   // another mod, and do not infer fusions from the names of the cards.
@@ -62,6 +69,24 @@ export function CardInfoDialog({selection,sha,onClose}:{
     }).catch(()=>{if(active)setFusionError(true)})
     return()=>{active=false}
   },[sha,cardId,fusionPage,fusionSort])
+
+  // Both lists use exact IDs from the SAME active ISO. A card can be a
+  // material in one recipe and the final monster in another.
+  useEffect(()=>{
+    setResultFusions(null)
+    setResultFusionError(false)
+    if(!sha||cardId===null)return
+    const api=desktopApi()
+    if(!api)return
+    let active=true
+    void api.get_card_fusions(cardId,resultFusionPage*8,8,resultFusionSort,"result").then(data=>{
+      if(!active)return
+      if(data.romSha===sha&&data.cardId===cardId&&data.role==="result"){
+        setResultFusions(data)
+      } else setResultFusionError(true)
+    }).catch(()=>{if(active)setResultFusionError(true)})
+    return()=>{active=false}
+  },[sha,cardId,resultFusionPage,resultFusionSort])
 
   useEffect(()=>{
     setResult(null)
@@ -118,6 +143,11 @@ export function CardInfoDialog({selection,sha,onClose}:{
   const fusionRows=matchedFusions?fusions.rows:[]
   const fusionTotal=matchedFusions?fusions.total:0
   const fusionPages=Math.max(1,Math.ceil(fusionTotal/8))
+  const matchedResultFusions=resultFusions?.romSha===sha&&
+    resultFusions.cardId===card.id&&resultFusions.role==="result"
+  const resultFusionRows=matchedResultFusions?resultFusions.rows:[]
+  const resultFusionTotal=matchedResultFusions?resultFusions.total:0
+  const resultFusionPages=Math.max(1,Math.ceil(resultFusionTotal/8))
   const rows=matched&&result.available?result.rows:[]
   const dropRows=rows.length?rows.slice(0,4):
     !result&&!error&&selection.fallbackDrop?[selection.fallbackDrop]:[]
@@ -190,7 +220,7 @@ export function CardInfoDialog({selection,sha,onClose}:{
       </div>
       <div className="mt-3 border-t border-line/70 pt-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-primary">Possíveis fusões</h4>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-primary">Fusões usando esta carta como material</h4>
           {<select value={fusionSort} aria-label="Ordenar fusões possíveis"
             onChange={event=>{setFusionSort(event.target.value as "atk"|"name"|"id");setFusionPage(0)}}
             className="field max-w-full px-2 py-1 text-xs">
@@ -234,8 +264,75 @@ export function CardInfoDialog({selection,sha,onClose}:{
           matchedFusions?"Nenhuma fusão encontrada com esta carta como material.":
           "Consultando fusões da ISO ativa…"}</p>}
       </div>
+      <div className="mt-3 border-t border-line/70 pt-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-primary">
+            Fusões em que esta carta é o resultado final
+          </h4>
+          <select value={resultFusionSort} aria-label="Ordenar materiais da fusão final"
+            onChange={event=>{
+              setResultFusionSort(event.target.value as "atk"|"name"|"id")
+              setResultFusionPage(0)
+            }} className="field max-w-full px-2 py-1 text-xs">
+            <option value="atk">Maior ATK dos materiais</option>
+            <option value="name">Material A–Z</option>
+            <option value="id">ID do material</option>
+          </select>
+        </div>
+        {resultFusionRows.length?<>
+          <ul className="space-y-1.5">
+            {resultFusionRows.map(fusion=><li
+              key={fusion.materialAId+"-"+fusion.materialBId+"-"+fusion.resultId}
+              className="rounded-lg border border-line/50 bg-panel-strong/60 px-2.5 py-2 text-xs">
+              <p className="break-words text-foreground/85">
+                #{fusion.materialAId} <span className="font-semibold text-white">
+                  {fusion.materialAName}
+                </span> <span className="text-primary">ATK {fusion.materialAAtk??"—"}</span>
+              </p>
+              <p className="mt-1 break-words text-foreground/85">
+                + #{fusion.materialBId} <span className="font-semibold text-white">
+                  {fusion.materialBName}
+                </span> <span className="text-primary">ATK {fusion.materialBAtk??"—"}</span>
+              </p>
+              <p className="mt-1 break-words font-semibold text-gold">
+                → #{fusion.resultId} {fusion.resultName}
+                <span className="ml-2 text-primary">ATK {fusion.atk??"—"}</span>
+              </p>
+            </li>)}
+          </ul>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] text-muted">
+              {resultFusionTotal} receita(s) para formar esta carta
+            </span>
+            {resultFusionPages>1&&<div className="flex items-center gap-1">
+              <button type="button" aria-label="Receitas anteriores para formar esta carta"
+                disabled={resultFusionPage===0}
+                onClick={()=>setResultFusionPage(page=>Math.max(0,page-1))}
+                className="rounded-md p-1 text-primary disabled:opacity-30">
+                <ChevronLeft className="size-4"/>
+              </button>
+              <span className="text-[11px] tabular-nums text-muted">
+                {resultFusionPage+1}/{resultFusionPages}
+              </span>
+              <button type="button" aria-label="Mais receitas para formar esta carta"
+                disabled={resultFusionPage+1>=resultFusionPages}
+                onClick={()=>setResultFusionPage(page=>page+1)}
+                className="rounded-md p-1 text-primary disabled:opacity-30">
+                <ChevronRight className="size-4"/>
+              </button>
+            </div>}
+          </div>
+          {resultFusions?.provisional&&<p className="mt-2 text-[11px] text-muted">
+            Algumas receitas são candidatas extraídas da ISO e não confirmadas em duelo.
+          </p>}
+        </>:<p className="text-xs text-muted">
+          {resultFusionError?"Não foi possível consultar fusões neste mod.":
+            matchedResultFusions?"Nenhuma receita nesta ISO forma esta carta.":
+            "Consultando receitas que produzem esta carta…"}
+        </p>}
+      </div>
       <p className="mt-3 text-[11px] text-muted">
-        "Clique fora da janela ou pressione Esc para fechar."
+        Clique fora da janela ou pressione Esc para fechar.
       </p>
       </div>
     </div>
