@@ -63,7 +63,9 @@ function Invoke-Checked([string]$Command,[string[]]$CommandArgs) {
         $summary=Join-Path $script:BuildLogDir "ULTIMA_FALHA.txt"
         $header="FALHA NA ETAPA $stage. Codigo: $code. Comando: $Command $argsText"
         $tail=@(Get-Content -LiteralPath $log -Tail 45 -ErrorAction SilentlyContinue)
-        [IO.File]::WriteAllLines($summary,@($header,"",("Log: " + $log),"")+$tail,
+        $summaryLines=@($header,"",("Log: " + $log),"") + @($tail)
+        [IO.File]::WriteAllText($summary,
+            ($summaryLines -join [Environment]::NewLine) + [Environment]::NewLine,
             [Text.UTF8Encoding]::new($false))
         Write-Host ""
         Write-Host "============== ULTIMA FALHA ==============" -ForegroundColor Red
