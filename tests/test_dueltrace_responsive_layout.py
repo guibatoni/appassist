@@ -24,6 +24,7 @@ DROPS=(ROOT/"web/components/desktop/drops-page.tsx").read_text(encoding="utf-8")
 PREVIEW=(ROOT/"web/components/desktop/card-hover-preview.tsx").read_text(encoding="utf-8")
 UPDATES=(ROOT/"web/components/shell/update-checker.tsx").read_text(encoding="utf-8")
 NATIVE=(ROOT/"scanner/dueltrace_web_desktop.py").read_text(encoding="utf-8")
+FLOATING=(ROOT/"web/components/desktop/floating-tools.tsx").read_text(encoding="utf-8")
 
 
 class DisplayGeometryTests(unittest.TestCase):
@@ -137,6 +138,9 @@ class ResponsiveUiContracts(unittest.TestCase):
         self.assertIn("max-h-[min(75dvh,600px)]",UPDATES)
         self.assertIn("overflow-y-auto",UPDATES)
         self.assertIn("Atualizar agora",UPDATES)
+        self.assertIn("flex flex-wrap items-start justify-center gap-1",FLOATING)
+        self.assertIn("min-[390px]:h-[78px] min-[390px]:w-[68px]",FLOATING)
+        self.assertIn("aria-label=\"Fechar visor\"",FLOATING)
 
     def test_ratio_support_does_not_use_zoom_or_change_game_data(self):
         for source in (SHELL,TOP,SIDE,MAIN,DROPS):
