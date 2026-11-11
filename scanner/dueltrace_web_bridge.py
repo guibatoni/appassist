@@ -61,7 +61,6 @@ from dueltrace_preview_installer import (
     fetch_portable_stable_package, install_portable_stable_release
 )
 from dueltrace_preview_updates import installed_preview_build_id
-from dueltrace_private_update_source import PrivateUpdateUnavailable
 
 
 class DueltraceWebBridge:
@@ -392,13 +391,10 @@ class DueltraceWebBridge:
                             "substituição na pasta atual."),
                     })
         except (OSError,ValueError,TypeError) as exc:
-            status["previewCheckStatus"]=(
-                "authentication_required" if isinstance(exc,PrivateUpdateUnavailable)
-                else "unavailable")
+            status["previewCheckStatus"]="unavailable"
             status["previewError"]=(
-                str(exc) if isinstance(exc,PrivateUpdateUnavailable) else
-                "Pré-lançamentos temporariamente indisponíveis. "
-                "Nenhum download foi iniciado.")
+                "Canal público de atualizações indisponível ou ainda não publicado. "
+                "Verifique a conexão e tente novamente; nenhum login é necessário.")
 
         # Sem pacote portátil verificável, o botão não pode instalar uma
         # versão só porque foi detectada no GitHub.
