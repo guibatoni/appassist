@@ -103,3 +103,87 @@ body {
   scrollbar-width: thin;
   scrollbar-color: #315f89 transparent;
 }
+
+
+/* Responsive desktop UI: use the AVAILABLE PANEL width, not the monitor
+   breakpoint. The 224px sidebar must not force two card columns too early. */
+.dueltrace-main {
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.dt-hand-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7.25rem), 1fr));
+}
+
+.dt-adaptive-cards {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+}
+
+/* The library detail panel should only take a 330px column when the
+   *main content*, not merely the monitor, has room for it. */
+.dt-library-layout {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+@container (min-width: 1050px) {
+  .dt-library-layout { grid-template-columns: minmax(0, 1fr) 330px; }
+}
+
+.dt-adaptive-drops {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 23rem), 1fr));
+}
+
+/* Long ISO names and localized menu entries must wrap without widening
+   the entire WebView or clipping navigation and window controls. */
+.dueltrace-main :where(.panel) {
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .dt-hand-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dt-adaptive-cards, .dt-adaptive-drops { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Wide but shallow monitors (21:9/32:9) should remain fully scrollable.
+   Never scale the whole app: text and cards retain accessible dimensions. */
+@media (max-height: 650px) {
+  .dt-app-padding { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+  .dt-shell-body { padding-bottom: 0.75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame-glow, .panel { scroll-behavior: auto; }
+}
+
+/* Portrait orientation wins over the desktop width breakpoint. A maximized
+   1080x1920 display is still portrait even though it is >=1024px wide. */
+@media (orientation: portrait) and (min-width: 1024px) {
+  .dt-shell-body { flex-direction: column; }
+  .dt-nav-sidebar { width: auto; flex-shrink: 1; }
+  .dt-nav-list {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.25rem;
+  }
+  .dt-nav-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    white-space: normal;
+    text-align: center;
+    padding: 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.2;
+  }
+}

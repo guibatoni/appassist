@@ -133,7 +133,7 @@ export function UpdateChecker() {
         className="size-2 animate-pulse rounded-full bg-gold"/>}
     </button>
     {visible &&
-      <section className="absolute right-0 top-full z-50 mt-2 w-[min(90vw,370px)] rounded-xl border border-gold/40 bg-[#0a1a31] p-4 text-sm text-foreground shadow-[0_12px_36px_rgba(0,0,0,.65)]"
+      <section className="dueltrace-scroll absolute left-0 top-full z-50 mt-2 max-h-[min(75dvh,600px)] w-[min(calc(100vw-2.5rem),370px)] overflow-y-auto rounded-xl border border-gold/40 bg-[#0a1a31] p-3 text-sm text-foreground shadow-[0_12px_36px_rgba(0,0,0,.65)] sm:right-0 sm:left-auto sm:p-4"
         aria-label="Resultado da verificação">
         <div className="flex items-start justify-between gap-3">
           <h3 className="font-display text-base font-semibold text-gold">Atualizações DUELTRACE</h3>

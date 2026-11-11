@@ -55,7 +55,7 @@ export function WindowControls() {
     }
   }
 
-  const common="inline-flex h-9 w-10 items-center justify-center rounded-md border border-transparent text-muted transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-40"
+  const common="inline-flex h-8 w-8 items-center justify-center sm:h-9 sm:w-10 rounded-md border border-transparent text-muted transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-40"
   const disabled=!connected||busy!==null
   return <div className="flex shrink-0 items-center gap-0.5 border-l border-line/60 pl-2"
     role="group" aria-label="Controles da janela">
