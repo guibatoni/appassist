@@ -107,7 +107,9 @@ class ResponsiveUiContracts(unittest.TestCase):
         self.assertIn("h-8 w-8",WINDOW)
         self.assertIn("sm:h-9 sm:w-10",WINDOW)
         self.assertIn("aria-label=\"Fechar DUELTRACE\"",WINDOW)
-        self.assertIn("pywebview-drag-region",TOP)
+        self.assertIn("onPointerDown={onHeaderPointerDown}",TOP)
+        self.assertIn("onPointerMove={onHeaderPointerMove}",TOP)
+        self.assertIn("setPointerCapture(event.pointerId)",TOP)
 
     def test_navigation_all_tabs_visible_even_in_portrait(self):
         self.assertIn("grid-cols-3",SIDE)
