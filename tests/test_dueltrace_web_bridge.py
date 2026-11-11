@@ -117,6 +117,57 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(no_material["rows"],[])
         self.assertEqual(data["provisional"],True)
 
+    def test_card_fusions_as_final_result_lists_material_pairs_with_atk(self):
+        # Card #8 is the outcome of curated 7+3 and alpha 2+3.
+        # A duplicated or contradictory alpha recipe must never be shown.
+        candidates={"fusions":[
+            {"a":2,"b":3,"result":8,"validation":"alpha_seven_matching_iso_banks"},
+            {"a":2,"b":3,"result":8,"validation":"alpha_seven_matching_iso_banks"},
+            {"a":1,"b":2,"result":8,"validation":"alpha_seven_matching_iso_banks"},
+        ]}
+        with patch.object(self.bridge,"_alpha_bundle",return_value=candidates):
+            page=self.bridge.get_card_fusions(8,role="result")
+            self.assertEqual(page["romSha"],self.sha)
+            self.assertEqual(page["cardId"],8)
+            self.assertEqual(page["role"],"result")
+            self.assertEqual(page["total"],2)
+            self.assertTrue(page["provisional"])
+            combinations={
+                (r["materialAId"],r["materialBId"],r["resultId"])
+                for r in page["rows"]
+            }
+            self.assertEqual(combinations,{(7,3,8),(2,3,8)})
+            self.assertTrue(all(r["atk"]==3200 for r in page["rows"]))
+            self.assertEqual(
+                {r["materialAAtk"] for r in page["rows"]},{2800,300})
+            self.assertEqual(
+                {r["materialBAtk"] for r in page["rows"]},{100})
+            self.assertTrue(all(r["partnerId"] is None for r in page["rows"]))
+            # ATK order for a fixed outcome uses strongest ingredient, not
+            # the fixed 3200 ATK of the resulting monster.
+            self.assertEqual(page["rows"][0]["materialAId"],7)
+            last=self.bridge.get_card_fusions(8,offset=1,limit=1,role="result")
+            self.assertEqual(last["total"],2)
+            self.assertEqual(last["rows"][0]["materialAId"],2)
+            by_name=self.bridge.get_card_fusions(8,sort="name",role="result")
+            self.assertEqual([r["materialAId"] for r in by_name["rows"]],[2,7])
+            material=self.bridge.get_card_fusions(8,role="material")
+            self.assertEqual(material["total"],0)
+            unknown=self.bridge.get_card_fusions(5,role="result")
+            self.assertEqual(unknown["rows"],[])
+            self.assertNotIn("source_path",str(page))
+
+    def test_card_fusion_role_is_validated_and_protected(self):
+        for invalid in ("",None,"all","results",True,8):
+            with self.subTest(role=invalid),self.assertRaises(ValueError):
+                self.bridge.get_card_fusions(8,role=invalid)
+        private=ProtectedDesktopApi(self.bridge,"q"*64)
+        with self.assertRaises(PermissionError):
+            private.get_card_fusions("invalid",8,0,8,"atk","result")
+        found=private.get_card_fusions("q"*64,8,0,8,"atk","result")
+        self.assertEqual(found["role"],"result")
+        self.assertEqual(found["total"],1)
+
     def test_card_fusion_bridge_rejects_invalid_inputs_and_enforces_token(self):
         for invalid in (0,-1,723,"2",True,None,{},[]):
             with self.subTest(card_id=invalid),self.assertRaises(ValueError):
