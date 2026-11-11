@@ -13,6 +13,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 from dueltrace_live_hand import (
     HAND_ADDRESS,HAND_BYTES,build_fusion_index,
     read_hand_from_epsxe,suggest_hand_pairs,
+    _PID_HAND_ADDRESS_CACHE, _PID_PENDING_HANDS, _PID_SCAN_PROGRESS,
+    _PID_CONFIRMED_READ_FAILURES, _LAST_FAILED_SCAN,
 )
 
 
@@ -52,6 +54,13 @@ class FakeKernel:
 
 
 class HandFusionTests(unittest.TestCase):
+    def setUp(self):
+        for cache in (_PID_HAND_ADDRESS_CACHE,_PID_PENDING_HANDS,
+                      _PID_SCAN_PROGRESS,_PID_CONFIRMED_READ_FAILURES,
+                      _LAST_FAILED_SCAN):
+            cache.clear()
+            self.addCleanup(cache.clear)
+
     def test_five_slots_only_and_rank_results_by_attack(self):
         recipes=[
             {"a":1,"b":2,"result":300,"validation":"extraida_sete_bancos_consistentes"},
@@ -84,12 +93,21 @@ class HandFusionTests(unittest.TestCase):
     def test_ram_reads_only_validated_140_bytes(self):
         hand=[34,100,200,15,700]
         kernel=FakeKernel(fake_hand(hand))
-        result=read_hand_from_epsxe(kernel=kernel,pids=[1234])
-        self.assertTrue(result["ready"])
-        self.assertEqual(result["hand_ids"],hand)
-        self.assertEqual(result["pid"],1234)
+        result=read_hand_from_epsxe(kernel=kernel,pids=[1234],
+                                    monotonic=lambda:100)
+        self.assertFalse(result["ready"])
+        self.assertIn("jogue uma carta",result["status"])
+        self.assertIsNone(result["hand_ids"])
+        # The player's next turn replaces one card.
+        updated=[34,100,200,15,701]
+        kernel.payload=fake_hand(updated)
+        next_result=read_hand_from_epsxe(kernel=kernel,pids=[1234],
+                                         monotonic=lambda:101)
+        self.assertTrue(next_result["ready"],next_result)
+        self.assertEqual(next_result["hand_ids"],updated)
+        self.assertEqual(next_result["pid"],1234)
         self.assertEqual(kernel.address,HAND_ADDRESS)
-        self.assertEqual(kernel.closed,[99])
+        self.assertEqual(kernel.closed,[99,99])
         self.assertFalse(kernel.opened[0][1])
 
     def test_failure_does_not_retain_stale_hand(self):
@@ -123,18 +141,39 @@ class HandFusionTests(unittest.TestCase):
         result=read_hand_from_epsxe(kernel=kernel,pids=[1234])
         self.assertFalse(result["ready"])
         self.assertIsNone(result["hand_ids"])
-        self.assertIn("transição",result["status"])
+        self.assertIn("não localizada",result["status"])
         self.assertEqual(kernel.ReadProcessMemory.call_count,2)
         self.assertEqual(kernel.closed,[99])
+
+    def test_process_disappearance_invalidates_all_cached_ram(self):
+        kernel=FakeKernel(fake_hand([1,2,3,4,5]))
+        read_hand_from_epsxe(kernel=kernel,pids=[567],monotonic=lambda:100)
+        kernel.payload=fake_hand([1,2,3,4,6])
+        self.assertTrue(read_hand_from_epsxe(
+            kernel=kernel,pids=[567],monotonic=lambda:101)["ready"])
+        self.assertIn(567,_PID_HAND_ADDRESS_CACHE)
+        lost=read_hand_from_epsxe(kernel=kernel,pids=[])
+        self.assertFalse(lost["ready"])
+        self.assertIsNone(lost["hand_ids"])
+        self.assertEqual(_PID_HAND_ADDRESS_CACHE,{})
+        self.assertEqual(_PID_PENDING_HANDS,{})
 
     def test_process_ambiguity_does_not_guess(self):
         result=read_hand_from_epsxe(kernel=FakeKernel(fake_hand([1]*5)),
                                     pids=[10,11])
         self.assertFalse(result["ready"])
         self.assertIsNone(result["pid"])
-        result=read_hand_from_epsxe(kernel=FakeKernel(fake_hand([1]*5)),
-                                    preferred_pid=11,pids=[10,11])
-        self.assertTrue(result["ready"])
+        kernel=FakeKernel(fake_hand([1]*5))
+        result=read_hand_from_epsxe(kernel=kernel,
+                                    preferred_pid=11,pids=[10,11],
+                                    monotonic=lambda:100)
+        self.assertFalse(result["ready"])
+        kernel.payload=fake_hand([1,1,1,1,2])
+        next_result=read_hand_from_epsxe(kernel=kernel,
+                                         preferred_pid=11,pids=[10,11],
+                                         monotonic=lambda:101)
+        self.assertTrue(next_result["ready"])
+        self.assertEqual(next_result["hand_ids"],[1,1,1,1,2])
 
 
 @unittest.skipUnless(sys.platform=="win32","Requer sessão gráfica Windows")
