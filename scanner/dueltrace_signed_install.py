@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from dueltrace_update_checker import CURRENT_VERSION, fetch_stable_release, parse_version
+from dueltrace_public_distribution import PUBLIC_UPDATES_WEB
 from dueltrace_preview_updates import NoRedirect
 
 # Só configurar após validação jurídica do certificado REAL da Batoni Dev.
@@ -54,10 +55,10 @@ def select_signed_installer(release: dict, installed_version: str) -> dict | Non
         raise UnsafeUpdate("Tag inválida.")
     if version <= current:
         return None
-    if release.get("html_url") != f"https://github.com/guibatoni/appassist/releases/tag/{tag}":
+    if release.get("html_url") != f"{PUBLIC_UPDATES_WEB}/releases/tag/{tag}":
         raise UnsafeUpdate("Release de origem não autorizada.")
     name = f"DUELTRACE-Setup-{tag}.exe"
-    url = f"https://github.com/guibatoni/appassist/releases/download/{tag}/{name}"
+    url = f"{PUBLIC_UPDATES_WEB}/releases/download/{tag}/{name}"
     assets = release.get("assets")
     if not isinstance(assets,list):
         raise UnsafeUpdate("Release ainda não contém instalador.")
