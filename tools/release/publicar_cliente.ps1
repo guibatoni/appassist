@@ -18,6 +18,9 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference="Stop"
+$env:PYTHONIOENCODING="utf-8"
+[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+$OutputEncoding=[Console]::OutputEncoding
 $publicRepo="guibatoni/dueltrace-releases"
 $assetName="DUELTRACE-WebUI-Windows-Preview.zip"
 $workspace=(Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
@@ -62,7 +65,7 @@ function Invoke-Checked([string]$Command,[string[]]$CommandArgs) {
     if ($code -ne 0) {
         $summary=Join-Path $script:BuildLogDir "ULTIMA_FALHA.txt"
         $header="FALHA NA ETAPA $stage. Codigo: $code. Comando: $Command $argsText"
-        $tail=@(Get-Content -LiteralPath $log -Tail 45 -ErrorAction SilentlyContinue)
+        $tail=@(Get-Content -LiteralPath $log -Tail 45 -Encoding UTF8 -ErrorAction SilentlyContinue)
         $summaryLines=@($header,"",("Log: " + $log),"") + @($tail)
         [IO.File]::WriteAllText($summary,
             ($summaryLines -join [Environment]::NewLine) + [Environment]::NewLine,
