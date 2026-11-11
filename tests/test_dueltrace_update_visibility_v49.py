@@ -84,7 +84,7 @@ class UpdateVisibilityV49Tests(unittest.TestCase):
         self.assertNotIn("gh auth status",ui)
         self.assertIn("<ShieldAlert className=",ui)
         self.assertIn('aria-label="Atualizar agora"',ui)
-        self.assertIn('https://github.com/guibatoni/appassist/releases"',checker)
+        self.assertIn('PUBLIC_UPDATES_WEB + "/releases"',checker)
         self.assertIn('status["previewCheckStatus"]="checked"',bridge)
 
 
