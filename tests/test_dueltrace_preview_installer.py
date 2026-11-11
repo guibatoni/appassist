@@ -20,7 +20,7 @@ PAYLOAD=b"trusted-test-zip"
 
 def release(*,tag=TAG,payload=PAYLOAD,sha=SHA):
     run=int(tag.rsplit("-r",1)[1]) if "-r" in tag else RUN
-    body=f"Versão de teste.\\n\\nBuild {run} | Commit {sha} | SHA-256 ZIP: {hashlib.sha256(payload).hexdigest()}"
+    body=f"Versão de teste.\n\nBuild {run} | Commit {sha} | SHA-256 ZIP: {hashlib.sha256(payload).hexdigest()}"
     return {"tag_name":tag,"draft":False,"prerelease":True,
             "target_commitish":"main","body":body,
             "html_url":f"https://github.com/guibatoni/dueltrace-releases/releases/tag/{tag}",
