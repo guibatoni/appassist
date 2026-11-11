@@ -80,7 +80,7 @@ class UpdateVisibilityV49Tests(unittest.TestCase):
         self.assertIn("previewCheckStatus",ui)
         self.assertIn("installedPreviewRunId",ui)
         self.assertNotIn("api.open_updates_page(",ui)
-        self.assertIn("Nenhuma Preview mais recente",ui)
+        self.assertIn("nenhuma Preview mais recente",ui)
         self.assertIn('https://github.com/guibatoni/appassist/releases"',checker)
         self.assertIn('status["previewCheckStatus"]="checked"',bridge)
 
