@@ -163,3 +163,27 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .frame-glow, .panel { scroll-behavior: auto; }
 }
+
+/* Portrait orientation wins over the desktop width breakpoint. A maximized
+   1080x1920 display is still portrait even though it is >=1024px wide. */
+@media (orientation: portrait) and (min-width: 1024px) {
+  .dt-shell-body { flex-direction: column; }
+  .dt-nav-sidebar { width: auto; flex-shrink: 1; }
+  .dt-nav-list {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.25rem;
+  }
+  .dt-nav-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    white-space: normal;
+    text-align: center;
+    padding: 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.2;
+  }
+}
