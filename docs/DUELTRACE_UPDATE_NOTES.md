@@ -1,12 +1,15 @@
 # DUELTRACE — Notas da atualização
 
 ## Novidades
+- **Interface adaptável:** o DUELTRACE reorganiza navegação, cartas, fusões, drops e detalhes em telas 9:16, 16:9, 16:10, 4:3 e ultrawide, sem distorcer as cartas.
 - **ePSXe:** busca dinâmica de RAM quando o endereço antigo não funciona, com suporte a executáveis identificados por número de versão (somente Windows).
 - Atualizações privadas podem ser encontradas pelo mesmo botão quando o proprietário já autenticou o GitHub CLI no Windows.
 - Aba Fusões: escolha pesquisar por **resultado final**, **material da fusão** ou **ambos**, por nome ou ID da carta.
 - Patch notes exibidos em uma janela dentro do aplicativo, sem abrir o navegador.
 
 ## Melhorias
+- A janela Windows e os visores de RANK/fusões passam a respeitar a área útil do monitor; tamanho mínimo antigo de 1100 × 700 removido para suportar orientação vertical.
+- Pop-ups de cartas e atualizações cabem em janelas estreitas ou baixas, mantendo rolagem interna, foco e controles da janela.
 - Leitura da mão com validação dupla de cinco cartas, cache temporário por processo e proteção contra endereços de memória ambíguos.
 - Oponentes e projeção experimental de RANK X15 reutilizam a base de RAM detectada, sem alterar as fórmulas nem validar automaticamente uma ISO.
 - Mantido o botão único **Atualizar agora**: substitui os arquivos na pasta atual, reinicia o DUELTRACE e preserva os dados locais.
