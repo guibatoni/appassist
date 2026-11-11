@@ -10,7 +10,8 @@ from pathlib import Path, PurePosixPath
 
 LIMIT = 1024 * 1024 * 1024
 GAME_FILE = re.compile(r"^(?:WA_MRG\.MRG|SLUS_014\.11)$", re.I)
-GAME_SUFFIXES = {".iso", ".cue", ".mcr"}
+# Executable Windows package must never embed user ROMs, saves or disc images.
+GAME_SUFFIXES = {".iso", ".bin", ".img", ".cue", ".chd", ".ccd", ".mcr", ".mcd", ".sav", ".state"}
 SECRET_SUFFIXES = {".pfx", ".p12", ".pem", ".key"}
 
 
