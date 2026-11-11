@@ -1,136 +1,206 @@
 #requires -Version 5.1
 <#
-Manual promotion of a previously CI-validated PRIVATE Windows Preview to a
-PUBLIC, binary-only customer release. Fail closed: no source repo publication,
-no unsigned EXE, no disabled Microsoft Defender, no package replacement,
-no tokens embedded in binaries or logged to output.
+DUELTRACE local Windows builder and optional public binary release publisher.
+NO GitHub Actions, Windows runner, CI workflow artifact, or PRIVATE release is
+used. Customers are always anonymous. Only the maintainer publishing the file
+needs GitHub CLI login and a trusted code-signing certificate.
+
+Quick start (from a CLEAN checkout on Windows 10/11):
+  powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/publicar_cliente.ps1
+  powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/publicar_cliente.ps1 -Publish -CertificateThumbprint YOUR_40_HEX -ExpectedPublisherSubject "CN=..."
+The first command produces a LOCAL unsigned developer ZIP, NOT for public
+distribution. The second signs and verifies before creating the public release.
 #>
-param([Parameter(Mandatory=$true)][string]$PrivateTag)
+param(
+    [switch]$Publish,
+    [string]$CertificateThumbprint="",
+    [string]$ExpectedPublisherSubject=""
+)
+Set-StrictMode -Version Latest
 $ErrorActionPreference="Stop"
-$privateRepo="guibatoni/appassist"
 $publicRepo="guibatoni/dueltrace-releases"
 $assetName="DUELTRACE-WebUI-Windows-Preview.zip"
+$workspace=(Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
 
-if ($PrivateTag -cnotmatch '^preview-v(?<version>\d{1,4}\.\d{1,4}\.\d{1,4})-r(?<build>[1-9]\d{0,14})$') {
-    throw "Tag de compilação inválida."
-}
-$version=$Matches.version
-$runId=[long]$Matches.build
-if (!$env:PRIVATE_GH_TOKEN -or !$env:PUBLIC_GH_TOKEN) {
-    throw "Autorização de publicação não configurada."
-}
-if (!$env:PFX_BASE64 -or !$env:PFX_PASSWORD -or !$env:EXPECTED_PUBLISHER) {
-    throw "A distribuição pública exige certificado Authenticode e editor verificado."
-}
-$env:GH_TOKEN=$env:PRIVATE_GH_TOKEN
-$release=gh api "repos/$privateRepo/releases/tags/$PrivateTag" | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or !$release -or $release.draft -or !$release.prerelease) {
-    throw "Pré-release privada ausente ou não aprovada."
-}
-$sha=$release.target_commitish
-if ($sha -cnotmatch '^[a-f0-9]{40}$') {
-    throw "SHA de origem privada inválido."
-}
-$assets=@($release.assets | Where-Object { $_.name -eq $assetName })
-if ($assets.Count -ne 1 -or $assets[0].size -lt 1000000 -or
-    $assets[0].size -gt 230MB -or
-    $assets[0].digest -cnotmatch '^sha256:[a-f0-9]{64}$') {
-    throw "Asset privado sem hash/tamanho auditado."
-}
-$expected=$assets[0].digest.Substring(7)
-$footer="Build $runId | Commit $sha | SHA-256 ZIP: $expected"
-if (![string]::IsNullOrEmpty($release.body) -and !$release.body.Contains($footer)) {
-    throw "Notas oficiais não correspondem ao ZIP assinado."
-}
-if ([string]::IsNullOrEmpty($release.body)) {
-    throw "Notas oficiais sem identidade de build."
-}
-$run=gh api "repos/$privateRepo/actions/runs/$runId" | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or !$run -or $run.status -ne 'completed' -or
-    $run.conclusion -ne 'success' -or $run.event -ne 'push' -or
-    $run.head_sha -cne $sha) {
-    throw "O build privado não concluiu os testes Windows."
+function Invoke-Checked([string]$Command,[string[]]$Args) {
+    & $Command @Args
+    if ($LASTEXITCODE -ne 0) {
+        throw "Comando de build/validação falhou: $Command (exit $LASTEXITCODE)"
+    }
 }
 
-New-Item -ItemType Directory -Force -Path private-update | Out-Null
-gh release download $PrivateTag --repo $privateRepo --pattern $assetName --dir private-update
-if ($LASTEXITCODE -ne 0) { throw "Falha ao obter release privada." }
-$originalZip=(Resolve-Path "private-update/$assetName").Path
-if ((Get-FileHash -LiteralPath $originalZip -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expected -or
-    (Get-Item $originalZip).Length -ne $assets[0].size) {
-    throw "Conteúdo privado difere do SHA-256 publicado."
+if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    throw "A compilação PyInstaller/WebView2 requer Windows, não Linux/macOS."
+}
+if ($Publish) {
+    if ($CertificateThumbprint -cnotmatch '^[a-fA-F0-9]{40}$' -or
+        [string]::IsNullOrWhiteSpace($ExpectedPublisherSubject)) {
+        throw "Para publicar: forneça thumbprint Authenticode e Subject exato do editor."
+    }
+    if (!(Get-Command gh -ErrorAction SilentlyContinue)) {
+        throw "Somente o proprietário precisa do GitHub CLI (gh auth login)."
+    }
+    Invoke-Checked "gh" @("auth","status")
 }
 
-# Reuse the same defensive extraction and embedded manifest checks
-# performed on client computers; do NOT use Expand-Archive on untrusted ZIP.
-$env:PYTHONPATH=(Join-Path (Get-Location).Path "scanner")
-$env:PRIVATE_ZIP=$originalZip
-$env:PRIVATE_VERSION=$version
-$env:PRIVATE_RUN="$runId"
-$env:PRIVATE_SHA=$sha
-$validation=@'
-import os
-from pathlib import Path
-from dueltrace_preview_installer import unpack_preview_zip
-unpack_preview_zip(
-    Path(os.environ["PRIVATE_ZIP"]),
-    Path("customer-package"),
-    {"version":os.environ["PRIVATE_VERSION"],
-     "run_id":int(os.environ["PRIVATE_RUN"]),
-     "sha":os.environ["PRIVATE_SHA"]},
-)
-'@
-$validation | python -
-if ($LASTEXITCODE -ne 0) { throw "Identidade do ZIP privado rejeitada." }
-
-# The signing key is used once on the hosted runner, never copied to output.
-$pfx=Join-Path $env:RUNNER_TEMP "dueltrace-temporary-signing.pfx"
+Push-Location $workspace
+$manifestPath=Join-Path $workspace "scanner/dueltrace-build.json"
+$hadManifest=Test-Path -LiteralPath $manifestPath -PathType Leaf
+$originalManifest=if ($hadManifest) {[IO.File]::ReadAllBytes($manifestPath)} else {$null}
 try {
-    [IO.File]::WriteAllBytes($pfx,[Convert]::FromBase64String($env:PFX_BASE64))
-    $sdk=Join-Path ([Environment]::GetFolderPath("ProgramFilesX86")) "Windows Kits\10\bin"
-    $signTool=Get-ChildItem -LiteralPath $sdk -Recurse -File -Filter "signtool.exe" |
-        Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
-        Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
-    if (!$signTool) { throw "signtool.exe não encontrado no runner Windows." }
-    & $signTool sign /fd SHA256 /f $pfx /p $env:PFX_PASSWORD /tr http://timestamp.digicert.com /td SHA256 "customer-package/DUELTRACE-WebUI.exe"
-    if ($LASTEXITCODE -ne 0) { throw "Assinatura digital não concluída." }
+    # Prevent an uncommitted local modification from becoming an unreviewed
+    # customer executable, and establish the exact private source identity.
+    $sourceSha=(& git rev-parse HEAD).Trim().ToLowerInvariant()
+    if ($LASTEXITCODE -ne 0 -or $sourceSha -cnotmatch '^[a-f0-9]{40}$') {
+        throw "Commit local inválido."
+    }
+    $origin=(& git remote get-url origin).Trim()
+    if ($LASTEXITCODE -ne 0 -or $origin -notmatch '(^|[/:])guibatoni/appassist(\.git)?$') {
+        throw "O código não foi obtido do repositório privado oficial."
+    }
+    $dirty=(& git status --porcelain)
+    if ($LASTEXITCODE -ne 0 -or $dirty) {
+        throw "Há alterações locais não commitadas. Publique apenas código revisado."
+    }
+    $env:PYTHONPATH=Join-Path $workspace "scanner"
+    $version=(& python -c "from dueltrace_update_checker import CURRENT_VERSION; print(CURRENT_VERSION)").Trim()
+    if ($LASTEXITCODE -ne 0 -or $version -cnotmatch '^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$') {
+        throw "Versão atual não identificada."
+    }
+    # Timestamp UTC is a monotonic, unique local build ID within the same
+    # semver, compatible with the previously published GitHub Actions run IDs.
+    $buildId=[long][DateTime]::UtcNow.ToString("yyyyMMddHHmmss")
+    if ($buildId -ge 1000000000000000) { throw "Build ID muito grande." }
+    $tag="preview-v$version-r$buildId"
+    Write-Host "DUELTRACE local: $tag | fonte privada $sourceSha"
+
+    Invoke-Checked "python" @("-m","pip","install","-r","tools/security/requirements-webui-build.txt","pip-audit")
+    Invoke-Checked "python" @("-m","unittest","discover","-s","tests","-p","test_*.py","-v")
+    Push-Location (Join-Path $workspace "web")
+    try {
+        Invoke-Checked "npm" @("ci")
+        Invoke-Checked "npm" @("audit","--omit=dev","--audit-level=moderate")
+        Invoke-Checked "npm" @("audit","--audit-level=high")
+        Invoke-Checked "npm" @("run","build")
+    } finally { Pop-Location }
+    Invoke-Checked "python" @("tools/security/verify_web_css.py")
+
+    $requiredPages=@(
+        "web/out/index.html","web/out/inicio/index.html",
+        "web/out/mods/index.html","web/out/biblioteca/index.html",
+        "web/out/fusoes/index.html","web/out/drops/index.html",
+        "web/out/ferramentas/calculadora/index.html",
+        "web/out/ferramentas/fusoes/index.html"
+    )
+    foreach ($file in $requiredPages) {
+        if (!(Test-Path -LiteralPath $file -PathType Leaf)) {
+            throw "A compilação não incluiu tela obrigatória: $file"
+        }
+    }
+    $identity=@{
+        schema=1
+        run_id=$buildId
+        head_sha=$sourceSha
+        version=$version
+    } | ConvertTo-Json -Compress
+    [IO.File]::WriteAllText($manifestPath,$identity,[Text.UTF8Encoding]::new($false))
+
+    Invoke-Checked "python" @("-m","PyInstaller","--noconfirm","--clean","--onedir","--noconsole",
+        "--name","DUELTRACE-WebUI","--paths","scanner","--collect-all","webview",
+        "--add-data","web/out;web/out",
+        "--add-data","scanner/dueltrace-build.json;.",
+        "scanner/dueltrace_web_desktop.py")
+    $dir=Join-Path $workspace "dist/DUELTRACE-WebUI"
+    $exe=Join-Path $dir "DUELTRACE-WebUI.exe"
+    if (!(Test-Path -LiteralPath $exe -PathType Leaf)) {
+        throw "PyInstaller não gerou o executável Windows."
+    }
+    if ($Publish) {
+        $certificate=Get-Item -LiteralPath "Cert:\CurrentUser\My\$CertificateThumbprint" -ErrorAction SilentlyContinue
+        if (!$certificate -or !$certificate.HasPrivateKey -or
+            $certificate.Subject -cne $ExpectedPublisherSubject -or
+            $certificate.NotAfter -lt [DateTime]::Now) {
+            throw "Certificado de editor inexistente, expirado ou não correspondente."
+        }
+        $sdk=Join-Path ([Environment]::GetFolderPath("ProgramFilesX86")) "Windows Kits\10\bin"
+        $signtool=Get-ChildItem -LiteralPath $sdk -Recurse -File -Filter "signtool.exe" |
+            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+        if (!$signtool) { throw "Windows SDK signtool.exe indisponível." }
+        # Certificate stays in the Windows certificate store, never in a file
+        # or in the public ZIP. Timestamping and trusted chain are mandatory.
+        Invoke-Checked $signtool @("sign","/fd","SHA256","/sha1",
+            $CertificateThumbprint,"/tr","http://timestamp.digicert.com",
+            "/td","SHA256",$exe)
+        $signature=Get-AuthenticodeSignature -LiteralPath $exe
+        if ($signature.Status -ne "Valid" -or !$signature.SignerCertificate -or
+            $signature.SignerCertificate.Subject -cne $ExpectedPublisherSubject -or
+            $signature.SignerCertificate.Thumbprint -cne $CertificateThumbprint) {
+            throw "Assinatura Authenticode do EXE não foi aprovada."
+        }
+        Copy-Item "tools/security/AVISO-ATUALIZACAO-CLIENTES.txt" (Join-Path $dir "LEIA-ME-ATUALIZACAO.txt") -Force
+    } else {
+        Copy-Item "tools/security/AVISO-SEGURANCA-PREVIEW.txt" (Join-Path $dir "LEIA-ME-SEGURANCA.txt") -Force
+    }
+    $zip=Join-Path $workspace "dist/$assetName"
+    if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
+    Compress-Archive -Path (Join-Path $dir "*") -DestinationPath $zip
+    Invoke-Checked "python" @("tools/security/audit_windows_archive.py",
+        $dir,$zip,"--report","dist/security/archive-integrity.json")
+    $gateArgs=@("-PackageDirectory",$dir,"-ZipPath",$zip,
+                "-OutputDirectory","dist/security")
+    if ($Publish) {
+        $gateArgs+=@("-RequireSignature","-ExpectedPublisherSubject",
+                    $ExpectedPublisherSubject)
+    }
+    & (Join-Path $workspace "tools/security/gate_windows_package.ps1") @gateArgs
+    if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "Auditoria Defender falhou." }
+    $digest=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+    $size=(Get-Item -LiteralPath $zip).Length
+    Write-Host "ZIP LOCAL validado: $zip ($size bytes) SHA-256 $digest"
+
+    if (!$Publish) {
+        Write-Warning "Preview local NÃO ASSINADA: não distribuir a clientes. Para link público use -Publish com certificado válido."
+        return
+    }
+
+    # Upload authentication belongs ONLY on the maintainer machine. The
+    # app's update checker uses anonymous HTTPS against a public binary repo.
+    $public=(& gh api "repos/$publicRepo") | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or !$public -or $public.private -or
+        $public.full_name -cne $publicRepo) {
+        throw "Crie primeiro $publicRepo como repositório PUBLICO com branch main. O código appassist fica privado."
+    }
+    $notes=(Get-Content "docs/DUELTRACE_UPDATE_NOTES.md" -Raw -Encoding UTF8).Trim()
+    $notes+=[Environment]::NewLine+[Environment]::NewLine+"DUELTRACE Windows assinado. Binário somente; código-fonte privado."
+    $notes+=[Environment]::NewLine+[Environment]::NewLine+"Build $buildId | Commit $sourceSha | SHA-256 ZIP: $digest"
+    $notesPath=Join-Path $env:TEMP "dueltrace-release-$buildId.md"
+    try {
+        [IO.File]::WriteAllText($notesPath,$notes,[Text.UTF8Encoding]::new($false))
+        # Create only: never overwrite or mutate an existing public ZIP/tag.
+        Invoke-Checked "gh" @("release","create",$tag,$zip,"--repo",$publicRepo,
+            "--target","main","--title","DUELTRACE v$version Windows - Build $buildId",
+            "--notes-file",$notesPath,"--prerelease","--latest=false")
+    } finally {
+        Remove-Item -LiteralPath $notesPath -Force -ErrorAction SilentlyContinue
+    }
+    $published=(& gh api "repos/$publicRepo/releases/tags/$tag") | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or !$published -or $published.draft) {
+        throw "A publicação não foi confirmada no GitHub público."
+    }
+    $assets=@($published.assets | Where-Object { $_.name -eq $assetName })
+    if ($assets.Count -ne 1 -or $assets[0].digest -cne "sha256:$digest" -or
+        $assets[0].size -ne $size) {
+        throw "O ZIP público não corresponde ao arquivo assinado e verificado."
+    }
+    $link="https://github.com/$publicRepo/releases/download/$tag/$assetName"
+    Write-Host "DOWNLOAD DIRETO (sem login para clientes): $link"
 } finally {
-    Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+    if ($hadManifest) {
+        [IO.File]::WriteAllBytes($manifestPath,$originalManifest)
+    } elseif (Test-Path -LiteralPath $manifestPath) {
+        Remove-Item -LiteralPath $manifestPath -Force
+    }
+    Pop-Location
 }
-Remove-Item "customer-package/LEIA-ME-SEGURANCA.txt" -ErrorAction SilentlyContinue
-Copy-Item "tools/security/AVISO-ATUALIZACAO-CLIENTES.txt" "customer-package/LEIA-ME-ATUALIZACAO.txt"
-New-Item -ItemType Directory -Force -Path public-update | Out-Null
-$publicZip="public-update/$assetName"
-Compress-Archive -Path "customer-package/*" -DestinationPath $publicZip -Force
-python tools/security/audit_windows_archive.py customer-package $publicZip --report public-update/archive-integrity.json
-if ($LASTEXITCODE -ne 0) { throw "Falha na auditoria do ZIP público." }
-./tools/security/gate_windows_package.ps1 -PackageDirectory customer-package -ZipPath $publicZip -OutputDirectory public-update/security -RequireSignature -ExpectedPublisherSubject $env:EXPECTED_PUBLISHER
-
-# The public GitHub token may access ONLY the destination release repository.
-$env:GH_TOKEN=$env:PUBLIC_GH_TOKEN
-$public=gh api "repos/$publicRepo" | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or !$public -or $public.private -or
-    $public.full_name -cne $publicRepo) {
-    throw "Repositório de atualizações público não configurado."
-}
-# gh release create is create-only: existing tags are never overwritten.
-$zip=(Resolve-Path $publicZip).Path
-$digest=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-$notes=(Get-Content "docs/DUELTRACE_UPDATE_NOTES.md" -Raw -Encoding UTF8).Trim()
-$notes+=[Environment]::NewLine+[Environment]::NewLine+"Pacote Windows assinado para clientes. Somente executável; código-fonte privado não publicado."
-$notes+=[Environment]::NewLine+[Environment]::NewLine+"Build $runId | Commit $sha | SHA-256 ZIP: $digest"
-$notesFile=Join-Path $env:RUNNER_TEMP "dueltrace-public-notes.md"
-Set-Content -LiteralPath $notesFile -Value $notes -Encoding UTF8
-gh release create $PrivateTag $zip --repo $publicRepo --target main --title "DUELTRACE v$version Windows - atualização" --notes-file $notesFile --prerelease --latest=false
-if ($LASTEXITCODE -ne 0) { throw "Publicação da release não concluída." }
-
-$posted=gh api "repos/$publicRepo/releases/tags/$PrivateTag" | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or !$posted -or $posted.draft) {
-    throw "Release pública não ficou disponível."
-}
-$published=@($posted.assets | Where-Object { $_.name -eq $assetName })
-if ($published.Count -ne 1 -or $published[0].digest -cne "sha256:$digest" -or
-    $published[0].size -ne (Get-Item $zip).Length) {
-    throw "Digest/tamanho da publicação não corresponde ao ZIP aprovado."
-}
-Write-Host "Distribuição Windows verificada, aprovada e publicada."
