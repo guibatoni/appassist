@@ -36,6 +36,7 @@ function DropCard({row,sha,cardDetails,onPreview}:{
     onMouseLeave={()=>onPreview(null)}
     onFocus={event=>onPreview({card,anchor:event.currentTarget,fallbackDrop:row})}
     onBlur={()=>onPreview(null)}
+    onClick={event=>onPreview({card,anchor:event.currentTarget,fallbackDrop:row,pinned:true})}
     className="flex min-w-0 w-full flex-wrap items-center gap-3 rounded-xl border border-gold/20 bg-gradient-to-r from-[#122644] to-[#071426] p-3 text-left transition-colors hover:border-primary/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
     <DropArtwork sha={sha} id={row.cardId} name={row.cardName}/>
     <div className="min-w-0 flex-1">
@@ -64,6 +65,9 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [loading,setLoading]=useState(false)
   const [error,setError]=useState<string|null>(null)
   const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
+  const onPreview=(next:CardPreviewSelection|null)=>{
+    setPreview(current=>current?.pinned&&!next?.pinned?current:next)
+  }
   const cardsById=useMemo(()=>new Map(cards.map(card=>[card.id,card])),[cards])
 
   // Nunca reutilizar filtros de um mod em outro perfil SHA.
@@ -162,7 +166,7 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       {result?.available&&<>
         <div className="dt-adaptive-drops">
           {result.rows.map(row=><DropCard key={row.opponentId+"-"+row.group+"-"+row.cardId}
-            row={row} sha={sha} cardDetails={cardsById.get(row.cardId)??null} onPreview={setPreview}/>)}
+            row={row} sha={sha} cardDetails={cardsById.get(row.cardId)??null} onPreview={onPreview}/>)}
         </div>
         {!result.rows.length&&<p className="py-8 text-center text-sm text-muted">Nenhuma carta para os filtros selecionados.</p>}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
