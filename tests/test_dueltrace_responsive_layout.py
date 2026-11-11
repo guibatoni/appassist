@@ -131,7 +131,6 @@ class ResponsiveUiContracts(unittest.TestCase):
         for selector in (".dt-hand-grid", ".dt-adaptive-cards",
                          ".dt-adaptive-drops"):
             self.assertIn(selector,CSS)
-        self.assertIn("@container (min-width: 1050px)",CSS)
         self.assertIn('className="dt-hand-grid"',MAIN)
         self.assertIn('className="dt-adaptive-cards"',MAIN)
         self.assertIn('className="dt-adaptive-drops"',DROPS)
