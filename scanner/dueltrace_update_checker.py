@@ -19,7 +19,7 @@ from dueltrace_preview_updates import (
 CURRENT_VERSION = "0.9.7"
 CURRENT_CHANNEL = "preview"
 RELEASE_API = "https://api.github.com/repos/guibatoni/appassist/releases/latest"
-RELEASE_PAGE = "https://github.com/guibatoni/appassist/releases/latest"
+RELEASE_PAGE = "https://github.com/guibatoni/appassist/releases"
 MAX_RESPONSE_BYTES = 256 * 1024
 VERSION_PATTERN = re.compile(r"^v?(\d{1,4})\.(\d{1,4})\.(\d{1,4})$")
 
