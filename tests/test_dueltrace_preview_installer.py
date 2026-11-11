@@ -148,6 +148,29 @@ class PreviewInstallerTests(unittest.TestCase):
                 updater.unpack_preview_zip(hostile,base/"evil",info)
             self.assertFalse((base/"escape.txt").exists())
 
+    def test_signed_customer_archive_notice_is_accepted_and_managed(self):
+        """A public signed build has a different notice from older previews."""
+        with tempfile.TemporaryDirectory() as td:
+            folder=Path(td)
+            source=make_zip(folder,extra={
+                "LEIA-ME-ATUALIZACAO.txt":b"Arquivo oficial de atualizacao",
+            })
+            info=updater.select_preview_release(release(),"0.8.4")
+            exe=updater.unpack_preview_zip(source,folder/"customer",info)
+            self.assertTrue(exe.is_file())
+            self.assertEqual(
+                (folder/"customer"/"LEIA-ME-ATUALIZACAO.txt").read_bytes(),
+                b"Arquivo oficial de atualizacao")
+            script=updater._powershell_replace_script(
+                folder/"DUELTRACE",folder/"customer",folder/"rollback",98765)
+            self.assertIn("'LEIA-ME-ATUALIZACAO.txt'",script)
+            self.assertIn("'LEIA-ME-SEGURANCA.txt'",script)
+            source.unlink()
+            untrusted=make_zip(folder,extra={"documento-inesperado.txt":b"nao"})
+            with self.assertRaises(updater.UnsafeUpdate):
+                updater.unpack_preview_zip(
+                    untrusted,folder/"untrusted",info)
+
     def test_duplicate_names_not_accepted_even_case_insensitive(self):
         with tempfile.TemporaryDirectory() as td:
             base=Path(td)
