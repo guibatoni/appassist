@@ -99,12 +99,12 @@ export function CardHoverPreview({selection,sha,onClose}:{
     <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-[90] bg-[#020713]/75 backdrop-blur-[2px]"/>
     <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center p-3">
       <div role="tooltip" id={"card-preview-"+card.id}
-        className="pointer-events-none max-h-[calc(100dvh-24px)] w-[min(94vw,500px)] overflow-y-auto rounded-2xl border border-gold/55 bg-[#08172e]/98 p-4 shadow-[0_25px_85px_rgb(0_0_0/0.85)] backdrop-blur-xl transition-[opacity,transform] duration-200 scale-100 opacity-100">
-      <div className="flex items-start gap-4">
-        <div className="w-40 shrink-0 sm:w-48">
+        className="pointer-events-none dueltrace-scroll max-h-[calc(100dvh-24px)] w-[min(calc(100vw-24px),500px)] overflow-y-auto rounded-2xl border border-gold/55 bg-[#08172e]/98 p-3 sm:p-4 shadow-[0_25px_85px_rgb(0_0_0/0.85)] backdrop-blur-xl transition-[opacity,transform] duration-200 scale-100 opacity-100">
+      <div className="flex flex-col items-center gap-3 min-[480px]:flex-row min-[480px]:items-start min-[480px]:gap-4">
+        <div className="w-32 shrink-0 min-[480px]:w-40 sm:w-48">
           <EnlargedArtwork card={card} sha={sha}/>
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 w-full flex-1">
           <span className="text-xs font-bold text-gold">#{card.id}</span>
           <h3 className="mt-1 break-words font-display text-lg font-bold text-white">{card.name}</h3>
           {(card.type||card.attribute)&&<p className="mt-2 text-xs text-muted">
