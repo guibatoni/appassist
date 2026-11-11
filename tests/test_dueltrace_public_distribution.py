@@ -29,7 +29,7 @@ def release(*,tag=TAG,sha=SHA,digest=DIGEST,body=None):
         "draft":False, "prerelease":True,"tag_name":tag,
         "target_commitish":"main",  # public repo does not have private commit
         "body":(body if body is not None else
-                f"Update notes\\nBuild {RUN} | Commit {sha} | SHA-256 ZIP: {digest}"),
+                f"Update notes\nBuild {RUN} | Commit {sha} | SHA-256 ZIP: {digest}"),
         "html_url":public.PUBLIC_UPDATES_WEB+"/releases/tag/"+tag,
         "assets":[{"name":installer.ASSET_NAME,
                    "size":len(ZIP),"digest":"sha256:"+digest,
@@ -63,9 +63,8 @@ class PublicCustomerUpdatesTests(unittest.TestCase):
         original=release()
         for tampered in (
             {"body":"missing footer"},
-            {"body":original["body"]+"\\n"+original["body"]},
+            {"body":original["body"]+"\n"+original["body"]},
             {"body":original["body"].replace(str(RUN),"333333333")},
-            {"body":original["body"].replace(SHA,"2"*40)},
             {"body":original["body"].replace(DIGEST,"0"*64)},
             {"html_url":"https://bad.example/releases/tag/"+TAG},
             {"assets":[{**original["assets"][0],
@@ -73,11 +72,6 @@ class PublicCustomerUpdatesTests(unittest.TestCase):
             {"assets":[{**original["assets"][0],"digest":None}]},
         ):
             with self.subTest(tampered=tampered):
-                # A source SHA may differ so long as the release is signed
-                # by the public repo publisher; the main threat here is a
-                # contradictory or ambiguous source/size/digest/URL.
-                if "body" in tampered and "2"*40 in tampered["body"]:
-                    continue
                 with self.assertRaises(UnsafeUpdate):
                     installer.select_preview_release(
                         {**original,**tampered},"0.9.7",RUN-1)
