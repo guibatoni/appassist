@@ -69,7 +69,7 @@ class SharedCardPreviewTests(unittest.TestCase):
         self.assertIn('fixed inset-0 z-[100] flex items-center justify-center',source)
         self.assertIn('max-h-[calc(100dvh-24px)]',source)
         self.assertIn('overflow-y-auto',source)
-        self.assertIn('w-[min(94vw,500px)]',source)
+        self.assertIn('w-[min(calc(100vw-24px),500px)]',source)
         self.assertNotIn("getBoundingClientRect()",source)
         self.assertNotIn("window.innerWidth-width-margin",source)
         self.assertNotIn("style={position",source)
@@ -81,7 +81,7 @@ class SharedCardPreviewTests(unittest.TestCase):
         source=self.overlay
         self.assertIn('fixed inset-0 z-[90] bg-[#020713]/75',source)
         self.assertIn('pointer-events-none fixed inset-0 z-[100]',source)
-        self.assertIn('pointer-events-none max-h-[calc(100dvh-24px)]',source)
+        self.assertIn('pointer-events-none dueltrace-scroll max-h-[calc(100dvh-24px)]',source)
         self.assertIn('role="tooltip"',source)
         self.assertIn('event.key==="Escape"',source)
         self.assertIn('onClose()',source)
@@ -108,9 +108,9 @@ class SharedCardPreviewTests(unittest.TestCase):
         self.assertNotIn('sourceOffset',source)
 
     def test_preview_is_larger_than_list_thumbnail_and_reset_when_filter_changes(self):
-        self.assertIn('w-40 shrink-0 sm:w-48',self.overlay)
+        self.assertIn('w-32 shrink-0 min-[480px]:w-40 sm:w-48',self.overlay)
         self.assertIn('sizes="192px"',self.overlay)
-        self.assertIn('w-[min(94vw,500px)]',self.overlay)
+        self.assertIn('w-[min(calc(100vw-24px),500px)]',self.overlay)
         self.assertIn('useEffect(()=>{setPreview(null)},[sha,query,searchScope,offset,sort,cardType])',self.fusions)
         self.assertIn('setPreview(null)',self.drops)
         self.assertIn('fallbackDrop:row',self.drops)
