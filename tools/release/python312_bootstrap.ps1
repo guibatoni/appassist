@@ -41,10 +41,10 @@ function Find-Python312 {
     }
     $candidates=@()
     if ($env:LOCALAPPDATA) {
-        $candidates+=Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"
+        $candidates+=(Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe")
     }
     if ($env:ProgramFiles) {
-        $candidates+=Join-Path $env:ProgramFiles "Python312\python.exe"
+        $candidates+=(Join-Path $env:ProgramFiles "Python312\python.exe")
     }
     $candidateFolders=@(
         "Registry::HKEY_CURRENT_USER\Software\Python\PythonCore\3.12\InstallPath",
@@ -53,7 +53,7 @@ function Find-Python312 {
     foreach ($registryPath in $candidateFolders) {
         try {
             $base=(Get-Item -LiteralPath $registryPath -ErrorAction Stop).GetValue("")
-            if ($base) { $candidates+=Join-Path $base "python.exe" }
+            if ($base) { $candidates+=(Join-Path $base "python.exe") }
         } catch {}
     }
     foreach ($candidate in $candidates) {
@@ -84,7 +84,7 @@ if ($existing) {
             throw "Python 3.12 ausente. Instale-o pelo instalador oficial python.org ou ative winget e execute novamente; o Python 3.14 pode permanecer instalado."
         }
         Write-Host "Python 3.12 não encontrado. Instalando Python 3.12 para o usuário atual via winget..." -ForegroundColor Yellow
-        & winget install --exact --id Python.Python.3.12 --source winget --scope user --silent --accept-package-agreements --accept-source-agreements
+        & winget install --exact --id Python.Python.3.12 --source winget --scope user --silent --accept-package-agreements --accept-source-agreements --override "/quiet InstallAllUsers=0 PrependPath=0 Include_launcher=0 Include_pip=1"
         if ($LASTEXITCODE -ne 0) {
             throw "winget não concluiu a instalação do Python 3.12. Confira o acesso à internet e execute novamente."
         }
