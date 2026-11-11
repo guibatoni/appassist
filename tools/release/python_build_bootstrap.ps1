@@ -31,25 +31,25 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
 
 $candidates=@()
 $python=Get-Command python -ErrorAction SilentlyContinue
-if ($python) { $candidates+=,@{Command="python"; Args=@()} }
+if ($python) { $candidates += @{Command="python"; Args=@()} }
 $py=Get-Command py -ErrorAction SilentlyContinue
 if ($py) {
-    $candidates+=,@{Command="py"; Args=@("-3.14")}
-    $candidates+=,@{Command="py"; Args=@("-3.12")}
+    $candidates += @{Command="py"; Args=@("-3.14")}
+    $candidates += @{Command="py"; Args=@("-3.12")}
 }
 if (Get-Command python3.14 -ErrorAction SilentlyContinue) {
-    $candidates+=,@{Command="python3.14"; Args=@()}
+    $candidates += @{Command="python3.14"; Args=@()}
 }
 if (Get-Command python3.12 -ErrorAction SilentlyContinue) {
-    $candidates+=,@{Command="python3.12"; Args=@()}
+    $candidates += @{Command="python3.12"; Args=@()}
 }
 if ($env:LOCALAPPDATA) {
-    $candidates+=,@{Command=(Join-Path $env:LOCALAPPDATA "Programs\Python\Python314\python.exe"); Args=@()}
-    $candidates+=,@{Command=(Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"); Args=@()}
+    $candidates += @{Command=(Join-Path $env:LOCALAPPDATA "Programs\Python\Python314\python.exe"); Args=@()}
+    $candidates += @{Command=(Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"); Args=@()}
 }
 if ($env:ProgramFiles) {
-    $candidates+=,@{Command=(Join-Path $env:ProgramFiles "Python314\python.exe"); Args=@()}
-    $candidates+=,@{Command=(Join-Path $env:ProgramFiles "Python312\python.exe"); Args=@()}
+    $candidates += @{Command=(Join-Path $env:ProgramFiles "Python314\python.exe"); Args=@()}
+    $candidates += @{Command=(Join-Path $env:ProgramFiles "Python312\python.exe"); Args=@()}
 }
 
 $selected=$null
