@@ -135,6 +135,8 @@ export function UpdateChecker() {
     (canDownload ? "Nova versão disponível para download." :
       "Nova versão identificada; pacote ainda indisponível.") :
     result?.previewError ? result.previewError :
+    result?.previewCheckStatus === "checked" ?
+      "Consulta concluída: nenhuma Preview mais recente que o build instalado." :
     result?.status === "unavailable" ? "Não foi possível consultar novas versões." :
     "Nenhuma atualização nova disponível."
   const notesVersion = result?.patchNotesVersion ??
@@ -177,12 +179,13 @@ export function UpdateChecker() {
                 <p className="text-xs text-muted">
                   Instalada: <strong className="text-white">
                     v{result.currentVersion} {result.channel === "preview" ? "Preview" : "Estável"}
+                    {result.installedPreviewRunId ? ` · build #${result.installedPreviewRunId}` : ""}
                   </strong>
                 </p>
                 {available&&<p className="mt-1 text-xs text-muted">
                   Disponível: <strong className="text-white">
                     {result.automaticPortableReady ? result.latestStable :
-                      result.previewVersion ? `v${result.previewVersion} Preview` :
+                      result.previewVersion ? `v${result.previewVersion} Preview · build #${result.previewRunId ?? "?"}` :
                         result.latestStable ?? "Nova versão"}
                   </strong>
                 </p>}
@@ -202,6 +205,22 @@ export function UpdateChecker() {
             aria-label="Atualizar agora">
             <Download className="size-4"/>
             {installing?"Baixando atualização…":"Atualizar agora"}
+          </button>
+          <button type="button" disabled={checking}
+            onClick={async()=>{
+              try{
+                const api=desktopApi()
+                if(!api)throw new Error("Abra o DUELTRACE no Windows.")
+                const outcome=await api.open_updates_page()
+                if(!outcome.opened)throw new Error("Não foi possível abrir as versões.")
+              }catch(e){
+                setInstallFeedback(e instanceof Error ? e.message :
+                  "Não foi possível abrir as versões no navegador.")
+              }
+            }}
+            className="btn-ghost text-xs disabled:opacity-50"
+            aria-label="Ver versões oficiais no GitHub">
+            Ver versões no GitHub
           </button>
           <button type="button" disabled={checking}
             onClick={()=>setNotesOpen(true)}
