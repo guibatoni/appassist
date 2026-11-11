@@ -70,3 +70,16 @@ componentes gerenciados, preserva arquivos pessoais e faz rollback em falha.
   Controle de uso pago exige licença do aplicativo, separado do download.
 - Não desative o Microsoft Defender ou o SmartScreen para tentar publicar.
 - O kit não contém executável pronto, ROM ou código-fonte distribuível.
+
+## Diagnostico de erro Python (exit 1)
+
+A partir desta correção, o build registra todos os comandos (instalacao
+pip, auditoria de vulnerabilidades, testes Python, validacao CSS e PyInstaller)
+na pasta local `dist/build-diagnostics/`. Se alguma etapa falhar, sera
+criado o arquivo `ULTIMA_FALHA.txt` com o numero da etapa, o comando
+exato, o codigo de retorno e as ultimas linhas do erro.
+
+Abra `DUELTRACE-codigo-privado/dist/build-diagnostics/ULTIMA_FALHA.txt`
+e envie o texto exibido caso a compilacao ainda pare. **Nao** e necessario
+instalar Python 3.12 ou Node.js 22 para esse diagnostico. Nao desative
+a auditoria de seguranca apenas para forcar um ZIP publico.
