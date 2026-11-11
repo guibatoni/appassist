@@ -36,7 +36,7 @@ class SharedCardPreviewTests(unittest.TestCase):
         self.assertIn("if(selection.anchor.isConnected)setRevealed(selection)",source)
         self.assertNotIn("setPosition(",source)
         self.assertIn('event.key==="Escape"',source)
-        # Este componente é chamado em Fusões e Drops; não há tempos diferentes.
+        # A mesma prévia é usada nas três bibliotecas.
         for page in (self.fusions,self.drops):
             self.assertIn('<CardHoverPreview selection={preview} sha={sha}',page)
 
@@ -81,8 +81,9 @@ class SharedCardPreviewTests(unittest.TestCase):
         source=self.overlay
         self.assertIn('fixed inset-0 z-[90] bg-[#020713]/75',source)
         self.assertIn('pointer-events-none fixed inset-0 z-[100]',source)
-        self.assertIn('pointer-events-none dueltrace-scroll max-h-[calc(100dvh-24px)]',source)
-        self.assertIn('role="tooltip"',source)
+        self.assertIn('dueltrace-scroll max-h-[calc(100dvh-24px)]',source)
+        self.assertIn('role={activeSelection.pinned?"dialog":"tooltip"}',source)
+        self.assertIn('pointer-events-auto ',source)
         self.assertIn('event.key==="Escape"',source)
         self.assertIn('onClose()',source)
         self.assertIn('onMouseLeave={()=>onPreview(null)}',self.fusions)
@@ -106,6 +107,25 @@ class SharedCardPreviewTests(unittest.TestCase):
         self.assertIn('row.chancePercent.toLocaleString("pt-BR"',source)
         self.assertNotIn('result.source',source)
         self.assertNotIn('sourceOffset',source)
+
+
+    def test_drops_and_library_show_exact_fusion_partners_with_attack(self):
+        source=self.overlay
+        self.assertIn('api.get_card_fusions(cardId,fusionPage*8,8,fusionSort)',source)
+        self.assertIn('data.romSha===sha&&data.cardId===cardId',source)
+        self.assertIn('Possíveis fusões',source)
+        self.assertIn('fusion.partnerName',source)
+        self.assertIn('fusion.resultName',source)
+        self.assertIn('fusion.atk??"—"',source)
+        self.assertIn('aria-label="Ordenar fusões possíveis"',source)
+        self.assertIn('aria-label="Mais fusões"',source)
+        self.assertIn('pinned:true',self.drops)
+        library=self.fusions.split('function Library(',1)[1].split('function FusionIllustration(',1)[0]
+        self.assertIn('pinned:true',library)
+        self.assertIn('<CardHoverPreview selection={preview} sha={sha}',library)
+        self.assertNotIn('<aside',library)
+        self.assertIn('onMouseEnter={event=>onPreview(',library)
+        self.assertIn('onFocus={event=>onPreview(',library)
 
     def test_preview_is_larger_than_list_thumbnail_and_reset_when_filter_changes(self):
         self.assertIn('w-32 shrink-0 min-[480px]:w-40 sm:w-48',self.overlay)
