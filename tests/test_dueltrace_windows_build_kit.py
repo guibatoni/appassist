@@ -56,6 +56,21 @@ class WindowsBuildKitTests(unittest.TestCase):
         self.assertIn('git@github\\.com:guibatoni/appassist',PUBLISHER)
         self.assertNotIn('malicious',PUBLISHER)
 
+    def test_publisher_is_not_truncated_or_accidentally_duplicated(self):
+        # Catch regressions caused by unsafe text replacement around the
+        # PowerShell regex ending in a literal dollar/apostrophe pair.
+        self.assertLess(len(PUBLISHER),20000)
+        self.assertEqual(PUBLISHER.count("function Invoke-Checked("),1)
+        self.assertEqual(PUBLISHER.count("Push-Location $workspace"),1)
+        self.assertEqual(PUBLISHER.count("DUELTRACE-WebUI.exe"),3)
+        self.assertIn("if ($LASTEXITCODE -ne 0 -or !$trustedOrigin)",PUBLISHER)
+        self.assertIn("$notes=(Get-Content",PUBLISHER)
+        self.assertIn("--draft",PUBLISHER)
+        self.assertIn("--draft=false",PUBLISHER)
+        self.assertIn("$published.draft",PUBLISHER)
+        self.assertIn("SHA-256 ZIP: $digest",PUBLISHER)
+        self.assertEqual(PUBLISHER.count("DOWNLOAD DIRETO"),1)
+
     def test_signed_customer_readme_is_accepted_by_installer(self):
         self.assertIn('"LEIA-ME-ATUALIZACAO.txt"',UPDATER)
         self.assertIn("'LEIA-ME-ATUALIZACAO.txt'",UPDATER)
