@@ -116,6 +116,20 @@ class WindowsBuildKitTests(unittest.TestCase):
             ]
             self.assertEqual(invalid,[])
 
+    def test_pip_security_patch_before_dependency_audit(self):
+        upgrade='Invoke-Checked "python" @("-m","pip","install","--upgrade","pip==26.3")'
+        audit='Invoke-Checked "python" @("-m","pip_audit","--local")'
+        project='Invoke-Checked "python" @("-m","pip","install","-r"'
+        self.assertIn(upgrade,PUBLISHER)
+        self.assertIn(audit,PUBLISHER)
+        self.assertIn(project,PUBLISHER)
+        self.assertLess(PUBLISHER.index(upgrade),PUBLISHER.index(project))
+        self.assertLess(PUBLISHER.index(project),PUBLISHER.index(audit))
+        self.assertIn('m.version(\'pip\')',PUBLISHER)
+        self.assertIn('(26,2)',PUBLISHER)
+        self.assertNotIn('"--ignore-vuln"',PUBLISHER)
+        self.assertNotIn('"--disable-pip-version-check"',PUBLISHER)
+
     def test_failure_reports_real_python_step_and_keeps_local_logs(self):
         self.assertIn("dist/build-diagnostics",PUBLISHER)
         self.assertIn("ULTIMA_FALHA.txt",PUBLISHER)
