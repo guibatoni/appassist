@@ -27,6 +27,9 @@
 - Pacotes ZIP verificados substituem o aplicativo na pasta existente e reiniciam o DUELTRACE.
 
 ## Correções
+- **Atualizador sem Actions (v58):** corrigido um trecho Python incompleto no verificador, e toda consulta de Previews passa a usar o canal público de releases, sem acessar Actions nem o repositório privado dos clientes.
+- **Publicador Windows local (v58):** análise de dependências Python passa a ser executada, e artefatos Next.js/PyInstaller são ignorados no Git para permitir builds repetidos.
+- Removido o workflow automático antigo de validação/publicação Windows do Actions. O build para clientes continua exigindo testes locais, assinatura e Defender antes de publicar o ZIP.
 - **Janela principal (Windows):** substituído o arraste CSS e o movimento por eventos WebView2 pela rotina nativa Win32 de arraste da janela na thread da interface. Botões da janela permanecem clicáveis e o redimensionamento lateral continua preservado.
 - **Janela principal:** toda a faixa superior do DUELTRACE pode ser usada para clicar e arrastar a janela, inclusive sobre o logotipo; botões de atualização, minimizar, maximizar e fechar continuam independentes.
 - **Canal de distribuição:** quando o servidor público ainda não estiver configurado, o aplicativo mostra uma mensagem objetiva sem solicitar credenciais.
