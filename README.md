@@ -16,6 +16,16 @@ O aplicativo combina um motor Python com uma interface Next.js/React exportada e
 
 **Não há garantia de suporte universal.** Tamanho de arquivo, texto legível, pesos coerentes ou uma hipótese de IA não comprovam compatibilidade. O comportamento em jogo precisa ser validado por ISO e por layout RAM.
 
+## Kit Windows de compilação e atualizações
+
+O projeto inclui quatro arquivos `.cmd` na pasta raiz para verificar o ambiente,
+**gerar o ZIP completo do DUELTRACE no Windows**, preparar um repositório público
+separado de binários e publicar uma release assinada sem GitHub Actions.
+Consulte [Guia do kit Windows v58](docs/DUELTRACE_KIT_WINDOWS_V58.md).
+
+O ZIP completo não é gerado em Linux: ele depende do PyInstaller e do WebView2
+no Windows. Releases para clientes exigem Authenticode e Microsoft Defender.
+
 ## Desenvolvimento
 
 Python 3.10+ (CI: 3.12), com Tkinter para os módulos legados e Pillow para os testes gráficos. A interface usa o lockfile de `web/`; o CI utiliza Node.js 22.
