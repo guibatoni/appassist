@@ -1178,7 +1178,7 @@ class BridgeTests(unittest.TestCase):
         with patch("dueltrace_web_bridge.check_for_updates",return_value={
             "status":"preview_ahead","currentVersion":"0.7.2","latestStable":"v0.6.6",
             "updateAvailable":False,"message":"Prévia mais nova",
-            "channel":"preview","releasePage":"https://github.com/guibatoni/appassist/releases/latest"
+            "channel":"preview","releasePage":"https://github.com/guibatoni/dueltrace-releases/releases"
         }) as check, patch(
             "dueltrace_web_bridge.fetch_latest_preview_package",return_value=None
         ) as preview:
