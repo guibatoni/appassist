@@ -340,6 +340,8 @@ class DueltraceWebBridge:
         status["automaticPortableReady"]=False
         status["patchNotes"]=[]
         status["patchNotesVersion"]=None
+        status["installedPreviewRunId"]=installed_preview_build_id()
+        status["previewCheckStatus"]="unavailable"
 
         # Prefere release estável portátil quando for mais recente e válida.
         # Não usa instalador tradicional, que pode criar outra instalação.
@@ -361,7 +363,10 @@ class DueltraceWebBridge:
         try:
             candidate=fetch_latest_preview_package(
                 current_version=CURRENT_VERSION,
-                installed_run_id=installed_preview_build_id())
+                installed_run_id=status["installedPreviewRunId"])
+            # The absence of a new release after a successful fetch means
+            # up-to-date, NOT 'GitHub disconnected'.
+            status["previewCheckStatus"]="checked"
             if candidate is not None:
                 status.update({
                     "latestPreview":f"v{candidate['version']} Preview",
@@ -386,6 +391,9 @@ class DueltraceWebBridge:
                             "substituição na pasta atual."),
                     })
         except (OSError,ValueError,TypeError) as exc:
+            status["previewCheckStatus"]=(
+                "authentication_required" if isinstance(exc,PrivateUpdateUnavailable)
+                else "unavailable")
             status["previewError"]=(
                 str(exc) if isinstance(exc,PrivateUpdateUnavailable) else
                 "Pré-lançamentos temporariamente indisponíveis. "
