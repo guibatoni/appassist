@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 DUELTRACE Windows build Python selector.
 Use an already installed CPython 3.14 (preferred) or 3.12; NEVER download or
