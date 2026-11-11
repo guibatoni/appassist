@@ -65,6 +65,7 @@ class PublicCustomerUpdatesTests(unittest.TestCase):
         self.assertNotIn('actions/runs/',publisher)
         self.assertNotIn('gh release download',publisher)
         self.assertFalse((ROOT/".github/workflows/publicar-atualizacao-clientes.yml").exists())
+        self.assertFalse((ROOT/".github/workflows/validar-webui-desktop.yml").exists())
         self.assertIn('Publish',publisher)
         self.assertIn("GitHub CLI login",publisher)
         self.assertNotIn('github.token',publisher)
