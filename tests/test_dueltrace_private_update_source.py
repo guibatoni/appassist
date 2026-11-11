@@ -151,9 +151,25 @@ class PrivateUpdatesTests(unittest.TestCase):
                 cli._check_version()
         with patch.object(cli,"_run",return_value=b"gh version 2.102.0 (safe)"):
             cli._check_version()
-        with patch.object(cli.shutil,"which",return_value=None):
+        with (patch.object(cli.shutil,"which",return_value=None),
+              patch.dict(cli.os.environ,{
+                  "ProgramFiles":"","ProgramW6432":"","LOCALAPPDATA":""})):
             with self.assertRaises(cli.PrivateUpdateUnavailable):
                 cli._gh_path()
+
+    def test_windows_installed_cli_detected_when_explorer_path_is_stale(self):
+        # A user can start DUELTRACE from Windows Explorer after installing
+        # GitHub CLI, but Explorer might keep an older PATH snapshot.
+        if cli.os.name!="nt":
+            self.skipTest("Windows installer paths are Windows-only")
+        with tempfile.TemporaryDirectory() as root:
+            exe=Path(root)/"GitHub CLI"/"gh.exe"
+            exe.parent.mkdir()
+            exe.write_bytes(b"MZ")
+            with (patch.object(cli.shutil,"which",return_value=None),
+                  patch.dict(cli.os.environ,{
+                      "ProgramFiles":root,"ProgramW6432":"","LOCALAPPDATA":""})):
+                self.assertEqual(cli._gh_path(),str(exe))
 
     def test_gh_cli_process_is_noninteractive_and_does_not_log_secrets(self):
         fake=subprocess.CompletedProcess(

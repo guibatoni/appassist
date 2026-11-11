@@ -18,6 +18,7 @@ from urllib.parse import unquote, urlsplit
 
 from dueltrace_web_bridge import DueltraceWebBridge
 from dueltrace_web_security import ProtectedDesktopApi
+from dueltrace_native_resize import enable_native_edge_resize
 from dueltrace_display_layout import (
     window_geometry, tool_geometry, windows_work_area,
 )
@@ -221,6 +222,13 @@ def main():
             frameless=True,easy_drag=False,resizable=True)
         if window is None:
             raise RuntimeError("Não foi possível criar a janela do DUELTRACE.")
+        # pywebview WinForms 6.x removes the native resize frame when
+        # frameless=True. Restore WS_THICKFRAME after the form is shown:
+        # Windows handles the four edges and corners, without a title bar.
+        # No HWND/system call is exposed to the browser.
+        def restore_resize_border():
+            enable_native_edge_resize(window)
+        window.events.shown+=restore_resize_border
         # A região .pywebview-drag-region no cabeçalho move a janela;
         # controles nativos são chamados somente pela API local autenticada.
         api._native_window=window

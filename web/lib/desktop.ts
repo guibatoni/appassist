@@ -806,6 +806,8 @@ export type UpdateCheck = {
   channel: "stable" | "preview"
   latestStable: string | null
   latestPreview: string | null
+  installedPreviewRunId?: number | null
+  previewCheckStatus?: "checked" | "authentication_required" | "unavailable"
   previewRunId: number | null
   previewVersion: string | null
   automaticInstallReady: boolean

@@ -32,11 +32,31 @@ class PrivateUpdateUnavailable(OSError):
 
 
 def _gh_path() -> str:
-    path = shutil.which("gh")
-    if not path:
-        raise PrivateUpdateUnavailable(
-            "GitHub privado: instale o GitHub CLI e autorize sua conta uma vez.")
-    return path
+    """Find an existing authorized GitHub CLI also from Windows Explorer.
+
+    Explorer may run from a PATH snapshot taken before 'gh' was installed.
+    Look only in standard locations of the official GitHub CLI installation;
+    never download/run arbitrary updater binaries, and never expose tokens.
+    """
+    path=shutil.which("gh")
+    if path:
+        return path
+    if os.name=="nt":
+        roots=(
+            os.environ.get("ProgramFiles"),
+            os.environ.get("ProgramW6432"),
+            os.environ.get("LOCALAPPDATA"),
+        )
+        for index,root in enumerate(roots):
+            if not root:
+                continue
+            candidate=(Path(root)/("Programs" if index==2 else "")/
+                       "GitHub CLI"/"gh.exe")
+            if candidate.is_file():
+                return str(candidate)
+    raise PrivateUpdateUnavailable(
+        "Atualizações privadas: GitHub CLI não encontrado neste Windows. "
+        "Instale em https://cli.github.com/ e execute 'gh auth login' uma vez.")
 
 
 def _env() -> dict[str, str]:
