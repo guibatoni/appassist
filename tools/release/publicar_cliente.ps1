@@ -22,8 +22,8 @@ $publicRepo="guibatoni/dueltrace-releases"
 $assetName="DUELTRACE-WebUI-Windows-Preview.zip"
 $workspace=(Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
 
-function Invoke-Checked([string]$Command,[string[]]$Args) {
-    & $Command @Args
+function Invoke-Checked([string]$Command,[string[]]$CommandArgs) {
+    & $Command @CommandArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Comando de build/validação falhou: $Command (exit $LASTEXITCODE)"
     }
@@ -78,10 +78,10 @@ try {
     Invoke-Checked "python" @("-m","unittest","discover","-s","tests","-p","test_*.py","-v")
     Push-Location (Join-Path $workspace "web")
     try {
-        Invoke-Checked "npm" @("ci")
-        Invoke-Checked "npm" @("audit","--omit=dev","--audit-level=moderate")
-        Invoke-Checked "npm" @("audit","--audit-level=high")
-        Invoke-Checked "npm" @("run","build")
+        Invoke-Checked "npm.cmd" @("ci")
+        Invoke-Checked "npm.cmd" @("audit","--omit=dev","--audit-level=moderate")
+        Invoke-Checked "npm.cmd" @("audit","--audit-level=high")
+        Invoke-Checked "npm.cmd" @("run","build")
     } finally { Pop-Location }
     Invoke-Checked "python" @("tools/security/verify_web_css.py")
 
@@ -136,7 +136,7 @@ try {
         $signature=Get-AuthenticodeSignature -LiteralPath $exe
         if ($signature.Status -ne "Valid" -or !$signature.SignerCertificate -or
             $signature.SignerCertificate.Subject -cne $ExpectedPublisherSubject -or
-            $signature.SignerCertificate.Thumbprint -cne $CertificateThumbprint) {
+            $signature.SignerCertificate.Thumbprint.ToUpperInvariant() -ne $CertificateThumbprint.ToUpperInvariant()) {
             throw "Assinatura Authenticode do EXE não foi aprovada."
         }
         Copy-Item "tools/security/AVISO-ATUALIZACAO-CLIENTES.txt" (Join-Path $dir "LEIA-ME-ATUALIZACAO.txt") -Force
