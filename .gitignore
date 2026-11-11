@@ -43,3 +43,6 @@ web/node_modules/
 web/tsconfig.tsbuildinfo
 DUELTRACE-WebUI.spec
 scanner/dueltrace-build.json
+
+# Ambiente Python 3.12 exclusivo de compilacao (sem alterar Python 3.14 do Windows)
+.dueltrace-build-py312/
