@@ -4,8 +4,8 @@ import Image from "next/image"
 import {useEffect, useMemo, useState} from "react"
 import {ChevronLeft, ChevronRight, RefreshCcw, Search} from "lucide-react"
 import {cardArt, cardWithFrame, desktopApi} from "@/lib/desktop"
-import {CardHoverPreview} from "./card-hover-preview"
-import type {CardPreviewSelection} from "./card-hover-preview"
+import {CardInfoDialog} from "./card-info-dialog"
+import type {CardPreviewSelection} from "./card-info-dialog"
 import type {DropsPage, DropRow, LocalCard} from "@/lib/desktop"
 
 function DropArtwork({sha,id,name}:{sha:string|null;id:number;name:string}) {
@@ -32,11 +32,7 @@ function DropCard({row,sha,cardDetails,onPreview}:{
     effect:null,effectSource:null,
   }
   return <button type="button" aria-label={`Ver detalhes e locais de drop de ${row.cardName}`}
-    onMouseEnter={event=>onPreview({card,anchor:event.currentTarget,fallbackDrop:row})}
-    onMouseLeave={()=>onPreview(null)}
-    onFocus={event=>onPreview({card,anchor:event.currentTarget,fallbackDrop:row})}
-    onBlur={()=>onPreview(null)}
-    onClick={event=>onPreview({card,anchor:event.currentTarget,fallbackDrop:row,pinned:true})}
+    onClick={()=>onPreview({card,fallbackDrop:row})}
     className="flex min-w-0 w-full flex-wrap items-center gap-3 rounded-xl border border-gold/20 bg-gradient-to-r from-[#122644] to-[#071426] p-3 text-left transition-colors hover:border-primary/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
     <DropArtwork sha={sha} id={row.cardId} name={row.cardName}/>
     <div className="min-w-0 flex-1">
@@ -65,9 +61,6 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [loading,setLoading]=useState(false)
   const [error,setError]=useState<string|null>(null)
   const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
-  const onPreview=(next:CardPreviewSelection|null)=>{
-    setPreview(current=>current?.pinned&&!next?.pinned?current:next)
-  }
   const cardsById=useMemo(()=>new Map(cards.map(card=>[card.id,card])),[cards])
 
   // Nunca reutilizar filtros de um mod em outro perfil SHA.
@@ -166,7 +159,7 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       {result?.available&&<>
         <div className="dt-adaptive-drops">
           {result.rows.map(row=><DropCard key={row.opponentId+"-"+row.group+"-"+row.cardId}
-            row={row} sha={sha} cardDetails={cardsById.get(row.cardId)??null} onPreview={onPreview}/>)}
+            row={row} sha={sha} cardDetails={cardsById.get(row.cardId)??null} onPreview={setPreview}/>)}
         </div>
         {!result.rows.length&&<p className="py-8 text-center text-sm text-muted">Nenhuma carta para os filtros selecionados.</p>}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
@@ -180,7 +173,7 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
           </div>
         </div>
       </>}
-      <CardHoverPreview selection={preview} sha={sha} onClose={()=>setPreview(null)}/>
+      <CardInfoDialog selection={preview} sha={sha} onClose={()=>setPreview(null)}/>
     </section>
   </div>
 }

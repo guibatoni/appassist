@@ -2,20 +2,15 @@
 
 import Image from "next/image"
 import {createPortal} from "react-dom"
-import {useEffect,useState} from "react"
+import {useEffect,useRef,useState} from "react"
 import {ChevronLeft,ChevronRight,Layers,X} from "lucide-react"
 import {cardArt,cardWithFrame,desktopApi} from "@/lib/desktop"
 import type {CardDropSources,CardFusionSuggestions,DropRow,LocalCard} from "@/lib/desktop"
 
 export type CardPreviewSelection = {
   card:LocalCard
-  anchor:HTMLElement
   fallbackDrop?:DropRow
-  pinned?:boolean
 }
-
-// A prévia e o fundo escurecido só aparecem após um segundo de permanência.
-const CARD_PREVIEW_DELAY_MS=1000
 
 function EnlargedArtwork({card,sha}:{card:LocalCard;sha:string|null}) {
   const [source,setSource]=useState<"frame"|"art"|"none">("frame")
@@ -30,40 +25,22 @@ function EnlargedArtwork({card,sha}:{card:LocalCard;sha:string|null}) {
   </div>
 }
 
-/**
- * Prévia única de Biblioteca, Fusões e Drops, centralizada na janela.
- * O escurecimento e a janela não interceptam o mouse, preservando o hover
- * sobre a carta original e o atraso de um segundo sem piscadas.
- */
-export function CardHoverPreview({selection,sha,onClose}:{
+/** Informações de cartas: clique abre, botão/tecla Esc/clique externo fecha. */
+export function CardInfoDialog({selection,sha,onClose}:{
   selection:CardPreviewSelection|null;sha:string|null;onClose:()=>void
 }) {
   const [mounted,setMounted]=useState(false)
-  const [revealed,setRevealed]=useState<CardPreviewSelection|null>(null)
+  const dialogRef=useRef<HTMLDivElement>(null)
+  const onCloseRef=useRef(onClose)
   const [result,setResult]=useState<CardDropSources|null>(null)
   const [error,setError]=useState(false)
   const [fusions,setFusions]=useState<CardFusionSuggestions|null>(null)
   const [fusionError,setFusionError]=useState(false)
   const [fusionSort,setFusionSort]=useState<"atk"|"name"|"id">("atk")
   const [fusionPage,setFusionPage]=useState(0)
-  // Um novo hover/foco inicia a contagem; sair da carta cancela o timer.
-  // A identidade da seleção impede que uma prévia anterior pisque na tela.
-  useEffect(()=>{
-    setRevealed(null)
-    if(!selection)return
-    if(selection.pinned){
-      if(selection.anchor.isConnected)setRevealed(selection)
-      return
-    }
-    const timer=window.setTimeout(()=>{
-      if(selection.anchor.isConnected)setRevealed(selection)
-    },CARD_PREVIEW_DELAY_MS)
-    return()=>window.clearTimeout(timer)
-  },[selection])
-
-  const activeSelection=selection&&revealed===selection?revealed:null
-  const card=activeSelection?.card??null
+  const card=selection?.card??null
   const cardId=card?.id??null
+  useEffect(()=>{onCloseRef.current=onClose},[onClose])
 
   useEffect(()=>setMounted(true),[])
 
@@ -105,14 +82,37 @@ export function CardHoverPreview({selection,sha,onClose}:{
 
   useEffect(()=>{
     if(!selection)return
-    const escape=(event:KeyboardEvent)=>{
-      if(event.key==="Escape")onClose()
+    const prior=document.activeElement
+    dialogRef.current?.focus()
+    const onKey=(event:KeyboardEvent)=>{
+      if(event.key==="Escape"){
+        event.preventDefault()
+        onCloseRef.current()
+      } else if(event.key==="Tab"){
+        const focusable=Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]),select:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])'
+        )??[])
+        if(!focusable.length){
+          event.preventDefault()
+          dialogRef.current?.focus()
+        } else if(event.shiftKey&&(document.activeElement===focusable[0]||document.activeElement===dialogRef.current)){
+          event.preventDefault()
+          focusable[focusable.length-1].focus()
+        } else if(!event.shiftKey&&document.activeElement===focusable[focusable.length-1]){
+          event.preventDefault()
+          focusable[0].focus()
+        }
+      }
     }
-    document.addEventListener("keydown",escape)
-    return()=>document.removeEventListener("keydown",escape)
-  },[selection,onClose])
+    document.addEventListener("keydown",onKey)
+    return()=>{
+      document.removeEventListener("keydown",onKey)
+      if(prior instanceof HTMLElement&&prior.isConnected)prior.focus()
+    }
+  },[selection])
 
-  if(!mounted||!activeSelection||!card)return null
+
+  if(!mounted||!selection||!card)return null
   const matched=result?.romSha===sha&&result.cardId===card.id
   const matchedFusions=fusions?.romSha===sha&&fusions.cardId===card.id
   const fusionRows=matchedFusions?fusions.rows:[]
@@ -120,7 +120,7 @@ export function CardHoverPreview({selection,sha,onClose}:{
   const fusionPages=Math.max(1,Math.ceil(fusionTotal/8))
   const rows=matched&&result.available?result.rows:[]
   const dropRows=rows.length?rows.slice(0,4):
-    !result&&!error&&activeSelection.fallbackDrop?[activeSelection.fallbackDrop]:[]
+    !result&&!error&&selection.fallbackDrop?[selection.fallbackDrop]:[]
   const more=Math.max(0,rows.length-dropRows.length)
   // Apenas textos com procedência no perfil selecionado são apresentados.
   const description=card.descriptionSource&&card.description?.trim()?card.description.trim():null
@@ -128,17 +128,16 @@ export function CardHoverPreview({selection,sha,onClose}:{
   const duplicateText=Boolean(description&&effect&&description===effect)
 
   return createPortal(<>
-    <div aria-hidden="true" onClick={activeSelection.pinned?onClose:undefined}
-      className={(activeSelection.pinned?"pointer-events-auto ":"pointer-events-none ")+"fixed inset-0 z-[90] bg-[#020713]/75 backdrop-blur-[2px]"}/>
+    <div aria-hidden="true" onClick={onClose}
+      className="fixed inset-0 z-[90] bg-[#020713]/75 backdrop-blur-[2px]"/>
     <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center p-3">
-      <div role={activeSelection.pinned?"dialog":"tooltip"} aria-modal={activeSelection.pinned?true:undefined}
-        aria-label={activeSelection.pinned?`Informações de ${card.name}`:undefined}
-        id={"card-preview-"+card.id}
-        className={(activeSelection.pinned?"pointer-events-auto ":"pointer-events-none ")+"dueltrace-scroll max-h-[calc(100dvh-24px)] w-[min(calc(100vw-24px),500px)] overflow-y-auto rounded-2xl border border-gold/55 bg-[#08172e]/98 p-3 sm:p-4 shadow-[0_25px_85px_rgb(0_0_0/0.85)] backdrop-blur-xl transition-[opacity,transform] duration-200 scale-100 opacity-100"}>
-      {activeSelection.pinned&&<button type="button" aria-label="Fechar informações da carta"
+      <div role="dialog" aria-modal="true" aria-label={`Informações de ${card.name}`}
+        tabIndex={-1} ref={dialogRef} id={"card-dialog-"+card.id}
+        className="pointer-events-auto dueltrace-scroll max-h-[calc(100dvh-24px)] w-[min(calc(100vw-24px),500px)] overflow-y-auto rounded-2xl border border-gold/55 bg-[#08172e]/98 p-3 sm:p-4 shadow-[0_25px_85px_rgb(0_0_0/0.85)] backdrop-blur-xl outline-none">
+      <button type="button" aria-label="Fechar informações da carta"
         onClick={onClose} className="mb-2 ml-auto flex rounded-md p-1 text-muted hover:bg-primary/10 hover:text-white">
         <X className="size-5"/>
-      </button>}
+      </button>
       <div className="flex flex-col items-center gap-3 min-[480px]:flex-row min-[480px]:items-start min-[480px]:gap-4">
         <div className="w-32 shrink-0 min-[480px]:w-40 sm:w-48">
           <EnlargedArtwork card={card} sha={sha}/>
@@ -192,7 +191,7 @@ export function CardHoverPreview({selection,sha,onClose}:{
       <div className="mt-3 border-t border-line/70 pt-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-primary">Possíveis fusões</h4>
-          {activeSelection.pinned&&<select value={fusionSort} aria-label="Ordenar fusões possíveis"
+          {<select value={fusionSort} aria-label="Ordenar fusões possíveis"
             onChange={event=>{setFusionSort(event.target.value as "atk"|"name"|"id");setFusionPage(0)}}
             className="field max-w-full px-2 py-1 text-xs">
             <option value="atk">Maior ATK</option><option value="name">Resultado A–Z</option>
@@ -218,7 +217,7 @@ export function CardHoverPreview({selection,sha,onClose}:{
           </ul>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             <span className="text-[11px] text-muted">{fusionTotal} combinação(ões) nesta ISO</span>
-            {activeSelection.pinned&&fusionPages>1&&<div className="flex items-center gap-1">
+            {fusionPages>1&&<div className="flex items-center gap-1">
               <button type="button" aria-label="Fusões anteriores"
                 disabled={fusionPage===0} onClick={()=>setFusionPage(x=>Math.max(0,x-1))}
                 className="rounded-md p-1 text-primary disabled:opacity-30"><ChevronLeft className="size-4"/></button>
@@ -227,8 +226,6 @@ export function CardHoverPreview({selection,sha,onClose}:{
                 disabled={fusionPage+1>=fusionPages} onClick={()=>setFusionPage(x=>x+1)}
                 className="rounded-md p-1 text-primary disabled:opacity-30"><ChevronRight className="size-4"/></button>
             </div>}
-            {!activeSelection.pinned&&fusionTotal>fusionRows.length&&
-              <span className="text-[11px] text-muted">Clique na carta para ver outras combinações.</span>}
           </div>
           {fusions?.provisional&&<p className="mt-2 text-[11px] text-muted">
             Algumas combinações são candidatas extraídas da ISO, ainda não confirmadas em duelo.
@@ -238,8 +235,7 @@ export function CardHoverPreview({selection,sha,onClose}:{
           "Consultando fusões da ISO ativa…"}</p>}
       </div>
       <p className="mt-3 text-[11px] text-muted">
-        {activeSelection.pinned?"Clique fora da janela ou pressione Esc para fechar.":
-          "Afaste o mouse ou pressione Esc para fechar. Clique na carta para explorar as fusões."}
+        "Clique fora da janela ou pressione Esc para fechar."
       </p>
       </div>
     </div>

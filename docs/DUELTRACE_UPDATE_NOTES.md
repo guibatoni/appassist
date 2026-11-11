@@ -1,6 +1,8 @@
 # DUELTRACE — Notas da atualização
 
 ## Novidades
+- **Cartas por clique (v55):** a janela de informações abre somente ao clicar em uma carta na Central de Duelo, Biblioteca, Fusões ou Drops; passar o mouse não abre pop-ups.
+- **Informações completas:** a janela mantém arte, descrições maiores, efeitos, locais de drop e possíveis fusões com ATK do resultado; feche por X, Esc ou clicando fora.
 - **Interface adaptável:** o DUELTRACE reorganiza navegação, cartas, fusões, drops e detalhes em telas 9:16, 16:9, 16:10, 4:3 e ultrawide, sem distorcer as cartas.
 - **ePSXe:** busca dinâmica de RAM quando o endereço antigo não funciona, com suporte a executáveis identificados por número de versão (somente Windows).
 - Atualizações privadas podem ser encontradas pelo mesmo botão quando o proprietário já autenticou o GitHub CLI no Windows.
