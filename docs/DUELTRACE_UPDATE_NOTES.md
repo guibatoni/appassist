@@ -21,6 +21,7 @@
 - Pacotes ZIP verificados substituem o aplicativo na pasta existente e reiniciam o DUELTRACE.
 
 ## Correções
+- **Janela principal (Windows):** substituído o arraste CSS do WebView2 que não funcionou por movimento real do pywebview (`Window.move`) enquanto o botão esquerdo é mantido pressionado na faixa superior. Botões da janela permanecem clicáveis e o redimensionamento lateral continua preservado.
 - **Janela principal:** toda a faixa superior do DUELTRACE pode ser usada para clicar e arrastar a janela, inclusive sobre o logotipo; botões de atualização, minimizar, maximizar e fechar continuam independentes.
 - **Atualizações privadas:** quando não houver autenticação no GitHub CLI, a janela mostra instruções práticas (`gh auth login` e `gh auth status`) com aviso, em vez de um sinal de sucesso enganoso.
 - **Janela sem barra de título:** restauração das bordas nativas de redimensionamento do Windows; agora deve ser possível arrastar laterais e cantos, sem alterar o visual do cabeçalho.

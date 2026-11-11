@@ -832,6 +832,9 @@ export type PopoutState={opened?:boolean;closed?:boolean;reused?:boolean;kind:Po
 
 export interface DesktopAPI {
   window_control(action:WindowControlAction):Promise<WindowControlState>
+  drag_window_begin(screenX:number,screenY:number):Promise<{started:boolean;dragId:number|null}>
+  drag_window_move(dragId:number,screenX:number,screenY:number):Promise<{moved:boolean}>
+  drag_window_end(dragId:number):Promise<{ended:boolean}>
   get_alpha_discovery(sha:string):Promise<AlphaDiscovery>
   open_tool_window(kind:PopoutKind):Promise<PopoutState>
   get_alpha_preferences():Promise<{fusionTipsVisible:boolean}>
@@ -891,6 +894,9 @@ export interface DesktopAPI {
 
 interface ProtectedNativeAPI {
   window_control(token:string,action:WindowControlAction):Promise<WindowControlState>
+  drag_window_begin(token:string,screenX:number,screenY:number):Promise<{started:boolean;dragId:number|null}>
+  drag_window_move(token:string,dragId:number,screenX:number,screenY:number):Promise<{moved:boolean}>
+  drag_window_end(token:string,dragId:number):Promise<{ended:boolean}>
   get_alpha_discovery(token:string,sha:string):Promise<AlphaDiscovery>
   open_tool_window(token:string,kind:PopoutKind):Promise<PopoutState>
   get_alpha_preferences(token:string):Promise<{fusionTipsVisible:boolean}>
@@ -964,6 +970,9 @@ export function desktopApi(): DesktopAPI | null {
   if (!native || typeof token !== "string" || token.length < 32) return null
   return {
     window_control: (action) => native.window_control(token,action),
+    drag_window_begin: (x,y) => native.drag_window_begin(token,x,y),
+    drag_window_move: (dragId,x,y) => native.drag_window_move(token,dragId,x,y),
+    drag_window_end: (dragId) => native.drag_window_end(token,dragId),
     get_alpha_discovery: (sha) => native.get_alpha_discovery(token,sha),
     open_tool_window: (kind) => native.open_tool_window(token,kind),
     get_alpha_preferences: () => native.get_alpha_preferences(token),
