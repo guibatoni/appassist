@@ -134,7 +134,7 @@ export function CardHoverPreview({selection,sha,onClose}:{
       <div role={activeSelection.pinned?"dialog":"tooltip"} aria-modal={activeSelection.pinned?true:undefined}
         aria-label={activeSelection.pinned?`Informações de ${card.name}`:undefined}
         id={"card-preview-"+card.id}
-        className={(activeSelection.pinned?"pointer-events-auto ":"pointer-events-none ")+"dueltrace-scroll max-h-[calc(100dvh-24px)] w-[min(calc(100vw-24px),500px)] overflow-y-auto rounded-2xl border border-gold/55 bg-[#08172e]/98 p-3 sm:p-4 shadow-[0_25px_85px_rgb(0_0_0/0.85)] backdrop-blur-xl transition-[opacity,transform] duration-200 scale-100 opacity-100">
+        className={(activeSelection.pinned?"pointer-events-auto ":"pointer-events-none ")+"dueltrace-scroll max-h-[calc(100dvh-24px)] w-[min(calc(100vw-24px),500px)] overflow-y-auto rounded-2xl border border-gold/55 bg-[#08172e]/98 p-3 sm:p-4 shadow-[0_25px_85px_rgb(0_0_0/0.85)] backdrop-blur-xl transition-[opacity,transform] duration-200 scale-100 opacity-100"}>
       {activeSelection.pinned&&<button type="button" aria-label="Fechar informações da carta"
         onClick={onClose} className="mb-2 ml-auto flex rounded-md p-1 text-muted hover:bg-primary/10 hover:text-white">
         <X className="size-5"/>
