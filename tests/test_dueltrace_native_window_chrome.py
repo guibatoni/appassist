@@ -125,7 +125,7 @@ class NativeWindowControlsTests(unittest.TestCase):
         css=(ROOT/"web/app/globals.css").read_text(encoding="utf-8")
         shell=(ROOT/"web/components/shell/app-shell.tsx").read_text(encoding="utf-8")
         self.assertIn("dueltrace-scroll",shell)
-        self.assertIn("min-h-0 flex-1 overflow-y-auto overscroll-contain",shell)
+        self.assertIn("min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain",shell)
         self.assertIn("h-dvh min-h-0 flex-col overflow-hidden",shell)
         for selector in (".dueltrace-scroll","*::-webkit-scrollbar","*::-webkit-scrollbar-thumb:hover"):
             self.assertIn(selector,css)
