@@ -12,7 +12,7 @@ import {RankScoreDisplay} from "./rank-score-display"
 import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
-import type {LocalCard, HandState, FusionPage, FusionSearchScope, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, CardDropSources, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison, IsoForensicAudit, MipsTraceResult, AlphaDiscovery} from "@/lib/desktop"
+import type {LocalCard, HandState, FusionPage, FusionSearchScope, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison, IsoForensicAudit, MipsTraceResult, AlphaDiscovery} from "@/lib/desktop"
 
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
 
@@ -1240,66 +1240,20 @@ function Mods({mods,sha,onRefresh,configured}:{
   </>
 }
 
-function CardDropSourcesPanel({sha,card}:{sha:string|null;card:LocalCard}) {
-  const [result,setResult]=useState<CardDropSources|null>(null)
-  const [loading,setLoading]=useState(true)
-  const [error,setError]=useState<string|null>(null)
-
-  useEffect(()=>{
-    let mounted=true
-    setResult(null)
-    setError(null)
-    const api=desktopApi()
-    if(!api||!sha){setLoading(false);return()=>{mounted=false}}
-    setLoading(true)
-    void api.get_card_drop_sources(card.id).then(data=>{
-      if(mounted)setResult(data)
-    }).catch(e=>{
-      if(mounted)setError(e instanceof Error?e.message:"Consulta de drops indisponível.")
-    }).finally(()=>{if(mounted)setLoading(false)})
-    return()=>{mounted=false}
-  },[sha,card.id])
-
-  const verifiedResponse=result?.romSha===sha && result.cardId===card.id
-  const rows=verifiedResponse&&result.available?result.rows:[]
-  return <section className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3" aria-label="Onde conseguir esta carta">
-    <h3 className="mb-2 font-semibold text-gold">Onde conseguir esta carta</h3>
-    {loading?<p className="text-sm text-muted" role="status">Consultando drops da ISO ativa…</p>:
-      error?<p className="text-sm text-danger" role="alert">{error}</p>:
-      !verifiedResponse?<p className="text-sm text-muted">Aguardando dados da ISO ativa.</p>:
-      !result.available?<p className="text-sm text-muted">Drops ainda não identificados neste mod. {result.status}</p>:
-      rows.length===0?<p className="text-sm text-muted">Nenhum oponente confirmado para esta carta.</p>:
-      <div className="space-y-2">
-        <p className="text-xs text-primary">{result.total} possibilidade(s), ordenadas por chance de drop.</p>
-
-        <ul className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
-          {rows.map(row=><li key={row.opponentId+"-"+row.group}
-            className="flex items-start justify-between gap-2 rounded-md border border-line/50 bg-panel-strong/50 p-2">
-            <div className="min-w-0">
-              <p className="break-words text-sm font-semibold text-white">#{row.opponentId} {row.opponentName}</p>
-              <p className="text-xs text-muted">{row.eligibleRanks.join(" / ")} · {row.groupLabel}</p>
-            </div>
-            <div className="shrink-0 text-right">
-              <p className="text-sm font-semibold tabular-nums text-primary">
-                {row.chancePercent.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:4})}%
-              </p>
-              <p className="text-[11px] text-muted">{row.weight}/2048</p>
-            </div>
-          </li>)}
-        </ul>
-      </div>}
-  </section>
-}
-
 function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
   const [search,setSearch]=useState("")
   const [sort,setSort]=useState<"id"|"atk"|"def"|"type"|"name">("id")
   const [cardType,setCardType]=useState("")
   const [pageSize,setPageSize]=useState(20)
   const [page,setPage]=useState(0)
-  const [selectedId,setSelectedId]=useState<number|null>(null)
+  const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
+  // A visualização pode ser fixada por clique para explorar/paginar as fusões.
+  // Sair do hover não fecha uma janela fixada.
+  const onPreview=(next:CardPreviewSelection|null)=>{
+    setPreview(current=>current?.pinned&&!next?.pinned?current:next)
+  }
   const types=useMemo(()=>Array.from(new Set(cards.map(c=>c.type||c.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"pt-BR")),[cards])
-  useEffect(()=>{setSearch("");setSort("id");setCardType("");setPage(0);setSelectedId(null)},[sha])
+  useEffect(()=>{setSearch("");setSort("id");setCardType("");setPage(0);setPreview(null)},[sha])
   const visible=useMemo(()=>{
     const q=search.trim().toLocaleLowerCase("pt-BR")
     const filtered=cards.filter(c=>(!q||(String(c.id)+" "+c.name+" "+c.type+" "+c.category+" "+(c.effect??"")+" "+(c.description??"")).toLocaleLowerCase("pt-BR").includes(q))
@@ -1316,8 +1270,8 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
       :a.id-b.id)
     return filtered
   },[cards,search,sort,cardType])
-  const chosen=visible.find(c=>c.id===selectedId)??visible[0]??null
   const pages=Math.max(1,Math.ceil(visible.length/pageSize))
+  useEffect(()=>{setPreview(null)},[search,sort,cardType,page,pageSize])
   return <>
     <Heading title="Biblioteca de Cartas" subtitle="Explore, pesquise e consulte os detalhes das cartas"/>
     <section className="panel rounded-xl p-4">
@@ -1344,47 +1298,27 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
         </label>
         <span className="self-center text-sm text-muted">{visible.length} / {cards.length} cartas</span>
       </div>
-      <div className="dt-library-layout mt-4">
-        <div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-            {visible.slice(page*pageSize,(page+1)*pageSize).map(card=><button type="button" key={card.id}
-              className={"rounded-lg border p-2 text-center transition hover:border-primary "+(chosen?.id===card.id?"border-primary bg-primary/10":"border-line/70 bg-panel-strong/60")}
-              onClick={()=>setSelectedId(card.id)}>
-              <CardThumbnail key={String(sha)+"-"+card.id} card={card} sha={sha}/>
-              <p className="mt-2 min-h-9 text-xs font-semibold text-white">{card.name}</p>
-              <MonsterStats card={card} className="mt-1 text-center"/>
-            </button>)}
-          </div>
-          {!visible.length&&<Empty>Nenhuma carta identificada para esta pesquisa.</Empty>}
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
-            <button type="button" className="btn-ghost disabled:opacity-30" disabled={page===0} onClick={()=>setPage(x=>x-1)}><ChevronLeft className="size-4"/>Anterior</button>
-            <span className="text-xs text-muted">{page+1} / {pages}</span>
-            <button type="button" className="btn-ghost disabled:opacity-30" disabled={page+1>=pages} onClick={()=>setPage(x=>x+1)}>Próxima<ChevronRight className="size-4"/></button>
-          </div>
-        </div>
-        <aside className="rounded-xl border border-gold/40 bg-gradient-to-b from-[#142b50] to-background p-4">
-          {chosen?<><h2 className="font-display text-xl font-semibold text-gold">#{chosen.id} {chosen.name}</h2>
-            <div className="my-4"><CardThumbnail key={String(sha)+"-"+chosen.id} card={chosen} sha={sha}/></div>
-            <MonsterStats card={chosen} className="text-base"/>
-            <p className="mt-2 text-sm text-muted">Tipo: {chosen.type||"Não identificado"}</p>
-            <p className="text-sm text-muted">Categoria: {chosen.category}</p>
-            {chosen.level!==null&&chosen.level!==undefined&&<p className="text-sm text-muted">Nível: {chosen.level} · Atributo ID: {chosen.attributeId??"—"}</p>}
-            {(chosen.guardianStar1!==null&&chosen.guardianStar1!==undefined||chosen.guardianStar2!==null&&chosen.guardianStar2!==undefined)&&
-              <p className="text-sm text-muted">Estrelas Guardiãs (IDs extraídos): {chosen.guardianStar1??"—"} / {chosen.guardianStar2??"—"}</p>}
-            <div className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3">
-              <h3 className="mb-1 font-semibold text-gold">Descrição da carta</h3>
-              <p className="whitespace-pre-line text-sm text-foreground/85">{chosen.description??"Nenhuma descrição vinculada com segurança ao ID desta carta."}</p>
-            </div>
-            <div className="mt-4 rounded-lg border border-line/70 bg-background/60 p-3">
-              <h3 className="mb-1 font-semibold text-primary">Efeito</h3>
-              <p className="whitespace-pre-line text-sm text-foreground/85">{chosen.effect??"Nenhum efeito individual foi identificado com procedência."}</p>
-              {chosen.effect&&<p className="mt-2 text-xs text-gold">
-                Mecânica no duelo ainda não confirmada — descrição não é prova de execução.
-              </p>}
-            </div>
-            <CardDropSourcesPanel key={(sha??"sem-iso")+"-"+chosen.id} sha={sha} card={chosen}/></>:<Empty>Selecione uma carta.</Empty>}
-        </aside>
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+        {visible.slice(page*pageSize,(page+1)*pageSize).map(card=><button type="button" key={card.id}
+          aria-label={`Ver informações e fusões de ${card.name}`}
+          className="rounded-lg border border-line/70 bg-panel-strong/60 p-2 text-center transition hover:border-primary hover:bg-primary/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          onMouseEnter={event=>onPreview({card,anchor:event.currentTarget})}
+          onMouseLeave={()=>onPreview(null)}
+          onFocus={event=>onPreview({card,anchor:event.currentTarget})}
+          onBlur={()=>onPreview(null)}
+          onClick={event=>onPreview({card,anchor:event.currentTarget,pinned:true})}>
+          <CardThumbnail key={String(sha)+"-"+card.id} card={card} sha={sha}/>
+          <p className="mt-2 min-h-9 text-xs font-semibold text-white">{card.name}</p>
+          <MonsterStats card={card} className="mt-1 text-center"/>
+        </button>)}
       </div>
+      {!visible.length&&<Empty>Nenhuma carta identificada para esta pesquisa.</Empty>}
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
+        <button type="button" className="btn-ghost disabled:opacity-30" disabled={page===0} onClick={()=>setPage(x=>x-1)}><ChevronLeft className="size-4"/>Anterior</button>
+        <span className="text-xs text-muted">{page+1} / {pages}</span>
+        <button type="button" className="btn-ghost disabled:opacity-30" disabled={page+1>=pages} onClick={()=>setPage(x=>x+1)}>Próxima<ChevronRight className="size-4"/></button>
+      </div>
+      <CardHoverPreview selection={preview} sha={sha} onClose={()=>setPreview(null)}/>
     </section>
   </>
 }
