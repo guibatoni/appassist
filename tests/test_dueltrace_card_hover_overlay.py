@@ -62,6 +62,12 @@ class SharedCardPreviewTests(unittest.TestCase):
         self.assertIn("CARD_PREVIEW_DELAY_MS=1000",source)
         self.assertIn("Onde conseguir",source)
 
+    def test_long_descriptions_and_effects_are_not_four_line_clamped(self):
+        self.assertNotIn("line-clamp-4",self.overlay)
+        self.assertIn('whitespace-pre-line break-words text-xs leading-relaxed',self.overlay)
+        self.assertIn('max-h-[calc(100dvh-24px)]',self.overlay)
+        self.assertIn('overflow-y-auto',self.overlay)
+
     def test_overlay_centers_in_viewport_instead_of_on_selected_card(self):
         source=self.overlay
         self.assertIn("createPortal(<>",source)
