@@ -6,6 +6,12 @@ As releases públicas contêm **somente o ZIP Windows**, em
 aplicativo. **Clientes não precisam ter GitHub, instalar GitHub CLI ou digitar
 tokens** para verificar/instalar atualizações.
 
+## Kit com arquivos de um clique
+
+Os quatro arquivos `.cmd` necessários, o assistente Windows, as verificações
+necessárias e as instruções para quem usa a v53 estão documentados em
+[DUELTRACE_KIT_WINDOWS_V58.md](DUELTRACE_KIT_WINDOWS_V58.md).
+
 ## Compilação e publicação pelo Windows do desenvolvedor
 
 **O GitHub Actions NÃO é mais necessário para produzir nem publicar
