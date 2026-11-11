@@ -12,7 +12,7 @@ class PublicUiContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.source=PAGE.read_text(encoding="utf-8")
-        cls.mods=cls.source.split("function Mods({mods,sha,onRefresh,configured}:{",1)[1].split("function CardDropSourcesPanel(",1)[0]
+        cls.mods=cls.source.split("function Mods({mods,sha,onRefresh,configured}:{",1)[1].split("function Library(",1)[0]
         cls.fusions=cls.source.split("function FusionIllustration(",1)[1].split("export function DesktopPage(",1)[0]
 
     def test_mods_use_one_column_disclosure_list_with_status_and_actions(self):
