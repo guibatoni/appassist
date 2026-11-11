@@ -36,7 +36,7 @@ function DropCard({row,sha,cardDetails,onPreview}:{
     onMouseLeave={()=>onPreview(null)}
     onFocus={event=>onPreview({card,anchor:event.currentTarget,fallbackDrop:row})}
     onBlur={()=>onPreview(null)}
-    className="flex w-full items-center gap-3 rounded-xl border border-gold/20 bg-gradient-to-r from-[#122644] to-[#071426] p-3 text-left transition-colors hover:border-primary/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+    className="flex min-w-0 w-full flex-wrap items-center gap-3 rounded-xl border border-gold/20 bg-gradient-to-r from-[#122644] to-[#071426] p-3 text-left transition-colors hover:border-primary/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
     <DropArtwork sha={sha} id={row.cardId} name={row.cardName}/>
     <div className="min-w-0 flex-1">
       <p className="text-xs text-gold">#{row.cardId} · {row.groupLabel}</p>
@@ -44,7 +44,7 @@ function DropCard({row,sha,cardDetails,onPreview}:{
       {row.category==="Monstros"&&<p className="mt-1 text-xs tabular-nums text-primary">ATK {row.atk??"—"} · DEF {row.def??"—"}</p>}
       <p className="mt-1 text-xs text-muted">{row.opponentName}</p>
     </div>
-    <div className="shrink-0 text-right">
+    <div className="ml-auto shrink-0 text-right">
       <p className="font-display text-xl font-semibold tabular-nums text-primary">{row.chancePercent.toLocaleString("pt-BR",{maximumFractionDigits:4})}%</p>
 
     </div>
@@ -106,7 +106,7 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const types=result?.cardTypes??[]
 
   return <div className="flex flex-col gap-4">
-    <header className="panel rounded-xl border-gold/40 bg-gradient-to-r from-[#142b51] to-[#061126] px-5 py-4">
+    <header className="panel rounded-xl border-gold/40 bg-gradient-to-r from-[#142b51] to-[#061126] px-3 py-3 sm:px-5 sm:py-4">
       <h1 className="font-display text-2xl font-bold text-gold sm:text-3xl">Biblioteca de Drops</h1>
       <p className="mt-1 text-sm text-muted">Encontre cartas e recompensas dos adversários</p>
     </header>
@@ -160,12 +160,12 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       {error&&<p className="mt-3 text-sm text-danger" role="alert">{error}</p>}
       {result&&!result.available&&<p className="mt-4 rounded-lg border border-line/50 p-4 text-sm text-muted">Nenhum drop disponível neste mod. Use Atualizar dados na Biblioteca de Mods.</p>}
       {result?.available&&<>
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="dt-adaptive-drops">
           {result.rows.map(row=><DropCard key={row.opponentId+"-"+row.group+"-"+row.cardId}
             row={row} sha={sha} cardDetails={cardsById.get(row.cardId)??null} onPreview={setPreview}/>)}
         </div>
         {!result.rows.length&&<p className="py-8 text-center text-sm text-muted">Nenhuma carta para os filtros selecionados.</p>}
-        <div className="mt-4 flex items-center justify-between gap-2">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs tabular-nums text-muted">{result.total?offset+1:0}–{Math.min(offset+pageSize,result.total)} de {result.total} drops</p>
           <div className="flex gap-2">
             <button type="button" className="btn-ghost disabled:opacity-30" disabled={offset===0||loading}
