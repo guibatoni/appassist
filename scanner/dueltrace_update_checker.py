@@ -12,9 +12,7 @@ import urllib.error
 import urllib.request
 import webbrowser
 
-from dueltrace_preview_updates import (
-    fetch_latest_preview, installed_preview_build_id, version_for_branch
-)
+from dueltrace_preview_updates import installed_preview_build_id
 from dueltrace_public_distribution import PUBLIC_UPDATES_API, PUBLIC_UPDATES_WEB
 
 CURRENT_VERSION = "0.9.7"
@@ -48,14 +46,13 @@ def fetch_stable_release() -> dict:
         "X-GitHub-Api-Version": "2022-11-28",
     })
     opener = urllib.request.build_opener(NoRedirect())
-    try:
-        with opener.open(request, timeout=7) as response:
-            if response.status != 200 or response.geturl() != RELEASE_API:
-                raise ValueError("Resposta inesperada do servidor de versões.")
-            length = response.headers.get("Content-Length")
-            if length and int(length) > MAX_RESPONSE_BYTES:
-                raise ValueError("Resposta de atualização excede limite.")
-            body = response.read(MAX_RESPONSE_BYTES + 1)
+    with opener.open(request, timeout=7) as response:
+        if response.status != 200 or response.geturl() != RELEASE_API:
+            raise ValueError("Resposta inesperada do servidor de versões.")
+        length = response.headers.get("Content-Length")
+        if length and int(length) > MAX_RESPONSE_BYTES:
+            raise ValueError("Resposta de atualização excede limite.")
+        body = response.read(MAX_RESPONSE_BYTES + 1)
     if len(body) > MAX_RESPONSE_BYTES:
         raise ValueError("Resposta de atualização excede limite.")
     data = json.loads(body.decode("utf-8"))
@@ -132,89 +129,67 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
             "Não foi possível consultar o GitHub. Confira a internet ou tente "
             "novamente; nenhuma alteração foi realizada."
         )
-    # As versões Preview são compiladas no Actions, não em releases/latest.
-    # Se um teste fornecer apenas o fetcher estável, não consulte a rede
-    # indiretamente durante os testes. Em produção, ambos são consultados.
+    # Preview and stable versions are BOTH discovered from PUBLIC Releases.
+    # No GitHub Actions API, workflow IDs, CI artifacts or private repository
+    # credentials are used by the customer-facing update checker.
     if channel == "preview" and (preview_fetcher is not None or fetcher is None):
         try:
-            preview = (preview_fetcher or fetch_latest_preview)()
+            if preview_fetcher is not None:
+                preview = preview_fetcher()
+            else:
+                # Import lazily: the preview installer imports parse_version.
+                from dueltrace_preview_installer import fetch_latest_preview_package
+                preview = fetch_latest_preview_package(
+                    current_version=current_version,
+                    installed_run_id=installed_run_id if type(installed_run_id) is int
+                                     else installed_preview_build_id(),
+                )
             if preview is not None:
-                if not isinstance(preview, dict):
-                    raise ValueError("Dados Preview inválidos.")
-                run_id = preview.get("run_id")
-                branch = preview.get("branch")
-                sha = preview.get("head_sha")
-                if (type(run_id) is not int or not 0 < run_id < 10**15
-                        or version_for_branch(branch) is None
-                        or not isinstance(sha, str)
-                        or not re.fullmatch(r"[0-9a-f]{40}", sha)
-                        or preview.get("page") !=
-                        f"https://github.com/guibatoni/appassist/actions/runs/{run_id}"):
-                    raise ValueError("Build Preview com origem inválida.")
-                remote_label = preview.get("version", version_for_branch(branch))
-                remote_version = parse_version(remote_label)
-                if remote_version is None or remote_label != version_for_branch(branch):
-                    raise ValueError("Versão Preview não corresponde à branch publicada.")
-                result["latestPreview"] = f"v{remote_label} Preview (não assinado)"
-                result["previewVersion"] = remote_label
-                result["previewRunId"] = run_id
-                result["previewPage"] = preview["page"]
-                result["previewBranch"] = branch
-                result["previewBuildSha"] = sha[:10]
-                installed = (installed_run_id if installed_run_id is not None
-                             else installed_preview_build_id())
-                if result["status"] == "update_available":
-                    # Release estável mais nova permanece prioritária.
-                    pass
-                elif remote_version < current:
-                    result["status"] = "preview_older"
-                    result["message"] = (
-                        "A prévia publicada no Actions é de uma versão anterior "
-                        "à instalação atual. Nenhuma atualização necessária."
-                    )
-                elif remote_version > current:
-                    result["status"] = "preview_update_available"
-                    result["updateAvailable"] = True
-                    result["message"] = (
-                        f"Nova prévia v{remote_label} identificada. O pacote ainda "
-                        "não é assinado: o aplicativo NÃO irá baixá-lo nem "
-                        "instalá-lo automaticamente. Consulte o GitHub."
-                    )
-                elif type(installed) is int and installed >= run_id:
-                    result["status"] = "preview_current"
-                    result["message"] = "Este build já é igual ou mais recente que a prévia publicada."
-                elif type(installed) is int and 0 < installed < run_id:
-                    result["status"] = "preview_update_available"
-                    result["updateAvailable"] = True
-                    result["message"] = (
-                        "Novo build Preview identificado. A versão é experimental "
-                        "e não assinada; a instalação automática permanece "
-                        "bloqueada por segurança."
-                    )
-                else:
-                    result["status"] = "preview_build_unknown"
-                    result["message"] = (
-                        "Uma prévia foi encontrada, mas o build instalado não "
-                        "possui identidade comparável. Consulte os detalhes "
-                        "antes de atualizar manualmente."
-                    )
-            elif result["status"] == "unavailable" and not result["latestStable"]:
-                result["message"] = (
-                    "Nenhum pacote Preview foi identificado. Use os links "
-                    "oficiais do GitHub para verificar manualmente."
-                )
-        except (OSError, ValueError, TypeError, UnicodeError,
-                urllib.error.URLError, json.JSONDecodeError):
-            # Se a API de Actions falhar, preserve a comparação estável.
-            result["previewStatus"] = "unavailable"
-            result["previewError"] = ("Consulta de builds indisponível. "
-                                       "O GitHub pode estar fora do ar "
-                                       "ou ter atingido o limite da API.")
-            if result["status"] == "unavailable":
-                result["message"] = (
-                    "A consulta automática falhou. Você ainda pode abrir "
-                    "as versões e builds no GitHub manualmente."
-                )
+                if not isinstance(preview,dict):
+                    raise ValueError("Metadados públicos da Preview inválidos.")
+                run_id=preview.get("run_id")
+                version=preview.get("version")
+                sha=preview.get("sha")
+                page=preview.get("page")
+                from dueltrace_public_distribution import PUBLIC_UPDATES_WEB
+                tag=f"preview-v{version}-r{run_id}"
+                if (type(run_id) is not int or not 0<run_id<10**15
+                        or parse_version(version) is None
+                        or type(sha) is not str
+                        or not re.fullmatch(r"[a-f0-9]{40}",sha)
+                        or page!=f"{PUBLIC_UPDATES_WEB}/releases/tag/{tag}"):
+                    raise ValueError("Preview não corresponde ao canal público.")
+                remote=parse_version(version)
+                result["latestPreview"]=f"v{version} Preview"
+                result["previewVersion"]=version
+                result["previewRunId"]=run_id
+                result["previewPage"]=page
+                result["previewBuildSha"]=sha[:10]
+                installed=(installed_run_id if type(installed_run_id) is int
+                           else installed_preview_build_id())
+                if result["status"]!="update_available":
+                    if remote<current:
+                        result["status"]="preview_older"
+                        result["message"]="Nenhuma Preview mais recente publicada."
+                    elif remote>current or (type(installed) is int and
+                                            0<installed<run_id):
+                        result["status"]="preview_update_available"
+                        result["updateAvailable"]=True
+                        result["message"]="Nova Preview disponível no canal público."
+                    elif type(installed) is int and installed>=run_id:
+                        result["status"]="preview_current"
+                        result["message"]="O build instalado é igual ou mais novo."
+                    else:
+                        result["status"]="preview_build_unknown"
+                        result["message"]="Build local não comparável; atualização requer revisão."
+            elif result["status"]=="unavailable":
+                result["message"]="Nenhuma versão pública disponível neste momento."
+        except (OSError,ValueError,TypeError,UnicodeError,urllib.error.URLError,
+                json.JSONDecodeError):
+            result["previewStatus"]="unavailable"
+            result["previewError"]=(
+                "Canal público de versões temporariamente indisponível. "
+                "Não é necessário login do GitHub.")
     return result
 
 
