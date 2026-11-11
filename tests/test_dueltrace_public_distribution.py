@@ -49,6 +49,26 @@ class PublicCustomerUpdatesTests(unittest.TestCase):
         self.assertNotIn("authentication_required",ui)
         self.assertIn("sem",ui.lower())
 
+    def test_local_windows_publisher_has_no_actions_dependency(self):
+        publisher=(ROOT/"tools/release/publicar_cliente.ps1").read_text(
+            encoding="utf-8")
+        self.assertIn('Invoke-Checked "python" @("-m","unittest"',publisher)
+        self.assertIn('Invoke-Checked "python" @("-m","PyInstaller"',publisher)
+        self.assertIn('Invoke-Checked "npm.cmd" @("run","build")',publisher)
+        self.assertIn("gate_windows_package.ps1",publisher)
+        self.assertIn("-RequireSignature",publisher)
+        self.assertIn("Cert:",publisher)
+        self.assertIn("Get-AuthenticodeSignature",publisher)
+        self.assertIn('dueltrace-releases',publisher)
+        self.assertIn('releases/download/$tag/$assetName',publisher)
+        self.assertIn('Write-Host "DOWNLOAD DIRETO',publisher)
+        self.assertNotIn('actions/runs/',publisher)
+        self.assertNotIn('gh release download',publisher)
+        self.assertFalse((ROOT/".github/workflows/publicar-atualizacao-clientes.yml").exists())
+        self.assertIn('Publish',publisher)
+        self.assertIn("GitHub CLI login",publisher)
+        self.assertNotIn('github.token',publisher)
+
     def test_uses_private_source_commit_embedded_in_public_release_notes(self):
         metadata=release()
         result=installer.select_preview_release(metadata,"0.9.7",RUN-1)
