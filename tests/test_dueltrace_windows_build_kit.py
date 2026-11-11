@@ -37,7 +37,7 @@ class WindowsBuildKitTests(unittest.TestCase):
         requirements=(ROOT/"tools/security/requirements-webui-build.txt").read_text(encoding="utf-8")
         self.assertIn('python_build_bootstrap.ps1',WINDOWS)
         self.assertIn('Test-Interpreter',helper)
-        self.assertIn('3.(?:14|12)',helper)
+        self.assertIn('3\\.(?:14|12)',helper)
         self.assertIn('python -c',helper)
         self.assertIn('-m venv $venv',helper)
         self.assertIn('env:PATH',helper)
