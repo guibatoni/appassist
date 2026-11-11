@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 DUELTRACE local Windows builder and optional public binary release publisher.
 NO GitHub Actions, Windows runner, CI workflow artifact, or PRIVATE release is
