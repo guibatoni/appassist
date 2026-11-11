@@ -109,7 +109,7 @@ class WindowsBuildKitTests(unittest.TestCase):
                            encoding="utf-8")):
             invalid=[
                 match.group(0) for match in re.finditer(
-                    r"\\$([A-Za-z_][A-Za-z0-9_]*):",script)
+                    r"\$([A-Za-z_][A-Za-z0-9_]*):",script)
                 if match.group(1) not in {
                     "env","script","global","local","private","using"
                 }
