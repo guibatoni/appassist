@@ -76,7 +76,7 @@ function Invoke-Checked([string]$Command,[string[]]$CommandArgs) {
         Write-Host "Etapa: $stage | Codigo: $code" -ForegroundColor Red
         Write-Host "Diagnostico: $summary" -ForegroundColor Yellow
         Write-Host "==========================================" -ForegroundColor Red
-        throw "Falha na etapa $stage: $Command $argsText (exit $code). Diagnostico: $summary"
+        throw "Falha na etapa ${stage}: $Command $argsText (exit $code). Diagnostico: $summary"
     }
     Write-Host "[OK] Etapa $stage concluida." -ForegroundColor Green
 }
