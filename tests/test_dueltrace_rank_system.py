@@ -5,7 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 from dueltrace_rank_system import (
-    X15_RANKS, CLASSIC_RANKS, CLASSIC_POOLS, pool_index_for_rank,
+    X15_RANKS, CLASSIC_RANKS, CLASSIC_POOLS, CLASSIC_DROP_FILTERS,
+    drop_filter_ranks, pool_index_for_drop_filter, pool_index_for_rank,
     classic_rank_for_verified_score, x15_rank_for_verified_score,
 )
 from dueltrace_rank_system import rank_label_for_existing_score
@@ -31,7 +32,7 @@ class RankSystemTests(unittest.TestCase):
         p=fake_profile()
         result=get_drop_catalog(p)
         self.assertEqual(result["rankSystem"],"classic")
-        self.assertEqual(result["rankOptions"],list(CLASSIC_RANKS))
+        self.assertEqual(result["rankOptions"],list(CLASSIC_DROP_FILTERS))
         self.assertEqual([x["label"] for x in result["groupOptions"]],list(CLASSIC_POOLS))
         self.assertEqual([x["groupLabel"] for x in result["rows"][:3]],["S/A POW","B/C/D POW/TEC","S/A TEC"])
         self.assertFalse(result["rankLabelsVerified"])
@@ -57,6 +58,47 @@ class RankSystemTests(unittest.TestCase):
                                         for row in result["rows"]))
                     self.assertEqual(result["rows"][0]["groupLabel"],CLASSIC_POOLS[pool])
         self.assertEqual(get_drop_catalog(p)["total"],117)
+
+    def test_bcd_pow_tec_are_two_dropdown_choices_for_one_real_drop_pool(self):
+        sha="a"*64
+        p=fake_profile(sha)
+        expected=("S-POW","A-POW","BCD-POW","BCD-TEC","A-TEC","S-TEC")
+        self.assertEqual(CLASSIC_DROP_FILTERS,expected)
+        self.assertEqual(drop_filter_ranks(sha),expected)
+        self.assertEqual(drop_filter_ranks(X15_SHA),X15_RANKS)
+        original_scores=("B-POW","C-POW","D-POW",
+                         "D-TEC","C-TEC","B-TEC")
+        self.assertTrue(all(x in CLASSIC_RANKS for x in original_scores))
+        self.assertTrue(all(x not in expected for x in original_scores))
+        for choice in ("BCD-POW","BCD-TEC"):
+            with self.subTest(choice=choice):
+                self.assertEqual(pool_index_for_drop_filter(sha,choice),1)
+                data=get_drop_catalog(p,rank=choice)
+                self.assertEqual(data["rankOptions"],list(expected))
+                self.assertEqual(data["rankSelected"],choice)
+                self.assertTrue(data["available"])
+                self.assertEqual(data["total"],39)
+                self.assertTrue(all(
+                    r["group"]==p["drop_group_labels"][1] for r in data["rows"]))
+                self.assertEqual(data["rows"][0]["groupLabel"],"B/C/D POW/TEC")
+                self.assertEqual(data["rows"][0]["eligibleRanks"],
+                                 list(original_scores))
+        # They are separate menu choices, NOT new physical tables/probabilities.
+        self.assertEqual(
+            get_drop_catalog(p,rank="BCD-POW")["rows"],
+            get_drop_catalog(p,rank="BCD-TEC")["rows"])
+        # Old programmatic requests remain valid; the underlying score engine
+        # still computes all ten actual ranks individually.
+        for rank in original_scores:
+            self.assertEqual(pool_index_for_drop_filter(sha,rank),1)
+            self.assertEqual(get_drop_catalog(p,rank=rank)["total"],39)
+        with self.assertRaises(ValueError):
+            get_drop_catalog(p,rank="BCD-RANK")
+        with self.assertRaises(ValueError):
+            get_drop_catalog(fake_profile(X15_SHA,["Z-POW","S-POW","S-TEC"]),
+                             rank="BCD-POW")
+        with self.assertRaises(ValueError):
+            pool_index_for_drop_filter(X15_SHA,"BCD-TEC")
 
     def test_x15_only_its_three_ranks_and_original_scores_not_reused(self):
         p=fake_profile(X15_SHA,["Z-POW","S-POW","S-TEC"])
