@@ -16,6 +16,9 @@
 - Pacotes ZIP verificados substituem o aplicativo na pasta existente e reiniciam o DUELTRACE.
 
 ## Correções
+- **Mão ao vivo no ePSXe:** uma cópia estática com cinco IDs plausíveis não é mais tomada como a mão verdadeira. O DUELTRACE aguarda uma mudança real de carta entre consultas antes de confirmar o endereço, enquanto continua procurando outros candidatos.
+- Quando a leitura confirmada fica inválida, o programa deixa de exibir cartas e reinicia a busca automaticamente; endereços e observações provisórias permanecem somente na memória desta execução.
+- Varredura de RAM agora prossegue mesmo quando encontra duas cópias estáticas da mão, sem repetir as mesmas posições indefinidamente.
 - ePSXe: a varredura de RAM continua de onde parou quando o primeiro bloco de 48 MB não contém a mão; busca rápida pelos deslocamentos PS1 e mensagens de estado mais claras.
 - Endereço físico fixo da RAM não impede mais o reconhecimento de mãos em versões do ePSXe com disposição de memória diferente.
 - Corrigida a limitação da consulta anônima que não enxerga Releases do repositório privado quando há GitHub CLI autenticado disponível.
