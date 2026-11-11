@@ -55,6 +55,7 @@ class PublicCustomerUpdatesTests(unittest.TestCase):
         self.assertIn('Invoke-Checked "python" @("-m","unittest"',publisher)
         self.assertIn('Invoke-Checked "python" @("-m","PyInstaller"',publisher)
         self.assertIn('Invoke-Checked "npm.cmd" @("run","build")',publisher)
+        self.assertIn('Invoke-Checked "python" @("-m","pip_audit","--local")',publisher)
         self.assertIn("gate_windows_package.ps1",publisher)
         self.assertIn("-RequireSignature",publisher)
         self.assertIn("Cert:",publisher)
