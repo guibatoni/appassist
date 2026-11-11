@@ -31,6 +31,22 @@ class WindowsBuildKitTests(unittest.TestCase):
                 self.assertIn("if errorlevel 1",source)
                 self.assertIn("pause",source)
 
+    def test_python_314_coexists_with_isolated_python_312_build(self):
+        helper=(RELEASE/"python312_bootstrap.ps1").read_text(encoding="utf-8")
+        ignore=(ROOT/".gitignore").read_text(encoding="utf-8")
+        self.assertIn('Get-Command py',helper)
+        self.assertIn('Test-Python312 "py" @("-3.12")',helper)
+        self.assertIn('Python.Python.3.12',helper)
+        self.assertIn('winget install',helper)
+        self.assertIn('-m venv $venv',helper)
+        self.assertIn('env:PATH',helper)
+        self.assertIn('env:VIRTUAL_ENV',helper)
+        self.assertIn('.dueltrace-build-py312/',ignore)
+        self.assertIn('python312_bootstrap.ps1',WINDOWS)
+        self.assertNotIn('Require-Command "python"',WINDOWS)
+        self.assertNotIn('Utilize Python 3.12 no Windows (encontrado:',WINDOWS)
+        self.assertIn('Python 3.14 do Windows não foi alterado',helper)
+
     def test_public_repository_creation_requires_explicit_confirmation(self):
         self.assertIn('Read-Host "Digite CRIAR',WINDOWS)
         self.assertIn('if ($confirm -cne "CRIAR")',WINDOWS)
