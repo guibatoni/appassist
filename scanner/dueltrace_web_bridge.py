@@ -157,7 +157,7 @@ class DueltraceWebBridge:
                 "effectSource": str(item["effect_source"])[:150] if effect else None,
                 "effectStatus": str(item.get("effect_status") or "não_confirmado")[:120]
                     if effect else None,
-                "description":str(item.get("description_text") or "")[:550] or None,
+                # Keep long descriptions from the active ROM profile readable.\n                "description":str(item.get("description_text") or "")[:4000] or None,
                 "descriptionSource":str(item.get("description_source") or "")[:150] or None,
                 "level":item.get("level") if type(item.get("level")) is int else None,
                 "attributeId":item.get("attribute_id") if type(item.get("attribute_id")) is int else None,
