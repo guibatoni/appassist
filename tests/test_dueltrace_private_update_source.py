@@ -31,13 +31,14 @@ ASSET=b"private-test-zip-bytes"
 def preview_release(asset=ASSET):
     return {
         "draft":False, "prerelease":True, "tag_name":TAG,
-        "target_commitish":SHA,
-        "html_url":f"https://github.com/guibatoni/appassist/releases/tag/{TAG}",
+        "target_commitish":"main",
+        "body":f"Build {RUN} | Commit {SHA} | SHA-256 ZIP: {hashlib.sha256(asset).hexdigest()}",
+        "html_url":f"https://github.com/guibatoni/dueltrace-releases/releases/tag/{TAG}",
         "assets":[{"name":updater.ASSET_NAME,
             "size":len(asset),
             "digest":"sha256:"+hashlib.sha256(asset).hexdigest(),
             "browser_download_url":
-                f"https://github.com/guibatoni/appassist/releases/download/{TAG}/{updater.ASSET_NAME}"}],
+                f"https://github.com/guibatoni/dueltrace-releases/releases/download/{TAG}/{updater.ASSET_NAME}"}],
     }
 
 
@@ -48,58 +49,56 @@ def http_error(code):
 
 
 class PrivateUpdatesTests(unittest.TestCase):
-    def test_private_preview_is_identified_by_same_verified_release(self):
-        with (patch.object(updater,"_get_json",side_effect=http_error(404)),
-              patch.object(cli,"read_private_release_metadata",
-                           return_value=[preview_release()])):
+    def test_customer_preview_is_anonymous_and_never_uses_private_cli(self):
+        with (patch.object(updater,"_get_json",return_value=[preview_release()]) as public,
+              patch.object(cli,"read_private_release_metadata") as private):
             found=updater.fetch_latest_preview_package(
                 current_version="0.9.7",installed_run_id=RUN-1)
-        self.assertEqual(found["transport"],"gh_cli")
+        self.assertNotIn("transport",found)
         self.assertEqual(found["version"],"0.9.7")
         self.assertEqual(found["run_id"],RUN)
         self.assertEqual(found["sha"],SHA)
         self.assertEqual(found["sha256"],hashlib.sha256(ASSET).hexdigest())
+        public.assert_called_once_with(updater.PREVIEW_LIST,list)
+        private.assert_not_called()
 
-    def test_privately_authenticated_source_is_not_used_for_invalid_origin(self):
+    def test_missing_public_release_never_falls_back_to_private_cli(self):
+        for code in (401,403,404,500):
+            with (patch.object(updater,"_get_json",side_effect=http_error(code)),
+                  patch.object(cli,"read_private_release_metadata") as private):
+                with self.assertRaises(urllib.error.HTTPError):
+                    updater.fetch_latest_preview_package()
+                private.assert_not_called()
         forged=preview_release()
         forged["html_url"]="https://attacker.example/release"
-        with (patch.object(updater,"_get_json",side_effect=http_error(404)),
-              patch.object(cli,"read_private_release_metadata",
-                           return_value=[forged])):
+        with patch.object(updater,"_get_json",return_value=[forged]):
             selected=updater.fetch_latest_preview_package(
                 current_version="0.9.7",installed_run_id=RUN-1)
         self.assertIsNone(selected)
-        for bad_code in (400,500):
-            with (patch.object(updater,"_get_json",side_effect=http_error(bad_code)),
-                  patch.object(cli,"read_private_release_metadata") as fallback):
-                with self.assertRaises(urllib.error.HTTPError):
-                    updater.fetch_latest_preview_package()
-                fallback.assert_not_called()
 
-    def test_stable_release_can_be_discovered_privately(self):
+    def test_stable_release_is_discovered_anonymously(self):
         tag="v0.9.8"
         release={
             "draft":False,"prerelease":False,"tag_name":tag,
-            "html_url":f"https://github.com/guibatoni/appassist/releases/tag/{tag}",
-            "target_commitish":SHA,
+            "html_url":f"https://github.com/guibatoni/dueltrace-releases/releases/tag/{tag}",
+            "target_commitish":"main",
+            "body":f"Build {RUN} | Commit {SHA} | SHA-256 ZIP: {hashlib.sha256(ASSET).hexdigest()}",
             "assets":[{
                 "name":updater.STABLE_ASSET_NAME,
                 "size":len(ASSET),
                 "digest":"sha256:"+hashlib.sha256(ASSET).hexdigest(),
                 "browser_download_url":
-                    f"https://github.com/guibatoni/appassist/releases/download/{tag}/{updater.STABLE_ASSET_NAME}",
+                    f"https://github.com/guibatoni/dueltrace-releases/releases/download/{tag}/{updater.STABLE_ASSET_NAME}",
             }],
         }
-        with (patch.object(checker.urllib.request,"build_opener") as transport,
-              patch.object(cli,"read_private_release_metadata",
-                           return_value=release) as cli_get):
-            transport.return_value.open.side_effect=http_error(404)
+        with (patch.object(checker,"fetch_stable_release",return_value=release),
+              patch.object(cli,"read_private_release_metadata") as private):
             selected=updater.fetch_portable_stable_package(
                 current_version="0.9.7")
-        self.assertEqual(selected["transport"],"gh_cli")
         self.assertEqual(selected["version"],"0.9.8")
         self.assertEqual(selected["sha256"],hashlib.sha256(ASSET).hexdigest())
-        cli_get.assert_called_once_with(stable=True)
+        self.assertNotIn("transport",selected)
+        private.assert_not_called()
 
     def test_private_download_is_integrity_checked_and_atomic(self):
         with tempfile.TemporaryDirectory() as td:
@@ -198,7 +197,7 @@ class PrivateUpdatesTests(unittest.TestCase):
         self.assertIn('aria-label="Atualizar agora"',ui)
         self.assertIn("api.install_preview_update()",ui)
         self.assertIn("api.install_portable_update()",ui)
-        self.assertIn("gh auth login",ui)
+        self.assertNotIn("gh auth login",ui)
         self.assertNotIn("api.gh_auth(",ui)
         self.assertNotIn("subprocess.run(",ui)
         self.assertIn("Move-Item -LiteralPath $target",staged)
