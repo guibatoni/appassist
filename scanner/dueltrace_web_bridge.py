@@ -1300,11 +1300,13 @@ class DueltraceWebBridge:
                            if alpha_added else "Receitas do perfil ativo."),
             }
 
-    def get_card_fusions(self, card_id, offset=0, limit=8, sort="atk"):
-        """List exact same-ISO fusion recipes using this card as a material.
+    def get_card_fusions(self, card_id, offset=0, limit=8, sort="atk",
+                         role="material"):
+        """Show exact fusions where a card is a material OR the final result.
 
-        Unlike a partial-text search, only recipe material IDs are matched.
-        Results are suggestions and do not assert in-game verification.
+        No fuzzy name matches: all IDs and ATK values come from the active
+        ROM profile, with curated recipes overriding alpha candidates.
+        Pagination is independent for each role to avoid hiding recipes.
         """
         if type(card_id) is not int or not 1<=card_id<=722:
             raise ValueError("ID de carta inválido")
@@ -1314,12 +1316,15 @@ class DueltraceWebBridge:
             raise ValueError("Limite inválido")
         if type(sort) is not str or sort not in ("atk","name","id"):
             raise ValueError("Ordem de fusões inválida")
+        if type(role) is not str or role not in ("material","result"):
+            raise ValueError("Papel de fusão inválido")
         with self._lock:
             active,entry,profile=self._active()
             sha=(active or {}).get("sha256")
             if not profile:
-                return {"romSha":sha,"cardId":card_id,"available":False,
-                        "total":0,"offset":offset,"rows":[],"provisional":False}
+                return {"romSha":sha,"cardId":card_id,"role":role,
+                        "available":False,"total":0,"offset":offset,
+                        "rows":[],"provisional":False}
             recipes,alpha_added=self._combined_fusion_recipes(sha,entry,profile)
             cards={card["id"]:card for card in self._cards(profile)}
             rows=[]
@@ -1330,34 +1335,60 @@ class DueltraceWebBridge:
                 a,b,dest_id=(item.get("a"),item.get("b"),item.get("result"))
                 if not all(type(v) is int and 1<=v<=722 for v in (a,b,dest_id)):
                     continue
-                if card_id not in (a,b):
+                if role=="material" and card_id not in (a,b):
                     continue
-                partner_id=b if a==card_id else a
+                if role=="result" and card_id!=dest_id:
+                    continue
+                # Order-insensitive pair key avoids repeated alpha aliases.
                 key=(min(a,b),max(a,b),dest_id)
                 if key in seen:
                     continue
                 seen.add(key)
-                partner=cards.get(partner_id,{})
+                left=cards.get(a,{})
+                right=cards.get(b,{})
                 dest=cards.get(dest_id,{})
+                partner_id=b if a==card_id else a
+                partner=cards.get(partner_id,{})
+                atk=dest.get("atk")
+                atk_left=left.get("atk")
+                atk_right=right.get("atk")
                 rows.append({
-                    "partnerId":partner_id,
-                    "partnerName":partner.get("name") or f"Carta #{partner_id}",
+                    "materialAId":a,
+                    "materialAName":left.get("name") or f"Carta #{a}",
+                    "materialAAtk":atk_left if type(atk_left) is int else None,
+                    "materialBId":b,
+                    "materialBName":right.get("name") or f"Carta #{b}",
+                    "materialBAtk":atk_right if type(atk_right) is int else None,
+                    "partnerId":partner_id if role=="material" else None,
+                    "partnerName":(partner.get("name") or f"Carta #{partner_id}")
+                                   if role=="material" else None,
                     "resultId":dest_id,
                     "resultName":dest.get("name") or f"Carta #{dest_id}",
-                    "atk":dest.get("atk") if type(dest.get("atk")) is int else None,
+                    "atk":atk if type(atk) is int else None,
                 })
             if sort=="atk":
+                # For a fixed result, sort by strongest materials; sorting
+                # only by the final monster's ATK would be a constant.
                 rows.sort(key=lambda row:(
-                    row["atk"] is None,-(row["atk"] or 0),
-                    row["resultName"].casefold(),row["partnerId"],row["resultId"]))
+                    row["atk"] is None if role=="material" else
+                    row["materialAAtk"] is None and row["materialBAtk"] is None,
+                    -(row["atk"] or 0) if role=="material" else
+                    -max(row["materialAAtk"] or 0,row["materialBAtk"] or 0),
+                    row["resultName"].casefold(),
+                    row["materialAId"],row["materialBId"],row["resultId"]))
             elif sort=="name":
                 rows.sort(key=lambda row:(
-                    row["resultName"].casefold(),row["partnerName"].casefold(),
-                    row["resultId"],row["partnerId"]))
+                    row["resultName"].casefold() if role=="material"
+                    else row["materialAName"].casefold(),
+                    row["materialBName"].casefold(),
+                    row["resultId"],row["materialAId"],row["materialBId"]))
             else:
-                rows.sort(key=lambda row:(row["resultId"],row["partnerId"]))
-            return {"romSha":sha,"cardId":card_id,"available":bool(recipes),
-                    "total":len(rows),"offset":offset,"rows":rows[offset:offset+limit],
+                rows.sort(key=lambda row:(
+                    row["resultId"] if role=="material" else row["materialAId"],
+                    row["materialBId"],row["resultId"]))
+            return {"romSha":sha,"cardId":card_id,"role":role,
+                    "available":bool(recipes),"total":len(rows),
+                    "offset":offset,"rows":rows[offset:offset+limit],
                     "provisional":alpha_added}
 
     def compare_mod_cards(self, source_sha, target_sha, query="",
