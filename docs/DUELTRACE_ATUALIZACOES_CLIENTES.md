@@ -1,34 +1,102 @@
-# Atualizações para clientes — DUELTRACE (Windows)
+# DUELTRACE — atualizações Windows para clientes, sem GitHub Actions
 
-## Objetivo
+O código-fonte do aplicativo permanece privado em `guibatoni/appassist`.
+As releases públicas contêm **somente o ZIP Windows**, em
+`guibatoni/dueltrace-releases`, e podem ser consultadas anonimamente pelo
+aplicativo. **Clientes não precisam ter GitHub, instalar GitHub CLI ou digitar
+tokens** para verificar/instalar atualizações.
 
-Todo usuário de um DUELTRACE instalado poderá clicar em **Atualizações → Atualizar agora** para baixar um ZIP verificado e substituir os arquivos do aplicativo na **mesma pasta**, com reinício e rollback. Não será necessário ter conta no GitHub, instalar GitHub CLI ou receber acesso ao repositório privado `guibatoni/appassist`.
+## Compilação e publicação pelo Windows do desenvolvedor
 
-A partir desta etapa o aplicativo consulta **apenas** o repositório público de distribuição binária `guibatoni/dueltrace-releases`. O repositório de código-fonte original continua privado. O canal de distribuição publica somente pacotes Windows e notas de versão; **não** publica ISOs, arquivos de clientes, relatórios de RAM, chaves privadas ou repositórios de desenvolvimento.
+**O GitHub Actions NÃO é mais necessário para produzir nem publicar
+atualizações.** O desenvolvedor executa o script local
+`tools/release/publicar_cliente.ps1`, após revisar/commitar o código.
+A compilação local inclui os recursos das etapas v54–v57 por estar na branch
+encadeada de desenvolvimento.
 
-## Preparação necessária pelo proprietário
+Pré-requisitos no **Windows do desenvolvedor** (não no PC dos clientes):
 
-1. Criar `guibatoni/dueltrace-releases` como repositório **público**, contendo inicialmente apenas um README (branch `main`). O nome do repositório deve ser exato, pois a origem está fixada no aplicativo para evitar redirecionamentos suspeitos.
-2. No repositório **privado** `guibatoni/appassist`, configurar uma Environment chamada `customer-release`, idealmente exigindo aprovação manual do proprietário.
-3. Adicionar uma credencial **fine-grained** do GitHub em Actions Secrets, sob o nome `DUELTRACE_PUBLIC_RELEASE_TOKEN`, com acesso **somente** ao repositório `dueltrace-releases` e permissão Contents: Read and write. Não colocar tokens no executável, README ou arquivos rastreados.
-4. Providenciar certificado real de assinatura de código Authenticode, emitido por uma autoridade confiável. No repositório **privado**, definir os Secrets `DUELTRACE_CODESIGN_PFX_BASE64` (PFX em base64) e `DUELTRACE_CODESIGN_PFX_PASSWORD`. Definir a Actions Variable `DUELTRACE_EXPECTED_PUBLISHER_SUBJECT` com o Subject exato do certificado. Não usar certificado autoassinado para distribuição a clientes.
-5. Garantir que o GitHub Actions Windows esteja funcionando, inclusive auditoria da instalação, antivírus e validação do arquivo (o workflow atual estava falhando antes de iniciar o runner). Gerar uma Preview privada com workflow **concluído com sucesso** e release privada correspondente.
-6. Após revisar e integrar o código, executar manualmente o workflow `Publicar atualizacao DUELTRACE para clientes` usando a tag completa da Preview privada aprovada. O processo verifica run/commit, ZIP e SHA-256; assina o EXE, reempacota, audita com Microsoft Defender, verifica o editor e publica apenas o ZIP **assinado** no repositório público.
+- Git e um checkout limpo do repositório privado `guibatoni/appassist`.
+- Python 3.12 com acesso a PyPI, Node.js 22 e npm.
+- Windows 10/11, Windows SDK com `signtool.exe`, Microsoft Defender ativo e
+  atualizado, internet para auditorias e carimbo de tempo da assinatura.
+- Para **publicar**, certificado real Authenticode de editor confiável,
+  com chave privada instalada em `Cert:\CurrentUser\My`.
+- GitHub CLI autorizado **apenas para o desenvolvedor** (uma vez, `gh auth
+  login`). O app de clientes nunca usa GH CLI ou tokens.
 
-A publicação **falha e não distribui nada** se qualquer um desses requisitos estiver ausente. O pipeline não publica automaticamente um PR, um build com falha ou um executável sem assinatura.
+### 1. Build local apenas para desenvolvimento
 
-## Funcionalidade no aplicativo
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/publicar_cliente.ps1
+```
 
-- Verificação anônima em `https://api.github.com/repos/guibatoni/dueltrace-releases/releases`, respeitando HTTP/HTTPS, URL, tamanho, digest SHA-256 e origem fixa.
-- Pré-releases usam tags `preview-vX.Y.Z-rBUILD`; as notas devem incluir uma única linha `Build BUILD | Commit SOURCE_SHA | SHA-256 ZIP: DIGEST`. O commit identificado é o da compilação **privada**, que não existe no repositório público.
-- O ZIP contém `_internal/dueltrace-build.json` com versão, ID do build e SHA correspondentes aos metadados assinados da release.
-- Comparação de versão/build evita retrocesso e instalações repetidas. Releases estáveis e Previews são distinguidas. O botão único prefere ZIP estável válido quando aplicável.
-- Download e instalação acontecem apenas após clique explícito; ZIP é validado antes da troca. Instalação na pasta atual, sem apagar ISOs ou dados locais, com rollback em falhas.
+O script verifica o código Git, executa todos os testes Python, instala
+dependências fixadas, audita dependências web, compila a UI estática, empacota
+com PyInstaller, verifica integridade e executa Microsoft Defender. O ZIP
+experimental sem assinatura fica em
+`dist/DUELTRACE-WebUI-Windows-Preview.zip`; **não deve ser distribuído
+como release pública para clientes**.
 
-## Duas limitações importantes
+### 2. Preparar a distribuição pública (ação única)
 
-**Distribuição de binário público:** qualquer pessoa na internet conseguirá baixar o ZIP do repositório público, mesmo sem ter comprado o produto. Se a venda deve ser restrita a assinantes/compradores, será necessário **licenciamento validado pelo aplicativo** ou um servidor de downloads autenticado por licença. Um GitHub token universal embutido no aplicativo não é seguro.
+1. Criar **um novo repositório público**, exatamente
+   `guibatoni/dueltrace-releases`, com README e branch `main`.
+   **Não** tornar `guibatoni/appassist` público.
+2. Instalar o certificado de assinatura Authenticode válido no armazenamento
+   de certificados do Windows e anotar o Thumbprint (40 caracteres hex) e
+   o Subject exato do editor.
+3. No computador do desenvolvedor, executar `gh auth login` com autorização
+   para **criar releases somente no repositório público de distribuição**.
+   Se possível, usar credenciais de escopo mínimo.
 
-**Atualização inicial:** uma versão já distribuída que somente consulta `guibatoni/appassist` **não passará magicamente a usar o novo canal**. Esses usuários precisarão instalar **uma vez** uma versão do DUELTRACE que já contenha o novo atualizador. Depois disso, as futuras atualizações poderão vir pelo botão normal, sem acesso ao GitHub privado.
+### 3. Gerar e publicar a release assinada
 
-Enquanto a release pública inicial, o certificado e a infraestrutura de publicação não estiverem configurados, **não anunciar que as atualizações de clientes estão ativas**.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/publicar_cliente.ps1 -Publish -CertificateThumbprint "SEU_THUMBPRINT_40_HEX" -ExpectedPublisherSubject "CN=SEU_EDITOR"
+```
+
+O script compila o Windows localmente, assina e confere o EXE, executa as
+auditorias e o Defender e publica somente o ZIP no repositório público.
+A tag é `preview-v0.9.7-r<BUILD_ID>`, sendo `BUILD_ID` um identificador
+numérico local em UTC. O arquivo `_internal/dueltrace-build.json` e as
+notas da release incluem a versão, o ID do build e o SHA do commit privado.
+É publicado SHA-256 do ZIP assinado. A mesma tag nunca é sobrescrita.
+
+**Ao finalizar com sucesso**, o PowerShell imprime o endereço completo:
+
+`https://github.com/guibatoni/dueltrace-releases/releases/download/<TAG>/DUELTRACE-WebUI-Windows-Preview.zip`
+
+O link é válido **somente após a publicação**; não use endereço inventado.
+O código-fonte privado não é enviado ao repositório público.
+
+## Atualização dos computadores dos clientes
+
+1. Cliente abre o DUELTRACE e clica em **Atualizações**.
+2. O aplicativo consulta o repositório de releases público por HTTPS,
+   sem autenticação.
+3. Verifica tag, ID de build, SHA-256, tamanho, origem e identidade interna.
+4. Após clique em **Atualizar agora**, baixa e instala **na mesma pasta**,
+   preserva ISOs/dados e utiliza rollback caso o reinício falhe.
+
+**Migração inicial obrigatória:** versões antigas (como a Preview v53)
+ainda consultam o repositório privado e não sabem do canal público. É
+necessário disponibilizar uma **primeira instalação manual**, com o updater
+novo compilado neste processo. Só depois essas instalações passam a
+atualizar-se pelo botão sem login.
+
+## Segurança, privacidade e comercialização
+
+- Não incorporar token do GitHub nem a chave de assinatura ao aplicativo.
+- Não baixar/instalar Builds de GitHub Actions ou ROMs pelo atualizador.
+- Se falta assinatura Authenticode, auditoria, Defender, acesso de publicação
+  ou validação de origem, **não publicar**.
+- Um ZIP em repositório público pode ser baixado por qualquer pessoa.
+  Para vender acesso individual é necessário licenciamento de aplicativo
+  ou servidor próprio com autenticação de compradores; isso é independente
+  do atualizador.
+
+O workflow antigo do GitHub Actions pode continuar existindo no repositório
+para verificações de desenvolvimento, mas **não participa da geração,
+assinatura, publicação, descoberta nem download das novas releases para
+clientes**. O fluxo manual permanece independente.
