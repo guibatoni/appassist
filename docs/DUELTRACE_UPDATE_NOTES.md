@@ -16,6 +16,7 @@
 - Pacotes ZIP verificados substituem o aplicativo na pasta existente e reiniciam o DUELTRACE.
 
 ## Correções
+- ePSXe: a varredura de RAM continua de onde parou quando o primeiro bloco de 48 MB não contém a mão; busca rápida pelos deslocamentos PS1 e mensagens de estado mais claras.
 - Endereço físico fixo da RAM não impede mais o reconhecimento de mãos em versões do ePSXe com disposição de memória diferente.
 - Corrigida a limitação da consulta anônima que não enxerga Releases do repositório privado quando há GitHub CLI autenticado disponível.
 - Atualização estável portátil tem prioridade quando também existe uma Preview.
