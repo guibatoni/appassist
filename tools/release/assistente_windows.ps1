@@ -34,23 +34,22 @@ function Check-Tools {
         !(Test-Path -LiteralPath (Join-Path $root "web/package-lock.json"))) {
         throw "Abra o kit junto ao código privado completo do DUELTRACE."
     }
-    # The user's default python.exe may be 3.14 (or another version).
-    # Bootstrap a separate Python 3.12 venv and temporarily prepend its Scripts
-    # directory to PATH. Never modify the system's default Python.
-    $pythonBootstrap=Join-Path $PSScriptRoot "python312_bootstrap.ps1"
+    # Accept the user's installed Python 3.14.6 (or 3.12) in a local venv.
+    # Do not install another interpreter or change the default Windows Python.
+    $pythonBootstrap=Join-Path $PSScriptRoot "python_build_bootstrap.ps1"
     if (!(Test-Path -LiteralPath $pythonBootstrap -PathType Leaf)) {
-        throw "Atualize a branch do DUELTRACE: módulo de preparação do Python 3.12 ausente."
+        throw "Atualize a branch do DUELTRACE: seletor do Python instalado ausente."
     }
     & $pythonBootstrap
     $version=(& python -c "import sys; print('.'.join(map(str,sys.version_info[:3])))").Trim()
-    if ($LASTEXITCODE -ne 0 -or $version -notmatch '^3\.12\.') {
-        throw "Ambiente isolado incorreto: Python 3.12 obrigatório (encontrado: $version)."
+    if ($LASTEXITCODE -ne 0 -or $version -notmatch '^3\.(12|14)\.') {
+        throw "Ambiente isolado incorreto: use Python 3.14 ou 3.12 já instalado (encontrado: $version)."
     }
     $nodeVersion=(& node --version).Trim()
     if ($LASTEXITCODE -ne 0 -or $nodeVersion -notmatch '^v22\.') {
         throw "Utilize Node.js 22 (encontrado: $nodeVersion)."
     }
-    Write-Host "Ambiente do DUELTRACE: Python $version (isolado) e Node $nodeVersion."
+    Write-Host "Ambiente do DUELTRACE: Python $version já instalado (isolado) e Node $nodeVersion."
 }
 
 function Check-Public-Repository([bool]$create) {
