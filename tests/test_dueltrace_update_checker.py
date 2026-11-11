@@ -55,6 +55,63 @@ class UpdateCheckerTests(unittest.TestCase):
         self.assertEqual(preview["status"],"preview")
         self.assertEqual(stable["status"],"up_to_date")
 
+    def test_public_preview_without_actions_login_or_private_urls(self):
+        latest={
+            "version":"0.9.7","run_id":20261111140559,
+            "sha":"b"*40,
+            "page":"https://github.com/guibatoni/dueltrace-releases/releases/tag/"
+                   "preview-v0.9.7-r20261111140559",
+        }
+        checked=check_for_updates(
+            fetcher=lambda:release("v0.9.6"),
+            preview_fetcher=lambda:latest,
+            installed_run_id=42967559607,
+            current_version="0.9.7",channel="preview")
+        self.assertEqual(checked["status"],"preview_update_available")
+        self.assertTrue(checked["updateAvailable"])
+        self.assertEqual(checked["previewRunId"],20261111140559)
+        self.assertEqual(checked["previewPage"],latest["page"])
+        self.assertEqual(checked["previewBuildSha"],"b"*10)
+        self.assertNotIn("actions",checked["previewPage"])
+
+        newer=check_for_updates(
+            fetcher=lambda:release("v0.9.6"),
+            preview_fetcher=lambda:latest,
+            installed_run_id=20261111140560,
+            current_version="0.9.7",channel="preview")
+        self.assertEqual(newer["status"],"preview_current")
+        self.assertFalse(newer["updateAvailable"])
+
+    def test_public_preview_rejects_foreign_or_incomplete_metadata(self):
+        latest={
+            "version":"0.9.7","run_id":20261111140559,
+            "sha":"b"*40,
+            "page":"https://github.com/guibatoni/dueltrace-releases/releases/tag/"
+                   "preview-v0.9.7-r20261111140559",
+        }
+        for altered in (
+            {"page":"https://github.com/guibatoni/appassist/actions/runs/1"},
+            {"run_id":"20261111140559"},
+            {"sha":"not-a-sha"},
+            {"version":"0.9.7+injected"},
+        ):
+            with self.subTest(altered=altered):
+                status=check_for_updates(
+                    fetcher=lambda:release("v0.9.6"),
+                    preview_fetcher=lambda:{**latest,**altered},
+                    installed_run_id=42967559607)
+                self.assertNotEqual(status["status"],"preview_update_available")
+                self.assertFalse(status["updateAvailable"])
+                self.assertIn("público",status["previewError"])
+
+    def test_version_checker_never_queries_github_actions(self):
+        source=(Path(__file__).resolve().parents[1]/
+                "scanner/dueltrace_update_checker.py").read_text(encoding="utf-8")
+        self.assertNotIn("actions/runs",source)
+        self.assertNotIn("fetch_latest_preview,",source)
+        self.assertNotIn("RUNS_API",source)
+        self.assertIn("fetch_latest_preview_package(",source)
+
     def test_malformed_or_foreign_releases_fail_without_url_reflection(self):
         for payload in [
             release("v0.9.0",html_url="https://evil.example/install.exe"),
