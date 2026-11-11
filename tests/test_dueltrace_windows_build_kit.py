@@ -98,6 +98,18 @@ class WindowsBuildKitTests(unittest.TestCase):
         self.assertIn("SHA-256 ZIP: $digest",PUBLISHER)
         self.assertEqual(PUBLISHER.count("DOWNLOAD DIRETO"),1)
 
+    def test_failure_reports_real_python_step_and_keeps_local_logs(self):
+        self.assertIn("dist/build-diagnostics",PUBLISHER)
+        self.assertIn("ULTIMA_FALHA.txt",PUBLISHER)
+        self.assertIn("$Command $argsText",PUBLISHER)
+        self.assertIn("2>&1 | ForEach-Object",PUBLISHER)
+        self.assertIn("etapa-",PUBLISHER)
+        self.assertIn("$code=$LASTEXITCODE",PUBLISHER)
+        self.assertIn("Falha na etapa $stage",PUBLISHER)
+        self.assertNotIn(
+            'Comando de build/validação falhou: $Command (exit $LASTEXITCODE)',
+            PUBLISHER)
+
     def test_signed_customer_readme_is_accepted_by_installer(self):
         self.assertIn('"LEIA-ME-ATUALIZACAO.txt"',UPDATER)
         self.assertIn("'LEIA-ME-ATUALIZACAO.txt'",UPDATER)
