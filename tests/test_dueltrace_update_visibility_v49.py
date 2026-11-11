@@ -9,7 +9,6 @@ from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"scanner"))
 import dueltrace_web_bridge as bridge_mod
-from dueltrace_private_update_source import PrivateUpdateUnavailable
 
 
 class UpdateVisibilityV49Tests(unittest.TestCase):
@@ -24,11 +23,11 @@ class UpdateVisibilityV49Tests(unittest.TestCase):
         return bridge_mod.DueltraceWebBridge.__new__(
             bridge_mod.DueltraceWebBridge)
 
-    def test_verified_new_private_preview_is_visible_and_displayed_by_build_id(self):
+    def test_verified_public_preview_is_visible_and_displayed_by_build_id(self):
         release={
             "version":"0.9.7","run_id":42939025484,
             "sha":"a"*40,
-            "page":"https://github.com/guibatoni/appassist/releases/tag/preview-v0.9.7-r42939025484",
+            "page":"https://github.com/guibatoni/dueltrace-releases/releases/tag/preview-v0.9.7-r42939025484",
             "patchNotes":[],
         }
         with (patch.object(bridge_mod,"check_for_updates",return_value=self.base()),
@@ -54,15 +53,14 @@ class UpdateVisibilityV49Tests(unittest.TestCase):
         self.assertFalse(result["updateAvailable"])
         self.assertIsNone(result["previewError"])
 
-    def test_missing_github_cli_is_displayed_and_never_claims_updated(self):
-        error=PrivateUpdateUnavailable(
-            "GitHub privado: instale o GitHub CLI e autorize a conta.")
+    def test_missing_public_feed_is_reported_without_requesting_login(self):
+        error=OSError("Canal público ainda não publicado")
         with (patch.object(bridge_mod,"check_for_updates",return_value=self.base()),
               patch.object(bridge_mod,"installed_preview_build_id",return_value=42935155350),
               patch.object(bridge_mod,"fetch_latest_preview_package",side_effect=error)):
             result=self.instance().check_updates()
-        self.assertEqual(result["previewCheckStatus"],"authentication_required")
-        self.assertIn("GitHub CLI",result["previewError"])
+        self.assertEqual(result["previewCheckStatus"],"unavailable")
+        self.assertIn("Canal público",result["previewError"])
         self.assertFalse(result["automaticPreviewReady"])
         self.assertFalse(result["updateAvailable"])
 
@@ -81,9 +79,9 @@ class UpdateVisibilityV49Tests(unittest.TestCase):
         self.assertIn("installedPreviewRunId",ui)
         self.assertNotIn("api.open_updates_page(",ui)
         self.assertIn("nenhuma Preview mais recente",ui)
-        self.assertIn('result.previewCheckStatus === "authentication_required"',ui)
-        self.assertIn("gh auth login",ui)
-        self.assertIn("gh auth status",ui)
+        self.assertNotIn('result.previewCheckStatus === "authentication_required"',ui)
+        self.assertNotIn("gh auth login",ui)
+        self.assertNotIn("gh auth status",ui)
         self.assertIn("<ShieldAlert className=",ui)
         self.assertIn('aria-label="Atualizar agora"',ui)
         self.assertIn('https://github.com/guibatoni/appassist/releases"',checker)
