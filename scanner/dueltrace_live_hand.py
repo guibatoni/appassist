@@ -283,7 +283,7 @@ def read_hand_from_epsxe(*, preferred_pid: int | None=None,
                     "status":"RAM ambígua; não é seguro selecionar um endereço",
                     "hand_ids":None,"pid":pid}
         if scan_detail is not None and scan_detail["cursor"] is not None:
-            status="ePSXe detectado; busca de RAM continua na próxima região"
+            status="ePSXe detectado; busca de RAM continua em outros blocos"
         else:
             status="ePSXe detectado; estrutura de cinco cartas não validada"
         return {"ready":False,"status":status,
