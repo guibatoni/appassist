@@ -74,8 +74,13 @@ class NativePointerDragV51Tests(unittest.TestCase):
         self.assertEqual(self.api.drag_window_move(self.token,first["dragId"],401,401),
                          {"moved":False})
         self.window.move.assert_not_called()
-        # A stale move attempt must not clear another active session.
-        # User can immediately restart a valid drag.
+        # Stale callbacks cannot cancel the second, newer drag.
+        self.assertEqual(
+            self.api.drag_window_move(self.token,second["dragId"],430,435),
+            {"moved":True})
+        self.window.move.assert_called_once_with(230,210)
+        self.window.move.reset_mock()
+        # User can then immediately restart a valid drag.
         started=self.api.drag_window_begin(self.token,200,200)
         self.assertEqual(started["dragId"],3)
         self.assertEqual(self.api.drag_window_move(self.token,3,210,210),
