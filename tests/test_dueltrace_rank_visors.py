@@ -57,7 +57,10 @@ class FloatingVisorUiTests(unittest.TestCase):
         self.assertIn('("RANK ao vivo — DUELTRACE",390,280)',source)
         self.assertIn('("Dicas de fusões — DUELTRACE",440,600)',source)
         self.assertIn('on_top=True',source)
-        self.assertIn('min_size=((330,230) if kind=="calculadora"',source)
+        self.assertIn('tool_size=tool_geometry(',source)
+        self.assertIn('min_width=330 if kind=="calculadora" else 380',source)
+        self.assertIn('min_height=230 if kind=="calculadora" else 380',source)
+        self.assertIn('min_size=tool_size["min_size"]',source)
 
 
 if __name__=="__main__":
