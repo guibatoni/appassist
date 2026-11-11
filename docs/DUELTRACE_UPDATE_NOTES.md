@@ -8,7 +8,7 @@
 - Patch notes exibidos em uma janela dentro do aplicativo, sem abrir o navegador.
 
 ## Melhorias
-- Atualizador mostra os números reais dos builds Preview instalados e disponíveis e oferece acesso à lista de Releases no navegador como alternativa, mantendo o botão Atualizar agora.
+- Atualizador mostra os números reais dos builds Preview instalados e disponíveis, mantendo apenas o botão Atualizar agora para instalar na pasta existente.
 - Localização opcional do GitHub CLI nas pastas padrão do Windows, inclusive quando o app foi aberto pelo Explorador de Arquivos com PATH antigo.
 - A janela Windows e os visores de RANK/fusões passam a respeitar a área útil do monitor; tamanho mínimo antigo de 1100 × 700 removido para suportar orientação vertical.
 - Pop-ups de cartas e atualizações cabem em janelas estreitas ou baixas, mantendo rolagem interna, foco e controles da janela.
