@@ -28,7 +28,7 @@ function Check-Windows {
 function Check-Tools {
     Check-Windows
     Require-Command "git" "Instale Git para Windows."
-    Require-Command "node" "Instale Node.js 22."
+    Require-Command "node" "Utilize o Node.js já instalado (22, 24 ou 26)."
     Require-Command "npm.cmd" "Reinstale Node.js/npm."
     if (!(Test-Path -LiteralPath $publisher -PathType Leaf) -or
         !(Test-Path -LiteralPath (Join-Path $root "web/package-lock.json"))) {
@@ -46,9 +46,12 @@ function Check-Tools {
         throw "Ambiente isolado incorreto: use Python 3.14 ou 3.12 já instalado (encontrado: $version)."
     }
     $nodeVersion=(& node --version).Trim()
-    if ($LASTEXITCODE -ne 0 -or $nodeVersion -notmatch '^v22\.') {
-        throw "Utilize Node.js 22 (encontrado: $nodeVersion)."
+    # Next.js 16 needs Node >=20.9. The supported current/LTS major
+    # versions 22, 24 and 26 are accepted without changing the system.
+    if ($LASTEXITCODE -ne 0 -or $nodeVersion -notmatch '^v(?:22|24|26)\.[0-9]+\.[0-9]+$') {
+        throw "Node.js incompatível (encontrado: $nodeVersion). Use Node.js 22, 24 ou 26."
     }
+
     Write-Host "Ambiente do DUELTRACE: Python $version já instalado (isolado) e Node $nodeVersion."
 }
 
