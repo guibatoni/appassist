@@ -12,12 +12,12 @@ Linux porque o pacote é gerado por PyInstaller + pywebview/WebView2 no Windows.
 
 | Arquivo | O que faz |
 | --- | --- |
-| `01_VERIFICAR_AMBIENTE_WINDOWS.cmd` | Verifica Windows, Python 3.12, Git, Node 22 e npm |
+| `01_VERIFICAR_AMBIENTE_WINDOWS.cmd` | Verifica Windows, Python 3.14 ou 3.12 existente, Git, Node 22 e npm |
 | `02_GERAR_DUELTRACE_COMPLETO.cmd` | Compila a aplicação completa para Windows, testa e gera ZIP **local** |
 | `03_PREPARAR_CANAL_PUBLICO.cmd` | Pede confirmação para criar **apenas** `guibatoni/dueltrace-releases` público |
 | `04_PUBLICAR_DUELTRACE_WINDOWS.cmd` | Escolhe certificado, compila, assina, examina e publica o ZIP público |
 | `tools/release/assistente_windows.ps1` | Motor interativo dos quatro botões |
-| `tools/release/python312_bootstrap.ps1` | Detecta/instala Python 3.12 e ativa ambiente isolado para o compilador |
+| `tools/release/python_build_bootstrap.ps1` | Usa Python 3.14 já instalado sem instalar Python 3.12, isolando o build |
 | `tools/release/publicar_cliente.ps1` | Motor de compilação/assinatura/publicação, independente do GitHub Actions |
 | `tools/security/AVISO-ATUALIZACAO-CLIENTES.txt` | Aviso incluído no ZIP público e aceito pelo atualizador |
 | `tests/test_dueltrace_windows_build_kit.py` | Contratos do build Windows e do publicador |
@@ -26,7 +26,7 @@ Linux porque o pacote é gerado por PyInstaller + pywebview/WebView2 no Windows.
 
 1. Tenha o repositório privado clonado no Windows e abra uma cópia **limpa**
    da branch integrada v58, sem arquivos modificados não commitados.
-2. Instale Git para Windows e Node.js **22**. O Python padrão pode continuar na versão **3.14.6**: o kit busca Python **3.12** e, caso esteja ausente, instala a versão 3.12 para o usuário atual por meio do winget. Depois cria um ambiente isolado em `.dueltrace-build-py312/` (sem modificar o seu Python padrão).
+2. Instale Git para Windows e Node.js **22**. **Não precisa instalar Python 3.12.** O kit usa o Python **3.14.6** já instalado e cria somente um ambiente virtual local `.dueltrace-build-py314/`, com as bibliotecas necessárias. Se já existir Python 3.12, também poderá usá-lo, mas nenhuma instalação de Python é feita pelo kit.
 3. Clique duas vezes em `01_VERIFICAR_AMBIENTE_WINDOWS.cmd`.
 4. Clique duas vezes em `02_GERAR_DUELTRACE_COMPLETO.cmd`.
 5. Após **todos** os testes e auditorias, o ZIP completo será criado em
