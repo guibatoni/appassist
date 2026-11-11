@@ -122,9 +122,11 @@ class ProtectedDesktopApi:
         with self._native_window_lock:
             session=self._drag_session
             window=self._native_window
-            if (session is None or window is None or drag_id!=session["id"]
-                    or time.monotonic()-session["last"]>10
-                    or self._native_maximized):
+            if session is None or window is None or drag_id!=session["id"]:
+                # Late WebView2 RPCs from a previous drag must never clear a
+                # newer drag session that has already begun.
+                return {"moved":False}
+            if time.monotonic()-session["last"]>10 or self._native_maximized:
                 self._drag_session=None
                 return {"moved":False}
             dx=sx-session["start_x"]
