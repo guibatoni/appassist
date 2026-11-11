@@ -17,8 +17,8 @@ PUBLIC_UPDATES_WEB = "https://github.com/" + PUBLIC_UPDATES_REPO
 # GitHub release.target_commitish belongs to the PUBLIC repository and is
 # intentionally not the SHA of the PRIVATE Windows build.
 BUILD_TRAILER = re.compile(
-    r"(?m)^Build ([1-9][0-9]{0,14}) \\| Commit ([a-f0-9]{40})"
-    r" \\| SHA-256 ZIP: ([a-f0-9]{64})\\s*$"
+    r"(?m)^Build ([1-9][0-9]{0,14}) \| Commit ([a-f0-9]{40})"
+    r" \| SHA-256 ZIP: ([a-f0-9]{64})\s*$"
 )
 
 
