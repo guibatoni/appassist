@@ -1,7 +1,7 @@
 "use client"
 
-import { useRef, type PointerEvent as ReactPointerEvent } from "react"
-import { desktopApi, type DesktopAPI } from "@/lib/desktop"
+import { type PointerEvent as ReactPointerEvent } from "react"
+import { desktopApi } from "@/lib/desktop"
 import { ShieldCheck } from "lucide-react"
 import { UpdateChecker } from "./update-checker"
 import { WindowControls } from "./window-controls"
@@ -33,139 +33,29 @@ function Logo() {
   )
 }
 
-type ActiveDrag = {
-  pointerId: number
-  api: DesktopAPI
-  dragId: number | null
-  latestX: number
-  latestY: number
-  lastX: number
-  lastY: number
-  sending: boolean
-  finished: boolean
-  started: boolean
-}
-
 export function TopBar() {
-  const currentDrag = useRef<ActiveDrag | null>(null)
-
-  const endDrag = (state: ActiveDrag) => {
-    if (state.finished) return
-    state.finished = true
-    if (currentDrag.current === state) currentDrag.current = null
-    // Don't invalidate the native session while a final move is still
-    // in-flight. endDrag is called after the move resolves instead.
-    if (!state.sending && state.dragId !== null) {
-      void state.api.drag_window_end(state.dragId).catch(() => {})
-    }
-  }
-
-  const sendLatest = (state: ActiveDrag) => {
-    if (state.finished || !state.started || state.sending || state.dragId === null) return
-    const x = state.latestX
-    const y = state.latestY
-    if (x === state.lastX && y === state.lastY) return
-    state.lastX = x
-    state.lastY = y
-    state.sending = true
-    void state.api.drag_window_move(state.dragId, x, y)
-      .then((response) => {
-        if (!response.moved) endDrag(state)
-      })
-      .catch(() => endDrag(state))
-      .finally(() => {
-        state.sending = false
-        if (state.finished) {
-          if (state.dragId !== null) {
-            void state.api.drag_window_end(state.dragId).catch(() => {})
-          }
-        } else {
-          // Back-pressure: only one move request in flight; the latest
-          // pointer location is kept even during a slow WebView2 bridge call.
-          sendLatest(state)
-        }
-      })
-  }
-
   const onHeaderPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-    if (!event.isPrimary || event.button !== 0 || currentDrag.current) return
+    if (!event.isPrimary || event.button !== 0) return
     const target = event.target
-    // Update, window control, input and link interactions must NOT drag.
+    // Native Windows caption drag must never intercept actionable controls.
     if (target instanceof Element &&
         target.closest('button,a,input,textarea,select,[role="button"],[data-no-window-drag]')) return
     const api = desktopApi()
     if (!api) return
-    const x = Math.round(event.screenX)
-    const y = Math.round(event.screenY)
-    const state: ActiveDrag = {
-      pointerId: event.pointerId,
-      api,
-      dragId: null,
-      latestX: x,
-      latestY: y,
-      lastX: x,
-      lastY: y,
-      sending: false,
-      finished: false,
-      started: false,
-    }
-    currentDrag.current = state
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId)
-    } catch {
-      currentDrag.current = null
-      return
-    }
+    // Windows handles the entire drag, including cursor tracking, screen DPI,
+    // multi-monitor movement and release. Do not capture pointer or call
+    // Window.move in a WebView2 pointermove loop (broken in v51).
     event.preventDefault()
-    void api.drag_window_begin(x, y)
-      .then((result) => {
-        if (!result.started || result.dragId === null) {
-          endDrag(state)
-          return
-        }
-        state.dragId = result.dragId
-        state.started = true
-        if (state.finished) {
-          void api.drag_window_end(result.dragId).catch(() => {})
-        } else {
-          sendLatest(state)
-        }
-      })
-      .catch(() => endDrag(state))
-  }
-
-  const onHeaderPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
-    const state = currentDrag.current
-    if (!state || state.pointerId !== event.pointerId) return
-    if ((event.buttons & 1) === 0) {
-      endDrag(state)
-      return
-    }
-    state.latestX = Math.round(event.screenX)
-    state.latestY = Math.round(event.screenY)
-    sendLatest(state)
-  }
-
-  const onHeaderPointerEnd = (event: ReactPointerEvent<HTMLElement>) => {
-    const state = currentDrag.current
-    if (state && state.pointerId === event.pointerId) endDrag(state)
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
+    void api.drag_window_native().catch(() => {})
   }
 
   return (
     <header
       onPointerDown={onHeaderPointerDown}
-      onPointerMove={onHeaderPointerMove}
-      onPointerUp={onHeaderPointerEnd}
-      onPointerCancel={onHeaderPointerEnd}
-      onLostPointerCapture={onHeaderPointerEnd}
       className="relative sticky top-0 z-[60] flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 rounded-t-2xl border-b border-line/40 bg-[#040b1f]/95 px-2 py-2 cursor-grab select-none active:cursor-grabbing backdrop-blur-xl sm:gap-x-3 sm:px-5 sm:py-3 lg:px-6"
       aria-label="Barra superior — arraste para mover o DUELTRACE"
     >
-      {/* Direct authenticated Window.move handles WebView2 mouse events,
-          instead of pywebview-drag-region which failed on real Windows. */}
+      {/* Authenticated native Win32 caption dragging handles the complete mouse gesture. */}
       <div className="pointer-events-none relative z-10 order-1 flex min-w-0 flex-1 select-none items-center">
         <Logo />
       </div>
