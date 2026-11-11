@@ -132,6 +132,12 @@ try {
     Write-Host "DUELTRACE local: $tag | fonte privada $sourceSha"
     $env:DUELTRACE_SOURCE_SHA=$sourceSha
 
+    # Fresh Python venvs may ship pip 26.1.2 (PYSEC-2026-3721).
+    # Fix the VULNERABLE installer first, before installing project packages;
+    # do not bypass pip-audit or change the user's system Python/pip.
+    Invoke-Checked "python" @("-m","pip","install","--upgrade","pip==26.3")
+    Invoke-Checked "python" @("-c",
+        "import importlib.metadata as m; assert tuple(map(int,m.version('pip').split('.'))) >= (26,2), 'pip vulnerável (<26.2)'")
     Invoke-Checked "python" @("-m","pip","install","-r","tools/security/requirements-webui-build.txt","pip-audit")
     Invoke-Checked "python" @("-m","pip_audit","--local")
     Invoke-Checked "python" @("-m","unittest","discover","-s","tests","-p","test_*.py","-v")
