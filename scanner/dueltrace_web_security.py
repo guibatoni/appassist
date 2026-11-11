@@ -24,6 +24,8 @@ class ProtectedDesktopApi:
         self._native_window_lock=threading.RLock()
         self._native_maximized=False
         self._native_close_requested=False
+        self._drag_session=None
+        self._drag_sequence=0
         self._tool_window_open=None
         self._tool_window_close=None
 
@@ -66,6 +68,91 @@ class ProtectedDesktopApi:
                     target=close_after_response,name="dueltrace-window-close",
                     daemon=True).start()
             return {"maximized":self._native_maximized}
+
+    def _drag_coordinate(self, value):
+        # The only movement permitted is the CURRENT DUELTRACE window.
+        # No arbitrary HWND, code, command, URL or filesystem access.
+        if type(value) is not int or not -50000 <= value <= 50000:
+            raise ValueError("Coordenada de arraste inválida.")
+        return value
+
+    def drag_window_begin(self, credential, screen_x, screen_y):
+        """Start an authenticated mouse drag using pywebview native geometry.
+
+        Unlike pywebview's .pywebview-drag-region selector (which did not
+        move the embedded WebView2 on the user's Windows), the following
+        drag move requests call Window.move(x,y) directly. Coordinates are
+        absolute and based on this window's original position.
+        """
+        self._authorize(credential)
+        sx=self._drag_coordinate(screen_x)
+        sy=self._drag_coordinate(screen_y)
+        with self._native_window_lock:
+            window=self._native_window
+            if window is None:
+                raise RuntimeError("Janela nativa ainda não está pronta.")
+            if self._native_maximized:
+                return {"started":False,"dragId":None}
+            native=getattr(window,"native",None)
+            if native is not None:
+                # This also handles maximizing via OS shortcuts or the taskbar,
+                # which might not have updated the custom maximize button.
+                try:
+                    if str(native.WindowState).casefold().endswith("maximized"):
+                        return {"started":False,"dragId":None}
+                except (AttributeError,RuntimeError):
+                    pass
+            start_x,start_y=int(window.x),int(window.y)
+            self._drag_sequence+=1
+            self._drag_session={
+                "id":self._drag_sequence,
+                "start_x":sx,"start_y":sy,
+                "window_x":start_x,"window_y":start_y,
+                "last":time.monotonic(),
+            }
+            return {"started":True,"dragId":self._drag_sequence}
+
+    def drag_window_move(self, credential, drag_id, screen_x, screen_y):
+        """Move only while the matching short-lived drag is active."""
+        self._authorize(credential)
+        sx=self._drag_coordinate(screen_x)
+        sy=self._drag_coordinate(screen_y)
+        if type(drag_id) is not int:
+            raise ValueError("Sessão de arraste inválida.")
+        with self._native_window_lock:
+            session=self._drag_session
+            window=self._native_window
+            if (session is None or window is None or drag_id!=session["id"]
+                    or time.monotonic()-session["last"]>10
+                    or self._native_maximized):
+                self._drag_session=None
+                return {"moved":False}
+            dx=sx-session["start_x"]
+            dy=sy-session["start_y"]
+            # Bound movement originating from a single mouse action. Multiple
+            # monitors are allowed; remote programmatic commands are not.
+            if abs(dx)>10000 or abs(dy)>10000:
+                self._drag_session=None
+                return {"moved":False}
+            dest_x=session["window_x"]+dx
+            dest_y=session["window_y"]+dy
+            if not -50000<=dest_x<=50000 or not -50000<=dest_y<=50000:
+                self._drag_session=None
+                return {"moved":False}
+            window.move(int(dest_x),int(dest_y))
+            session["last"]=time.monotonic()
+            return {"moved":True}
+
+    def drag_window_end(self, credential, drag_id):
+        """Stop movement as soon as the mouse button is released/cancelled."""
+        self._authorize(credential)
+        if type(drag_id) is not int:
+            raise ValueError("Sessão de arraste inválida.")
+        with self._native_window_lock:
+            if self._drag_session and self._drag_session["id"]==drag_id:
+                self._drag_session=None
+                return {"ended":True}
+            return {"ended":False}
 
     def get_alpha_discovery(self, credential, sha):
         self._authorize(credential)
