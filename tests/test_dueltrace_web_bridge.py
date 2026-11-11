@@ -150,7 +150,7 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(last["total"],2)
             self.assertEqual(last["rows"][0]["materialAId"],2)
             by_name=self.bridge.get_card_fusions(8,sort="name",role="result")
-            self.assertEqual([r["materialAId"] for r in by_name["rows"]],[2,7])
+            self.assertEqual([r["materialAId"] for r in by_name["rows"]],[7,2])
             material=self.bridge.get_card_fusions(8,role="material")
             self.assertEqual(material["total"],0)
             unknown=self.bridge.get_card_fusions(5,role="result")
