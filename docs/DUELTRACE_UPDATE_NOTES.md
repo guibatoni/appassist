@@ -1,8 +1,10 @@
 # DUELTRACE — Notas da atualização
 
 ## Novidades
+- **Fusões em duas direções (v57):** toda carta mostra receitas em que é usada como material e receitas que a produzem como resultado final; veja os dois ingredientes, seus ATKs, o resultado e seu ATK, com ordenação e navegação independentes.
+- **Atualização sem GitHub Actions (v57):** o desenvolvedor gera, assina, verifica e publica o ZIP completo diretamente no Windows; os clientes baixam as próximas versões anonimamente do canal público de executáveis.
 - **Atualizações para todos os clientes:** o DUELTRACE consulta o canal público separado de pacotes Windows, sem exigir conta GitHub, GitHub CLI, token ou acesso ao código-fonte privado. A atualização acontece na mesma pasta por um único botão.
-- **Distribuição controlada:** a publicação ao público exige validação de CI, assinatura de editor confiável, análise Microsoft Defender e SHA-256 do ZIP antes de disponibilizar o executável.
+- **Distribuição controlada:** a publicação ao público exige testes locais, assinatura de editor confiável, análise Microsoft Defender e SHA-256 do ZIP antes de disponibilizar o executável.
 - **Cartas por clique (v55):** a janela de informações abre somente ao clicar em uma carta na Central de Duelo, Biblioteca, Fusões ou Drops; passar o mouse não abre pop-ups.
 - **Informações completas:** a janela mantém arte, descrições maiores, efeitos, locais de drop e possíveis fusões com ATK do resultado; feche por X, Esc ou clicando fora.
 - **Interface adaptável:** o DUELTRACE reorganiza navegação, cartas, fusões, drops e detalhes em telas 9:16, 16:9, 16:10, 4:3 e ultrawide, sem distorcer as cartas.
@@ -25,7 +27,7 @@
 - Pacotes ZIP verificados substituem o aplicativo na pasta existente e reiniciam o DUELTRACE.
 
 ## Correções
-- **Janela principal (Windows):** substituído o arraste CSS do WebView2 que não funcionou por movimento real do pywebview (`Window.move`) enquanto o botão esquerdo é mantido pressionado na faixa superior. Botões da janela permanecem clicáveis e o redimensionamento lateral continua preservado.
+- **Janela principal (Windows):** substituído o arraste CSS e o movimento por eventos WebView2 pela rotina nativa Win32 de arraste da janela na thread da interface. Botões da janela permanecem clicáveis e o redimensionamento lateral continua preservado.
 - **Janela principal:** toda a faixa superior do DUELTRACE pode ser usada para clicar e arrastar a janela, inclusive sobre o logotipo; botões de atualização, minimizar, maximizar e fechar continuam independentes.
 - **Canal de distribuição:** quando o servidor público ainda não estiver configurado, o aplicativo mostra uma mensagem objetiva sem solicitar credenciais.
 - **Janela sem barra de título:** restauração das bordas nativas de redimensionamento do Windows; agora deve ser possível arrastar laterais e cantos, sem alterar o visual do cabeçalho.
