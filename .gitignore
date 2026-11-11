@@ -32,3 +32,14 @@ backups_launcher/
 .updates/
 launcher_state.json
 launcher_config.json
+
+# Artefatos locais do compilador DUELTRACE / Next.js / PyInstaller
+# Permitem builds Windows repetidos sem sujar o checkout privado.
+dist/
+build/
+web/.next/
+web/out/
+web/node_modules/
+web/tsconfig.tsbuildinfo
+DUELTRACE-WebUI.spec
+scanner/dueltrace-build.json
