@@ -207,22 +207,6 @@ export function UpdateChecker() {
             {installing?"Baixando atualização…":"Atualizar agora"}
           </button>
           <button type="button" disabled={checking}
-            onClick={async()=>{
-              try{
-                const api=desktopApi()
-                if(!api)throw new Error("Abra o DUELTRACE no Windows.")
-                const outcome=await api.open_updates_page()
-                if(!outcome.opened)throw new Error("Não foi possível abrir as versões.")
-              }catch(e){
-                setInstallFeedback(e instanceof Error ? e.message :
-                  "Não foi possível abrir as versões no navegador.")
-              }
-            }}
-            className="btn-ghost text-xs disabled:opacity-50"
-            aria-label="Ver versões oficiais no GitHub">
-            Ver versões no GitHub
-          </button>
-          <button type="button" disabled={checking}
             onClick={()=>setNotesOpen(true)}
             className="btn-ghost inline-flex items-center gap-2 rounded-lg border border-primary/40 px-3 py-2 text-xs transition-colors hover:border-primary disabled:opacity-50"
             aria-label="Abrir patch notes">
