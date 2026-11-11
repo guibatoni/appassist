@@ -22,11 +22,58 @@ $publicRepo="guibatoni/dueltrace-releases"
 $assetName="DUELTRACE-WebUI-Windows-Preview.zip"
 $workspace=(Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
 
+# Stage logs remain in dist/build-diagnostics (ignored by Git) and are
+# never copied to the customer's ZIP. A failure reports the exact stage.
+$script:BuildStep=0
+$script:BuildLogDir=Join-Path $workspace "dist/build-diagnostics"
+New-Item -ItemType Directory -Force -Path $script:BuildLogDir | Out-Null
+
 function Invoke-Checked([string]$Command,[string[]]$CommandArgs) {
-    & $Command @CommandArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "Comando de build/validação falhou: $Command (exit $LASTEXITCODE)"
+    $script:BuildStep++
+    $argsText=($CommandArgs -join " ")
+    $stage=("{0:D2}" -f $script:BuildStep)
+    $log=Join-Path $script:BuildLogDir ("etapa-" + $stage + ".log")
+    $headline="[ETAPA $stage] $Command $argsText"
+    Write-Host ""
+    Write-Host $headline -ForegroundColor Cyan
+    [IO.File]::WriteAllText($log,$headline + [Environment]::NewLine,
+        [Text.UTF8Encoding]::new($false))
+    $prior=$ErrorActionPreference
+    $code=1
+    try {
+        # Windows PowerShell 5.1 can turn native stderr into a terminating
+        # NativeCommandError when the preference is Stop. Allow both streams
+        # to be recorded and use the native process exit code as authority.
+        $ErrorActionPreference="Continue"
+        & $Command @CommandArgs 2>&1 | ForEach-Object {
+            $line=([string]$_)
+            Write-Host $line
+            Add-Content -LiteralPath $log -Value $line -Encoding UTF8
+        }
+        $code=$LASTEXITCODE
+    } catch {
+        $message=([string]$_)
+        Add-Content -LiteralPath $log -Value $message -Encoding UTF8
+        Write-Host $message -ForegroundColor Red
+        $code=1
+    } finally {
+        $ErrorActionPreference=$prior
     }
+    if ($code -ne 0) {
+        $summary=Join-Path $script:BuildLogDir "ULTIMA_FALHA.txt"
+        $header="FALHA NA ETAPA $stage. Codigo: $code. Comando: $Command $argsText"
+        $tail=@(Get-Content -LiteralPath $log -Tail 45 -ErrorAction SilentlyContinue)
+        [IO.File]::WriteAllLines($summary,@($header,"",("Log: " + $log),"")+$tail,
+            [Text.UTF8Encoding]::new($false))
+        Write-Host ""
+        Write-Host "============== ULTIMA FALHA ==============" -ForegroundColor Red
+        $tail | ForEach-Object { Write-Host $_ }
+        Write-Host "Etapa: $stage | Codigo: $code" -ForegroundColor Red
+        Write-Host "Diagnostico: $summary" -ForegroundColor Yellow
+        Write-Host "==========================================" -ForegroundColor Red
+        throw "Falha na etapa $stage: $Command $argsText (exit $code). Diagnostico: $summary"
+    }
+    Write-Host "[OK] Etapa $stage concluida." -ForegroundColor Green
 }
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
