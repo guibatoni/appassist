@@ -24,6 +24,13 @@ CLASSIC_RANKS = (
 CLASSIC_POOLS = ("S/A POW", "B/C/D POW/TEC", "S/A TEC")
 X15_POOLS = X15_RANKS
 
+# Visual-only RANK filters for the Drops UI. B, C and D share the same
+# physical WA_MRG drop bank for POW and TEC; the original duel scoring must
+# retain all ten distinct classic labels, as defined in CLASSIC_RANKS.
+CLASSIC_DROP_FILTERS = (
+    "S-POW", "A-POW", "BCD-POW", "BCD-TEC", "A-TEC", "S-TEC",
+)
+
 CLASSIC_POOL_RANKS = (
     ("S-POW","A-POW"),
     ("B-POW","C-POW","D-POW","D-TEC","C-TEC","B-TEC"),
@@ -50,6 +57,22 @@ def rank_system(sha: str | None) -> str:
 
 def available_ranks(sha: str | None) -> tuple[str, ...]:
     return X15_RANKS if is_x15_sha(sha) else CLASSIC_RANKS
+
+
+def drop_filter_ranks(sha: str | None) -> tuple[str, ...]:
+    """Dropdown choices for reward tables; NOT the duel's RANK system."""
+    return X15_RANKS if is_x15_sha(sha) else CLASSIC_DROP_FILTERS
+
+
+def pool_index_for_drop_filter(sha: str | None, rank: str) -> int:
+    """Resolve BCD-POW/BCD-TEC to the single original shared drop bank.
+
+    Existing individual RANK values remain accepted for older API clients.
+    X15 has no BCD labels and cannot receive classic grouped filters.
+    """
+    if not is_x15_sha(sha) and rank in ("BCD-POW", "BCD-TEC"):
+        return 1
+    return pool_index_for_rank(sha, rank)
 
 
 def drop_pool_labels(sha: str | None) -> tuple[str, ...]:
