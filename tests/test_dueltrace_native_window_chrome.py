@@ -95,13 +95,13 @@ class NativeWindowControlsTests(unittest.TestCase):
         self.assertIn("trusted_window_url(current,url)",desktop)
         self.assertIn("bridge._request_shutdown=close_for_update",desktop)
 
-    def test_topbar_buttons_are_inside_app_but_outside_draggable_region(self):
+    def test_topbar_buttons_are_inside_app_but_excluded_from_pointer_drag(self):
         topbar=(ROOT/"web/components/shell/top-bar.tsx").read_text(encoding="utf-8")
         controls=(ROOT/"web/components/shell/window-controls.tsx").read_text(encoding="utf-8")
-        self.assertIn("pywebview-drag-region",topbar)
         self.assertIn("<WindowControls />",topbar)
-        self.assertLess(topbar.index("pywebview-drag-region"),topbar.index("<WindowControls />"))
         self.assertIn("sticky top-0",topbar)
+        self.assertIn("onPointerDown={onHeaderPointerDown}",topbar)
+        self.assertIn('target.closest(\'button,a,input,textarea,select,[role="button"],[data-no-window-drag]\')',topbar)
         for label in ("Minimizar janela","Maximizar janela","Restaurar janela","Fechar DUELTRACE"):
             with self.subTest(label=label):
                 self.assertIn(label,controls)
@@ -111,26 +111,35 @@ class NativeWindowControlsTests(unittest.TestCase):
         self.assertIn('window.addEventListener("pywebviewready",sync)',controls)
         self.assertIn("disabled={disabled}",controls)
 
-    def test_entire_titlebar_drags_but_buttons_remain_interactive(self):
+    def test_entire_titlebar_uses_webview2_mouse_capture_and_native_move(self):
         topbar=(ROOT/"web/components/shell/top-bar.tsx").read_text(encoding="utf-8")
         native=(ROOT/"scanner/dueltrace_web_desktop.py").read_text(encoding="utf-8")
-        # A full-surface drag overlay receives actual mouse events over
-        # the logo and empty header space. Buttons are above the overlay.
-        self.assertIn('pywebview-drag-region absolute inset-0 z-0',topbar)
-        self.assertIn('pointer-events-none relative z-10',topbar)
-        self.assertIn('relative z-10 order-3',topbar)
-        self.assertIn('relative z-10 order-2 shrink-0',topbar)
-        self.assertEqual(topbar.count('pywebview-drag-region'),1)
+        self.assertIn("onPointerDown={onHeaderPointerDown}",topbar)
+        self.assertIn("onPointerMove={onHeaderPointerMove}",topbar)
+        self.assertIn("onPointerUp={onHeaderPointerEnd}",topbar)
+        self.assertIn("onPointerCancel={onHeaderPointerEnd}",topbar)
+        self.assertIn("onLostPointerCapture={onHeaderPointerEnd}",topbar)
+        self.assertIn("setPointerCapture(event.pointerId)",topbar)
+        self.assertIn("releasePointerCapture(event.pointerId)",topbar)
+        self.assertIn("state.api.drag_window_move(state.dragId, x, y)",topbar)
+        self.assertIn("state.api.drag_window_end(state.dragId)",topbar)
+        self.assertIn("api.drag_window_begin(x, y)",topbar)
+        self.assertIn("pointer-events-none relative z-10",topbar)
         self.assertIn('<UpdateChecker />',topbar)
         self.assertIn('<WindowControls />',topbar)
-        self.assertIn('webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"]=True',native)
         self.assertIn('frameless=True,easy_drag=False,resizable=True',native)
         self.assertIn('window.events.shown+=restore_resize_border',native)
+        self.assertNotIn('webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"]=True',native)
 
     def test_native_api_remains_token_bound_no_open_http_endpoint(self):
         types=(ROOT/"web/lib/desktop.ts").read_text(encoding="utf-8")
         secured=(ROOT/"scanner/dueltrace_web_security.py").read_text(encoding="utf-8")
         self.assertIn("window_control: (action) => native.window_control(token,action)",types)
+        self.assertIn("drag_window_begin: (x,y) => native.drag_window_begin(token,x,y)",types)
+        self.assertIn("drag_window_move: (dragId,x,y) => native.drag_window_move(token,dragId,x,y)",types)
+        self.assertIn("drag_window_end: (dragId) => native.drag_window_end(token,dragId)",types)
+        self.assertIn("def drag_window_begin(self, credential, screen_x, screen_y):",secured)
+        self.assertIn("def drag_window_move(self, credential, drag_id, screen_x, screen_y):",secured)
         self.assertIn("window_control(token:string,action:WindowControlAction)",types)
         self.assertIn("self._authorize(credential)",secured)
         self.assertIn('"toggle_maximize","close"',secured)
