@@ -17,12 +17,12 @@ def release(version="v0.8.0", payload=b"MZ-exemplo-seguro"):
     filename=f"DUELTRACE-Setup-{version}.exe"
     return {
         "tag_name":version, "draft":False, "prerelease":False,
-        "html_url":f"https://github.com/guibatoni/appassist/releases/tag/{version}",
+        "html_url":f"https://github.com/guibatoni/dueltrace-releases/releases/tag/{version}",
         "assets":[{
             "name":filename, "size":len(payload),
             "digest":"sha256:"+hashlib.sha256(payload).hexdigest(),
             "browser_download_url":
-                f"https://github.com/guibatoni/appassist/releases/download/{version}/{filename}",
+                f"https://github.com/guibatoni/dueltrace-releases/releases/download/{version}/{filename}",
         }]
     }
 
@@ -39,7 +39,7 @@ class SignedUpdaterTests(unittest.TestCase):
     def test_selects_only_newer_official_signed_release_asset(self):
         c=updater.select_signed_installer(release(),"0.7.5")
         self.assertEqual(c["version"],"v0.8.0")
-        self.assertTrue(c["url"].startswith("https://github.com/guibatoni/appassist/"))
+        self.assertTrue(c["url"].startswith("https://github.com/guibatoni/dueltrace-releases/"))
         self.assertIsNone(updater.select_signed_installer(release(),"0.9.0"))
         for data in [
             {**release(),"prerelease":True},
