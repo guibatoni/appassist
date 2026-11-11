@@ -1,8 +1,9 @@
 """Conservative read-only RAM discovery across Windows ePSXe releases.
 
 Never assume a process address is portable between versions. Locate the
-five-card battle hand *inside the selected ePSXe process*, require exact
-slot IDs/indices plus two stable independent reads, and refuse ambiguity.
+five-card battle hand *inside the selected ePSXe process*. Two stable reads
+prove only structure, NOT a live hand; promotion to live happens later only
+after a different five-card hand is observed at the same address.
 
 The scan is bounded and does not dump RAM or send data outside this process.
 It does NOT validate the loaded ISO, RANK offsets, opponents or game version.
@@ -199,7 +200,9 @@ def discover_hand_addresses(read_at, regions: list[tuple[int,int]], *,
                     found.append(host)
                     if len(found)>=MAX_MATCHES:
                         complete=False
-                        next_cursor=(index,min(size-1,offset+1))
+                        # Skip the last candidate instead of repeatedly
+                        # scanning the same pair of static/decoy hands.
+                        next_cursor=(index,min(size-1,offset+pos+1))
                         break
             if len(found)>=MAX_MATCHES:
                 break
@@ -215,7 +218,11 @@ def discover_hand_addresses(read_at, regions: list[tuple[int,int]], *,
 
 
 def choose_stable_hand(read_at, addresses, *, max_candidates=128) -> dict:
-    """Return one validated hand, otherwise never guess or retain stale data."""
+    """Find a stable *structural candidate*, NOT a proven live hand.
+
+    A static five-card copy can pass this check. The caller must also
+    observe actual card-ID changes across polling cycles before caching.
+    """
     from fusion_ram_probe import decode_hand
 
     if not isinstance(addresses,(tuple,list)) or len(addresses)>max_candidates:

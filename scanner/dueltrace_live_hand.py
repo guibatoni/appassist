@@ -31,6 +31,13 @@ _PID_HAND_ADDRESS_CACHE: dict[int,int] = {}
 _LAST_FAILED_SCAN: dict[int,float] = {}
 # Fingerprint of RAM regions plus scan cursor: never store outside this run.
 _PID_SCAN_PROGRESS: dict[int,tuple[int,tuple[int,int]]] = {}
+# A static five-card buffer is NOT evidence that this is the live hand.
+# Candidates remain provisional until the same host address shows a genuine
+# change in the five card IDs across separate polling calls.
+_PID_PENDING_HANDS: dict[int,dict[int,tuple[tuple[int,...],float]]] = {}
+_PID_CONFIRMED_READ_FAILURES: dict[int,int] = {}
+MAX_PENDING_HANDS_PER_PID = 64
+PENDING_HAND_TTL_SECONDS = 180.0
 RESCAN_AFTER_SECONDS = 5.0
 EPSXE_IMAGE_PATTERN = re.compile(
     r"epsxe(?:[ ._-]?v?\d+(?:[._-]\d+)*)?(?:[._-](?:x86|x64|win32|win64|32|64))?\.exe\Z",
@@ -158,7 +165,19 @@ def read_hand_from_epsxe(*, preferred_pid: int | None=None,
     kernel=kernel or _windows_kernel32()
     candidates=discover_epsxe_pids(kernel) if pids is None else list(pids)
     if not candidates:
-        return {"ready":False,"status":"ePSXe não encontrado","hand_ids":None,"pid":None}
+        for cache in (_PID_HAND_ADDRESS_CACHE,_LAST_FAILED_SCAN,
+                      _PID_SCAN_PROGRESS,_PID_PENDING_HANDS,
+                      _PID_CONFIRMED_READ_FAILURES):
+            cache.clear()
+        return {"ready":False,"status":"ePSXe não encontrado",
+                "hand_ids":None,"pid":None}
+    active_pids=set(candidates)
+    for cache in (_PID_HAND_ADDRESS_CACHE,_LAST_FAILED_SCAN,
+                  _PID_SCAN_PROGRESS,_PID_PENDING_HANDS,
+                  _PID_CONFIRMED_READ_FAILURES):
+        for old_pid in tuple(cache):
+            if old_pid not in active_pids:
+                cache.pop(old_pid,None)
     if preferred_pid is not None:
         if preferred_pid not in candidates:
             return {"ready":False,"status":"Processo ePSXe iniciado não encontrado",
@@ -195,98 +214,121 @@ def read_hand_from_epsxe(*, preferred_pid: int | None=None,
                                         buffer,size,ctypes.byref(read))
             return buffer.raw if ok and read.value==size else None
 
-        # Prefer the original known 2.0.x address and recheck twice.
-        first=decode_hand(read_at(HAND_ADDRESS,HAND_BYTES))
-        if first is not None:
-            second=decode_hand(read_at(HAND_ADDRESS,HAND_BYTES))
-            if second is None or second!=first:
-                return {"ready":False,
-                        "status":"Mão em transição — aguardando estabilidade",
-                        "hand_ids":None,"pid":pid}
-            _PID_HAND_ADDRESS_CACHE[pid]=HAND_ADDRESS
-            _LAST_FAILED_SCAN.pop(pid,None)
-            _PID_SCAN_PROGRESS.pop(pid,None)
-            return {"ready":True,"status":"Mão estável: duas leituras válidas",
-                    "hand_ids":second,"pid":pid,"ramLayout":"legacy"}
-
+        # ONLY a candidate that already demonstrated actual card changes in
+        # previous polls may be treated as the live RAM pointer. Two immediate
+        # identical reads alone are insufficient: they accept static buffers.
         cached=_PID_HAND_ADDRESS_CACHE.get(pid)
-        if cached is not None and cached!=HAND_ADDRESS:
-            result=choose_stable_hand(read_at,[cached])
-            if result["hand_ids"] is not None:
-                _PID_SCAN_PROGRESS.pop(pid,None)
-                return {"ready":True,
-                        "status":"Mão estável em layout ePSXe alternativo",
-                        "hand_ids":result["hand_ids"],"pid":pid,
-                        "ramLayout":"dynamic"}
-        _PID_HAND_ADDRESS_CACHE.pop(pid,None)
-        scan_detail=None
-        if candidate_addresses is not None:
-            addresses=list(candidate_addresses)
-        else:
-            now=monotonic()
-            last=_LAST_FAILED_SCAN.get(pid)
-            if last is not None and now-last<RESCAN_AFTER_SECONDS:
+        if cached is not None:
+            validated=choose_stable_hand(read_at,[cached])
+            if validated["hand_ids"] is not None:
+                _PID_CONFIRMED_READ_FAILURES.pop(pid,None)
+                return {"ready":True,"status":"Mão ao vivo confirmada",
+                        "hand_ids":validated["hand_ids"],"pid":pid,
+                        "ramLayout":"legacy" if cached==HAND_ADDRESS else "dynamic"}
+            misses=_PID_CONFIRMED_READ_FAILURES.get(pid,0)+1
+            if misses<2:
+                _PID_CONFIRMED_READ_FAILURES[pid]=misses
                 return {"ready":False,
-                        "status":"ePSXe detectado; procurando outras regiões da RAM",
+                        "status":"RAM em transição — verificando endereço conhecido",
                         "hand_ids":None,"pid":pid}
-            regions=readable_regions(kernel,handle)
-            if not regions:
-                _LAST_FAILED_SCAN[pid]=monotonic()
-                _PID_SCAN_PROGRESS.pop(pid,None)
-                return {"ready":False,
-                        "status":"ePSXe detectado, mas nenhuma região RAM acessível",
-                        "hand_ids":None,"pid":pid}
-            # Shortcut: candidate PlayStation RAM at committed region start.
-            # This is a heuristic only: choose_stable_hand still double-reads.
-            fast=probe_region_hand_anchors(read_at,regions)
-            fast_check=choose_stable_hand(read_at,fast)
-            if fast_check["status"]=="ambiguous_ram_mapping":
-                return {"ready":False,
-                        "status":"Várias mãos plausíveis na RAM; identificação ambígua",
-                        "hand_ids":None,"pid":pid}
-            if fast_check["hand_ids"] is not None:
-                addresses=fast
-            else:
-                # Continue a large process's memory scan across polls instead
-                # of starting from byte 0 after every 48 MiB budget.
-                fingerprint=hash(tuple(regions))
-                saved=_PID_SCAN_PROGRESS.get(pid)
-                cursor=saved[1] if saved is not None and saved[0]==fingerprint else None
-                scan_detail=discover_hand_addresses(
-                    read_at,regions,cursor=cursor,report_progress=True)
-                addresses=scan_detail["addresses"]
-                if scan_detail["cursor"] is None:
-                    _PID_SCAN_PROGRESS.pop(pid,None)
-                else:
-                    _PID_SCAN_PROGRESS[pid]=(fingerprint,scan_detail["cursor"])
-                    if len(_PID_SCAN_PROGRESS)>32:
-                        # Avoid unbounded state on machines with many ePSXe PIDs.
-                        keep=_PID_SCAN_PROGRESS[pid]
-                        _PID_SCAN_PROGRESS.clear()
-                        _PID_SCAN_PROGRESS[pid]=keep
-        result=choose_stable_hand(read_at,addresses)
-        if result["hand_ids"] is not None:
-            _PID_HAND_ADDRESS_CACHE[pid]=result["address"]
+            # Old pointer is invalid twice; resume discovery, never show a
+            # previous hand and never accept a stale cache as positive proof.
+            _PID_HAND_ADDRESS_CACHE.pop(pid,None)
+            _PID_CONFIRMED_READ_FAILURES.pop(pid,None)
+            _PID_PENDING_HANDS.pop(pid,None)
             _LAST_FAILED_SCAN.pop(pid,None)
             _PID_SCAN_PROGRESS.pop(pid,None)
-            if len(_PID_HAND_ADDRESS_CACHE)>32:
-                _PID_HAND_ADDRESS_CACHE.clear()
-                _PID_HAND_ADDRESS_CACHE[pid]=result["address"]
-            return {"ready":True,"status":"Mão reconhecida nesta versão do ePSXe",
-                    "hand_ids":result["hand_ids"],"pid":pid,"ramLayout":"dynamic"}
+
+        now=monotonic()
+        pending=_PID_PENDING_HANDS.setdefault(pid,{})
+        for address,(old_ids,first_seen) in tuple(pending.items()):
+            if now-first_seen>PENDING_HAND_TTL_SECONDS:
+                pending.pop(address,None)
+
+        changed=[]
+        checked=set()
+
+        def observe(address):
+            if type(address) is not int or address<0x10000 or address in checked:
+                return
+            checked.add(address)
+            pair=choose_stable_hand(read_at,[address])
+            ids=pair["hand_ids"]
+            if ids is None:
+                return
+            new_ids=tuple(ids)
+            previous=pending.get(address)
+            if previous is not None and previous[0]!=new_ids:
+                # A genuine inter-poll change. Do not confuse two consecutive
+                # reads of an UNCHANGED stale hand with proof of activity.
+                changed.append((address,ids))
+            elif previous is None and len(pending)<MAX_PENDING_HANDS_PER_PID:
+                pending[address]=(new_ids,now)
+
+        # Revisit EVERY provisional address before looking for more. Static
+        # copies stay provisional and do NOT prevent discovery of the real RAM.
+        for address in tuple(pending):
+            observe(address)
+
+        # Legacy address remains an inexpensive candidate, not a privileged
+        # auto-confirmation. Explicit candidate_addresses is a test seam.
         if candidate_addresses is None:
-            _LAST_FAILED_SCAN[pid]=monotonic()
-            if len(_LAST_FAILED_SCAN)>32:
-                _LAST_FAILED_SCAN.clear()
-        if result["status"]=="ambiguous_ram_mapping":
-            return {"ready":False,
-                    "status":"RAM ambígua; não é seguro selecionar um endereço",
-                    "hand_ids":None,"pid":pid}
-        if scan_detail is not None and scan_detail["cursor"] is not None:
-            status="ePSXe detectado; busca de RAM continua em outros blocos"
+            observe(HAND_ADDRESS)
+            last=_LAST_FAILED_SCAN.get(pid)
+            if last is None or now-last>=RESCAN_AFTER_SECONDS:
+                regions=readable_regions(kernel,handle)
+                if regions:
+                    for address in probe_region_hand_anchors(read_at,regions):
+                        observe(address)
+                    fingerprint=hash(tuple(regions))
+                    saved=_PID_SCAN_PROGRESS.get(pid)
+                    cursor=(saved[1] if saved is not None
+                            and saved[0]==fingerprint else None)
+                    page=discover_hand_addresses(
+                        read_at,regions,cursor=cursor,report_progress=True)
+                    for address in page["addresses"]:
+                        observe(address)
+                    if page["cursor"] is None:
+                        _PID_SCAN_PROGRESS.pop(pid,None)
+                    else:
+                        _PID_SCAN_PROGRESS[pid]=(fingerprint,page["cursor"])
+                else:
+                    _PID_SCAN_PROGRESS.pop(pid,None)
+                _LAST_FAILED_SCAN[pid]=now
         else:
-            status="ePSXe detectado; estrutura de cinco cartas não validada"
-        return {"ready":False,"status":status,
-                "hand_ids":None,"pid":pid}
+            for address in candidate_addresses:
+                observe(address)
+
+        if len(changed)>1:
+            # Mirrored/changeable copies cannot be distinguished without a
+            # separate in-game signal. Never choose one arbitrarily.
+            return {"ready":False,
+                    "status":"Mais de uma mão muda na RAM; mapeamento ambíguo",
+                    "hand_ids":None,"pid":pid}
+        if len(changed)==1:
+            address,ids=changed[0]
+            _PID_HAND_ADDRESS_CACHE[pid]=address
+            _PID_CONFIRMED_READ_FAILURES.pop(pid,None)
+            _PID_PENDING_HANDS.pop(pid,None)
+            _PID_SCAN_PROGRESS.pop(pid,None)
+            _LAST_FAILED_SCAN.pop(pid,None)
+            if len(_PID_HAND_ADDRESS_CACHE)>32:
+                keep=_PID_HAND_ADDRESS_CACHE[pid]
+                _PID_HAND_ADDRESS_CACHE.clear()
+                _PID_HAND_ADDRESS_CACHE[pid]=keep
+            return {"ready":True,
+                    "status":"RAM confirmada após mudança real da mão",
+                    "hand_ids":ids,"pid":pid,
+                    "ramLayout":"legacy" if address==HAND_ADDRESS else "dynamic"}
+
+        if len(pending)>1:
+            status="Múltiplos candidatos de RAM; aguardando mudança real da mão"
+        elif pending:
+            status="RAM candidata localizada; jogue uma carta para confirmar a mão"
+        elif pid in _PID_SCAN_PROGRESS:
+            status="ePSXe detectado; buscando estrutura da mão em outros blocos"
+        else:
+            status="ePSXe detectado; mão real ainda não localizada"
+        return {"ready":False,"status":status,"hand_ids":None,"pid":pid}
     finally:
         kernel.CloseHandle(handle)
