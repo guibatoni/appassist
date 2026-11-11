@@ -171,6 +171,13 @@ class PrivateUpdatesTests(unittest.TestCase):
                       "ProgramFiles":root,"ProgramW6432":"","LOCALAPPDATA":""})):
                 self.assertEqual(cli._gh_path(),str(exe))
 
+    def test_missing_cli_error_is_precise_not_hidden_as_generic_network_error(self):
+        with patch.object(cli,"_gh_path",side_effect=cli.PrivateUpdateUnavailable(
+                "GitHub CLI não encontrado. Execute gh auth login.")):
+            with self.assertRaisesRegex(cli.PrivateUpdateUnavailable,
+                                         "GitHub CLI não encontrado"):
+                cli._run(["version"],timeout=5)
+
     def test_gh_cli_process_is_noninteractive_and_does_not_log_secrets(self):
         fake=subprocess.CompletedProcess(
             args=["gh"],returncode=1,stdout=b"",stderr=b"some token")
@@ -191,7 +198,9 @@ class PrivateUpdatesTests(unittest.TestCase):
         self.assertIn('aria-label="Atualizar agora"',ui)
         self.assertIn("api.install_preview_update()",ui)
         self.assertIn("api.install_portable_update()",ui)
-        self.assertNotIn("gh auth",ui)
+        self.assertIn("gh auth login",ui)
+        self.assertNotIn("api.gh_auth(",ui)
+        self.assertNotIn("subprocess.run(",ui)
         self.assertIn("Move-Item -LiteralPath $target",staged)
         self.assertIn("Start-Process -FilePath $exe -WorkingDirectory $old -PassThru",staged)
         self.assertIn("Rollback concluído;",staged)

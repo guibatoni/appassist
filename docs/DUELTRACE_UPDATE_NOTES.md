@@ -21,6 +21,8 @@
 - Pacotes ZIP verificados substituem o aplicativo na pasta existente e reiniciam o DUELTRACE.
 
 ## Correções
+- **Janela principal:** toda a faixa superior do DUELTRACE pode ser usada para clicar e arrastar a janela, inclusive sobre o logotipo; botões de atualização, minimizar, maximizar e fechar continuam independentes.
+- **Atualizações privadas:** quando não houver autenticação no GitHub CLI, a janela mostra instruções práticas (`gh auth login` e `gh auth status`) com aviso, em vez de um sinal de sucesso enganoso.
 - **Janela sem barra de título:** restauração das bordas nativas de redimensionamento do Windows; agora deve ser possível arrastar laterais e cantos, sem alterar o visual do cabeçalho.
 - **Atualizações:** painel de versões centralizado, fora da rolagem que escondia conteúdo; mensagens claras quando o acesso ao GitHub privado não está configurado.
 - **Mão ao vivo no ePSXe:** uma cópia estática com cinco IDs plausíveis não é mais tomada como a mão verdadeira. O DUELTRACE aguarda uma mudança real de carta entre consultas antes de confirmar o endereço, enquanto continua procurando outros candidatos.

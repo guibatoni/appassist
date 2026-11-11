@@ -31,20 +31,26 @@ function Logo() {
 
 export function TopBar() {
   return (
-    <header className="sticky top-0 z-[60] flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 rounded-t-2xl border-b border-line/40 bg-[#040b1f]/95 px-2 py-2 backdrop-blur-xl sm:gap-x-3 sm:px-5 sm:py-3 lg:px-6">
-      <div className="pywebview-drag-region order-1 flex min-w-0 flex-1 cursor-grab select-none items-center">
+    <header className="relative sticky top-0 z-[60] flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 rounded-t-2xl border-b border-line/40 bg-[#040b1f]/95 px-2 py-2 backdrop-blur-xl sm:gap-x-3 sm:px-5 sm:py-3 lg:px-6">
+      {/* Full-height native drag surface. Logo is pointer-transparent while
+          interactive controls sit above this surface and stay clickable.
+          Using a dedicated target avoids pywebview treating a nested button
+          click as a window drag. Works for both 16:9 and portrait headers. */}
+      <div className="pywebview-drag-region absolute inset-0 z-0 cursor-grab select-none active:cursor-grabbing"
+        aria-hidden="true" title="Arraste para mover o DUELTRACE" />
+      <div className="pointer-events-none relative z-10 order-1 flex min-w-0 flex-1 select-none items-center">
         <Logo />
       </div>
       {/* On portrait/narrow windows, navigation and update controls must not
           crowd or push the native Close button outside the viewport. */}
-      <div className="order-3 flex min-w-0 w-full items-center justify-start gap-2 sm:order-2 sm:w-auto sm:shrink-0 sm:justify-end">
+      <div className="relative z-10 order-3 flex min-w-0 w-full items-center justify-start gap-2 sm:order-2 sm:w-auto sm:shrink-0 sm:justify-end">
         <UpdateChecker />
         <div className="hidden items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary 2xl:flex">
           <ShieldCheck className="size-5" />
           <span>Interface local · Windows</span>
         </div>
       </div>
-      <div className="order-2 shrink-0 sm:order-3">
+      <div className="relative z-10 order-2 shrink-0 sm:order-3">
         <WindowControls />
       </div>
     </header>

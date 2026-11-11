@@ -68,13 +68,22 @@ def _env() -> dict[str, str]:
 
 
 def _run(args: list[str], *, timeout: int) -> bytes:
+    # Resolve the executable before the subprocess try block. Previously
+    # PrivateUpdateUnavailable (an OSError subclass) was caught here and
+    # replaced by the vague "GitHub privado indisponível" error even when
+    # GitHub CLI was simply missing from Windows.
+    executable=_gh_path()
     try:
         completed = subprocess.run(
-            [_gh_path(), *args], capture_output=True, check=False, timeout=timeout,
+            [executable, *args], capture_output=True, check=False, timeout=timeout,
             env=_env(), shell=False)
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except subprocess.TimeoutExpired as exc:
         raise PrivateUpdateUnavailable(
-            "GitHub privado indisponível. Verifique a conexão e o acesso do GitHub CLI."
+            "O GitHub CLI não respondeu. Verifique a conexão com a internet."
+        ) from exc
+    except OSError as exc:
+        raise PrivateUpdateUnavailable(
+            "O GitHub CLI está instalado, mas não pôde ser executado no Windows."
         ) from exc
     if completed.returncode != 0:
         # Never print stderr: GitHub can echo details from local auth config.

@@ -199,6 +199,11 @@ def main():
         raise OSError("A interface desktop nativa está disponível apenas no Windows.")
     import webview
 
+    # On frameless WinForms windows, the drag selector can otherwise catch
+    # mouse-down on a nested button. Only the literal drag overlay is allowed
+    # to start movement. Close/maximize/update remain real clickable controls.
+    webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"]=True
+
     work_width,work_height=windows_work_area()
     main_size=window_geometry(work_width,work_height)
     static=assets_path()
