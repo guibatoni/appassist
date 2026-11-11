@@ -15,11 +15,12 @@ import webbrowser
 from dueltrace_preview_updates import (
     fetch_latest_preview, installed_preview_build_id, version_for_branch
 )
+from dueltrace_public_distribution import PUBLIC_UPDATES_API, PUBLIC_UPDATES_WEB
 
 CURRENT_VERSION = "0.9.7"
 CURRENT_CHANNEL = "preview"
-RELEASE_API = "https://api.github.com/repos/guibatoni/appassist/releases/latest"
-RELEASE_PAGE = "https://github.com/guibatoni/appassist/releases"
+RELEASE_API = PUBLIC_UPDATES_API + "/releases/latest"
+RELEASE_PAGE = PUBLIC_UPDATES_WEB + "/releases"
 MAX_RESPONSE_BYTES = 256 * 1024
 VERSION_PATTERN = re.compile(r"^v?(\d{1,4})\.(\d{1,4})\.(\d{1,4})$")
 
@@ -55,15 +56,6 @@ def fetch_stable_release() -> dict:
             if length and int(length) > MAX_RESPONSE_BYTES:
                 raise ValueError("Resposta de atualização excede limite.")
             body = response.read(MAX_RESPONSE_BYTES + 1)
-    except urllib.error.HTTPError as exc:
-        if exc.code not in (401,403,404):
-            raise
-        # GitHub private repos are invisible to anonymous requests.
-        # Use a locally authorized GitHub CLI, NEVER a token in the binary.
-        from dueltrace_private_update_source import read_private_release_metadata
-        result = dict(read_private_release_metadata(stable=True))
-        result["_dueltrace_source"] = "gh_cli"
-        return result
     if len(body) > MAX_RESPONSE_BYTES:
         raise ValueError("Resposta de atualização excede limite.")
     data = json.loads(body.decode("utf-8"))
@@ -106,7 +98,7 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
         latest = parse_version(tag)
         if latest is None:
             raise ValueError("Tag de release não reconhecida.")
-        expected_page = f"https://github.com/guibatoni/appassist/releases/tag/{tag}"
+        expected_page = f"{PUBLIC_UPDATES_WEB}/releases/tag/{tag}"
         if release.get("html_url") != expected_page:
             raise ValueError("Origem da release não corresponde ao repositório oficial.")
         result["latestStable"] = tag
@@ -227,13 +219,7 @@ def check_for_updates(*, fetcher=None, preview_fetcher=None, installed_run_id=No
 
 
 def open_official_releases(run_id: int | None = None) -> bool:
-    """Abre apenas releases ou um ID numérico de Actions do repositório oficial."""
-    if run_id is not None:
-        if type(run_id) is not int or not 0 <= run_id < 10**15:
-            raise ValueError("ID do build inválido.")
-        url = (f"https://github.com/guibatoni/appassist/actions/runs/{run_id}"
-               if run_id else
-               "https://github.com/guibatoni/appassist/actions/workflows/validar-webui-desktop.yml")
-    else:
-        url = RELEASE_PAGE
-    return bool(webbrowser.open(url, new=2))
+    """Open only the public binary releases channel, never the private source."""
+    if run_id is not None and (type(run_id) is not int or not 0<=run_id<10**15):
+        raise ValueError("ID do build inválido.")
+    return bool(webbrowser.open(RELEASE_PAGE, new=2))

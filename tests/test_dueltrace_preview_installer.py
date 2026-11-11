@@ -19,14 +19,16 @@ PAYLOAD=b"trusted-test-zip"
 
 
 def release(*,tag=TAG,payload=PAYLOAD,sha=SHA):
+    run=int(tag.rsplit("-r",1)[1]) if "-r" in tag else RUN
+    body=f"Versão de teste.\n\nBuild {run} | Commit {sha} | SHA-256 ZIP: {hashlib.sha256(payload).hexdigest()}"
     return {"tag_name":tag,"draft":False,"prerelease":True,
-            "target_commitish":sha,
-            "html_url":f"https://github.com/guibatoni/appassist/releases/tag/{tag}",
+            "target_commitish":"main","body":body,
+            "html_url":f"https://github.com/guibatoni/dueltrace-releases/releases/tag/{tag}",
             "assets":[{
                 "name":updater.ASSET_NAME,"size":len(payload),
                 "digest":"sha256:"+hashlib.sha256(payload).hexdigest(),
                 "browser_download_url":
-                    f"https://github.com/guibatoni/appassist/releases/download/{tag}/{updater.ASSET_NAME}"
+                    f"https://github.com/guibatoni/dueltrace-releases/releases/download/{tag}/{updater.ASSET_NAME}"
             }]}
 
 
@@ -50,7 +52,7 @@ class PreviewInstallerTests(unittest.TestCase):
         self.assertEqual(result["version"],"0.8.5")
         self.assertEqual(result["run_id"],RUN)
         self.assertEqual(result["sha"],SHA)
-        self.assertTrue(result["url"].startswith("https://github.com/guibatoni/appassist/"))
+        self.assertTrue(result["url"].startswith("https://github.com/guibatoni/dueltrace-releases/"))
 
     def test_no_rollback_equal_version_or_ambiguous_same_build(self):
         self.assertIsNone(updater.select_preview_release(release(),"0.9.0",1))
@@ -62,7 +64,7 @@ class PreviewInstallerTests(unittest.TestCase):
         template=release()
         for malformed in (
             {**template,"html_url":"https://elsewhere.example"},
-            {**template,"target_commitish":"not-sha"},
+            {**template,"body":"Build inválido"},
             {**template,"draft":True},
             {**template,"prerelease":False},
             {**template,"assets":[]},
@@ -102,7 +104,7 @@ class PreviewInstallerTests(unittest.TestCase):
         result=updater.fetch_latest_preview_package(
             current_version="0.8.4",fetcher=lambda:[
                 {"tag_name":"v0.6.6","prerelease":False},
-                {**release(),"target_commitish":"notsha"},
+                {**release(),"body":"Build inválido"},
                 release()])
         self.assertEqual(result["run_id"],RUN)
         with self.assertRaises(updater.UnsafeUpdate):
@@ -353,13 +355,14 @@ class PreviewInstallerTests(unittest.TestCase):
         asset=updater.STABLE_ASSET_NAME
         stable={
             "tag_name":version,"draft":False,"prerelease":False,
-            "target_commitish":sha,
-            "html_url":f"https://github.com/guibatoni/appassist/releases/tag/{version}",
+            "target_commitish":"main",
+            "body":f"Build 999 | Commit {sha} | SHA-256 ZIP: {hashlib.sha256(payload).hexdigest()}",
+            "html_url":f"https://github.com/guibatoni/dueltrace-releases/releases/tag/{version}",
             "assets":[{
                 "name":asset,"size":len(payload),
                 "digest":"sha256:"+hashlib.sha256(payload).hexdigest(),
                 "browser_download_url":
-                    f"https://github.com/guibatoni/appassist/releases/download/{version}/{asset}",
+                    f"https://github.com/guibatoni/dueltrace-releases/releases/download/{version}/{asset}",
             }],
         }
         info=updater.select_portable_stable_release(stable,"0.8.5")
@@ -380,17 +383,18 @@ class PreviewInstallerTests(unittest.TestCase):
         filename=updater.STABLE_ASSET_NAME
         valid={
             "tag_name":version,"draft":False,"prerelease":False,
-            "target_commitish":"b"*40,
-            "html_url":f"https://github.com/guibatoni/appassist/releases/tag/{version}",
+            "target_commitish":"main",
+            "body":"Build 999 | Commit "+("b"*40)+" | SHA-256 ZIP: "+("f"*64),
+            "html_url":f"https://github.com/guibatoni/dueltrace-releases/releases/tag/{version}",
             "assets":[{
                 "name":filename,"size":1200,"digest":"sha256:"+"f"*64,
-                "browser_download_url":f"https://github.com/guibatoni/appassist/releases/download/{version}/{filename}",
+                "browser_download_url":f"https://github.com/guibatoni/dueltrace-releases/releases/download/{version}/{filename}",
             }],
         }
         for change in (
             {"html_url":"https://elsewhere.example"},
             {"prerelease":True},
-            {"target_commitish":"not-a-hash"},
+            {"body":"Build inválido"},
             {"assets":[{**valid["assets"][0],"digest":None}]},
             {"assets":[{**valid["assets"][0],"browser_download_url":"https://evil.example"}]},
         ):

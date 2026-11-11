@@ -1,0 +1,28 @@
+DUELTRACE — ATUALIZAÇÃO PARA CLIENTES WINDOWS
+
+Este pacote foi disponibilizado no canal de distribuição de executáveis.
+Ele não contém o repositório de código-fonte do desenvolvedor.
+
+O aplicativo verifica a origem oficial, o tamanho, o SHA-256 e a identidade
+do build antes de instalar. A publicação exige assinatura Authenticode de
+editor confiável e verificação Microsoft Defender.
+
+Para atualizar futuras versões:
+1. Abra o DUELTRACE.
+2. Clique em Atualizações.
+3. Quando houver uma versão verificada, clique em Atualizar agora.
+
+O DUELTRACE substitui somente os arquivos próprios na pasta em uso,
+preserva os dados locais e tenta restaurar a versão anterior se o
+reinício falhar. Não mova ISOs para a pasta _internal do aplicativo.
+
+Não desative o antivírus, SmartScreen ou a proteção do Windows.
+Caso uma verificação falhe, interrompa a instalação e contate o suporte.
+
+O download da release é público. Isso não substitui o controle de
+licenciamento do aplicativo, caso o acesso seja vendido separadamente.
+
+Distribuição de executáveis:
+https://github.com/guibatoni/dueltrace-releases/releases
+
+Batoni Dev

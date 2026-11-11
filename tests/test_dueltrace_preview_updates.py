@@ -234,7 +234,7 @@ class PreviewUpdaterTests(unittest.TestCase):
         with patch("dueltrace_update_checker.webbrowser.open",return_value=True) as op:
             self.assertTrue(open_official_releases(120))
             op.assert_called_with(
-                "https://github.com/guibatoni/appassist/actions/runs/120",new=2)
+                "https://github.com/guibatoni/dueltrace-releases/releases",new=2)
             self.assertTrue(open_official_releases(0))
         for bad in ("120",-1,10**15,True):
             with self.assertRaises(ValueError):

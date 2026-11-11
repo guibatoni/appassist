@@ -23,7 +23,11 @@ from urllib.parse import urlsplit
 from dueltrace_update_checker import CURRENT_VERSION, parse_version
 from dueltrace_patch_notes import summarize_patch_notes
 from dueltrace_preview_updates import (
-    REPO_API, REPO_WEB, BUILD_INFO_FILE, _get_json, installed_preview_build_id,
+    BUILD_INFO_FILE, _get_json, installed_preview_build_id,
+)
+from dueltrace_public_distribution import (
+    PUBLIC_UPDATES_API as REPO_API, PUBLIC_UPDATES_WEB as REPO_WEB,
+    verified_source_identity,
 )
 from dueltrace_signed_install import TrustedRedirect, TRUSTED_HOSTS, UnsafeUpdate
 
@@ -57,9 +61,6 @@ def select_preview_release(release: dict, current_version: str,
         return None
     if release.get("html_url") != f"{REPO_WEB}/releases/tag/{tag}":
         raise UnsafeUpdate("Origem da pré-release não é a oficial.")
-    sha=release.get("target_commitish")
-    if not isinstance(sha,str) or not SHA.fullmatch(sha):
-        raise UnsafeUpdate("Commit de origem da release não identificado.")
     assets=release.get("assets")
     if not isinstance(assets,list):
         raise UnsafeUpdate("Release sem arquivos.")
@@ -74,7 +75,11 @@ def select_preview_release(release: dict, current_version: str,
             type(a.get("size")) is not int or
             not 0<a["size"]<=MAX_ARCHIVE):
         raise UnsafeUpdate("URL, tamanho ou SHA-256 da Preview inválidos.")
-    return {"tag":tag,"version":version,"run_id":run_id,"sha":sha,
+    try:
+        audited_run,sha=verified_source_identity(release.get("body"),parsed.group(1),run_id)
+    except ValueError as exc:
+        raise UnsafeUpdate(str(exc)) from exc
+    return {"tag":tag,"version":version,"run_id":audited_run,"sha":sha,
             "url":url,"sha256":parsed.group(1),"size":a["size"],
             "page":release["html_url"],
             "patchNotes":summarize_patch_notes(release.get("body"))}
@@ -83,18 +88,9 @@ def select_preview_release(release: dict, current_version: str,
 def fetch_latest_preview_package(*, current_version: str = CURRENT_VERSION,
                                  installed_run_id: int | None = None,
                                  fetcher=None) -> dict | None:
-    private_cli=False
-    if fetcher is not None:
-        data=fetcher()
-    else:
-        try:
-            data=_get_json(PREVIEW_LIST,list)
-        except urllib.error.HTTPError as exc:
-            if exc.code not in (401,403,404):
-                raise
-            from dueltrace_private_update_source import read_private_release_metadata
-            data=read_private_release_metadata()
-            private_cli=True
+    # Public binary distribution, always anonymous. Never prompt customers to
+    # authenticate to the private source repository or embed a GitHub token.
+    data=fetcher() if fetcher is not None else _get_json(PREVIEW_LIST,list)
     if not isinstance(data,list):
         raise UnsafeUpdate("Lista de pré-releases do GitHub inválida.")
     eligible=[]
@@ -107,8 +103,6 @@ def fetch_latest_preview_package(*, current_version: str = CURRENT_VERSION,
         try:
             candidate=select_preview_release(r,current_version,installed_run_id)
             if candidate:
-                if private_cli:
-                    candidate["transport"]="gh_cli"
                 eligible.append(candidate)
         except UnsafeUpdate:
             continue
@@ -132,9 +126,6 @@ def select_portable_stable_release(release: dict, current_version: str,
         return None
     if release.get("html_url")!=f"{REPO_WEB}/releases/tag/{tag}":
         raise UnsafeUpdate("Origem estável não autorizada.")
-    sha=release.get("target_commitish")
-    if type(sha) is not str or not SHA.fullmatch(sha):
-        raise UnsafeUpdate("Release sem commit SHA completo.")
     assets=release.get("assets")
     matches=([a for a in assets if isinstance(a,dict)
               and a.get("name")==STABLE_ASSET_NAME]
@@ -149,6 +140,10 @@ def select_portable_stable_release(release: dict, current_version: str,
             or not 0<item["size"]<=MAX_ARCHIVE
             or item.get("browser_download_url")!=url):
         raise UnsafeUpdate("ZIP estável sem SHA-256 ou endereço oficial.")
+    try:
+        _source_run,sha=verified_source_identity(release.get("body"),digest_match.group(1))
+    except ValueError as exc:
+        raise UnsafeUpdate(str(exc)) from exc
     return {"tag":tag,"version":".".join(map(str,newer)),
             "run_id":None,"sha":sha,"url":url,
             "sha256":digest_match.group(1),"size":item["size"],
@@ -161,10 +156,7 @@ def fetch_portable_stable_package(*, current_version: str = CURRENT_VERSION,
                                  fetcher=None) -> dict | None:
     from dueltrace_update_checker import fetch_stable_release
     release=(fetcher or fetch_stable_release)()
-    candidate=select_portable_stable_release(release,current_version,installed_channel)
-    if candidate and release.get("_dueltrace_source")=="gh_cli":
-        candidate["transport"]="gh_cli"
-    return candidate
+    return select_portable_stable_release(release,current_version,installed_channel)
 
 
 def install_portable_stable_release(*, data_home: Path,
@@ -183,20 +175,8 @@ def install_portable_stable_release(*, data_home: Path,
 def download_preview_zip(info: dict, destination: Path, *, opener=None) -> Path:
     if destination.exists() or destination.is_symlink():
         raise UnsafeUpdate("Destino de download já existe.")
-    transport=info.get("transport")
-    if transport not in (None,"gh_cli"):
-        raise UnsafeUpdate("Transporte de atualização não autorizado.")
-    if transport=="gh_cli":
-        # Authenticated GitHub CLI is local to the maintainer's PC; the ZIP
-        # still passes the same SHA-256 + embedded build identity checks.
-        if opener is not None:
-            raise UnsafeUpdate("Transporte privado não aceita opener externo.")
-        from dueltrace_private_update_source import (
-            download_private_zip, ZIP_ASSET, STABLE_ZIP_ASSET)
-        asset=(STABLE_ZIP_ASSET if info.get("channel")=="stable" else ZIP_ASSET)
-        return download_private_zip(
-            info["tag"], asset, destination,
-            sha256=info["sha256"], expected_size=info["size"])
+    if info.get("transport") is not None:
+        raise UnsafeUpdate("Atualizações para clientes usam apenas download HTTPS público.")
     req=urllib.request.Request(info["url"],headers={
         "User-Agent":"DUELTRACE-Preview-Update/0.8.5",
         "Accept":"application/octet-stream"})
