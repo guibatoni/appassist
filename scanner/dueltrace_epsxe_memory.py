@@ -103,44 +103,115 @@ def readable_regions(kernel, handle) -> list[tuple[int,int]]:
     return regions
 
 
-def discover_hand_addresses(read_at, regions: list[tuple[int,int]], *,
-                            budget: int=MAX_SCAN_BYTES) -> list[int]:
-    """Scan limited readable regions for structural hand candidates.
+def probe_region_hand_anchors(read_at, regions, *, max_probes=512) -> list[int]:
+    """Fast, bounded checks of PS1 hand offset near host region boundaries.
 
-    The result contains HOST addresses, never exposed to the frontend/logs.
-    The caller must double-read and reject more than one stable candidate.
+    Some ePSXe versions map their 2MB PlayStation RAM directly at the base
+    of a readable allocation, others have a small 64KB suballocation offset.
+    Read only 140 bytes at each hypothesized hand location. A match must
+    still pass two stable strict reads in choose_stable_hand().
+    """
+    from fusion_ram_probe import decode_hand
+
+    if type(max_probes) is not int or not 1 <= max_probes <= 1024:
+        raise ValueError("Limite de sondas ePSXe inválido.")
+    found=[]
+    seen=set()
+    count=0
+    # These are probing hints, not evidence of the emulator's RAM location.
+    hints=(0,0x10000,0x20000,0x30000,0x40000,0x80000)
+    for base,size in regions[:MAX_REGIONS]:
+        if type(base) is not int or type(size) is not int or base<MIN_ADDRESS:
+            continue
+        for delta in hints:
+            if HAND_OFFSET+delta+HAND_BYTES>size:
+                continue
+            address=base+HAND_OFFSET+delta
+            if address in seen:
+                continue
+            seen.add(address)
+            count+=1
+            value=read_at(address,HAND_BYTES)
+            if decode_hand(value) is not None:
+                found.append(address)
+                if len(found)>=MAX_MATCHES:
+                    return found
+            if count>=max_probes:
+                return found
+    return found
+
+
+def discover_hand_addresses(read_at, regions: list[tuple[int,int]], *,
+                            budget: int=MAX_SCAN_BYTES,
+                            cursor: tuple[int,int] | None=None,
+                            report_progress: bool=False):
+    """Bounded scan for strict five-card structures, optionally resumable.
+
+    Old callers get an address list. With report_progress=True, the caller
+    receives the next (region index, byte offset) cursor. Each invocation
+    scans at most 'budget' bytes; later invocations can continue instead of
+    repeating the first 48 MiB forever on larger ePSXe allocations.
+
+    Cursor never becomes a trusted pointer: every candidate still requires
+    two fresh, matching reads before any hand IDs are returned.
     """
     if type(budget) is not int or not 0<budget<=MAX_SCAN_BYTES:
         raise ValueError("Limite de leitura da RAM inválido.")
+    if not isinstance(regions,list) or len(regions)>MAX_REGIONS:
+        raise ValueError("Lista de regiões RAM inválida.")
+    if cursor is not None and (
+            not isinstance(cursor,tuple) or len(cursor)!=2
+            or any(type(item) is not int or item<0 for item in cursor)
+            or cursor[0]>=len(regions)
+            or cursor[1]>=regions[cursor[0]][1]):
+        raise ValueError("Posição de retomada da RAM inválida.")
+    start_index,start_offset=cursor if cursor is not None else (0,0)
     found=[]
     seen=set()
     consumed=0
-    for start,size in regions[:MAX_REGIONS]:
+    next_cursor=None
+    complete=True
+    for index in range(start_index,len(regions)):
+        start,size=regions[index]
         if (type(start) is not int or type(size) is not int or
                 start<MIN_ADDRESS or size<HAND_BYTES):
             continue
-        cursor=0
-        while cursor<size and consumed<budget:
-            # 139-byte overlap preserves records split at chunk boundaries.
-            remaining=min(size-cursor,CHUNK+HAND_BYTES-1,budget-consumed)
-            if remaining<HAND_BYTES:
+        offset=start_offset if index==start_index else 0
+        while offset+HAND_BYTES<=size:
+            if budget-consumed<HAND_BYTES:
+                next_cursor=(index,offset)
+                complete=False
                 break
-            raw=read_at(start+cursor,remaining)
+            # 139-byte overlap preserves records crossing any chunk edge.
+            remaining=min(size-offset,CHUNK+HAND_BYTES-1,budget-consumed)
+            if remaining<HAND_BYTES:
+                next_cursor=(index,offset)
+                complete=False
+                break
+            raw=read_at(start+offset,remaining)
             consumed+=remaining
             if isinstance(raw,bytes) and len(raw)==remaining:
-                for off in _candidate_hand_offsets(raw):
-                    host=start+cursor+off
-                    # Host base must be plausible when translating PSX offsets.
+                for pos in _candidate_hand_offsets(raw):
+                    host=start+offset+pos
                     if host-HAND_OFFSET<MIN_ADDRESS or host in seen:
                         continue
                     seen.add(host)
                     found.append(host)
                     if len(found)>=MAX_MATCHES:
-                        return found
-            cursor+=max(1,remaining-(HAND_BYTES-1))
-        if consumed>=budget:
+                        complete=False
+                        next_cursor=(index,min(size-1,offset+1))
+                        break
+            if len(found)>=MAX_MATCHES:
+                break
+            if offset+remaining>=size:
+                offset=size
+            else:
+                offset+=max(1,remaining-(HAND_BYTES-1))
+        if not complete:
             break
-    return found
+    outcome={"addresses":found,"cursor":next_cursor,"completed":complete,
+             "scanned_bytes":consumed}
+    return outcome if report_progress else found
 
 
 def choose_stable_hand(read_at, addresses, *, max_candidates=128) -> dict:

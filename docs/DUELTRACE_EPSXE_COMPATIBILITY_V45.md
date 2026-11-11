@@ -75,3 +75,11 @@ estes exercitam layouts sintéticos variados em Win32/Win64.
 Se uma versão não produzir mão válida: informar a versão do ePSXe,
 indicar se o jogo está em duelo e fornecer somente o status mostrado
 pelo DUELTRACE. Não solicite credenciais nem despejos completos de RAM.
+
+## Correção v46 — varredura que não prosseguia
+
+Uma imagem real da interface demonstrou o ePSXe já em duelo com cinco cartas, enquanto a Central de Duelo não conseguia identificar a RAM. O scanner anterior tinha orçamento de leitura de 48 MiB por tentativa, mas **reiniciava sempre do começo** na tentativa seguinte. Se a mão estava em uma região posterior, jamais seria localizada.
+
+A versão v46 passa a salvar **apenas em RAM, por PID**, a posição de leitura e a assinatura da lista de regiões. A próxima leitura retoma desse ponto se a disposição das regiões não mudou; se mudou, reinicia com segurança. O limite de 48 MiB **por tentativa** continua, evitando travamentos, mas a cobertura progride entre as tentativas. Testes sintéticos incluem uma mão em posição posterior ao primeiro bloco e conferem que o estado do scanner é descartado quando a mão é validada.
+
+Também há sondas iniciais limitadas no deslocamento de mão PS1 para detectar rapidamente layouts simples, mantendo a validação por duas leituras. A mensagem de espera distingue ePSXe detectado de estrutura de mão ainda não validada. Não houve mudança de endereços de ISO, fórmulas de RANK ou permissões de escrita. Somente partidas reais nas versões específicas do usuário confirmam o funcionamento final.

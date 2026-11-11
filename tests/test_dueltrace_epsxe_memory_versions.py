@@ -11,16 +11,17 @@ import struct
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scanner"))
 from dueltrace_epsxe_memory import (
     HAND_BYTES,HAND_OFFSET, MEMORY_BASIC_INFORMATION,
     discover_hand_addresses,choose_stable_hand,readable_regions,
+    probe_region_hand_anchors,
 )
 from dueltrace_live_hand import (
     HAND_ADDRESS, is_epsxe_process_name, read_hand_from_epsxe,
-    _PID_HAND_ADDRESS_CACHE, _LAST_FAILED_SCAN,
+    _PID_HAND_ADDRESS_CACHE, _LAST_FAILED_SCAN, _PID_SCAN_PROGRESS,
 )
 
 
@@ -90,8 +91,10 @@ class EpsxeCompatibilityTests(unittest.TestCase):
     def setUp(self):
         _PID_HAND_ADDRESS_CACHE.clear()
         _LAST_FAILED_SCAN.clear()
+        _PID_SCAN_PROGRESS.clear()
         self.addCleanup(_PID_HAND_ADDRESS_CACHE.clear)
         self.addCleanup(_LAST_FAILED_SCAN.clear)
+        self.addCleanup(_PID_SCAN_PROGRESS.clear)
 
     def test_known_ePSXe_filename_styles_without_accepting_other_emulators(self):
         for name in (
@@ -188,6 +191,84 @@ class EpsxeCompatibilityTests(unittest.TestCase):
         self.assertFalse(second["ready"])
         self.assertIsNone(second["hand_ids"])
         self.assertNotIn(pid,_PID_HAND_ADDRESS_CACHE)
+
+    def test_resumable_scan_finds_hand_beyond_first_read_budget(self):
+        size=0x280000
+        region_start=0x600000
+        memory=bytearray(size)
+        hand_offset=0x1D2345
+        hand=[449,145,447,629,468]
+        memory[hand_offset:hand_offset+HAND_BYTES]=hand_blob(hand)
+        reader=lambda address, count: (
+            bytes(memory[address-region_start:address-region_start+count])
+            if region_start<=address and address+count<=region_start+size
+            else None)
+        regions=[(region_start,size)]
+        state=None
+        attempts=0
+        while True:
+            page=discover_hand_addresses(
+                reader,regions,budget=512*1024,
+                cursor=state,report_progress=True)
+            self.assertLessEqual(page["scanned_bytes"],512*1024)
+            attempts+=1
+            if page["addresses"]:
+                self.assertEqual(page["addresses"],[region_start+hand_offset])
+                self.assertEqual(
+                    choose_stable_hand(reader,page["addresses"])["hand_ids"],hand)
+                break
+            self.assertFalse(page["completed"],"A busca reiniciou antes da região real")
+            self.assertIsNotNone(page["cursor"])
+            self.assertNotEqual(state,page["cursor"])
+            state=page["cursor"]
+            self.assertLess(attempts,12)
+        self.assertGreater(attempts,2)
+
+    def test_reader_continues_next_scan_instead_of_starting_over(self):
+        from dueltrace_epsxe_memory import discover_hand_addresses as actual_scan
+        pid=59025
+        base=0x600000
+        image=bytearray(0x280000)
+        actual_offset=0x1D2345
+        cards=[461,16,635,10,123]
+        image[actual_offset:actual_offset+HAND_BYTES]=hand_blob(cards)
+        kernel=MappedKernel(base,bytes(image))
+        # Bound this test's page to 1 MiB to reproduce the previous
+        # problem without allocating or reading 50+ MiB in CI.
+        def page(reader,regions,**kw):
+            return actual_scan(reader,regions,budget=1024*1024,**kw)
+        with patch("dueltrace_live_hand.discover_hand_addresses",side_effect=page):
+            first=read_hand_from_epsxe(kernel=kernel,pids=[pid],
+                                       monotonic=lambda:100.0)
+            self.assertFalse(first["ready"])
+            self.assertIn("continua",first["status"])
+            self.assertIn(pid,_PID_SCAN_PROGRESS)
+            checkpoint=_PID_SCAN_PROGRESS[pid][1]
+            self.assertGreater(checkpoint[1],0)
+            kernel.read_addresses.clear()
+            second=read_hand_from_epsxe(kernel=kernel,pids=[pid],
+                                        monotonic=lambda:106.0)
+        self.assertTrue(second["ready"],second)
+        self.assertEqual(second["hand_ids"],cards)
+        self.assertNotIn(pid,_PID_SCAN_PROGRESS)
+        self.assertEqual(_PID_HAND_ADDRESS_CACHE[pid],base+actual_offset)
+        # No rescan of region start: only probes, legacy and continuation.
+        self.assertFalse(any(
+            address==base and length>=1024*1024
+            for address,length in kernel.read_addresses))
+
+    def test_small_anchor_probes_find_playstation_ram_fast(self):
+        base=0x700000
+        mem=bytearray(0x200000)
+        cards=[1,2,3,4,5]
+        mem[HAND_OFFSET:HAND_OFFSET+HAND_BYTES]=hand_blob(cards)
+        def reader(address,length):
+            pos=address-base
+            return bytes(mem[pos:pos+length]) if (
+                0<=pos and pos+length<=len(mem)) else None
+        matches=probe_region_hand_anchors(reader,[(base,len(mem))])
+        self.assertEqual(matches,[base+HAND_OFFSET])
+        self.assertEqual(choose_stable_hand(reader,matches)["hand_ids"],cards)
 
     def test_scan_bounds_reject_unlimited_read_and_spurious_data(self):
         reads=[]

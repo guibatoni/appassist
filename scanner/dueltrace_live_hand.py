@@ -14,6 +14,7 @@ from ctypes import wintypes
 
 from dueltrace_epsxe_memory import (
     HAND_OFFSET, readable_regions, discover_hand_addresses, choose_stable_hand,
+    probe_region_hand_anchors,
 )
 
 from fusion_ram_probe import decode_hand
@@ -28,7 +29,9 @@ TH32CS_SNAPPROCESS = 0x00000002
 # RAM layouts depend on emulator release, plugins and ASLR, not on ISO name.
 _PID_HAND_ADDRESS_CACHE: dict[int,int] = {}
 _LAST_FAILED_SCAN: dict[int,float] = {}
-RESCAN_AFTER_SECONDS = 7.0
+# Fingerprint of RAM regions plus scan cursor: never store outside this run.
+_PID_SCAN_PROGRESS: dict[int,tuple[int,tuple[int,int]]] = {}
+RESCAN_AFTER_SECONDS = 5.0
 EPSXE_IMAGE_PATTERN = re.compile(
     r"epsxe(?:[ ._-]?v?\d+(?:[._-]\d+)*)?(?:[._-](?:x86|x64|win32|win64|32|64))?\.exe\Z",
     re.IGNORECASE,
@@ -202,6 +205,7 @@ def read_hand_from_epsxe(*, preferred_pid: int | None=None,
                         "hand_ids":None,"pid":pid}
             _PID_HAND_ADDRESS_CACHE[pid]=HAND_ADDRESS
             _LAST_FAILED_SCAN.pop(pid,None)
+            _PID_SCAN_PROGRESS.pop(pid,None)
             return {"ready":True,"status":"Mão estável: duas leituras válidas",
                     "hand_ids":second,"pid":pid,"ramLayout":"legacy"}
 
@@ -209,11 +213,13 @@ def read_hand_from_epsxe(*, preferred_pid: int | None=None,
         if cached is not None and cached!=HAND_ADDRESS:
             result=choose_stable_hand(read_at,[cached])
             if result["hand_ids"] is not None:
+                _PID_SCAN_PROGRESS.pop(pid,None)
                 return {"ready":True,
                         "status":"Mão estável em layout ePSXe alternativo",
                         "hand_ids":result["hand_ids"],"pid":pid,
                         "ramLayout":"dynamic"}
         _PID_HAND_ADDRESS_CACHE.pop(pid,None)
+        scan_detail=None
         if candidate_addresses is not None:
             addresses=list(candidate_addresses)
         else:
@@ -221,15 +227,48 @@ def read_hand_from_epsxe(*, preferred_pid: int | None=None,
             last=_LAST_FAILED_SCAN.get(pid)
             if last is not None and now-last<RESCAN_AFTER_SECONDS:
                 return {"ready":False,
-                        "status":"Procurando RAM da versão do ePSXe; entre em um duelo",
+                        "status":"ePSXe detectado; procurando outras regiões da RAM",
                         "hand_ids":None,"pid":pid}
-            # Scan is bounded by 48 MiB and memory read is always read-only.
             regions=readable_regions(kernel,handle)
-            addresses=discover_hand_addresses(read_at,regions)
+            if not regions:
+                _LAST_FAILED_SCAN[pid]=monotonic()
+                _PID_SCAN_PROGRESS.pop(pid,None)
+                return {"ready":False,
+                        "status":"ePSXe detectado, mas nenhuma região RAM acessível",
+                        "hand_ids":None,"pid":pid}
+            # Shortcut: candidate PlayStation RAM at committed region start.
+            # This is a heuristic only: choose_stable_hand still double-reads.
+            fast=probe_region_hand_anchors(read_at,regions)
+            fast_check=choose_stable_hand(read_at,fast)
+            if fast_check["status"]=="ambiguous_ram_mapping":
+                return {"ready":False,
+                        "status":"Várias mãos plausíveis na RAM; identificação ambígua",
+                        "hand_ids":None,"pid":pid}
+            if fast_check["hand_ids"] is not None:
+                addresses=fast
+            else:
+                # Continue a large process's memory scan across polls instead
+                # of starting from byte 0 after every 48 MiB budget.
+                fingerprint=hash(tuple(regions))
+                saved=_PID_SCAN_PROGRESS.get(pid)
+                cursor=saved[1] if saved is not None and saved[0]==fingerprint else None
+                scan_detail=discover_hand_addresses(
+                    read_at,regions,cursor=cursor,report_progress=True)
+                addresses=scan_detail["addresses"]
+                if scan_detail["cursor"] is None:
+                    _PID_SCAN_PROGRESS.pop(pid,None)
+                else:
+                    _PID_SCAN_PROGRESS[pid]=(fingerprint,scan_detail["cursor"])
+                    if len(_PID_SCAN_PROGRESS)>32:
+                        # Avoid unbounded state on machines with many ePSXe PIDs.
+                        keep=_PID_SCAN_PROGRESS[pid]
+                        _PID_SCAN_PROGRESS.clear()
+                        _PID_SCAN_PROGRESS[pid]=keep
         result=choose_stable_hand(read_at,addresses)
         if result["hand_ids"] is not None:
             _PID_HAND_ADDRESS_CACHE[pid]=result["address"]
             _LAST_FAILED_SCAN.pop(pid,None)
+            _PID_SCAN_PROGRESS.pop(pid,None)
             if len(_PID_HAND_ADDRESS_CACHE)>32:
                 _PID_HAND_ADDRESS_CACHE.clear()
                 _PID_HAND_ADDRESS_CACHE[pid]=result["address"]
@@ -243,8 +282,11 @@ def read_hand_from_epsxe(*, preferred_pid: int | None=None,
             return {"ready":False,
                     "status":"RAM ambígua; não é seguro selecionar um endereço",
                     "hand_ids":None,"pid":pid}
-        return {"ready":False,
-                "status":"Mão indisponível; entre em duelo para reconhecer a RAM",
+        if scan_detail is not None and scan_detail["cursor"] is not None:
+            status="ePSXe detectado; busca de RAM continua em outros blocos"
+        else:
+            status="ePSXe detectado; estrutura de cinco cartas não validada"
+        return {"ready":False,"status":status,
                 "hand_ids":None,"pid":pid}
     finally:
         kernel.CloseHandle(handle)
