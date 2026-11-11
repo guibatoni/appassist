@@ -412,16 +412,25 @@ export type FusionPage = { total: number; offset: number; rows: FusionRow[]; pro
 
 export type FusionSearchScope = "all" | "result" | "material"
 
+export type CardFusionRole = "material" | "result"
+
 export type CardFusionSuggestions = {
   romSha: string | null
   cardId: number
+  role: CardFusionRole
   available: boolean
   total: number
   offset: number
   provisional: boolean
   rows: Array<{
-    partnerId: number
-    partnerName: string
+    materialAId: number
+    materialAName: string
+    materialAAtk: number | null
+    materialBId: number
+    materialBName: string
+    materialBAtk: number | null
+    partnerId: number | null
+    partnerName: string | null
     resultId: number
     resultName: string
     atk: number | null
@@ -878,7 +887,7 @@ export interface DesktopAPI {
   get_rank_comparison(): Promise<RankComparison>
   get_fusions(query: string, offset: number, limit: number, sort?: string, cardType?: string, searchScope?: FusionSearchScope): Promise<FusionPage>
   get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
-  get_card_fusions(cardId: number, offset?: number, limit?: number, sort?: "atk" | "name" | "id"): Promise<CardFusionSuggestions>
+  get_card_fusions(cardId: number, offset?: number, limit?: number, sort?: "atk" | "name" | "id", role?: CardFusionRole): Promise<CardFusionSuggestions>
   get_card_drop_sources(cardId: number): Promise<CardDropSources>
   get_rank_trace_status(): Promise<MipsTraceResult>
   import_rank_trace(duelId?: string | null): Promise<MipsTraceResult>
@@ -942,7 +951,7 @@ interface ProtectedNativeAPI {
   get_rank_comparison(token: string): Promise<RankComparison>
   get_fusions(token: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, searchScope?: FusionSearchScope): Promise<FusionPage>
   get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
-  get_card_fusions(token: string, cardId: number, offset?: number, limit?: number, sort?: "atk" | "name" | "id"): Promise<CardFusionSuggestions>
+  get_card_fusions(token: string, cardId: number, offset?: number, limit?: number, sort?: "atk" | "name" | "id", role?: CardFusionRole): Promise<CardFusionSuggestions>
   get_card_drop_sources(token: string, cardId: number): Promise<CardDropSources>
   get_rank_trace_status(token: string): Promise<MipsTraceResult>
   import_rank_trace(token: string, duelId?: string | null): Promise<MipsTraceResult>
@@ -1022,7 +1031,7 @@ export function desktopApi(): DesktopAPI | null {
     get_fusions: (query, offset, limit, sort, cardType, searchScope) =>
       native.get_fusions(token, query, offset, limit, sort, cardType, searchScope),
     get_drops: (opponentId, group, query, offset, limit, sort, cardType, rank) => native.get_drops(token, opponentId, group, query, offset, limit, sort, cardType, rank),
-    get_card_fusions: (cardId, offset=0, limit=8, sort="atk") => native.get_card_fusions(token, cardId, offset, limit, sort),
+    get_card_fusions: (cardId, offset=0, limit=8, sort="atk", role="material") => native.get_card_fusions(token, cardId, offset, limit, sort, role),
     get_card_drop_sources: (cardId) => native.get_card_drop_sources(token, cardId),
     get_rank_trace_status: () => native.get_rank_trace_status(token),
     import_rank_trace: (duelId) => native.import_rank_trace(token, duelId),
