@@ -160,11 +160,11 @@ export function CardHoverPreview({selection,sha,onClose}:{
             <h4 className="mb-1 text-xs font-semibold text-gold">
               {duplicateText?"Descrição / efeito":"Descrição"}
             </h4>
-            <p className="whitespace-pre-line break-words line-clamp-4 text-xs leading-relaxed text-foreground/85">{description}</p>
+            <p className="whitespace-pre-line break-words text-xs leading-relaxed text-foreground/85">{description}</p>
           </div>}
           {effect&&!duplicateText&&<div>
             <h4 className="mb-1 text-xs font-semibold text-gold">Efeito</h4>
-            <p className="whitespace-pre-line break-words line-clamp-4 text-xs leading-relaxed text-foreground/85">{effect}</p>
+            <p className="whitespace-pre-line break-words text-xs leading-relaxed text-foreground/85">{effect}</p>
           </div>}
         </div>:<p className="text-xs text-muted">Descrição e efeito não disponíveis para esta carta.</p>}
       </div>
