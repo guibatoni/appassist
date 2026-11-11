@@ -83,3 +83,20 @@ Abra `DUELTRACE-codigo-privado/dist/build-diagnostics/ULTIMA_FALHA.txt`
 e envie o texto exibido caso a compilacao ainda pare. **Nao** e necessario
 instalar Python 3.12 ou Node.js 22 para esse diagnostico. Nao desative
 a auditoria de seguranca apenas para forcar um ZIP publico.
+
+## Pip 26.1.2 detectado pela auditoria (PYSEC-2026-3721)
+
+Ambientes virtuais Python 3.14 criados anteriormente podem conter o pip
+26.1.2, que tem vulnerabilidade de segurança já corrigida. O compilador
+atualizado executa `python -m pip install --upgrade pip==26.3` **dentro do
+ambiente virtual local** antes de instalar as dependências do DUELTRACE e
+executar `python -m pip_audit --local`. Ele nunca ignora essa vulnerabilidade
+nem altera o pip global do Windows.
+
+Se o mesmo alerta aparecer novamente, confirme no log que a etapa de upgrade
+conseguiu obter o pip 26.3 do índice oficial do PyPI; problemas de rede ou
+proxy podem impedir a atualização e devem ser corrigidos, não ignorados.
+
+A verificação de vulnerabilidades permanece um bloqueio obrigatório para o
+pacote: uma falha interrompe a compilação, com diagnóstico detalhado em
+`dist/build-diagnostics/ULTIMA_FALHA.txt`.
