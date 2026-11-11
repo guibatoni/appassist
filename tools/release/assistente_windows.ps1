@@ -28,23 +28,31 @@ function Check-Windows {
 function Check-Tools {
     Check-Windows
     Require-Command "git" "Instale Git para Windows."
-    Require-Command "python" "Instale Python 3.12 e habilite no PATH."
     Require-Command "node" "Instale Node.js 22."
     Require-Command "npm.cmd" "Reinstale Node.js/npm."
+    if (!(Test-Path -LiteralPath $publisher -PathType Leaf) -or
+        !(Test-Path -LiteralPath (Join-Path $root "web/package-lock.json"))) {
+        throw "Abra o kit junto ao código privado completo do DUELTRACE."
+    }
+    # The user's default python.exe may be 3.14 (or another version).
+    # Bootstrap a separate Python 3.12 venv and temporarily prepend its Scripts
+    # directory to PATH. Never modify the system's default Python.
+    $pythonBootstrap=Join-Path $PSScriptRoot "python312_bootstrap.ps1"
+    if (!(Test-Path -LiteralPath $pythonBootstrap -PathType Leaf)) {
+        throw "Atualize a branch do DUELTRACE: módulo de preparação do Python 3.12 ausente."
+    }
+    & $pythonBootstrap
     $version=(& python -c "import sys; print('.'.join(map(str,sys.version_info[:3])))").Trim()
     if ($LASTEXITCODE -ne 0 -or $version -notmatch '^3\.12\.') {
-        throw "Utilize Python 3.12 no Windows (encontrado: $version)."
+        throw "Ambiente isolado incorreto: Python 3.12 obrigatório (encontrado: $version)."
     }
     $nodeVersion=(& node --version).Trim()
     if ($LASTEXITCODE -ne 0 -or $nodeVersion -notmatch '^v22\.') {
         throw "Utilize Node.js 22 (encontrado: $nodeVersion)."
     }
-    if (!(Test-Path -LiteralPath $publisher -PathType Leaf) -or
-        !(Test-Path -LiteralPath (Join-Path $root "web/package-lock.json"))) {
-        throw "Abra o kit junto ao código privado completo do DUELTRACE."
-    }
-    Write-Host "Ambiente: Python $version e Node $nodeVersion."
+    Write-Host "Ambiente do DUELTRACE: Python $version (isolado) e Node $nodeVersion."
 }
+
 function Check-Public-Repository([bool]$create) {
     Require-Command "gh" "Somente o publicador precisa do GitHub CLI."
     & gh auth status
