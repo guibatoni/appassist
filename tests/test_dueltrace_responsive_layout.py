@@ -113,6 +113,11 @@ class ResponsiveUiContracts(unittest.TestCase):
         self.assertIn("grid-cols-3",SIDE)
         self.assertIn("min-[600px]:grid-cols-5",SIDE)
         self.assertIn("lg:flex lg:flex-col",SIDE)
+        self.assertIn('dt-nav-sidebar',SIDE)
+        self.assertIn('dt-nav-list',SIDE)
+        self.assertIn('dt-nav-link',SIDE)
+        self.assertIn("@media (orientation: portrait) and (min-width: 1024px)",CSS)
+        self.assertIn(".dt-shell-body { flex-direction: column; }",CSS)
         for menu in ("Início","Biblioteca de Mods","Biblioteca de Cartas",
                      "Fusões","Drops"):
             self.assertIn(menu,SIDE)
