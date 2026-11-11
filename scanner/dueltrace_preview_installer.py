@@ -241,7 +241,7 @@ def unpack_preview_zip(archive: Path, directory: Path, info: dict) -> Path:
                 with z.open(entry) as src, target.open("xb") as dest:
                     while chunk:=src.read(1024*1024):
                         dest.write(chunk)
-        allowed={"DUELTRACE-WebUI.exe","_internal","LEIA-ME-SEGURANCA.txt"}
+        allowed={"DUELTRACE-WebUI.exe","_internal","LEIA-ME-SEGURANCA.txt","LEIA-ME-ATUALIZACAO.txt"}
         if any(child.name not in allowed for child in directory.iterdir()):
             raise UnsafeUpdate("Pacote contém arquivos inesperados fora de _internal.")
         exe=directory/"DUELTRACE-WebUI.exe"
@@ -292,7 +292,7 @@ $backup='@@BACKUP@@'
 $legacy='@@LEGACY@@'
 $log='@@LOG@@'
 $pidOld=@@PID@@
-$managed=@('DUELTRACE-WebUI.exe','_internal','LEIA-ME-SEGURANCA.txt')
+$managed=@('DUELTRACE-WebUI.exe','_internal','LEIA-ME-SEGURANCA.txt','LEIA-ME-ATUALIZACAO.txt')
 $exe=Join-Path $old 'DUELTRACE-WebUI.exe'
 $installed=@()
 $moved=@()
@@ -475,7 +475,7 @@ def stage_preview_update(*, info: dict, data_home: Path,
         raise UnsafeUpdate("Os dados pessoais estão dentro de _internal; mova-os para fora antes de atualizar.")
     if (not original.is_dir() or original.is_symlink() or
             any((original / name).is_symlink() for name in
-                ("DUELTRACE-WebUI.exe","_internal","LEIA-ME-SEGURANCA.txt"))):
+                ("DUELTRACE-WebUI.exe","_internal","LEIA-ME-SEGURANCA.txt","LEIA-ME-ATUALIZACAO.txt"))):
         raise UnsafeUpdate("Pasta de instalação inválida ou contém links simbólicos.")
     # Os temporários e backups ficam no diretório de dados, não em uma nova pasta
     # vizinha ao executável. Nunca sobrescrever o usuário por padrão.
