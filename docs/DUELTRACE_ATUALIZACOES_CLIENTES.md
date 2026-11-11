@@ -96,7 +96,9 @@ atualizar-se pelo botão sem login.
   ou servidor próprio com autenticação de compradores; isso é independente
   do atualizador.
 
-O workflow antigo do GitHub Actions pode continuar existindo no repositório
-para verificações de desenvolvimento, mas **não participa da geração,
-assinatura, publicação, descoberta nem download das novas releases para
-clientes**. O fluxo manual permanece independente.
+O workflow automático antigo de compilação/publicação WebUI Windows foi removido.
+Outros workflows legados do projeto são independentes do processo de atualização
+para clientes; o fluxo de distribuição Windows é executado localmente.
+
+O script local executa também `python -m pip_audit --local`, `npm audit`, testes
+Python e verificação do build estático, além das análises do pacote Windows.
