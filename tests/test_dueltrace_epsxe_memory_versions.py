@@ -272,7 +272,7 @@ class EpsxeCompatibilityTests(unittest.TestCase):
             first=read_hand_from_epsxe(kernel=kernel,pids=[pid],
                                        monotonic=lambda:100.0)
             self.assertFalse(first["ready"])
-            self.assertIn("continua",first["status"])
+            self.assertIn("outros blocos",first["status"])
             self.assertIn(pid,_PID_SCAN_PROGRESS)
             checkpoint=_PID_SCAN_PROGRESS[pid][1]
             self.assertGreater(checkpoint[1],0)
