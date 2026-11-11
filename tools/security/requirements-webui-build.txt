@@ -1,6 +1,9 @@
 # Versões do primeiro build WebUI validado em Windows Actions (2026-11-03).
 # Actualizar somente após auditoria de dependências e CI.
 pywebview==6.2.1
+# Windows pywebview backend: pythonnet 3.2.1 supports CPython 3.14;
+# pythonnet 3.0.5 does not (requires Python <3.14).
+pythonnet==3.2.1; sys_platform == "win32" and python_version >= "3.14"
 pyinstaller==6.22.3
 pillow==13.0.0
 # MIPS R3000: biblioteca BSD opcional para desmontagem de evidências locais
