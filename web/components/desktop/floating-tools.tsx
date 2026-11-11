@@ -85,9 +85,9 @@ function FusionTipCard({card,sha,label,fallback}:{
   useEffect(()=>setMode("frame"),[sha,card?.id])
   const img=card&&sha?(mode==="frame"?cardWithFrame(sha,card.id):
     mode==="art"?cardArt(sha,card.id):null):null
-  return <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
+  return <div className="flex min-w-[3.5rem] max-w-24 flex-[1_1_3.5rem] flex-col items-center gap-1">
     <p className="text-[10px] uppercase tracking-wide text-muted">{label}</p>
-    <div className="relative h-[78px] w-[68px] shrink-0 overflow-hidden rounded border border-gold/30 bg-background/75">
+    <div className="relative h-[66px] w-[56px] shrink-0 overflow-hidden rounded border border-gold/30 bg-background/75 min-[390px]:h-[78px] min-[390px]:w-[68px]">
       {img?<Image src={img} alt={card?.name??"Carta"} fill unoptimized sizes="68px"
         className="object-fill [image-rendering:pixelated]"
         onError={()=>setMode(mode==="frame"?"art":"none")}/>:
@@ -157,7 +157,7 @@ export function FloatingFusionTips(){
               <p className="mb-2 text-center text-[11px] text-muted">
                 Mão {item.slot_a} + {item.slot_b}
               </p>
-              <div className="flex items-center gap-1">
+              <div className="flex flex-wrap items-center justify-center gap-1">
                 <FusionTipCard label="Material" sha={state?.activeSha??null}
                   card={hand?.hand[item.slot_a-1]??cardsById.get(item.a)}/>
                 <span className="text-primary">+</span>
@@ -184,7 +184,7 @@ export function FloatingFusionTips(){
               <p className="mb-2 text-[11px] text-muted">
                 Ordem da mão: {item.slot_order.join(" → ")}
               </p>
-              <div className="flex items-start justify-center gap-1">
+              <div className="flex flex-wrap items-start justify-center gap-1">
                 {item.slot_order.map((slot,i)=><FusionTipCard key={i} label={`Pos. ${slot}`}
                   sha={state?.activeSha??null}
                   card={hand?.hand[slot-1]??null}/>)}
