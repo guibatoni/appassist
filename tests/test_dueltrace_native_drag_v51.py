@@ -118,14 +118,14 @@ class NativePointerDragV51Tests(unittest.TestCase):
         types=(ROOT/"web/lib/desktop.ts").read_text(encoding="utf-8")
         self.assertIn("event.button !== 0",ui)
         self.assertIn("event.isPrimary",ui)
-        self.assertIn("(event.buttons & 1) === 0",ui)
-        self.assertIn("setPointerCapture(event.pointerId)",ui)
-        self.assertIn("onLostPointerCapture={onHeaderPointerEnd}",ui)
+        self.assertIn("api.drag_window_native()",ui)
+        self.assertNotIn("setPointerCapture(event.pointerId)",ui)
+        self.assertNotIn("onLostPointerCapture={onHeaderPointerEnd}",ui)
         self.assertIn('target.closest(\'button,a,input,textarea,select',ui)
-        self.assertIn("state.api.drag_window_move(state.dragId, x, y)",ui)
-        self.assertIn("state.api.drag_window_end(state.dragId)",ui)
-        self.assertIn("state.sending = true",ui)
-        self.assertIn("drag_window_begin: (x,y) => native.drag_window_begin(token,x,y)",types)
+        self.assertNotIn("state.api.drag_window_move(state.dragId, x, y)",ui)
+        self.assertNotIn("state.api.drag_window_end(state.dragId)",ui)
+        self.assertNotIn("state.sending = true",ui)
+        self.assertIn("drag_window_native: () => native.drag_window_native(token)",types)
 
 
 if __name__=="__main__":

@@ -76,6 +76,25 @@ class ProtectedDesktopApi:
             raise ValueError("Coordenada de arraste inválida.")
         return value
 
+    def drag_window_native(self, credential):
+        """Request OS-managed caption drag for this specific DUELTRACE form."""
+        self._authorize(credential)
+        with self._native_window_lock:
+            window=self._native_window
+            if window is None:
+                raise RuntimeError("Janela nativa ainda não está pronta.")
+            if self._native_maximized or self._native_close_requested:
+                return {"started":False}
+            native=getattr(window,"native",None)
+            if native is not None:
+                try:
+                    if str(native.WindowState).casefold().endswith("maximized"):
+                        return {"started":False}
+                except (AttributeError,RuntimeError):
+                    return {"started":False}
+            from dueltrace_native_drag import request_native_caption_drag
+            return {"started":bool(request_native_caption_drag(window))}
+
     def drag_window_begin(self, credential, screen_x, screen_y):
         """Start an authenticated mouse drag using pywebview native geometry.
 

@@ -108,8 +108,8 @@ class ResponsiveUiContracts(unittest.TestCase):
         self.assertIn("sm:h-9 sm:w-10",WINDOW)
         self.assertIn("aria-label=\"Fechar DUELTRACE\"",WINDOW)
         self.assertIn("onPointerDown={onHeaderPointerDown}",TOP)
-        self.assertIn("onPointerMove={onHeaderPointerMove}",TOP)
-        self.assertIn("setPointerCapture(event.pointerId)",TOP)
+        self.assertIn("api.drag_window_native()",TOP)
+        self.assertNotIn("setPointerCapture(event.pointerId)",TOP)
 
     def test_navigation_all_tabs_visible_even_in_portrait(self):
         self.assertIn("grid-cols-3",SIDE)

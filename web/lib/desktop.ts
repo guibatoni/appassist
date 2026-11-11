@@ -832,6 +832,7 @@ export type PopoutState={opened?:boolean;closed?:boolean;reused?:boolean;kind:Po
 
 export interface DesktopAPI {
   window_control(action:WindowControlAction):Promise<WindowControlState>
+  drag_window_native():Promise<{started:boolean}>
   drag_window_begin(screenX:number,screenY:number):Promise<{started:boolean;dragId:number|null}>
   drag_window_move(dragId:number,screenX:number,screenY:number):Promise<{moved:boolean}>
   drag_window_end(dragId:number):Promise<{ended:boolean}>
@@ -894,6 +895,7 @@ export interface DesktopAPI {
 
 interface ProtectedNativeAPI {
   window_control(token:string,action:WindowControlAction):Promise<WindowControlState>
+  drag_window_native(token:string):Promise<{started:boolean}>
   drag_window_begin(token:string,screenX:number,screenY:number):Promise<{started:boolean;dragId:number|null}>
   drag_window_move(token:string,dragId:number,screenX:number,screenY:number):Promise<{moved:boolean}>
   drag_window_end(token:string,dragId:number):Promise<{ended:boolean}>
@@ -970,6 +972,7 @@ export function desktopApi(): DesktopAPI | null {
   if (!native || typeof token !== "string" || token.length < 32) return null
   return {
     window_control: (action) => native.window_control(token,action),
+    drag_window_native: () => native.drag_window_native(token),
     drag_window_begin: (x,y) => native.drag_window_begin(token,x,y),
     drag_window_move: (dragId,x,y) => native.drag_window_move(token,dragId,x,y),
     drag_window_end: (dragId) => native.drag_window_end(token,dragId),

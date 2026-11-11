@@ -199,9 +199,8 @@ def main():
         raise OSError("A interface desktop nativa está disponível apenas no Windows.")
     import webview
 
-    # The main header uses a session-token-protected Window.move pointer
-    # bridge. The earlier pywebview drag selector didn't move the real
-    # WebView2 form on this Windows installation.
+    # A native Win32 caption loop performs the entire drag on the WinForms UI
+    # thread; WebView2 pointermove loses capture when the form moves.
     work_width,work_height=windows_work_area()
     main_size=window_geometry(work_width,work_height)
     static=assets_path()
@@ -232,8 +231,8 @@ def main():
         def restore_resize_border():
             enable_native_edge_resize(window)
         window.events.shown+=restore_resize_border
-        # A região .pywebview-drag-region no cabeçalho move a janela;
-        # controles nativos são chamados somente pela API local autenticada.
+        # The local authenticated API starts the native Win32 caption drag.
+        # Only the already attached main window can be moved.
         api._native_window=window
         def mark_maximized():
             with api._native_window_lock:
