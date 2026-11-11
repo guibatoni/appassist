@@ -90,6 +90,52 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(data["total"],3)
         self.assertTrue(all("nameResult" in r for r in data["rows"]))
 
+    def test_card_fusions_match_exact_material_id_and_show_result_atk(self):
+        candidates={"fusions":[
+            {"a":2,"b":3,"result":8,"validation":"alpha_seven_matching_iso_banks"},
+            {"a":1,"b":2,"result":8,"validation":"alpha_seven_matching_iso_banks"},
+            {"a":2,"b":3,"result":8,"validation":"alpha_seven_matching_iso_banks"},
+            {"a":7,"b":3,"result":8,"validation":"alpha_seven_matching_iso_banks"},
+        ]}
+        with patch.object(self.bridge,"_alpha_bundle",return_value=candidates):
+            data=self.bridge.get_card_fusions(2,sort="atk")
+            self.assertEqual(data["romSha"],self.sha)
+            self.assertEqual(data["cardId"],2)
+            self.assertTrue(data["available"])
+            self.assertEqual(data["total"],2)
+            # The curated 1+2=7 takes precedence over contradictory 1+2=8.
+            self.assertEqual([r["resultId"] for r in data["rows"]],[8,7])
+            self.assertEqual([r["atk"] for r in data["rows"]],[3200,2800])
+            self.assertEqual([r["partnerId"] for r in data["rows"]],[3,1])
+            self.assertFalse(any("source_path" in r for r in data["rows"]))
+            second=self.bridge.get_card_fusions(2,offset=1,limit=1,sort="atk")
+            self.assertEqual(second["total"],2)
+            self.assertEqual(second["rows"][0]["resultId"],7)
+            by_name=self.bridge.get_card_fusions(2,sort="name")
+            self.assertEqual([r["resultId"] for r in by_name["rows"]],[7,8])
+            no_material=self.bridge.get_card_fusions(5)
+            self.assertEqual(no_material["rows"],[])
+        self.assertEqual(data["provisional"],True)
+
+    def test_card_fusion_bridge_rejects_invalid_inputs_and_enforces_token(self):
+        for invalid in (0,-1,723,"2",True,None,{},[]):
+            with self.subTest(card_id=invalid),self.assertRaises(ValueError):
+                self.bridge.get_card_fusions(invalid)
+        for invalid in (-1,1.5,"0",True):
+            with self.subTest(offset=invalid),self.assertRaises(ValueError):
+                self.bridge.get_card_fusions(2,offset=invalid)
+        for invalid in (0,51,-1,"8"):
+            with self.subTest(limit=invalid),self.assertRaises(ValueError):
+                self.bridge.get_card_fusions(2,limit=invalid)
+        with self.assertRaises(ValueError):
+            self.bridge.get_card_fusions(2,sort="unknown")
+        private=ProtectedDesktopApi(self.bridge,"k"*64)
+        with self.assertRaises(PermissionError):
+            private.get_card_fusions("invalid",2)
+        data=private.get_card_fusions("k"*64,2)
+        self.assertEqual(data["cardId"],2)
+        self.assertEqual(data["romSha"],self.sha)
+
     def test_hide_fusion_preference_is_persisted_without_changing_emulator_settings(self):
         self.assertTrue(self.bridge.get_alpha_preferences()["fusionTipsVisible"])
         self.assertFalse(self.bridge.set_alpha_preferences(False)["fusionTipsVisible"])
