@@ -197,16 +197,10 @@ export function UpdateChecker() {
                       <CheckCircle2 className="size-5 shrink-0 text-primary"/>}
                   {statusText}
                 </p>
-                {result.previewCheckStatus === "authentication_required" && (
-                  <div className="mt-3 rounded-lg border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-muted">
-                    <p className="font-semibold text-foreground">Para consultar o GitHub privado:</p>
-                    <p className="mt-1">1. Instale GitHub CLI 2.102.0 ou superior.</p>
-                    <p>2. Abra o PowerShell e execute <code className="font-mono text-gold">gh auth login</code>.</p>
-                    <p>3. Use uma conta com acesso ao repositório e verifique com <code className="font-mono text-gold">gh auth status</code>.</p>
-                    <p className="mt-1">Depois, reinicie o DUELTRACE e clique novamente em Atualizações.</p>
-                    <p className="mt-1">Não coloque tokens ou senhas dentro do aplicativo.</p>
-                  </div>
-                )}
+                <p className="mt-3 text-[11px] text-muted">
+                  Atualizações distribuídas por canal público de pacotes, sem
+                  login do GitHub. O código-fonte do aplicativo permanece privado.
+                </p>
               </> :
               <p className="text-muted">Nenhuma consulta realizada.</p>}
         </div>
