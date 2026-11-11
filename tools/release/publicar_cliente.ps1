@@ -75,6 +75,7 @@ try {
     Write-Host "DUELTRACE local: $tag | fonte privada $sourceSha"
 
     Invoke-Checked "python" @("-m","pip","install","-r","tools/security/requirements-webui-build.txt","pip-audit")
+    Invoke-Checked "python" @("-m","pip_audit","--local")
     Invoke-Checked "python" @("-m","unittest","discover","-s","tests","-p","test_*.py","-v")
     Push-Location (Join-Path $workspace "web")
     try {
