@@ -77,7 +77,7 @@ $manifest | Set-Content -LiteralPath (Join-Path $report "SHA256SUMS.txt") -Encod
 $securityReport=[ordered]@{
     schema=1
     project="DUELTRACE-WebUI"
-    source_commit=$env:GITHUB_SHA
+    source_commit=$(if ($env:DUELTRACE_SOURCE_SHA) { $env:DUELTRACE_SOURCE_SHA } else { $env:GITHUB_SHA })
     defender_antivirus_enabled=$status.AntivirusEnabled
     defender_service_enabled=$status.AMServiceEnabled
     defender_signature_version=$status.AntivirusSignatureVersion
