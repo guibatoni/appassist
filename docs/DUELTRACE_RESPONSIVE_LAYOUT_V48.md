@@ -29,8 +29,10 @@ a barra de tarefas para estabelecer o tamanho inicial.
   O usuário continua podendo arrastar, maximizar, restaurar e redimensionar.
 - **Cabeçalho:** logotipo, atualizador e controles minimizar/maximizar/fechar
   permanecem visíveis; o atualizador passa à segunda linha em janelas estreitas.
-- **Menu:** horizontal lateral para desktops largos; em telas verticais vira
+- **Menu:** lateral para desktops largos; em telas verticais vira
   grade de 3 ou 5 colunas, com todas as abas visíveis, sem esconder ações.
+  Em monitores 1080×1920 **maximizados**, a orientação vertical continua tendo
+  prioridade mesmo quando a largura supera o breakpoint desktop de 1024 px.
 - **Central de Duelo:** as cinco cartas são distribuídas pelo espaço real,
   mantendo ATK/DEF, nomes, sugestões e painel RANK.
 - **Biblioteca de Fusões / Drops:** número de receitas/cartões por linha
