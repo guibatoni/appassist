@@ -43,10 +43,26 @@ class CloudUIParityTests(unittest.TestCase):
 
     def test_connector_button_no_longer_silently_disabled_for_key_length(self):
         page=source("components/cloud/cloud-prototype.tsx")
-        self.assertIn("setError(\"A chave está incompleta",page)
-        self.assertIn('disabled={busy} onClick={()=>void connect()}',page)
-        self.assertNotIn("disabled={busy||pairKey.trim().length<24}",page)
+        self.assertIn('setError("A chave está incompleta',page)
+        self.assertIn('disabled={busy||!clientReady} onClick={()=>void connect()}',page)
+        self.assertNotIn('disabled={busy||pairKey.trim().length<24}',page)
         self.assertIn("Chave recebida:",page)
+        self.assertIn("Inicializando interface do navegador",page)
+
+    def test_chrome_password_autofill_uses_real_dom_value_on_connect(self):
+        page=source("components/cloud/cloud-prototype.tsx")
+        self.assertIn("const pairingInputRef=useRef<HTMLInputElement>(null)",page)
+        self.assertIn('const key=pairingInputRef.current?.value.trim()??""',page)
+        self.assertIn('onInput={syncPairingField}',page)
+        self.assertIn('onFocus={syncPairingField}',page)
+        self.assertIn('onBlur={syncPairingField}',page)
+        self.assertIn('ref={pairingInputRef} defaultValue=""',page)
+        self.assertNotIn('value={pairKey}',page)
+        self.assertNotIn('const key=pairKey.trim()',page)
+        self.assertIn('setPairKeyLength(key.length)',page)
+        # Pairing secret is cleared from the input, not stored by a password manager.
+        self.assertIn('if(pairingInputRef.current)pairingInputRef.current.value=""',page)
+        self.assertIn('autoComplete="new-password"',page)
 
     def test_local_http_timeout_and_actionable_error_message(self):
         api=source("lib/cloud-local.ts")
