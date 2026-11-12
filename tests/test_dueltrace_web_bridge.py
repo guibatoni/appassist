@@ -1314,6 +1314,7 @@ class BridgeTests(unittest.TestCase):
                 self.assertIn(b"FRAMED",response.read())
             with urlopen(base+"/__art_hd__/"+self.sha+"/1.png") as response:
                 self.assertEqual(response.read(),b"HD-ART-SYNTHETIC")
+                self.assertEqual(response.headers["Content-Type"],"image/png")
             with urlopen(base+"/__card_hd__/"+self.sha+"/1.png") as response:
                 self.assertEqual(response.read(),b"FULL-CLASSIC-SYNTHETIC")
             with self.assertRaises(HTTPError) as foreign_classic:
@@ -1322,7 +1323,7 @@ class BridgeTests(unittest.TestCase):
             with self.assertRaises(HTTPError) as invalid_classic:
                 urlopen(base+"/__card_hd__/"+self.sha+"/0.png")
             self.assertEqual(invalid_classic.exception.code,404)
-                self.assertEqual(response.headers["Content-Type"],"image/png")
+
             with self.assertRaises(HTTPError) as foreign_hd:
                 urlopen(base+"/__art_hd__/"+"b"*64+"/1.png")
             self.assertEqual(foreign_hd.exception.code,404)
