@@ -163,10 +163,16 @@ def local_handler(directory: Path, bridge: DueltraceWebBridge):
                         from dueltrace_card_on_demand import ensure_card_hd
                         card=next((row for row in profile.get("cards",[])
                                    if row.get("id")==int(cid)),None)
-                        if card is None:
-                            self.send_error(404)
-                            return
-                        image=ensure_card_hd(root,card,rom_sha256=sha)
+                        fallback=(root/folder/f"{int(cid):03d}.png")
+                        if card is not None:
+                            try:
+                                image=ensure_card_hd(root,card,rom_sha256=sha)
+                            except (OSError, ValueError):
+                                # Preserve existing valid, SHA-bound cached art
+                                # when an old profile has no usable source PNG.
+                                image=fallback.resolve(strict=True)
+                        else:
+                            image=fallback.resolve(strict=True)
                     else:
                         image=(root/folder/f"{int(cid):03d}.png").resolve(strict=True)
                     max_size=8_000_000 if classic_match else 4_000_000 if hd_match else 1_000_000
