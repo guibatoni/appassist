@@ -106,6 +106,13 @@ class WAAssetTests(unittest.TestCase):
             with Image.open(Path(temp)/"cartas_com_moldura"/"001.png") as im:
                 self.assertEqual(im.size,(52,60))
             self.assertTrue((Path(temp)/"artes_722"/"001.png").is_file())
+            self.assertTrue((Path(temp)/"artes_upscaled"/"001.png").is_file())
+            self.assertEqual(report["upscaling"]["available"],2)
+            self.assertTrue(report["upscaling"]["originalsPreserved"])
+            with Image.open(Path(temp)/"artes_upscaled"/"001.png") as im:
+                self.assertEqual(im.size,(306,288))
+            with Image.open(Path(temp)/"artes_722"/"001.png") as im:
+                self.assertEqual(im.size,(102,96))
             self.assertTrue((Path(temp)/"molduras_wa"/"1-magica.png").is_file())
             manifest=(Path(temp)/"recursos_wa.json").read_text("utf-8")
             self.assertIn('"thumbnail_matches_record": true',manifest)
