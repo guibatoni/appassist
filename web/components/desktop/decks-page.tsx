@@ -95,6 +95,8 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             </option>)}
           </select>
         </label>}
+      {state?.savePinned&&state.selectedBlock&&
+        <p className="mt-2 text-xs text-primary">Bloco {state.selectedBlock} salvo como preferência desta ISO. A sequência acompanha os saves do jogo.</p>}
       <label className="mt-4 flex flex-col gap-1 text-sm text-muted">Selecionar deck
         <select value={chosen} onChange={e=>{setChosen(e.target.value);setPreview(null)}}
           className="field max-w-xl px-3 py-2 text-sm">

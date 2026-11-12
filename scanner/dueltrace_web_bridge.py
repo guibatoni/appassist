@@ -1647,6 +1647,7 @@ class DueltraceWebBridge:
             return {"romSha":sha,"linked":memory.get("linked",False),
                     "cardName":memory.get("cardName"),
                     "saveName":memory.get("saveName"),
+                    "savePinned":memory.get("savePinned") is True,
                     "status":(
                         "Deck lido da RAM de um ePSXe iniciado pelo DUELTRACE. "
                         "Se você trocou a ISO diretamente no emulador, nomes "

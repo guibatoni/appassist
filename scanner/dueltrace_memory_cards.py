@@ -98,6 +98,24 @@ class MemoryCardStore:
     def has_bindings(self):
         return bool(self._binding_data().get("links"))
 
+    @staticmethod
+    def _matches_selected_save(link, save):
+        """A pin is for one mod and one save, not an ever-changing sequence.
+
+        Older v0.17.2 links stored only the block. Accept their existing
+        selection for backward compatibility, then record the game identity
+        if the user explicitly selects or reselects the same memory card.
+        """
+        if not isinstance(link, dict) or not isinstance(save, dict):
+            return False
+        name=link.get("selectedSaveName")
+        duelist=link.get("selectedDuelistCode")
+        if name is not None and name != save.get("saveName"):
+            return False
+        if type(duelist) is int and duelist != save.get("duelistCode"):
+            return False
+        return True
+
     def _load_card(self,path):
         path=Path(path).expanduser().resolve(strict=True)
         if (not path.is_file() or path.is_symlink()
@@ -119,10 +137,44 @@ class MemoryCardStore:
             raise ValueError("Ative primeiro uma ISO cadastrada.")
         source,blob,result=self._load_card(path)
         data=self._binding_data()
-        data.setdefault("links",{})[rom_sha256]={
+        links=data.setdefault("links",{})
+        previous=links.get(rom_sha256)
+        selected_save=None
+        if isinstance(previous,dict):
+            previous_block=previous.get("selectedBlock")
+            previous_path=previous.get("path")
+            # A different Memory Card must never inherit an unrelated slot.
+            same_card=previous_path==str(source)
+            for row in result["saves"]:
+                if (type(previous_block) is int
+                        and row["block"]==previous_block
+                        and (same_card or (
+                            previous.get("selectedSaveName") is not None
+                            and previous.get("selectedDuelistCode") is not None))
+                        and self._matches_selected_save(previous,row)):
+                    selected_save=row
+                    break
+        if selected_save is None and len(result["saves"])==1:
+            # Only auto-pick an unambiguous FIRST selection, not a missing pin.
+            if not isinstance(previous,dict) or previous.get("selectedBlock") is None:
+                selected_save=result["saves"][0]
+        keep_missing_pin=(
+            selected_save is None
+            and isinstance(previous,dict)
+            and previous.get("path")==str(source)
+            and type(previous.get("selectedBlock")) is int
+            and 1 <= previous["selectedBlock"] <= 15)
+        links[rom_sha256]={
             "path":str(source),
-            "selectedBlock":result["saves"][0]["block"]
-                if len(result["saves"])==1 else None,
+            "selectedBlock":(
+                selected_save["block"] if selected_save else
+                previous["selectedBlock"] if keep_missing_pin else None),
+            "selectedSaveName":(
+                selected_save["saveName"] if selected_save else
+                previous.get("selectedSaveName") if keep_missing_pin else None),
+            "selectedDuelistCode":(
+                selected_save["duelistCode"] if selected_save else
+                previous.get("selectedDuelistCode") if keep_missing_pin else None),
         }
         _write_atomic(self.binding_file,
                       (json.dumps(data,ensure_ascii=False,indent=2)+"\n").encode("utf-8"))
@@ -140,9 +192,14 @@ class MemoryCardStore:
         if not isinstance(link,dict) or not link.get("path"):
             raise ValueError("Selecione primeiro o Memory Card desta ISO.")
         _path,blob,parsed=self._load_card(link["path"])
-        if block not in [save["block"] for save in parsed["saves"]]:
+        chosen=next((row for row in parsed["saves"]
+                     if row["block"]==block),None)
+        if chosen is None:
             raise ValueError("Esse save não foi validado no cartão atual.")
-        data["links"][rom_sha256]["selectedBlock"]=block
+        link["selectedBlock"]=block
+        link["selectedSaveName"]=chosen["saveName"]
+        link["selectedDuelistCode"]=chosen["duelistCode"]
+        # sequence intentionally NOT pinned: it increments on each game save.
         _write_atomic(self.binding_file,
                       (json.dumps(data,ensure_ascii=False,indent=2)+"\n").encode("utf-8"))
         return {"selected":True,"block":block}
@@ -225,17 +282,29 @@ class MemoryCardStore:
                   "duelistCode":row["duelistCode"],
                   "saveSequence":row["saveSequence"]} for row in saves]
         selected=link.get("selectedBlock")
-        if not type(selected) is int or selected not in {row["block"] for row in saves}:
-            selected=saves[0]["block"] if len(saves)==1 else None
-        chosen=next((row for row in saves if row["block"]==selected),None)
-        status=(
-            "Save válido e íntegro; este é o deck GRAVADO no cartão, não necessariamente o deck ativo no emulador."
-            if chosen else
-            "Há vários saves; escolha o bloco correto. Nenhum deck é presumido como ativo."
-            if saves else
-            "Memory Card válido, mas não há save FM com integridade comprovada.")
+        pinned=type(selected) is int and 1<=selected<=15
+        chosen=next((row for row in saves
+                     if pinned and row["block"]==selected
+                     and self._matches_selected_save(link,row)),None)
+        if not pinned and len(saves)==1:
+            # Single-save cards can be displayed without inventing a pin.
+            chosen=saves[0]
+            selected=chosen["block"]
+        if pinned and chosen is None:
+            status=(
+                f"O save fixado no Bloco {selected} não está disponível ou "
+                "não corresponde à partida escolhida. Não foi trocado por outro save.")
+        elif chosen:
+            status=(
+                "Save válido e íntegro; este é o deck GRAVADO no cartão, "
+                "não necessariamente o deck ativo no emulador.")
+        elif saves:
+            status="Há vários saves; escolha o correto. Nenhum deck é presumido como ativo."
+        else:
+            status="Memory Card válido, mas não há save FM com integridade comprovada."
         return {**base,"linked":True,"cardName":path.name,
-                "saves":choices,"selectedBlock":selected,
+                "saves":choices,"selectedBlock":selected if chosen else None,
+                "savePinned":pinned and chosen is not None,
                 "backupFingerprint":digest[:16],
                 "saveName":chosen["saveName"] if chosen else None,
                 "deckIds":chosen["deckIds"] if chosen else [],

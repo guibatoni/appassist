@@ -893,6 +893,7 @@ export type OpponentDeck = {
 export type DeckLibrary = {
   romSha:string|null;linked:boolean;cardName:string|null;saveName:string|null
   status:string;displayName:string;selectedDeckId:string;gameIntegrityVerified:boolean
+  savePinned:boolean
   activeInEmulatorVerified:boolean
   saves:Array<{block:number;saveName:string;duelistCode:number;saveSequence:number}>
   selectedBlock:number|null

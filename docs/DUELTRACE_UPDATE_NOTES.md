@@ -1,16 +1,16 @@
-# DUELTRACE v0.17.2 — Preview
+# DUELTRACE v0.17.3 — Preview
 
 ## Novidades
-- Leitura opcional do deck ativo na RAM do ePSXe iniciado pelo DUELTRACE.
-- Deck ao vivo aparece quando a localização de RAM já foi confirmada pela mudança real da mão.
-- Salvamento de snapshots locais do deck em RAM, sem modificar Memory Cards.
+- O Memory Card agora mantém a escolha do save por SHA-256 da ISO ativa, inclusive após reiniciar o DUELTRACE.
+- Selecionar o Bloco 4 do mod Rising of Wicked Gods permanece uma preferência específica daquele mod; nenhuma outra ISO herda essa seleção.
+- Confirmação visual discreta do bloco de save memorizado na aba Decks.
 
 ## Melhorias
-- O deck em RAM tem prioridade sobre o último save, quando a leitura é confiável.
-- Cartão salvo, deck ativo e decks antigos ficam diferenciados na interface.
-- Continua disponível a correção de drops e pools estruturais por oponente da v0.17.1.
+- Ao selecionar novamente o mesmo Memory Card, o DUELTRACE conserva o bloco escolhido e a identidade da partida.
+- A sequência de gravação (por exemplo, 3 → 4) pode avançar sem perder a referência do save escolhido.
+- Compatibilidade com preferências de bloco gravadas pelas versões anteriores.
 
 ## Correções
-- Não confundir um deck de save antigo com o deck atualmente usado no jogo.
-- RAM de outro processo, sem mão confirmada ou ISO não vinculada é ignorada.
-- Cartões, ISOs e saves originais nunca são alterados pelo DUELTRACE.
+- Um bloco temporariamente ausente ou substituído por outra partida não provoca a seleção silenciosa de outro deck.
+- A identidade do save é conferida pelo nome interno e código de duelista; nunca pela sequência de salvamento isoladamente.
+- O Memory Card original, os snapshots, o catálogo de mods e o executável do emulador não são alterados.
