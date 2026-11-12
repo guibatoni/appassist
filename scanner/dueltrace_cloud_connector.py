@@ -16,8 +16,10 @@ import http.server
 import json
 import re
 import secrets
+import webbrowser
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
+from dueltrace_cloud_browser import render_local_page
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -211,7 +213,7 @@ def make_handler(bridge, *, allowed_origins, token):
             )
 
         def _headers(self, status=200, *, content_type="application/json; charset=utf-8",
-                     length=None):
+                     length=None, browser_page=False):
             self.send_response(status)
             origin = self.headers.get("Origin")
             if _is_allowed_origin(origin, allowed):
@@ -220,6 +222,15 @@ def make_handler(bridge, *, allowed_origins, token):
             self.send_header("Cache-Control", "no-store, max-age=0")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
+            if browser_page:
+                # The local dashboard is server-rendered. No scripts, remote
+                # fonts, frames, browser storage or external requests.
+                self.send_header("Content-Security-Policy",
+                    "default-src 'none'; style-src 'unsafe-inline'; "
+                    "img-src 'self'; form-action 'self'; frame-ancestors 'none'; "
+                    "base-uri 'none'; connect-src 'none'")
+                self.send_header("X-Frame-Options", "DENY")
+                self.send_header("Cross-Origin-Resource-Policy", "same-origin")
             self.send_header("Content-Type", content_type)
             if length is not None:
                 self.send_header("Content-Length", str(length))
@@ -234,6 +245,145 @@ def make_handler(bridge, *, allowed_origins, token):
                 status = 413
             self._headers(status, length=len(raw))
             self.wfile.write(raw)
+
+        def _local_browser_trusted(self, *, write=False):
+            # Same-computer, same-origin HTML is separate from the existing
+            # cross-origin bearer-protected /v1 API.
+            expected_host = f"{HOST}:{self.server.server_port}"
+            origin = f"http://{expected_host}"
+            if (self.client_address[0] != HOST
+                    or self.headers.get("Host", "").lower() != expected_host):
+                return False
+            # Forbid drive-by loads from unrelated web pages and iframes.
+            site = self.headers.get("Sec-Fetch-Site", "").lower()
+            if site not in ("", "none", "same-origin"):
+                return False
+            request_origin = self.headers.get("Origin")
+            if write:
+                return request_origin == origin
+            return request_origin in (None, origin)
+
+        def _browser_html(self, uri):
+            if not self._local_browser_trusted():
+                self._json(403, {"error": "Navegação local não autorizada"})
+                return
+            if uri.path == "/local/art":
+                query = parse_qs(uri.query, keep_blank_values=True)
+                try:
+                    sha = _text_param(query, "sha", limit=64)
+                    cid = _int_param(query, "id", 0, minimum=1, maximum=722)
+                    data = _local_art(bridge, sha, cid)
+                except (ValueError, TypeError):
+                    data = None
+                if data is None:
+                    self._json(404, {"error": "Arte indisponível"})
+                    return
+                self._headers(200, content_type="image/png", length=len(data),
+                              browser_page=True)
+                self.wfile.write(data)
+                return
+            if uri.path not in ("/", "/local", "/local/"):
+                self._json(404, {"error": "Página não encontrada"})
+                return
+            try:
+                query = parse_qs(uri.query, keep_blank_values=True)
+                tab = _text_param(query, "tab", "inicio", limit=24)
+                search = _text_param(query, "q", "", limit=80)
+                page = _int_param(query, "page", 0, minimum=0, maximum=10000)
+                opponent = _int_param(query, "opponent", 0, minimum=0, maximum=39)
+                msg = _text_param(query, "msg", "", limit=24)
+                messages = {
+                    "activated": "Mod ativado. Os dados permanecem no PC.",
+                    "imported": "Importação local concluída. Selecione o mod.",
+                    "memory": "Memory Card selecionado localmente.",
+                    "cancelled": "Seleção de arquivo cancelada.",
+                    "error": "A operação não pôde ser concluída.",
+                }
+                state = _local_state(bridge)
+                panel = {}
+                if state["activeSha"]:
+                    if tab == "inicio":
+                        panel = _local_live(bridge)
+                    elif tab == "fusoes":
+                        panel = bridge.get_fusions(query=search, offset=0, limit=100)
+                    elif tab == "oponentes":
+                        panel = bridge.get_opponent_deck(opponent)
+                    elif tab == "drops":
+                        panel = bridge.get_drops(opponent_id=opponent, offset=0,
+                                                 limit=100, sort="id")
+                        names = bridge.get_opponent_deck(opponent)
+                        if isinstance(panel, dict) and isinstance(names, dict):
+                            panel = {**panel, "opponents": names.get("opponents", [])}
+                    elif tab == "decks":
+                        panel = bridge.get_deck_library("")
+                page_html = render_local_page(
+                    state, token=token, tab=tab, query=search, opponent=opponent,
+                    page=page, panel=panel, notice=messages.get(msg, ""))
+                raw = page_html.encode("utf-8")
+                if len(raw) > MAX_JSON:
+                    self._json(413, {"error": "Página muito grande"})
+                    return
+                self._headers(200, content_type="text/html; charset=utf-8",
+                              length=len(raw), browser_page=True)
+                self.wfile.write(raw)
+            except (ValueError, TypeError):
+                self._json(400, {"error": "Parâmetros de página inválidos"})
+            except Exception:
+                # The dashboard must never leak traces, paths or memory data.
+                self._json(503, {"error": "Dados locais indisponíveis"})
+
+        def _browser_action(self):
+            if not self._local_browser_trusted(write=True):
+                self._json(403, {"error": "Ação de origem não autorizada"})
+                return
+            try:
+                count = int(self.headers.get("Content-Length", "-1"))
+                content_type = self.headers.get("Content-Type", "").split(";", 1)[0]
+                if not 0 <= count <= MAX_BODY or content_type != "application/x-www-form-urlencoded":
+                    self._json(413, {"error": "Formulário inválido"})
+                    return
+                form = parse_qs(self.rfile.read(count).decode("utf-8"),
+                                keep_blank_values=True)
+                if any(len(v) != 1 for v in form.values()):
+                    raise ValueError()
+                csrf = form.get("csrf", [""])[0]
+                if not hmac.compare_digest(csrf, token):
+                    self._json(403, {"error": "Sessão inválida"})
+                    return
+                action = form.get("action", [""])[0]
+                if action == "activate":
+                    if set(form) != {"action", "csrf", "sha"}:
+                        raise ValueError()
+                    sha = form.get("sha", [""])[0]
+                    if not SHA_RE.fullmatch(sha):
+                        raise ValueError()
+                    _local_state_after_activation(bridge, sha)
+                    msg = "activated"
+                elif action in ("import", "memory-card"):
+                    if set(form) != {"action", "csrf"}:
+                        raise ValueError()
+                    result = (bridge.import_iso() if action == "import" else
+                              bridge.select_memory_card())
+                    msg = ("cancelled" if isinstance(result, dict) and
+                           result.get("cancelled") else
+                           ("imported" if action == "import" else "memory"))
+                else:
+                    raise ValueError()
+            except (ValueError, UnicodeDecodeError, TypeError):
+                self._json(400, {"error": "Solicitação inválida"})
+                return
+            except Exception:
+                # Never include paths, private filenames or tracebacks.
+                self._json(503, {"error": "Operação local indisponível"})
+                return
+            destination = ("/local/?tab=mods" if action in ("activate", "import")
+                           else "/local/?tab=decks") + "&msg=" + msg
+            self.send_response(303)
+            self.send_header("Location", destination)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
         def _auth(self):
             if not self._trusted():
@@ -269,9 +419,12 @@ def make_handler(bridge, *, allowed_origins, token):
             self.end_headers()
 
         def do_GET(self):
+            uri = urlsplit(self.path)
+            if uri.path in ("/", "/local", "/local/", "/local/art"):
+                self._browser_html(uri)
+                return
             if not self._auth():
                 return
-            uri = urlsplit(self.path)
             query = parse_qs(uri.query, keep_blank_values=True)
             try:
                 if uri.path == "/v1/state":
@@ -318,9 +471,12 @@ def make_handler(bridge, *, allowed_origins, token):
                 self._json(503, {"error": "Leitura local indisponível"})
 
         def do_POST(self):
+            uri = urlsplit(self.path)
+            if uri.path == "/local/action":
+                self._browser_action()
+                return
             if not self._auth():
                 return
-            uri = urlsplit(self.path)
             if uri.path not in ("/v1/activate", "/v1/import", "/v1/memory-card"):
                 self._json(404, {"error": "Rota não encontrada"})
                 return
@@ -386,6 +542,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         description="DUELTRACE Cloud — local-first Windows Connector")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--browser", action="store_true",
+                        help="Abrir automaticamente o painel local no navegador")
     parser.add_argument("--origin", action="append", default=[],
                         help="Origem HTTPS exata autorizada; repetível")
     args = parser.parse_args(argv)
@@ -400,7 +558,13 @@ def main(argv=None):
         print("\nDUELTRACE CLOUD CONNECTOR — dados somente no PC")
         print(f"Endereço: http://{HOST}:{server.server_port}")
         print(f"Chave temporária: {token}")
-        print("Cole a chave na página DUELTRACE Cloud; não envie a ninguém.")
+        if args.browser:
+            print("Abrindo painel local no navegador (sem colar chave)...")
+            webbrowser.open(f"http://{HOST}:{server.server_port}/local/")
+        else:
+            print("Para abrir o painel local sem chave, acesse:")
+            print(f"http://{HOST}:{server.server_port}/local/")
+        print("A chave é necessária somente para a interface Next.js experimental.")
         print("ISOs, Memory Cards e RAM não são enviados à nuvem.")
         try:
             server.serve_forever(poll_interval=.25)
