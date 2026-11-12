@@ -1247,11 +1247,7 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
   const [pageSize,setPageSize]=useState(20)
   const [page,setPage]=useState(0)
   const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
-  // A visualização pode ser fixada por clique para explorar/paginar as fusões.
-  // Sair do hover não fecha uma janela fixada.
-  const onPreview=(next:CardPreviewSelection|null)=>{
-    setPreview(current=>current?.pinned&&!next?.pinned?current:next)
-  }
+  // Detalhe fixo por clique; mover o mouse não fecha a janela.
   const types=useMemo(()=>Array.from(new Set(cards.map(c=>c.type||c.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"pt-BR")),[cards])
   useEffect(()=>{setSearch("");setSort("id");setCardType("");setPage(0);setPreview(null)},[sha])
   const visible=useMemo(()=>{
@@ -1302,11 +1298,7 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
         {visible.slice(page*pageSize,(page+1)*pageSize).map(card=><button type="button" key={card.id}
           aria-label={`Ver informações e fusões de ${card.name}`}
           className="rounded-lg border border-line/70 bg-panel-strong/60 p-2 text-center transition hover:border-primary hover:bg-primary/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-          onMouseEnter={event=>onPreview({card,anchor:event.currentTarget})}
-          onMouseLeave={()=>onPreview(null)}
-          onFocus={event=>onPreview({card,anchor:event.currentTarget})}
-          onBlur={()=>onPreview(null)}
-          onClick={event=>onPreview({card,anchor:event.currentTarget,pinned:true})}>
+          onClick={()=>setPreview({card})}>
           <CardThumbnail key={String(sha)+"-"+card.id} card={card} sha={sha}/>
           <p className="mt-2 min-h-9 text-xs font-semibold text-white">{card.name}</p>
           <MonsterStats card={card} className="mt-1 text-center"/>
@@ -1318,7 +1310,7 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
         <span className="text-xs text-muted">{page+1} / {pages}</span>
         <button type="button" className="btn-ghost disabled:opacity-30" disabled={page+1>=pages} onClick={()=>setPage(x=>x+1)}>Próxima<ChevronRight className="size-4"/></button>
       </div>
-      <CardHoverPreview selection={preview} sha={sha} onClose={()=>setPreview(null)}/>
+      <CardHoverPreview selection={preview} sha={sha} cards={cards} onClose={()=>setPreview(null)}/>
     </section>
   </>
 }
@@ -1334,10 +1326,7 @@ function FusionIllustration({id,name,sha,card,role,onPreview}:{
   return <div className="flex min-w-0 flex-col items-center gap-1.5">
     <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{role}</span>
     <button type="button" aria-label={`Ver detalhes e drops de ${name}`}
-      onMouseEnter={event=>onPreview({card:displayed,anchor:event.currentTarget})}
-      onMouseLeave={()=>onPreview(null)}
-      onFocus={event=>onPreview({card:displayed,anchor:event.currentTarget})}
-      onBlur={()=>onPreview(null)}
+      onClick={()=>onPreview({card:displayed})}
       className="group flex min-w-0 w-full flex-col items-center gap-1.5 rounded-md p-1 transition-all duration-200 hover:bg-primary/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
       <div className="w-11 origin-center transition-transform duration-200 group-hover:scale-105 group-focus-visible:scale-105 min-[390px]:w-14 sm:w-20">
         <CardThumbnail key={String(sha)+"-"+id} card={displayed} sha={sha}/>
@@ -1459,7 +1448,7 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             onClick={()=>setOffset(x=>x+pageSize)}>Próxima <ChevronRight className="size-4"/></button>
         </div>
       </div>
-      <CardHoverPreview selection={preview} sha={sha} onClose={()=>setPreview(null)}/>
+      <CardHoverPreview selection={preview} sha={sha} cards={cards} onClose={()=>setPreview(null)}/>
     </section>
   </>
 }
