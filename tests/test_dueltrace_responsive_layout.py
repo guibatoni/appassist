@@ -139,9 +139,9 @@ class ResponsiveUiContracts(unittest.TestCase):
         self.assertIn('max-w-[2100px]',SHELL)
 
     def test_popups_and_updater_remain_fully_visible(self):
-        self.assertIn('max-h-[calc(100dvh-24px)]',PREVIEW)
-        self.assertIn('flex flex-col items-center gap-3 min-[480px]:flex-row',PREVIEW)
-        self.assertIn("CARD_PREVIEW_DELAY_MS=1000",PREVIEW)
+        self.assertIn('max-h-[calc(100dvh-16px)]',PREVIEW)
+        self.assertIn('grid gap-4 sm:grid-cols-[210px_minmax(0,1fr)]',PREVIEW)
+        self.assertNotIn("CARD_PREVIEW_DELAY_MS=1000",PREVIEW)
         self.assertIn("max-h-[calc(100dvh-2rem)]",UPDATES)
         self.assertIn("createPortal(",UPDATES)
         self.assertIn("overflow-y-auto",UPDATES)
