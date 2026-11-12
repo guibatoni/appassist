@@ -113,7 +113,7 @@ class ResponsiveUiContracts(unittest.TestCase):
 
     def test_navigation_all_tabs_visible_even_in_portrait(self):
         self.assertIn("grid-cols-3",SIDE)
-        self.assertIn("min-[600px]:grid-cols-5",SIDE)
+        self.assertIn("min-[600px]:grid-cols-4",SIDE)
         self.assertIn("lg:flex lg:flex-col",SIDE)
         self.assertIn('dt-nav-sidebar',SIDE)
         self.assertIn('dt-nav-list',SIDE)
