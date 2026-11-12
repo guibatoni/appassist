@@ -56,7 +56,7 @@ class LocalChromeBrowserTests(unittest.TestCase):
         self.assertIn(b"frame-ancestors 'none'", headers.get(
             "Content-Security-Policy", "").encode())
         self.assertIn(b"DUELTRACE Cloud", body)
-        self.assertIn(b"v0.5.0", body)
+        self.assertIn(b"v0.5.1", body)
         self.assertNotIn(b"<script", body.lower())
         self.assertNotIn(b"__next", body.lower())
         self.assertNotIn(b"Conectar ao computador", body)
