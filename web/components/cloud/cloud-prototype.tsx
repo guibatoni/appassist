@@ -41,10 +41,13 @@ export function CloudPrototype(){
   const pairingInputRef=useRef<HTMLInputElement>(null)
   const [pairKeyLength,setPairKeyLength]=useState(0)
   const [clientReady,setClientReady]=useState(false)
+  const [connectAttempts,setConnectAttempts]=useState(0)
+  const [connectPhase,setConnectPhase]=useState<"idle"|"validating"|"requesting"|"failed">("idle")
   useEffect(()=>{setClientReady(true)},[])
   const syncPairingField=()=>{
     setPairKeyLength(pairingInputRef.current?.value.trim().length??0)
     setError("")
+    setConnectPhase("idle")
   }
   const [token,setToken]=useState("")
   const [state,setState]=useState<CloudState|null>(null)
@@ -65,16 +68,21 @@ export function CloudPrototype(){
   const [notice,setNotice]=useState("")
 
   const connect=async()=>{
-    // The actual HTMLInputElement value is authoritative. This also works
-    // when the password manager filled it without firing input/change events.
+    // A visible click counter and phase distinguish UI events from a blocked
+    // localhost request. Never log, display or persist the pairing secret.
+    setConnectAttempts(n=>n+1)
+    setConnectPhase("validating")
+    // Reading the DOM also supports Chrome password-manager autofill.
     const key=pairingInputRef.current?.value.trim()??""
     setPairKeyLength(key.length)
     setError("")
     if(key.length<24){
-      setError("A chave está incompleta. Copie a chave temporária inteira do PowerShell (mínimo de 24 caracteres).")
+      setConnectPhase("failed")
+      setError("Chave incompleta: copie a chave temporária inteira do PowerShell (pelo menos 24 caracteres).")
       return
     }
     setBusy(true)
+    setConnectPhase("requesting")
     try{
       const result=await cloudGet<CloudState>(key,"/v1/state")
       if(result.storage!=="local-only"||result.cloudUpload!==false)throw Error("Connector incompatível")
@@ -83,8 +91,10 @@ export function CloudPrototype(){
       setPairKeyLength(0)
       setConnected(true);setTab("mods")
       setNotice("Conexão local autenticada. Nenhum dado do jogo foi enviado à nuvem.")
-    }catch(e){setError(e instanceof Error?e.message:"Não foi possível conectar.")}
-    finally{setBusy(false)}
+    }catch(e){
+      setConnectPhase("failed")
+      setError(e instanceof Error?e.message:"Não foi possível conectar.")
+    }finally{setBusy(false)}
   }
   const reloadState=useCallback(async()=>{
     if(token)setState(await cloudGet<CloudState>(token,"/v1/state"))
@@ -165,25 +175,31 @@ export function CloudPrototype(){
           <div className="flex items-center gap-2"><Link2 className="size-6 text-primary"/>
             <h2 className="font-display text-xl font-semibold text-gold">Conectar ao ePSXe e aos mods do PC</h2></div>
           <p className="text-sm text-[#adbed2]">O navegador comunica-se apenas com o DUELTRACE Connector no seu próprio Windows. As ISOs, Memory Cards e RAM nunca são enviados ao site.</p>
-          <label className="block text-sm font-semibold" htmlFor="cloud-pair">Chave temporária do Connector</label>
-          <input id="cloud-pair" ref={pairingInputRef} defaultValue=""
-            onInput={syncPairingField} onChange={syncPairingField}
-            onFocus={syncPairingField} onBlur={syncPairingField}
-            type="password" autoComplete="new-password" spellCheck={false} maxLength={128}
-            placeholder="Cole aqui a chave que aparece no terminal"
-            onKeyDown={e=>{if(e.key==="Enter"&&!busy)void connect()}}
-            className="field w-full px-4 py-3 text-white outline-none focus:border-primary"/>
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
-            <span>Chave recebida: {pairKeyLength} caracteres</span>
-            {pairKeyLength>=24&&<span className="text-success">Pronta para autenticar</span>}
-          </div>
-          <button type="button" disabled={busy||!clientReady} onClick={()=>void connect()}
-            className="btn-gold min-h-11 px-5 py-3 font-semibold disabled:opacity-50">
-            <LockKeyhole className="size-4"/>{busy?"Conectando…":"Conectar ao computador"}
-          </button>
-          {!clientReady&&<p role="status" className="text-sm text-muted">Inicializando interface do navegador…</p>}
-          {busy&&<p role="status" className="text-sm text-primary">Consultando o Connector local em 127.0.0.1:8765…</p>}
-          {error&&<p role="alert" className="text-sm text-danger">{error}</p>}
+          <p data-cloud-build="0.2.2" role="status" className="rounded-lg border border-line/80 bg-[#081930] p-3 text-xs text-primary">
+            Cloud v0.2.2 · Interface {clientReady?"iniciada":"aguardando inicialização do JavaScript"} · Cliques reconhecidos: {connectAttempts}
+          </p>
+          <form className="space-y-4" onSubmit={event=>{event.preventDefault();if(!busy)void connect()}}>
+            <label className="block text-sm font-semibold" htmlFor="cloud-pair">Chave temporária do Connector</label>
+            <input id="cloud-pair" ref={pairingInputRef} defaultValue=""
+              onInput={syncPairingField} onChange={syncPairingField}
+              onFocus={syncPairingField} onBlur={syncPairingField}
+              type="password" autoComplete="new-password" spellCheck={false} maxLength={128}
+              placeholder="Cole aqui a chave que aparece no terminal"
+              className="field w-full px-4 py-3 text-white outline-none focus:border-primary"/>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+              <span>Chave recebida: {pairKeyLength} caracteres</span>
+              {pairKeyLength>=24&&<span className="text-success">Pronta para autenticar</span>}
+            </div>
+            {connectPhase==="requesting"&&<p role="status" className="rounded-lg border border-primary/50 p-3 text-sm text-primary">
+              Clique recebido. Consultando o Connector em 127.0.0.1:8765…
+            </p>}
+            {connectPhase==="validating"&&<p role="status" className="text-sm text-primary">Validando chave informada…</p>}
+            {error&&<p role="alert" className="rounded-lg border border-danger/60 bg-danger/10 p-3 text-sm text-danger">{error}</p>}
+            <button type="submit" disabled={busy}
+              className="btn-gold min-h-11 px-5 py-3 font-semibold disabled:opacity-50">
+              <LockKeyhole className="size-4"/>{busy?"Conectando…":"Conectar ao computador"}
+            </button>
+          </form>
         </section>
         <section className={panel+" space-y-4"}>
           <h2 className="text-lg font-semibold">Primeiro acesso</h2>
