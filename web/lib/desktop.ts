@@ -892,10 +892,13 @@ export type OpponentDeck = {
 }
 export type DeckLibrary = {
   romSha:string|null;linked:boolean;cardName:string|null;saveName:string|null
+  saveDisplayName:string|null;activeModName:string
   status:string;displayName:string;selectedDeckId:string;gameIntegrityVerified:boolean
   savePinned:boolean
   activeInEmulatorVerified:boolean
-  saves:Array<{block:number;saveName:string;duelistCode:number;saveSequence:number}>
+  saves:Array<{block:number;saveName:string;duelistCode:number;saveSequence:number
+    displayName:string;association:"linked_current_mod"|"linked_other_mod"|"shared_between_mods"|"unassigned"
+    linkedModName:string|null;saveTitle:string}>
   selectedBlock:number|null
   deckIds:number[];deckCount:number
   cards:Array<{id:number;count:number;name:string;atk:number|null;def:number|null}>

@@ -1,16 +1,16 @@
-# DUELTRACE v0.17.3 — Preview
+# DUELTRACE v0.17.4 — Preview
 
 ## Novidades
-- O Memory Card agora mantém a escolha do save por SHA-256 da ISO ativa, inclusive após reiniciar o DUELTRACE.
-- Selecionar o Bloco 4 do mod Rising of Wicked Gods permanece uma preferência específica daquele mod; nenhuma outra ISO herda essa seleção.
-- Confirmação visual discreta do bloco de save memorizado na aba Decks.
+- Os saves agora aparecem com nomes legíveis por bloco e associação ao mod da ISO ativa.
+- O título PS1 é extraído quando existe e pode ser decodificado com segurança.
+- O seletor diferencia saves vinculados ao mod, saves de outros mods e blocos sem associação.
 
 ## Melhorias
-- Ao selecionar novamente o mesmo Memory Card, o DUELTRACE conserva o bloco escolhido e a identidade da partida.
-- A sequência de gravação (por exemplo, 3 → 4) pode avançar sem perder a referência do save escolhido.
-- Compatibilidade com preferências de bloco gravadas pelas versões anteriores.
+- O apelido da Biblioteca de Mods é usado nos nomes dos saves.
+- A referência do Bloco 4 permanece vinculada à ISO escolhida, mesmo que a sequência de gravação avance.
+- A associação continua salva após reiniciar ou selecionar novamente o Memory Card.
 
 ## Correções
-- Um bloco temporariamente ausente ou substituído por outra partida não provoca a seleção silenciosa de outro deck.
-- A identidade do save é conferida pelo nome interno e código de duelista; nunca pela sequência de salvamento isoladamente.
-- O Memory Card original, os snapshots, o catálogo de mods e o executável do emulador não são alterados.
+- O identificador interno ilegível do cartão deixa de aparecer como nome do save.
+- Snapshots automáticos só pertencem ao bloco associado ao mod; backups antigos permanecem intactos.
+- Mods que usam o mesmo identificador de save não são classificados automaticamente como equivalentes.

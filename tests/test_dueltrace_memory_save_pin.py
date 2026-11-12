@@ -153,5 +153,71 @@ class MemoryCardPinnedSlotTests(unittest.TestCase):
             self.assertEqual(store.read(SHA_A)["deckIds"],list(range(1,41)))
 
 
+    def test_each_block_is_labeled_by_its_explicit_mod_link(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder=Path(temp)
+            card=folder/"epsxe000.mcr"
+            raw=card_with_two_saves(sequence=3)
+            card.write_bytes(raw)
+            root=folder/"userdata"
+            store=MemoryCardStore(root)
+            store.select(SHA_A,card,mod_name="RISING OF WICKED GODS")
+            store.select_save(SHA_A,4,mod_name="RISING OF WICKED GODS")
+            first=store.read(SHA_A,mod_name="RISING OF WICKED GODS")
+            self.assertEqual(first["selectedBlock"],4)
+            self.assertIn("RISING OF WICKED GODS",first["saveDisplayName"])
+            self.assertIn("seq. 3",first["saveDisplayName"])
+            self.assertEqual(first["saves"][0]["association"],"unassigned")
+            self.assertEqual(first["saves"][1]["association"],"linked_current_mod")
+            # Every auto-snapshot is associated to the linked slot only.
+            snapshots=store._saved(SHA_A)
+            self.assertEqual(len(snapshots),1)
+            self.assertIn("Bloco 4",snapshots[0]["name"])
+            self.assertEqual(card.read_bytes(),raw)
+            other=MemoryCardStore(root)
+            self.assertEqual(other.read(SHA_A)["selectedBlock"],4)
+            self.assertIn("RISING OF WICKED GODS",other.read(SHA_A)["saveDisplayName"])
+
+    def test_same_card_with_another_mod_is_not_mislabeled(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder=Path(temp);card=folder/"epsxe000.mcr"
+            card.write_bytes(card_with_two_saves())
+            store=MemoryCardStore(folder/"userdata")
+            store.select(SHA_A,card,mod_name="RISING OF WICKED GODS")
+            store.select_save(SHA_A,4,mod_name="RISING OF WICKED GODS")
+            store.select(SHA_B,card,mod_name="Remaster X15")
+            second=store.read(SHA_B,mod_name="Remaster X15")
+            block_four=next(s for s in second["saves"] if s["block"]==4)
+            self.assertEqual(block_four["association"],"linked_other_mod")
+            self.assertIn("RISING OF WICKED GODS",block_four["displayName"])
+            self.assertNotIn("Remaster X15",block_four["displayName"])
+            store.select_save(SHA_B,1,mod_name="Remaster X15")
+            assert store.read(SHA_A)["selectedBlock"]==4
+            second=store.read(SHA_B,mod_name="Remaster X15")
+            self.assertIn("Remaster X15",second["saveDisplayName"])
+            self.assertEqual(second["saves"][1]["association"],"linked_other_mod")
+            self.assertEqual(len(store._saved(SHA_B)),1)
+
+    def test_old_auto_snapshots_from_other_blocks_are_not_reused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder=Path(temp);card=folder/"epsxe000.mcr"
+            card.write_bytes(card_with_two_saves())
+            store=MemoryCardStore(folder/"userdata")
+            store.select(SHA_A,card,mod_name="RISING")
+            store.select_save(SHA_A,4,mod_name="RISING")
+            snapshot_dir=store.home/"deck_snapshots"/SHA_A
+            legacy=snapshot_dir/"auto-old-bug.json"
+            legacy.write_text(json.dumps({
+                "schema":1,"rom_sha256":SHA_A,"id":"auto-old-bug",
+                "name":"Wrong old auto deck","source":"memory_card",
+                "cards":list(range(1,41)),
+                "saveName":"BASLUS-01411-YUGIOH",
+                "saveIntegrityVerified":True
+            }),encoding="utf8")
+            names=[row["name"] for row in store.read(SHA_A)["saved"]]
+            self.assertNotIn("Wrong old auto deck",names)
+            self.assertTrue(any("Bloco 4" in name for name in names))
+
+
 if __name__=="__main__":
     unittest.main()

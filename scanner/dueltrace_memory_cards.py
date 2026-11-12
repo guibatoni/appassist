@@ -14,6 +14,7 @@ import os
 import re
 import struct
 from dueltrace_save_integrity import decode_save_block
+from dueltrace_save_labels import label_saves, safe_mod_name, title_from_ps1_header
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,6 +56,7 @@ def _extract_saves(blob):
         if checked is None:
             continue
         found.append({"block":block,"saveName":filename,
+                      "saveTitle":title_from_ps1_header(data),
                       "deckCount":CARD_COUNT,
                       "status":"save_ps1_integridade_validada_nao_comprovado_ativo",
                       **checked})
@@ -132,7 +134,7 @@ class MemoryCardStore:
         result=parse_memory_card(blob)
         return path,blob,result
 
-    def select(self,rom_sha256,path):
+    def select(self,rom_sha256,path,mod_name=None):
         if not isinstance(rom_sha256,str) or not ROM_RE.fullmatch(rom_sha256):
             raise ValueError("Ative primeiro uma ISO cadastrada.")
         source,blob,result=self._load_card(path)
@@ -175,6 +177,8 @@ class MemoryCardStore:
             "selectedDuelistCode":(
                 selected_save["duelistCode"] if selected_save else
                 previous.get("selectedDuelistCode") if keep_missing_pin else None),
+            "modName":(safe_mod_name(mod_name)
+                       or safe_mod_name(previous.get("modName") if isinstance(previous,dict) else "")),
         }
         _write_atomic(self.binding_file,
                       (json.dumps(data,ensure_ascii=False,indent=2)+"\n").encode("utf-8"))
@@ -183,7 +187,7 @@ class MemoryCardStore:
                 "detectedSaveCount":result["detectedSaveCount"],
                 "status":"Cartão vinculado. Leitura automática habilitada; o ePSXe continua salvando o original."}
 
-    def select_save(self,rom_sha256,block):
+    def select_save(self,rom_sha256,block,mod_name=None):
         if (not isinstance(rom_sha256,str) or not ROM_RE.fullmatch(rom_sha256)
                 or type(block) is not int or not 1 <= block <= 15):
             raise ValueError("Save do Memory Card inválido.")
@@ -199,6 +203,8 @@ class MemoryCardStore:
         link["selectedBlock"]=block
         link["selectedSaveName"]=chosen["saveName"]
         link["selectedDuelistCode"]=chosen["duelistCode"]
+        if safe_mod_name(mod_name):
+            link["modName"]=safe_mod_name(mod_name)
         # sequence intentionally NOT pinned: it increments on each game save.
         _write_atomic(self.binding_file,
                       (json.dumps(data,ensure_ascii=False,indent=2)+"\n").encode("utf-8"))
@@ -213,17 +219,34 @@ class MemoryCardStore:
             if target.is_symlink():
                 raise ValueError("Caminho de backup inseguro.")
             _write_atomic(target,blob)
-        # Decks automáticos são capturados somente para saves estruturais.
-        for save in parsed["saves"]:
+        # A full-card backup always includes all 15 slots; deck snapshots do
+        # NOT. Older versions incorrectly cloned every save under every ROM.
+        # Only the explicitly linked save is eligible for this mod.
+        linked=self._binding_data().get("links",{}).get(sha)
+        if not isinstance(linked,dict):
+            linked={}
+        chosen=next((save for save in parsed["saves"]
+                     if type(linked.get("selectedBlock")) is int
+                     and save["block"]==linked["selectedBlock"]
+                     and self._matches_selected_save(linked,save)),None)
+        if chosen is not None:
+            save=chosen
             deck=save["deckIds"]
             fp=hashlib.sha256(bytes().join(
                 int(cid).to_bytes(2,"little") for cid in deck)).hexdigest()
             folder2=self.home/"deck_snapshots"/sha
-            dest=folder2/("auto-"+fp+".json")
+            # Use slot in the key: older releases wrote auto-<hash>.json
+            # for ALL saves under any mod. Preserve them as backups, but do
+            # not let their filenames suppress correctly linked snapshots.
+            snapshot_id="auto-"+str(save["block"])+"-"+fp
+            dest=folder2/(snapshot_id+".json")
             if not dest.exists():
+                mod=safe_mod_name(linked.get("modName")) or "mod vinculado"
                 snapshot={"schema":1,"rom_sha256":sha,
-                          "id":"auto-"+fp,"name":"Deck automático · bloco "+str(save["block"]),
+                          "id":snapshot_id,
+                          "name":("Deck · Bloco "+str(save["block"])+" · "+mod)[:90],
                           "cards":deck,"source":"memory_card","saveName":save["saveName"],
+                          "saveBlock":save["block"],
                           "verifiedInGame":False,
                           "saveIntegrityVerified":True,
                           "duelistCode":save["duelistCode"],
@@ -234,6 +257,7 @@ class MemoryCardStore:
 
     def _saved(self,sha):
         folder=self.home/"deck_snapshots"/sha
+        link=(self._binding_data().get("links") or {}).get(sha) or {}
         if not folder.is_dir():
             return []
         found=[]
@@ -245,6 +269,12 @@ class MemoryCardStore:
             except (OSError,ValueError):
                 continue
             if (payload.get("rom_sha256")!=sha
+                    or (payload.get("source")=="memory_card"
+                        and (type(payload.get("saveBlock")) is not int
+                             or payload.get("saveBlock")!=link.get("selectedBlock")
+                             or not self._matches_selected_save(
+                                 link, {"saveName":payload.get("saveName"),
+                                        "duelistCode":payload.get("duelistCode")})))
                     or (payload.get("saveIntegrityVerified") is not True
                         and payload.get("liveRamVerified") is not True)
                     or not isinstance(payload.get("cards"),list) or
@@ -258,7 +288,7 @@ class MemoryCardStore:
                           "source":str(payload.get("source") or "local")[:30]})
         return found
 
-    def read(self,rom_sha256):
+    def read(self,rom_sha256,mod_name=None):
         if not isinstance(rom_sha256,str) or not ROM_RE.fullmatch(rom_sha256):
             return {"linked":False,"status":"Nenhum mod ativo.","saved":[],
                     "deckIds":[],"saves":[],"selectedBlock":None}
@@ -278,9 +308,10 @@ class MemoryCardStore:
                     "status":"Memory Card indisponível, inválido ou sendo gravado pelo ePSXe."}
         digest=self._backup(rom_sha256,blob,result)
         saves=result["saves"]
-        choices=[{"block":row["block"],"saveName":row["saveName"],
-                  "duelistCode":row["duelistCode"],
-                  "saveSequence":row["saveSequence"]} for row in saves]
+        choices=label_saves(
+            saves, data.get("links",{}), current_sha=rom_sha256,
+            memory_path=str(path),
+            mod_name=safe_mod_name(mod_name) or link.get("modName"))
         selected=link.get("selectedBlock")
         pinned=type(selected) is int and 1<=selected<=15
         chosen=next((row for row in saves
@@ -302,8 +333,14 @@ class MemoryCardStore:
             status="Há vários saves; escolha o correto. Nenhum deck é presumido como ativo."
         else:
             status="Memory Card válido, mas não há save FM com integridade comprovada."
+        chosen_label=next((row for row in choices
+                          if chosen and row["block"]==chosen["block"]),None)
         return {**base,"linked":True,"cardName":path.name,
-                "saves":choices,"selectedBlock":selected if chosen else None,
+                "saves":choices,
+                "saveDisplayName":(chosen_label or {}).get("displayName"),
+                "activeModName":(safe_mod_name(mod_name)
+                                 or safe_mod_name(link.get("modName"))),
+                "selectedBlock":selected if chosen else None,
                 "savePinned":pinned and chosen is not None,
                 "backupFingerprint":digest[:16],
                 "saveName":chosen["saveName"] if chosen else None,

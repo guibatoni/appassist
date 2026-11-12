@@ -1549,6 +1549,17 @@ class DueltraceWebBridge:
             evidence={**data,"rows":[dict(row) for row in data["rows"]]}
         return review_card_candidates(evidence)
 
+    @staticmethod
+    def _memory_mod_name(entry, profile):
+        """Prefer the user's per-ISO alias over the default imported name."""
+        from dueltrace_save_labels import safe_mod_name
+        entry=entry if isinstance(entry,dict) else {}
+        profile=profile if isinstance(profile,dict) else {}
+        value=(entry.get("display_name") or
+               profile.get("name") or
+               Path(entry.get("file_name") or "").stem)
+        return safe_mod_name(value) or "Mod selecionado"
+
     def get_opponent_deck(self, opponent_id=0):
         """Oponente selecionado: pool de deck pertencente à ISO ativa."""
         from dueltrace_deck_library import opponent_deck_view
@@ -1582,7 +1593,9 @@ class DueltraceWebBridge:
             active2,entry2,profile2=self._active()
             if not profile2 or active2.get("sha256")!=sha:
                 raise RuntimeError("A ISO ativa mudou durante a seleção.")
-            result=MemoryCardStore(self.catalog.home).select(sha,selected[0])
+            result=MemoryCardStore(self.catalog.home).select(
+                sha,selected[0],
+                mod_name=self._memory_mod_name(entry2,profile2))
             self._ensure_memory_monitor()
             return {"cancelled":False,**result}
 
@@ -1594,7 +1607,8 @@ class DueltraceWebBridge:
             if not profile:
                 raise ValueError("Ative uma ISO antes de selecionar um save.")
             return MemoryCardStore(self.catalog.home).select_save(
-                active["sha256"],block)
+                active["sha256"],block,
+                mod_name=self._memory_mod_name(entry,profile))
 
     def _get_confirmed_live_deck(self,sha):
         """Only trust RAM from a process this app launched for this SHA."""
@@ -1615,7 +1629,8 @@ class DueltraceWebBridge:
             active,entry,profile=self._active()
             sha=active.get("sha256") if profile else None
             store=MemoryCardStore(self.catalog.home)
-            memory=store.read(sha)
+            memory=store.read(
+                sha,mod_name=self._memory_mod_name(entry,profile))
             cards={c["id"]:c for c in self._cards(profile)}
             ids=memory.get("deckIds",[])
             display_name="Deck gravado no Memory Card"
@@ -1647,6 +1662,8 @@ class DueltraceWebBridge:
             return {"romSha":sha,"linked":memory.get("linked",False),
                     "cardName":memory.get("cardName"),
                     "saveName":memory.get("saveName"),
+                    "saveDisplayName":memory.get("saveDisplayName"),
+                    "activeModName":memory.get("activeModName"),
                     "savePinned":memory.get("savePinned") is True,
                     "status":(
                         "Deck lido da RAM de um ePSXe iniciado pelo DUELTRACE. "

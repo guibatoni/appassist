@@ -74,7 +74,9 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         <div>
           <p className="font-semibold text-white">{state?.cardName??"Memory Card não selecionado"}</p>
           <p className="text-sm text-muted">{state?.status??"Abra a Biblioteca de Mods para selecionar o Memory Card."}</p>
-          {state?.saveName&&<p className="text-xs text-primary">Save: {state.saveName}</p>}
+          {state?.saveDisplayName&&<p className="text-xs text-primary">
+            Save selecionado: {state.saveDisplayName}
+          </p>}
         </div>
         <button type="button" className="btn-ghost" onClick={()=>setRefresh(x=>x+1)}>
           <RefreshCcw className="size-4"/> Recarregar
@@ -83,15 +85,15 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       {error&&<p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
       {state?.activeInEmulatorVerified&&
         <p className="mt-2 text-sm text-primary">Leitura ao vivo confirmada na RAM do ePSXe iniciado pelo DUELTRACE. Alterações ainda não salvas no Memory Card podem aparecer aqui.</p>}
-      <p className="mt-3 text-xs text-muted">O DUELTRACE valida as verificações internas do save e acompanha alterações no arquivo. O cartão pode conter um deck salvo diferente do deck atualmente carregado no ePSXe. A seleção de ISO não confirma automaticamente qual save o emulador abriu.</p>
-      {(state?.saves?.length??0)>1&&
-        <label className="mt-4 flex flex-col gap-1 text-sm text-muted">Selecionar partida salva no cartão
+      <p className="mt-3 text-xs text-muted">O DUELTRACE identifica o título do save PS1 quando disponível e associa cada bloco ao mod que você selecionou. Mods que compartilham o mesmo identificador do jogo não podem ser diferenciados só por esse código. O ePSXe continua responsável pelo cartão original.</p>
+      {(state?.saves?.length??0)>0&&
+        <label className="mt-4 flex flex-col gap-1 text-sm text-muted">Saves identificados neste Memory Card
           <select className="field max-w-xl px-3 py-2" value={state?.selectedBlock??""}
             disabled={busy}
             onChange={e=>{if(e.target.value)void chooseSave(Number(e.target.value))}}>
             <option value="">Escolha o save correto</option>
             {state!.saves.map(save=><option key={save.block} value={save.block}>
-              Bloco {save.block} · {save.saveName} · sequência {save.saveSequence}
+              {save.displayName}
             </option>)}
           </select>
         </label>}
