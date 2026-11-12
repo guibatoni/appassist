@@ -62,7 +62,7 @@ class RankSystemTests(unittest.TestCase):
     def test_bcd_pow_tec_are_two_dropdown_choices_for_one_real_drop_pool(self):
         sha="a"*64
         p=fake_profile(sha)
-        expected=("S-POW","A-POW","BCD-POW","BCD-TEC","A-TEC","S-TEC")
+        expected=("SA-POW","BCD-POW","BCD-TEC","SA-TEC")
         self.assertEqual(CLASSIC_DROP_FILTERS,expected)
         self.assertEqual(drop_filter_ranks(sha),expected)
         self.assertEqual(drop_filter_ranks(X15_SHA),X15_RANKS)
@@ -99,6 +99,48 @@ class RankSystemTests(unittest.TestCase):
                              rank="BCD-POW")
         with self.assertRaises(ValueError):
             pool_index_for_drop_filter(X15_SHA,"BCD-TEC")
+
+    def test_sa_pow_and_sa_tec_group_original_ranks_without_altering_drops(self):
+        sha="a"*64
+        p=fake_profile(sha)
+        expected=("SA-POW","BCD-POW","BCD-TEC","SA-TEC")
+        self.assertEqual(drop_filter_ranks(sha),expected)
+        pair_banks={
+            "SA-POW":(0,("S-POW","A-POW")),
+            "SA-TEC":(2,("A-TEC","S-TEC")),
+        }
+        for label,(pool,original) in pair_banks.items():
+            with self.subTest(label=label):
+                self.assertEqual(pool_index_for_drop_filter(sha,label),pool)
+                grouped=get_drop_catalog(p,rank=label)
+                self.assertTrue(grouped["available"])
+                self.assertEqual(grouped["rankOptions"],list(expected))
+                self.assertEqual(grouped["rankSelected"],label)
+                self.assertEqual(grouped["total"],39)
+                self.assertTrue(all(
+                    row["group"]==p["drop_group_labels"][pool]
+                    for row in grouped["rows"]))
+                self.assertEqual(grouped["rows"][0]["groupLabel"],CLASSIC_POOLS[pool])
+                self.assertEqual(grouped["rows"][0]["eligibleRanks"],list(original))
+                for legacy in original:
+                    self.assertIn(legacy,CLASSIC_RANKS)
+                    self.assertNotIn(legacy,expected)
+                    self.assertEqual(pool_index_for_drop_filter(sha,legacy),pool)
+                    self.assertEqual(get_drop_catalog(p,rank=legacy)["rows"],
+                                     grouped["rows"])
+                    self.assertEqual(get_drop_catalog(p,rank=legacy)["total"],39)
+        # X15's own S-POW/S-TEC are distinct and SA aliases must be rejected.
+        x15=fake_profile(X15_SHA,["Z-POW","S-POW","S-TEC"])
+        self.assertEqual(drop_filter_ranks(X15_SHA),X15_RANKS)
+        for grouped in ("SA-POW","SA-TEC"):
+            with self.subTest(x15_rejects=grouped):
+                with self.assertRaises(ValueError):
+                    pool_index_for_drop_filter(X15_SHA,grouped)
+                with self.assertRaises(ValueError):
+                    get_drop_catalog(x15,rank=grouped)
+        # Never promote a dropdown shortcut to an actual duel scoring rank.
+        for grouped in ("SA-POW","SA-TEC"):
+            self.assertNotIn(grouped,CLASSIC_RANKS)
 
     def test_x15_only_its_three_ranks_and_original_scores_not_reused(self):
         p=fake_profile(X15_SHA,["Z-POW","S-POW","S-TEC"])

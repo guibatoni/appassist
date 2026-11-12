@@ -109,8 +109,8 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
     filters=drop_filter_ranks(iso_sha)
     labels=drop_pool_labels(iso_sha)
     grouped_ranks=pool_ranks(iso_sha)
-    # Expose six useful classic menu choices instead of listing B/C/D
-    # separately for POW and TEC. Keep legacy single-rank queries valid.
+    # Four menu choices cover the original three WA_MRG banks: SA-POW,
+    # BCD-POW, BCD-TEC and SA-TEC. Keep old single-rank queries valid.
     if rank and rank not in filters and rank not in ranks:
         raise ValueError("O RANK não pertence ao sistema desta ISO.")
     selected_group=(raw_groups[pool_index_for_drop_filter(iso_sha,rank)]

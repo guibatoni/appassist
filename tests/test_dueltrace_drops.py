@@ -57,11 +57,15 @@ class DropCatalogTests(unittest.TestCase):
         self.assertEqual(get_drop_catalog(p,query="2")["total"],39)
         self.assertEqual(len(get_drop_catalog(p,offset=100,limit=10)["rows"]),10)
 
-    def test_rank_dropdown_groups_classic_bcd_pow_and_tec(self):
+    def test_rank_dropdown_groups_classic_sa_and_bcd_pow_tec(self):
         p=fake_profile()
         result=get_drop_catalog(p)
         self.assertEqual(result["rankOptions"],[
-            "S-POW","A-POW","BCD-POW","BCD-TEC","A-TEC","S-TEC"])
+            "SA-POW","BCD-POW","BCD-TEC","SA-TEC"])
+        self.assertNotIn("S-POW",result["rankOptions"])
+        self.assertNotIn("A-POW",result["rankOptions"])
+        self.assertNotIn("A-TEC",result["rankOptions"])
+        self.assertNotIn("S-TEC",result["rankOptions"])
         self.assertNotIn("B-POW",result["rankOptions"])
         self.assertNotIn("C-POW",result["rankOptions"])
         self.assertNotIn("D-TEC",result["rankOptions"])
@@ -71,6 +75,15 @@ class DropCatalogTests(unittest.TestCase):
                 self.assertEqual(filtered["rankSelected"],rank)
                 self.assertEqual(filtered["total"],1)
                 self.assertEqual(filtered["rows"][0]["cardId"],2)
+                self.assertEqual(filtered["rows"][0]["chancePercent"],100)
+        for rank,card,group in (("SA-POW",1,0),("SA-TEC",3,2)):
+            with self.subTest(rank=rank):
+                filtered=get_drop_catalog(p,opponent_id=3,rank=rank)
+                self.assertEqual(filtered["rankSelected"],rank)
+                self.assertEqual(filtered["total"],1)
+                self.assertEqual(filtered["rows"][0]["cardId"],card)
+                self.assertEqual(filtered["rows"][0]["group"],
+                                 p["drop_group_labels"][group])
                 self.assertEqual(filtered["rows"][0]["chancePercent"],100)
         remaster=get_drop_catalog(fake_profile(
             X15_SHA,["Z-POW","S-POW","S-TEC"]))
