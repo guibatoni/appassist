@@ -57,6 +57,23 @@ class FakeBridge:
                          "nameResult":"Fusão",
                          "source":"ISO-local"}]}
 
+    def get_card_fusion_paths(self,card_id):
+        return {
+            "available": True, "romSha": SHA, "cardId": card_id,
+            "provisional": True, "materialTotal": 5, "resultTotal": 5,
+            "materialRows": [
+                {"partnerId": index, "partnerName": "Carta parceira",
+                 "resultId": 3, "resultName": "Resultado <teste>",
+                 "atk": 1000, "def": 800}
+                for index in range(2, 7)
+            ],
+            "resultRows": [
+                {"materialAId": 2, "materialAName": "Material A",
+                 "materialBId": 3, "materialBName": "Material B"}
+                for _ in range(5)
+            ],
+        }
+
     def get_opponent_deck(self,opponent_id=0):
         return {"available":True,"opponentId":opponent_id,
                 "opponents":[{"id":1,"name":"Simon"}],
