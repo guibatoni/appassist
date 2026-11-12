@@ -66,11 +66,11 @@ class PublicUiContractTests(unittest.TestCase):
     def test_fusion_search_scope_filters_by_result_or_material(self):
         source=self.fusions
         self.assertIn('const [searchScope,setSearchScope]',source)
-        self.assertIn('aria-label="Pesquisar fusões em"',source)
+        self.assertIn('aria-label={t("Pesquisar fusões em")}',source)
         self.assertIn('<option value="all">Resultado ou material</option>',source)
         self.assertIn('<option value="result">Resultado final da fusão</option>',source)
         self.assertIn('<option value="material">Material da fusão</option>',source)
-        self.assertIn('aria-label="Buscar fusões por nome ou ID"',source)
+        self.assertIn('aria-label={t("Buscar fusões por nome ou ID")}',source)
         self.assertIn('api.get_fusions(query,offset,pageSize,sort,cardType,searchScope)',source)
         self.assertIn('setSearchScope("all")',source)
         self.assertIn('[sha,query,searchScope,offset,sort,cardType,pageSize]',source)

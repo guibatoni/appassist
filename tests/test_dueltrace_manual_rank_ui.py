@@ -16,9 +16,9 @@ class CleanHomeRankUiTests(unittest.TestCase):
             "function Home({sha,cards}:",1)[0]
 
     def test_home_contains_only_hand_rank_and_fusions(self):
-        self.assertIn('aria-label="Cartas na mão"',self.home)
+        self.assertIn('aria-label={t("Cartas na mão")}',self.home)
         self.assertIn('<RankPanel sha={sha}/>',self.home)
-        self.assertIn('aria-label="Dicas de fusões"',self.home)
+        self.assertIn('aria-label={t("Dicas de fusões")}',self.home)
         self.assertNotIn("ManualRankCalculator",self.page)
         self.assertNotIn("Calculadora manual de RANK",self.page)
         self.assertNotIn("manualRankMetrics",self.page)

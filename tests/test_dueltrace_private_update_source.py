@@ -195,7 +195,7 @@ class PrivateUpdatesTests(unittest.TestCase):
     def test_same_button_keeps_current_folder_restart_and_rollback(self):
         ui=(ROOT/"web/components/shell/update-checker.tsx").read_text(encoding="utf-8")
         staged=(ROOT/"scanner/dueltrace_preview_installer.py").read_text(encoding="utf-8")
-        self.assertIn('aria-label="Atualizar agora"',ui)
+        self.assertIn('aria-label={t("Atualizar agora")}',ui)
         self.assertIn("api.install_preview_update()",ui)
         self.assertIn("api.install_portable_update()",ui)
         self.assertIn("gh auth login",ui)

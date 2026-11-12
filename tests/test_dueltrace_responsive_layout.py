@@ -89,7 +89,7 @@ class DisplayGeometryTests(unittest.TestCase):
 
     def test_native_window_uses_work_area_not_fixed_1100x700(self):
         self.assertIn("work_width,work_height=windows_work_area()",NATIVE)
-        self.assertIn("main_size=window_geometry(work_width,work_height)",NATIVE)
+        self.assertIn("default_size=window_geometry(work_width,work_height)",NATIVE)
         self.assertIn('width=main_size["width"],height=main_size["height"]',NATIVE)
         self.assertIn('min_size=(main_size["min_width"],main_size["min_height"])',NATIVE)
         self.assertIn("tool_size=tool_geometry(",NATIVE)
@@ -123,7 +123,7 @@ class ResponsiveUiContracts(unittest.TestCase):
         for menu in ("Início","Biblioteca de Mods","Biblioteca de Cartas",
                      "Fusões","Drops"):
             self.assertIn(menu,SIDE)
-        self.assertIn('aria-label="Navegação principal"',SIDE)
+        self.assertIn('aria-label={t("Navegação principal")}',SIDE)
 
     def test_adaptive_layouts_are_based_on_actual_panel_width(self):
         self.assertIn("dueltrace-main",SHELL)

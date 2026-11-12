@@ -74,7 +74,7 @@ class UpdateVisibilityV49Tests(unittest.TestCase):
         self.assertIn("createPortal(",ui)
         self.assertIn("document.body",ui)
         self.assertIn('aria-modal="true"',ui)
-        self.assertIn('aria-label="Atualizar agora"',ui)
+        self.assertIn('aria-label={t("Atualizar agora")}',ui)
         self.assertIn("api.install_preview_update()",ui)
         self.assertIn("api.install_portable_update()",ui)
         self.assertIn("previewCheckStatus",ui)
@@ -85,7 +85,7 @@ class UpdateVisibilityV49Tests(unittest.TestCase):
         self.assertIn("gh auth login",ui)
         self.assertIn("gh auth status",ui)
         self.assertIn("<ShieldAlert className=",ui)
-        self.assertIn('aria-label="Atualizar agora"',ui)
+        self.assertIn('aria-label={t("Atualizar agora")}',ui)
         self.assertIn('https://github.com/guibatoni/appassist/releases"',checker)
         self.assertIn('status["previewCheckStatus"]="checked"',bridge)
 
