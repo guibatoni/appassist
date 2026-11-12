@@ -814,6 +814,13 @@ export type RankComparison = {
 }
 
 export type UpdateNoteGroup={title:string;items:string[]}
+export type InstalledUpdateNotice={
+  available:boolean
+  unread:boolean
+  version:string
+  runId:number|null
+  notes:UpdateNoteGroup[]
+}
 
 export type UpdateCheck = {
   patchNotes?: UpdateNoteGroup[]
@@ -857,6 +864,8 @@ export interface DesktopAPI {
   get_alpha_preferences():Promise<{fusionTipsVisible:boolean}>
   set_alpha_preferences(visible:boolean):Promise<{fusionTipsVisible:boolean}>
   close_tool_window(kind:PopoutKind):Promise<PopoutState>
+  get_installed_update_notice(): Promise<InstalledUpdateNotice>
+  acknowledge_update_notice(runId:number): Promise<{acknowledged:boolean;runId:number}>
   check_updates(): Promise<UpdateCheck>
   open_updates_page(runId?: number): Promise<{opened: boolean}>
   install_signed_update(): Promise<{started: boolean; status: string; version?: string}>
@@ -921,6 +930,8 @@ interface ProtectedNativeAPI {
   get_alpha_preferences(token:string):Promise<{fusionTipsVisible:boolean}>
   set_alpha_preferences(token:string,visible:boolean):Promise<{fusionTipsVisible:boolean}>
   close_tool_window(token:string,kind:PopoutKind):Promise<PopoutState>
+  get_installed_update_notice(token:string): Promise<InstalledUpdateNotice>
+  acknowledge_update_notice(token:string,runId:number): Promise<{acknowledged:boolean;runId:number}>
   check_updates(token: string): Promise<UpdateCheck>
   open_updates_page(token: string, runId?: number): Promise<{opened: boolean}>
   install_signed_update(token: string): Promise<{started: boolean; status: string; version?: string}>
@@ -999,6 +1010,8 @@ export function desktopApi(): DesktopAPI | null {
     get_alpha_preferences: () => native.get_alpha_preferences(token),
     set_alpha_preferences: (visible) => native.set_alpha_preferences(token,visible),
     close_tool_window: (kind) => native.close_tool_window(token,kind),
+    get_installed_update_notice: () => native.get_installed_update_notice(token),
+    acknowledge_update_notice: (runId) => native.acknowledge_update_notice(token,runId),
     check_updates: () => native.check_updates(token),
     open_updates_page: (runId) => native.open_updates_page(token, runId),
     install_signed_update: () => native.install_signed_update(token),
