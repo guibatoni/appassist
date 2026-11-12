@@ -48,7 +48,7 @@ class PreviewReleaseMetadataPolicyTests(unittest.TestCase):
         self.assertEqual([x["title"] for x in notes],
                          ["Novidades", "Melhorias", "Correções"])
         self.assertGreaterEqual(sum(len(x["items"]) for x in notes), 6)
-        self.assertIn("BCD-POW", str(notes))
+        self.assertIn("Upscaling conservador", str(notes))
 
 
 if __name__ == "__main__":
