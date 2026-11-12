@@ -16,7 +16,7 @@ from functools import lru_cache
 from PIL import Image, ImageDraw, ImageFont
 from dueltrace_card_renderer_v014 import render_card_v014
 
-REVISION = 4
+REVISION = 5
 SIZE = (540, 780)
 CACHE_FILE = "cartas-hd-cache.json"
 MAX_CARDS = 722
@@ -153,7 +153,7 @@ def render_card(card, art: Image.Image) -> Image.Image:
     return render_card_v014(card_fields(card), art, card.get("id"))
 
 def render_card_pack(cards, originals: Path, enhanced: Path, dest: Path, *,
-                     type_analysis=None):
+                     type_analysis=None, type_name_analysis=None):
     """Build once per verified source art + actual card metadata, with cache."""
     originals = Path(originals).resolve(strict=True)
     enhanced = Path(enhanced).resolve()
@@ -181,6 +181,11 @@ def render_card_pack(cards, originals: Path, enhanced: Path, dest: Path, *,
         cards = apply_iso_type_evidence(
             cards, type_analysis,
             rom_sha256=type_analysis.get("rom_sha256"))
+    if isinstance(type_name_analysis, dict):
+        from dueltrace_type_names import apply_type_names
+        cards = apply_type_names(
+            cards, type_name_analysis,
+            rom_sha256=type_name_analysis.get("rom_sha256"))
     for card in cards[:MAX_CARDS]:
         cid = _bounded_integer(card.get("id"), MAX_CARDS)
         if not cid or f"{cid:03d}.png" in index:

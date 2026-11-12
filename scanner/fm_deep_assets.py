@@ -27,7 +27,7 @@ FRAME_ATLAS_COLUMN=2
 FRAME_V,FRAME_W,FRAME_H=128,52,60
 FRAME_ROW_STRIDE=64*2
 FRAME_NAMES=("monstro","magica","armadilha","ritual","roxo","laranja")
-ASSET_REVISION=3
+ASSET_REVISION=4
 
 
 def bgr555(value:int,*,transparent_zero=False):
@@ -122,7 +122,8 @@ def _has_detail(im)->bool:
 
 def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
                        rom_sha256:str,wa_name="DATA/WA_MRG.MRG",
-                       type_analysis:dict|None=None)->dict:
+                       type_analysis:dict|None=None,
+                       type_name_analysis:dict|None=None)->dict:
     """Extrai 722 PNGs grandes, 722 miniaturas e composições por tipo localmente."""
     try:
         from PIL import Image
@@ -217,7 +218,8 @@ def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
             from dueltrace_classic_cards import render_card_pack
             classic_cards = render_card_pack(
                 cards, folders["artes_722"], out / "artes_upscaled",
-                out / "cartas_classicas_hd", type_analysis=type_analysis)
+                out / "cartas_classicas_hd", type_analysis=type_analysis,
+                type_name_analysis=type_name_analysis)
         except (OSError, ValueError, ImportError) as exc:
             warnings.append("Cartas clássicas HD: " + str(exc)[:120])
     if classic_cards.get("failed"):

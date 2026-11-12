@@ -37,8 +37,8 @@ WA_CARD_SECTOR_START=722
 WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
-ART_PARSER_REVISION=10  # detecção dos tipos aplicada também à moldura de cartas
-SCAN_PARSER_REVISION=31  # auditar automaticamente tipos de carta por ISO
+ART_PARSER_REVISION=11  # novo cache visual e nomes por ISO
+SCAN_PARSER_REVISION=32  # descobrir nomes de tipos reais por tabela de ISO
 
 
 def sha256(path:Path, progress=None):
@@ -507,7 +507,7 @@ def process(path,output,with_art=False,digest=None,progress=None):
                      'decks.csv','validacao_pesos.csv',
                      'catalogo_candidato_nao_verificado.json',
                      'oponentes_candidatos_nao_verificados.json',
-                     'tipos_iso.json'):
+                     'tipos_iso.json', 'nomes_tipos_iso.json'):
         (dest/previous).unlink(missing_ok=True)
     disc=None
     try:
@@ -781,9 +781,15 @@ def process(path,output,with_art=False,digest=None,progress=None):
         from dueltrace_type_forensics import analyze_iso_types
         info["type_analysis"] = analyze_iso_types(
             cards, rom_sha256=info["sha256"])
+        from dueltrace_type_names import extract_type_names
+        info["type_name_analysis"] = extract_type_names(
+            sl, rom_sha256=info["sha256"])
         if cards and info["type_analysis"].get("analyzed") == CARD_COUNT:
             (dest / "tipos_iso.json").write_text(
                 json.dumps(info["type_analysis"], ensure_ascii=False, indent=2),
+                encoding="utf-8")
+            (dest / "nomes_tipos_iso.json").write_text(
+                json.dumps(info["type_name_analysis"], ensure_ascii=False, indent=2),
                 encoding="utf-8")
         # Recursos independentes: falha nos 39 adversários não apaga 722 cartas.
         if cards:
@@ -859,7 +865,8 @@ def process(path,output,with_art=False,digest=None,progress=None):
                 from fm_deep_assets import extract_asset_pack
                 pack=extract_asset_pack(wa,cards,dest,rom_sha256=info['sha256'],
                                         wa_name=wa_names[0],
-                                        type_analysis=info.get("type_analysis"))
+                                        type_analysis=info.get("type_analysis"),
+                                        type_name_analysis=info.get("type_name_analysis"))
                 info['artes_extraidas']=pack['art_count']
                 info['miniaturas_extraidas']=pack['thumbnail_count']
                 info['molduras_extraidas']=pack['frame_count']

@@ -15,6 +15,7 @@ from pathlib import Path
 from scanner_multiiso import process, sha256, X15_SHA
 from card_catalog import enrich_cards, attach_effect_manifest, effect_sidecar_path, category_summary
 from dueltrace_type_forensics import analyze_iso_types, apply_iso_type_evidence
+from dueltrace_type_names import apply_type_names
 from mod_effects_iso import extract_embedded_effects
 from dueltrace_rank_profiles import rank_profile_for_image
 from dueltrace_rank_system import CLASSIC_RANKS
@@ -95,6 +96,9 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     if catalog:
         catalog = apply_iso_type_evidence(
             catalog, type_analysis, rom_sha256=result["sha256"])
+        catalog = apply_type_names(
+            catalog, result.get("type_name_analysis"),
+            rom_sha256=result["sha256"])
     from fm_card_text import attach_descriptions
     candidate_descriptions={
         integer(row.get("id")):{"text":row["descricao"],"source":row["descricao_fonte"]}
@@ -173,6 +177,7 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "wa_sha256": result.get("hash_wa"),
         "catalog_validation": identity_validation,
         "type_analysis": type_analysis,
+        "type_name_analysis": result.get("type_name_analysis"),
         "candidate_catalogue": (result.get("candidate_catalogue")
                                 if isinstance(result.get("candidate_catalogue"),dict)
                                 else {"status":"nao_identificado","cards":0,"opponents":0}),

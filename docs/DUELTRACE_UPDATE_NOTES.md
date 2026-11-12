@@ -1,16 +1,16 @@
-# DUELTRACE v0.15.0 — Preview
+# DUELTRACE v0.16.0 — Preview
 
 ## Novidades
-- Análise automática de tipos ao importar ou atualizar dados de cada ISO.
-- Tipos personalizados, códigos 24–31 e possíveis alterações passam a ser identificados para revisão.
-- Relatório local tipos_iso.json com códigos, quantidades e evidências específicas do mod.
+- Novo design HD da carta gerado automaticamente mesmo quando o cache antigo não existe.
+- Extração automática de nomes de tipos por tabela textual encontrada no executável da ISO.
+- Detecção de nomes substituídos por mod, incluindo GOD no lugar de Réptil quando houver tabela comprovável.
 
 ## Melhorias
-- Biblioteca, Fusões, Drops e Mão utilizam classificações ligadas à ISO selecionada.
-- ATK/DEF reais continuam visíveis nas cartas com atributos de monstro.
-- O scanner atualiza o perfil de tipos por ISO e regenera caches derivados.
+- Biblioteca, Fusões, Drops, Mão e detalhes priorizam sempre a carta completa HD.
+- O backend associa nomes de tipos ao SHA-256 da ISO selecionada sem configuração manual.
+- Layout das cartas com nome, atributo, estrelas, arte, descrição e ATK/DEF dentro da moldura.
 
 ## Correções
-- Cartas suspeitas deixam de receber nomes de tipos do original sem confirmação.
-- Molduras de cartas não são atribuídas a tipos desconhecidos sem evidência.
-- Nenhuma ISO original é alterada; relatório e identificação permanecem ligados ao SHA-256.
+- O servidor local regenera imagens antigas ou incompatíveis antes de exibi-las.
+- Strings isoladas como GOD não são confundidas com tabelas completas de tipos.
+- O scanner rejeita mapeamentos ambíguos e mantém nomes desconhecidos sem inventar dados.

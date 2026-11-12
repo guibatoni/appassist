@@ -19,7 +19,7 @@ class PreviewReleaseMetadataPolicyTests(unittest.TestCase):
     def test_canonical_semver_branch_and_notes_are_consistent(self):
         self.assertEqual(policy.current_version(), CURRENT_VERSION)
         self.assertEqual(policy.verify_release_metadata(
-            "feature/dueltrace-v0.15.0-iso-card-type-forensics"), CURRENT_VERSION)
+            "feature/dueltrace-v0.16.0-hd-cards-type-name-tables"), CURRENT_VERSION)
         self.assertEqual(policy.verify_release_metadata("main"), CURRENT_VERSION)
 
     def test_old_branch_cannot_publish_newer_binary(self):
@@ -48,7 +48,7 @@ class PreviewReleaseMetadataPolicyTests(unittest.TestCase):
         self.assertEqual([x["title"] for x in notes],
                          ["Novidades", "Melhorias", "Correções"])
         self.assertGreaterEqual(sum(len(x["items"]) for x in notes), 6)
-        self.assertIn("tipos personalizados", str(notes).lower())
+        self.assertIn("nomes de tipos", str(notes).lower())
 
 
 if __name__ == "__main__":

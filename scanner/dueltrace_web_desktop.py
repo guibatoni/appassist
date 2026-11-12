@@ -157,8 +157,19 @@ def local_handler(directory: Path, bridge: DueltraceWebBridge):
                     folder=("cartas_classicas_hd" if classic_match else
                             "cartas_com_moldura" if composite_match else
                             "artes_upscaled" if hd_match else "artes_722")
-                    image=(root/folder/f"{int(cid):03d}.png").resolve(strict=True)
-                    max_size=4_000_000 if (hd_match or classic_match) else 1_000_000
+                    if classic_match:
+                        # Gera automaticamente a carta NOVA quando não existe,
+                        # ou o cache antigo não corresponde ao perfil da ISO.
+                        from dueltrace_card_on_demand import ensure_card_hd
+                        card=next((row for row in profile.get("cards",[])
+                                   if row.get("id")==int(cid)),None)
+                        if card is None:
+                            self.send_error(404)
+                            return
+                        image=ensure_card_hd(root,card,rom_sha256=sha)
+                    else:
+                        image=(root/folder/f"{int(cid):03d}.png").resolve(strict=True)
+                    max_size=8_000_000 if classic_match else 4_000_000 if hd_match else 1_000_000
                     if not image.is_relative_to(root) or image.stat().st_size>max_size:
                         self.send_error(404)
                         return

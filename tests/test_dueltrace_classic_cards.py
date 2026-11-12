@@ -77,7 +77,7 @@ class ClassicCardsTest(unittest.TestCase):
             self.assertEqual(third["cached"], 0)
             self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), digest)
             manifest = json.loads((cache / "cartas-hd-cache.json").read_text("utf-8"))
-            self.assertEqual(manifest["revision"], 4)
+            self.assertEqual(manifest["revision"], 5)
             with Image.open(cache / "001.png") as generated:
                 self.assertEqual(generated.size, SIZE)
 
