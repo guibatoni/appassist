@@ -84,7 +84,7 @@ class OnlineCloudTests(unittest.TestCase):
         css = (base / "app.css").read_text(encoding="utf-8")
         self.assertIn("DUELTRACE Cloud", html)
         self.assertIn('script defer src="./app.js"', html)
-        self.assertIn("DUELTRACE", css)
+        self.assertIn(".brand", css)
         self.assertIn('const BASE = "http://127.0.0.1:8765"', js)
         self.assertIn("response.json()", js)
         self.assertIn("credentials: \"omit\"", js)
