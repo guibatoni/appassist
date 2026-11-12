@@ -4,7 +4,7 @@ import Image from "next/image"
 import {createPortal} from "react-dom"
 import {useEffect,useMemo,useRef,useState} from "react"
 import {ArrowLeft,BookOpen,Layers,X} from "lucide-react"
-import {cardArtHd,cardArt,desktopApi} from "@/lib/desktop"
+import {cardClassicHd,cardArtHd,cardArt,desktopApi} from "@/lib/desktop"
 import type {CardDropSources,CardFusionPaths,DropRow,LocalCard} from "@/lib/desktop"
 
 /** Click-only selection. No hover timer, mouse-leave or focus popup. */
@@ -14,15 +14,16 @@ export type CardPreviewSelection = {
 }
 
 function EnlargedArtwork({card,sha}:{card:LocalCard;sha:string|null}) {
-  // The HD file is derived from the mod's original pixels, never AI-invented.
-  const [source,setSource]=useState<"hd"|"original"|"none">("hd")
-  useEffect(()=>setSource("hd"),[sha,card.id])
-  const url=source==="hd"?cardArtHd(sha,card.id):
+  const [source,setSource]=useState<"classic"|"hd"|"original"|"none">("classic")
+  useEffect(()=>setSource("classic"),[sha,card.id])
+  const url=source==="classic"?cardClassicHd(sha,card.id):
+    source==="hd"?cardArtHd(sha,card.id):
     source==="original"?cardArt(sha,card.id):null
-  return <div className="relative mx-auto aspect-[17/16] w-full max-w-64 overflow-hidden rounded-lg border border-gold/45 bg-[#061126] shadow-[0_0_24px_rgb(56_200_255/0.14)]">
-    {url?<Image src={url} alt={"Arte original do mod: "+card.name} fill unoptimized sizes="256px"
+  const ratio=source==="classic"?"aspect-[9/13]":"aspect-[17/16]"
+  return <div className={"relative mx-auto w-full max-w-64 overflow-hidden rounded-lg border border-gold/45 bg-[#061126] shadow-[0_0_24px_rgb(56_200_255/0.14)] "+ratio}>
+    {url?<Image src={url} alt={"Carta "+card.name} fill unoptimized sizes="256px"
       className="object-contain"
-      onError={()=>setSource(old=>old==="hd"?"original":"none")}/>:
+      onError={()=>setSource(old=>old==="classic"?"hd":old==="hd"?"original":"none")}/>:
       <div className="flex h-full items-center justify-center">
         <Layers className="size-12 text-primary/45" aria-label="Arte indisponível"/>
       </div>}
