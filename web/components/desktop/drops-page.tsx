@@ -1,5 +1,7 @@
 "use client"
 
+import {T,useI18n} from "@/lib/i18n"
+
 import Image from "next/image"
 import {useEffect, useMemo, useState} from "react"
 import {ChevronLeft, ChevronRight, RefreshCcw, Search} from "lucide-react"
@@ -53,6 +55,7 @@ function DropCard({row,sha,cardDetails,onPreview}:{
 }
 
 export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
+  const {t}=useI18n()
   const [opponent,setOpponent]=useState(0)
   const [rankFilter,setRankFilter]=useState("")
   const [query,setQuery]=useState("")
@@ -109,43 +112,43 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
 
   return <div className="flex flex-col gap-4">
     <header className="panel rounded-xl border-gold/40 bg-gradient-to-r from-[#142b51] to-[#061126] px-3 py-3 sm:px-5 sm:py-4">
-      <h1 className="font-display text-2xl font-bold text-gold sm:text-3xl">Biblioteca de Drops</h1>
-      <p className="mt-1 text-sm text-muted">Encontre cartas e recompensas dos adversários</p>
+      <h1 className="font-display text-2xl font-bold text-gold sm:text-3xl"><T k="Biblioteca de Drops"/></h1>
+      <p className="mt-1 text-sm text-muted"><T k="Encontre cartas e recompensas dos adversários"/></p>
     </header>
     <section className="panel rounded-xl p-4">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <label className="flex flex-col gap-1 text-xs text-muted">Oponente
           <select className="field w-full px-3 py-2 text-sm" value={opponent}
             onChange={e=>{setOpponent(Number(e.target.value));setOffset(0)}}>
-            <option value={0}>Todos os oponentes</option>
+            <option value={0}><T k="Todos os oponentes"/></option>
             {options.map(o=><option key={o.id} value={o.id}>#{o.id} {o.name}</option>)}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted">RANK da recompensa
           <select className="field w-full px-3 py-2 text-sm" value={rankFilter}
             onChange={e=>{setRankFilter(e.target.value);setOffset(0)}}>
-            <option value="">Todos os RANKs</option>
+            <option value=""><T k="Todos os RANKs"/></option>
             {rankOptions.map(rank=><option key={rank} value={rank}>{rank}</option>)}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted">Buscar carta
           <span className="field flex items-center gap-2 px-3 py-2"><Search className="size-4 text-primary"/>
             <input value={query} onChange={e=>{setQuery(e.target.value);setOffset(0)}}
-              placeholder="Nome, ID, efeito ou descrição" className="min-w-0 flex-1 bg-transparent text-sm outline-none"/>
+              placeholder={t("Nome, ID, efeito ou descrição")} className="min-w-0 flex-1 bg-transparent text-sm outline-none"/>
           </span>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted">Ordenar cartas
           <select className="field w-full px-3 py-2 text-sm" value={sort}
             onChange={e=>{setSort(e.target.value as typeof sort);setOffset(0)}}>
-            <option value="id">ID / ordem das tabelas</option>
-            <option value="atk">Maior ataque</option><option value="def">Maior defesa</option>
-            <option value="type">Tipo</option><option value="name">Alfabética (A–Z)</option>
+            <option value="id"><T k="ID / ordem das tabelas"/></option>
+            <option value="atk"><T k="Maior ataque"/></option><option value="def"><T k="Maior defesa"/></option>
+            <option value="type"><T k="Tipo"/></option><option value="name"><T k="Alfabética (A–Z)"/></option>
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted">Tipo da carta
           <select className="field w-full px-3 py-2 text-sm" value={cardType}
             onChange={e=>{setCardType(e.target.value);setOffset(0)}}>
-            <option value="">Todos os tipos</option>
+            <option value=""><T k="Todos os tipos"/></option>
             {types.map(t=><option key={t} value={t}>{t}</option>)}
           </select>
         </label>
@@ -156,25 +159,25 @@ export function DropsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
           </select>
         </label>
         <button type="button" className="btn-ghost self-end" onClick={()=>setRevision(x=>x+1)}
-          aria-label="Recarregar drops"><RefreshCcw className="size-4"/> Atualizar</button>
+          aria-label={t("Recarregar drops")}><RefreshCcw className="size-4"/> <T k="Atualizar"/></button>
       </div>
-      {loading&&<p className="mt-3 text-xs text-primary" role="status">Consultando tabelas do mod ativo…</p>}
+      {loading&&<p className="mt-3 text-xs text-primary" role="status"><T k="Consultando tabelas do mod ativo…"/></p>}
       {error&&<p className="mt-3 text-sm text-danger" role="alert">{error}</p>}
-      {result&&!result.available&&<p className="mt-4 rounded-lg border border-line/50 p-4 text-sm text-muted">Nenhum drop disponível neste mod. Use Atualizar dados na Biblioteca de Mods.</p>}
+      {result&&!result.available&&<p className="mt-4 rounded-lg border border-line/50 p-4 text-sm text-muted"><T k="Nenhum drop disponível neste mod. Use Atualizar dados na Biblioteca de Mods."/></p>}
       {result?.available&&<>
         <div className="dt-adaptive-drops">
           {result.rows.map(row=><DropCard key={row.opponentId+"-"+row.group+"-"+row.cardId}
             row={row} sha={sha} cardDetails={cardsById.get(row.cardId)??null} onPreview={onPreview}/>)}
         </div>
-        {!result.rows.length&&<p className="py-8 text-center text-sm text-muted">Nenhuma carta para os filtros selecionados.</p>}
+        {!result.rows.length&&<p className="py-8 text-center text-sm text-muted"><T k="Nenhuma carta para os filtros selecionados."/></p>}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs tabular-nums text-muted">{result.total?offset+1:0}–{Math.min(offset+pageSize,result.total)} de {result.total} drops</p>
           <div className="flex gap-2">
             <button type="button" className="btn-ghost disabled:opacity-30" disabled={offset===0||loading}
-              onClick={()=>setOffset(x=>Math.max(0,x-pageSize))}><ChevronLeft className="size-4"/> Anterior</button>
+              onClick={()=>setOffset(x=>Math.max(0,x-pageSize))}><ChevronLeft className="size-4"/> <T k="Anterior"/></button>
             <button type="button" className="btn-ghost disabled:opacity-30"
               disabled={offset+pageSize>=result.total||loading}
-              onClick={()=>setOffset(x=>x+pageSize)}>Próxima <ChevronRight className="size-4"/></button>
+              onClick={()=>setOffset(x=>x+pageSize)}><T k="Próxima"/> <ChevronRight className="size-4"/></button>
           </div>
         </div>
       </>}

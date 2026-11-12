@@ -918,6 +918,8 @@ export interface DesktopAPI {
   open_tool_window(kind:PopoutKind):Promise<PopoutState>
   get_alpha_preferences():Promise<{fusionTipsVisible:boolean}>
   set_alpha_preferences(visible:boolean):Promise<{fusionTipsVisible:boolean}>
+  get_ui_settings():Promise<{language:string;languages:string[];windowRemembered:boolean}>
+  set_ui_language(language:string):Promise<{language:string}>
   close_tool_window(kind:PopoutKind):Promise<PopoutState>
   get_installed_update_notice(): Promise<InstalledUpdateNotice>
   acknowledge_update_notice(runId:number): Promise<{acknowledged:boolean;runId:number}>
@@ -990,6 +992,8 @@ interface ProtectedNativeAPI {
   open_tool_window(token:string,kind:PopoutKind):Promise<PopoutState>
   get_alpha_preferences(token:string):Promise<{fusionTipsVisible:boolean}>
   set_alpha_preferences(token:string,visible:boolean):Promise<{fusionTipsVisible:boolean}>
+  get_ui_settings(token:string):Promise<{language:string;languages:string[];windowRemembered:boolean}>
+  set_ui_language(token:string,language:string):Promise<{language:string}>
   close_tool_window(token:string,kind:PopoutKind):Promise<PopoutState>
   get_installed_update_notice(token:string): Promise<InstalledUpdateNotice>
   acknowledge_update_notice(token:string,runId:number): Promise<{acknowledged:boolean;runId:number}>
@@ -1076,6 +1080,8 @@ export function desktopApi(): DesktopAPI | null {
     open_tool_window: (kind) => native.open_tool_window(token,kind),
     get_alpha_preferences: () => native.get_alpha_preferences(token),
     set_alpha_preferences: (visible) => native.set_alpha_preferences(token,visible),
+    get_ui_settings: () => native.get_ui_settings(token),
+    set_ui_language: (language) => native.set_ui_language(token,language),
     close_tool_window: (kind) => native.close_tool_window(token,kind),
     get_installed_update_notice: () => native.get_installed_update_notice(token),
     acknowledge_update_notice: (runId) => native.acknowledge_update_notice(token,runId),

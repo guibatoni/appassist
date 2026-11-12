@@ -175,3 +175,11 @@ body {
     line-height: 1.2;
   }
 }
+
+/* Use Windows CJK fallbacks for Japanese and Simplified Chinese UI text. */
+html:lang(ja) body {
+  font-family: "Yu Gothic", Meiryo, "Noto Sans CJK JP", sans-serif;
+}
+html:lang(zh-CN) body {
+  font-family: "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+}

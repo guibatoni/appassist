@@ -183,6 +183,14 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_alpha_preferences()
 
+    def get_ui_settings(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_ui_settings()
+
+    def set_ui_language(self, credential, language):
+        self._authorize(credential)
+        return self._bridge.set_ui_language(language)
+
     def set_alpha_preferences(self, credential, fusion_tips_visible):
         self._authorize(credential)
         return self._bridge.set_alpha_preferences(fusion_tips_visible)

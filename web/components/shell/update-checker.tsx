@@ -1,5 +1,7 @@
 "use client"
 
+import {T,useI18n} from "@/lib/i18n"
+
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { BookOpen, CheckCircle2, Download, RefreshCw, ShieldAlert, X } from "lucide-react"
@@ -12,6 +14,7 @@ import { desktopApi, type UpdateCheck, type InstalledUpdateNotice } from "@/lib/
  * oficial verificado, sem criar outra pasta de instalação.
  */
 export function UpdateChecker() {
+  const {t}=useI18n()
   const [result, setResult] = useState<UpdateCheck | null>(null)
   const [visible, setVisible] = useState(false)
   const [notesOpen, setNotesOpen] = useState(false)
@@ -193,7 +196,7 @@ export function UpdateChecker() {
       className="btn-ghost inline-flex items-center gap-2 rounded-lg border border-primary/30 px-3 py-2 text-xs font-semibold transition-colors hover:border-primary hover:text-white disabled:cursor-wait disabled:opacity-60"
       disabled={checking}
       onClick={() => void check()}
-      aria-label="Abrir atualizações do DUELTRACE">
+      aria-label={t("Abrir atualizações do DUELTRACE")}>
       <RefreshCw className={"size-4 text-primary" + (checking ? " animate-spin" : "")} />
       <span>{checking ? "Verificando…" : automaticNotice ? "Nova atualização" : "Atualizações"}</span>
       {automaticNotice && <span aria-label="Atualização identificada"
@@ -208,7 +211,7 @@ export function UpdateChecker() {
           className="dueltrace-scroll w-full max-w-[430px] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border border-gold/40 bg-[#0a1a31] p-3 text-sm text-foreground shadow-[0_12px_36px_rgba(0,0,0,.65)] outline-none sm:p-4"
           aria-label="Resultado da verificação">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="font-display text-base font-semibold text-gold">Atualizações DUELTRACE</h3>
+          <h3 className="font-display text-base font-semibold text-gold"><T k="Atualizações DUELTRACE"/></h3>
           <button type="button" aria-label="Fechar resultado" onClick={() => setVisible(false)}
             className="rounded-md p-1 text-muted transition-colors hover:bg-primary/10 hover:text-white">
             <X className="size-4" />
@@ -216,7 +219,7 @@ export function UpdateChecker() {
         </div>
         <div aria-live="polite" className="mt-3">
           {checking ?
-            <p className="text-muted">Verificando atualizações…</p> :
+            <p className="text-muted"><T k="Verificando atualizações…"/></p> :
             problem ?
               <p className="flex items-start gap-2 text-gold">
                 <ShieldAlert className="size-4 shrink-0"/>{problem}
@@ -245,29 +248,29 @@ export function UpdateChecker() {
                 </p>
                 {result.previewCheckStatus === "authentication_required" && (
                   <div className="mt-3 rounded-lg border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-muted">
-                    <p className="font-semibold text-foreground">Para consultar o GitHub privado:</p>
+                    <p className="font-semibold text-foreground"><T k="Para consultar o GitHub privado:"/></p>
                     <p className="mt-1">1. Instale GitHub CLI 2.102.0 ou superior.</p>
                     <p>2. Abra o PowerShell e execute <code className="font-mono text-gold">gh auth login</code>.</p>
                     <p>3. Use uma conta com acesso ao repositório e verifique com <code className="font-mono text-gold">gh auth status</code>.</p>
                     <p className="mt-1">Depois, reinicie o DUELTRACE e clique novamente em Atualizações.</p>
-                    <p className="mt-1">Não coloque tokens ou senhas dentro do aplicativo.</p>
+                    <p className="mt-1"><T k="Não coloque tokens ou senhas dentro do aplicativo."/></p>
                   </div>
                 )}
               </> :
-              <p className="text-muted">Nenhuma consulta realizada.</p>}
+              <p className="text-muted"><T k="Nenhuma consulta realizada."/></p>}
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button type="button" disabled={!canDownload||installing||checking}
             onClick={()=>void installOfficialUpdate()}
             className="btn-gold inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Atualizar agora">
+            aria-label={t("Atualizar agora")}>
             <Download className="size-4"/>
             {installing?"Baixando atualização…":"Atualizar agora"}
           </button>
           <button type="button" disabled={checking}
             onClick={openNotes}
             className="btn-ghost inline-flex items-center gap-2 rounded-lg border border-primary/40 px-3 py-2 text-xs transition-colors hover:border-primary disabled:opacity-50"
-            aria-label="Abrir patch notes">
+            aria-label={t("Abrir patch notes")}>
             <BookOpen className="size-4 text-primary"/>Patch notes
           </button>
         </div>

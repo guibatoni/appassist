@@ -1,5 +1,7 @@
 "use client"
 
+import {T,useI18n} from "@/lib/i18n"
+
 import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
 import {
@@ -19,9 +21,10 @@ import type {LocalCard, HandState, FusionPage, FusionSearchScope, LocalMod, Rank
 type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops" | "oponentes" | "decks"
 
 function Heading({title,subtitle}:{title:string;subtitle:string}) {
+  const {t}=useI18n()
   return <div className="panel rounded-xl border-gold/40 bg-gradient-to-r from-[#142b51] to-[#061126] px-3 py-3 sm:px-5 sm:py-4">
-    <h1 className="font-display text-2xl font-bold text-gold sm:text-3xl">{title}</h1>
-    <p className="mt-1 text-sm text-muted">{subtitle}</p>
+    <h1 className="font-display text-2xl font-bold text-gold sm:text-3xl">{t(title)}</h1>
+    <p className="mt-1 text-sm text-muted">{t(subtitle)}</p>
   </div>
 }
 
@@ -61,6 +64,7 @@ function Empty({children}:{children:React.ReactNode}) {
 }
 
 function RankPanel({sha}:{sha:string|null}) {
+  const {t}=useI18n()
   const [rank,setRank]=useState<RankState|null>(null)
   const [popoutError,setPopoutError]=useState(false)
   useEffect(()=>{
@@ -79,9 +83,9 @@ function RankPanel({sha}:{sha:string|null}) {
     return()=>{mounted=false;window.clearInterval(interval)}
   },[sha])
   const ready=rank?.ready===true
-  return <section className="panel rounded-xl p-4" aria-label="RANK ao vivo">
+  return <section className="panel rounded-xl p-4" aria-label={t("RANK ao vivo")}>
     <div className="flex items-center justify-between gap-2">
-      <h2 className="font-display text-lg font-semibold text-gold">RANK ao vivo</h2>
+      <h2 className="font-display text-lg font-semibold text-gold"><T k="RANK ao vivo"/></h2>
       <span className={"text-xs font-medium "+(ready?"text-success":"text-muted")}>
         {ready?"● Em tempo real":"○ Aguardando duelo"}
       </span>
@@ -94,7 +98,7 @@ function RankPanel({sha}:{sha:string|null}) {
       disabled={!desktopApi()} onClick={async()=>{
         try{await desktopApi()?.open_tool_window("calculadora");setPopoutError(false)}
         catch{setPopoutError(true)}
-      }}>Abrir visor em pop-up</button>
+      }}><T k="Abrir visor em pop-up"/></button>
     {popoutError&&<p className="mt-2 text-xs text-danger" role="alert">
       Não foi possível abrir o visor.
     </p>}
@@ -102,6 +106,7 @@ function RankPanel({sha}:{sha:string|null}) {
 }
 
 function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
+  const {t}=useI18n()
   const cardsById=useMemo(()=>new Map(cards.map(c=>[c.id,c])),[cards])
   const [hand,setHand]=useState<HandState|null>(null)
   const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
@@ -150,18 +155,18 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-2 px-1">
       <div>
-        <h1 className="font-display text-2xl font-bold text-gold">Central de Duelo</h1>
-        <p className="text-xs text-muted">Mão atual, fusões sugeridas e RANK ao vivo</p>
+        <h1 className="font-display text-2xl font-bold text-gold"><T k="Central de Duelo"/></h1>
+        <p className="text-xs text-muted"><T k="Mão atual, fusões sugeridas e RANK ao vivo"/></p>
       </div>
       <span className={hand?.ready?"text-xs font-medium text-success":"text-xs text-muted"}>
         {hand?.ready?"● Mão conectada":"○ "+(hand?.status??"Aguardando ePSXe")}
       </span>
     </div>
     <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_290px]">
-      <section className="panel min-w-0 rounded-xl p-4" aria-label="Cartas na mão">
+      <section className="panel min-w-0 rounded-xl p-4" aria-label={t("Cartas na mão")}>
         <div className="mb-3 flex items-baseline justify-between gap-2">
-          <h2 className="font-display text-lg font-semibold text-primary">Cartas na mão</h2>
-          <span className="text-xs text-muted">5 posições · leitura automática</span>
+          <h2 className="font-display text-lg font-semibold text-primary"><T k="Cartas na mão"/></h2>
+          <span className="text-xs text-muted"><T k="5 posições · leitura automática"/></span>
         </div>
         <div className="dt-hand-grid">
           {Array.from({length:5},(_,slot)=>{
@@ -186,23 +191,23 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       </section>
       <RankPanel sha={sha}/>
     </div>
-    <section className="panel rounded-xl p-4" aria-label="Dicas de fusões">
+    <section className="panel rounded-xl p-4" aria-label={t("Dicas de fusões")}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="font-display text-lg font-semibold text-gold">Dicas de fusões</h2>
-          <p className="text-xs text-muted">Combinações das cartas que estão na sua mão</p>
+          <h2 className="font-display text-lg font-semibold text-gold"><T k="Dicas de fusões"/></h2>
+          <p className="text-xs text-muted"><T k="Combinações das cartas que estão na sua mão"/></p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn-ghost" disabled={!desktopApi()}
             onClick={async()=>{
               try{await desktopApi()?.open_tool_window("fusoes");setTipsError(false)}
               catch{setTipsError(true)}
-            }}>Abrir dicas em pop-up</button>
+            }}><T k="Abrir dicas em pop-up"/></button>
           <button type="button" className="btn-ghost" onClick={()=>void toggleTips()}>
             {tipsVisible?"Ocultar dicas":"Mostrar dicas"}
           </button>
           {tipsVisible&&<button type="button" onClick={()=>setMode("pairs")}
-            className={mode==="pairs"?"btn-gold":"btn-ghost"}>Duplas</button>}
+            className={mode==="pairs"?"btn-gold":"btn-ghost"}><T k="Duplas"/></button>}
           {tipsVisible&&<button type="button" onClick={()=>setMode("chains")}
             className={mode==="chains"?"btn-gold":"btn-ghost"}>Cadeias (2–5)</button>}
         </div>
@@ -214,8 +219,8 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         Não foi possível abrir a janela de dicas independente.
       </p>}
       <div className={tipsVisible?"mt-3":"hidden"}>
-        {!hand?.ready?<Empty>As sugestões aparecerão quando o ePSXe identificar sua mão.</Empty>:
-          visibleCombinations.length===0?<Empty>Nenhuma fusão identificada para estas cartas.</Empty>:
+        {!hand?.ready?<Empty><T k="As sugestões aparecerão quando o ePSXe identificar sua mão."/></Empty>:
+          visibleCombinations.length===0?<Empty><T k="Nenhuma fusão identificada para estas cartas."/></Empty>:
           mode==="pairs"?<div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {hand.pairs.slice(0,showAll?undefined:5).map((item,i)=>
               <div key={i} className="rounded-lg border border-line/60 bg-background/40 p-3">
@@ -336,7 +341,7 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
           ISO de origem
           <select className="field rounded-md px-3 py-2 text-sm" value={fromSha}
             onChange={e=>{setFromSha(e.target.value);setResult(null)}}>
-            <option value="">Selecione uma ISO</option>
+            <option value=""><T k="Selecione uma ISO"/></option>
             {mods.map(m=><option key={m.sha256} value={m.sha256}>{m.name}</option>)}
           </select>
         </label>
@@ -344,7 +349,7 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
           ISO de destino
           <select className="field rounded-md px-3 py-2 text-sm" value={toSha}
             onChange={e=>{setToSha(e.target.value);setResult(null)}}>
-            <option value="">Selecione outra ISO</option>
+            <option value=""><T k="Selecione outra ISO"/></option>
             {mods.filter(m=>m.sha256!==fromSha).map(m=>
               <option key={m.sha256} value={m.sha256}>{m.name}</option>)}
           </select>
@@ -361,7 +366,7 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
           Confiança
           <select className="field rounded-md px-3 py-2 text-sm" value={confidence}
             onChange={e=>{setConfidence(e.target.value);setResult(null)}}>
-            <option value="todas">Todas</option>
+            <option value="todas"><T k="Todas"/></option>
             <option value="alta">Candidatas fortes</option>
             <option value="revisar">Revisão necessária</option>
             <option value="sem_correspondencia">Sem correspondência</option>
@@ -422,7 +427,7 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
               <p className="break-words text-sm font-semibold text-white">
                 <span className="text-primary">#{row.sourceId}</span> {row.sourceName}
               </p>
-              <p className="text-xs text-muted">Origem</p>
+              <p className="text-xs text-muted"><T k="Origem"/></p>
             </div>
             <span aria-hidden className="hidden text-primary md:inline">→</span>
             <div className="min-w-0">
@@ -441,17 +446,17 @@ function CardMatchPanel({mods,activeSha}:{mods:LocalMod[];activeSha:string|null}
               </p>}
             </div>
           </div>)}
-          {result.rows.length===0&&<Empty>Nenhuma carta encontrada neste filtro.</Empty>}
+          {result.rows.length===0&&<Empty><T k="Nenhuma carta encontrada neste filtro."/></Empty>}
         </div>
         <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted">
           <span>{result.total?result.offset+1:0}–{Math.min(result.total,result.offset+result.rows.length)} de {result.total}</span>
           <div className="flex gap-2">
             <button type="button" className="btn-ghost disabled:opacity-40"
               disabled={busy||result.offset===0}
-              onClick={()=>void compare(Math.max(0,result.offset-30))}>Anterior</button>
+              onClick={()=>void compare(Math.max(0,result.offset-30))}><T k="Anterior"/></button>
             <button type="button" className="btn-ghost disabled:opacity-40"
               disabled={busy||result.offset+30>=result.total}
-              onClick={()=>void compare(result.offset+30)}>Próxima</button>
+              onClick={()=>void compare(result.offset+30)}><T k="Próxima"/></button>
           </div>
         </div>
         <p className="mt-3 text-xs text-gold">
@@ -868,7 +873,7 @@ function StructuralMatrixExplorer({mod}:{mod:LocalMod}) {
           <thead className="sticky top-0 bg-panel-strong text-primary">
             <tr>
               <th className="px-2 py-2">Carta da ISO</th>
-              <th className="px-2 py-2">ATK / DEF</th>
+              <th className="px-2 py-2"><T k="ATK / DEF"/></th>
               <th className="px-2 py-2">Peso</th>
               <th className="px-2 py-2">%</th>
             </tr>
@@ -896,7 +901,7 @@ function StructuralMatrixExplorer({mod}:{mod:LocalMod}) {
           </button>
           <button type="button" className="btn-ghost disabled:opacity-40"
             onClick={()=>setOffset(n=>n+15)}
-            disabled={busy||offset+15>=(result.total??0)}>Próxima</button>
+            disabled={busy||offset+15>=(result.total??0)}><T k="Próxima"/></button>
         </div>
       </div>
     </div>}
@@ -1091,6 +1096,7 @@ function WindowEvidenceForm({mod}:{mod:LocalMod}) {
 function Mods({mods,sha,onRefresh,configured}:{
   mods:LocalMod[];sha:string|null;onRefresh:()=>Promise<void>;configured:boolean
 }) {
+  const {t}=useI18n()
   const [search,setSearch]=useState("")
   const [expandedSha,setExpandedSha]=useState<string|null>(null)
   const [editingSha,setEditingSha]=useState<string|null>(null)
@@ -1149,7 +1155,7 @@ function Mods({mods,sha,onRefresh,configured}:{
     .sort((a,b)=>a.name.localeCompare(b.name,"pt-BR"))
 
   return <>
-    <Heading title="Biblioteca de Mods" subtitle="Gerencie seus jogos e escolha o mod que deseja jogar"/>
+    <Heading title={t("Biblioteca de Mods")} subtitle={t("Gerencie seus jogos e escolha o mod que deseja jogar")}/>
     <section className="panel rounded-xl p-4">
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn-gold" disabled={busy||!desktopApi()}
@@ -1172,14 +1178,14 @@ function Mods({mods,sha,onRefresh,configured}:{
           <Play className="size-4"/> Jogar
         </button>
         <button type="button" className="btn-ghost" disabled={busy}
-          onClick={()=>void onRefresh()}><RefreshCcw className="size-4"/> Atualizar lista</button>
+          onClick={()=>void onRefresh()}><RefreshCcw className="size-4"/> <T k="Atualizar lista"/></button>
       </div>
       <label className="field mt-4 flex items-center gap-2 px-3 py-2">
         <Search className="size-4 text-primary"/>
-        <span className="sr-only">Pesquisar mod por nome ou apelido</span>
+        <span className="sr-only"><T k="Pesquisar mod por nome ou apelido"/></span>
         <input className="w-full bg-transparent outline-none" value={search}
           onChange={e=>setSearch(e.target.value)}
-          placeholder="Buscar mod pelo nome ou apelido"/>
+          placeholder={t("Buscar mod pelo nome ou apelido")}/>
       </label>
       {message&&<p className="mt-3 text-sm text-primary" role="status">{message}</p>}
       <div className="mt-4 space-y-3">
@@ -1225,14 +1231,14 @@ function Mods({mods,sha,onRefresh,configured}:{
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <input className="field min-w-0 flex-1 px-3 py-2"
                     autoFocus value={nickname} maxLength={72}
-                    placeholder="Apelido do mod"
+                    placeholder={t("Apelido do mod")}
                     onChange={e=>setNickname(e.target.value)}
                     onKeyDown={e=>{if(e.key==="Enter")void saveNickname(mod);
                       if(e.key==="Escape")setEditingSha(null)}}/>
                   <button className="btn-gold" disabled={busy}
-                    onClick={()=>void saveNickname(mod)}>Salvar</button>
+                    onClick={()=>void saveNickname(mod)}><T k="Salvar"/></button>
                   <button className="btn-ghost"
-                    onClick={()=>setEditingSha(null)}>Cancelar</button>
+                    onClick={()=>setEditingSha(null)}><T k="Cancelar"/></button>
                 </div>}
               <div className="mt-4 flex flex-wrap gap-2">
                 <button className="btn-gold flex-1 disabled:opacity-40" type="button"
@@ -1246,13 +1252,13 @@ function Mods({mods,sha,onRefresh,configured}:{
                   <RefreshCcw className="size-4"/> Atualizar dados
                 </button>
                 <button className="btn-ghost" type="button"
-                  aria-label={`Renomear ${mod.name}`} title="Alterar apelido"
+                  aria-label={`Renomear ${mod.name}`} title={t("Alterar apelido")}
                   disabled={busy||!desktopApi()} onClick={()=>{
                     setEditingSha(mod.sha256);setNickname(mod.name)
                   }}><Pencil className="size-4"/></button>
                 <button className="btn-ghost text-danger" type="button"
                   aria-label={`Remover ${mod.name} da biblioteca`}
-                  title="Remover da biblioteca" disabled={busy||!desktopApi()}
+                  title={t("Remover da biblioteca")} disabled={busy||!desktopApi()}
                   onClick={()=>void removeMod(mod)}>
                   <Trash2 className="size-4"/>
                 </button>
@@ -1260,13 +1266,14 @@ function Mods({mods,sha,onRefresh,configured}:{
             </div>}
           </article>
         })}
-        {!filtered.length&&<Empty>Nenhum mod encontrado.</Empty>}
+        {!filtered.length&&<Empty><T k="Nenhum mod encontrado."/></Empty>}
       </div>
     </section>
   </>
 }
 
 function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
+  const {t}=useI18n()
   const [search,setSearch]=useState("")
   const [sort,setSort]=useState<"id"|"atk"|"def"|"type"|"name">("id")
   const [cardType,setCardType]=useState("")
@@ -1295,25 +1302,25 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
   const pages=Math.max(1,Math.ceil(visible.length/pageSize))
   useEffect(()=>{setPreview(null)},[search,sort,cardType,page,pageSize])
   return <>
-    <Heading title="Biblioteca de Cartas" subtitle="Explore, pesquise e consulte os detalhes das cartas"/>
+    <Heading title={t("Biblioteca de Cartas")} subtitle={t("Explore, pesquise e consulte os detalhes das cartas")}/>
     <section className="panel rounded-xl p-4">
       <div className="flex flex-wrap gap-2">
         <label className="field flex min-w-0 flex-[1_1_14rem] items-center gap-2 px-3 py-2">
-          <Search className="size-4 text-primary"/><span className="sr-only">Buscar carta</span>
+          <Search className="size-4 text-primary"/><span className="sr-only"><T k="Buscar carta"/></span>
           <input className="w-full bg-transparent outline-none" value={search}
-            onChange={e=>{setSearch(e.target.value);setPage(0)}} placeholder="Buscar nome, ID, tipo, efeito ou descrição"/>
+            onChange={e=>{setSearch(e.target.value);setPage(0)}} placeholder={t("Buscar nome, ID, tipo, efeito ou descrição")}/>
         </label>
-        <select className="field px-3 py-2" value={sort} aria-label="Ordenar" onChange={e=>{setSort(e.target.value as typeof sort);setPage(0)}}>
-          <option value="id">ID</option><option value="atk">Maior ataque</option><option value="def">Maior defesa</option><option value="type">Tipo</option><option value="name">Alfabética (A–Z)</option>
+        <select className="field px-3 py-2" value={sort} aria-label={t("Ordenar")} onChange={e=>{setSort(e.target.value as typeof sort);setPage(0)}}>
+          <option value="id"><T k="ID"/></option><option value="atk"><T k="Maior ataque"/></option><option value="def"><T k="Maior defesa"/></option><option value="type"><T k="Tipo"/></option><option value="name"><T k="Alfabética (A–Z)"/></option>
         </select>
-        <select className="field px-3 py-2" value={cardType} aria-label="Filtrar por tipo"
+        <select className="field px-3 py-2" value={cardType} aria-label={t("Filtrar por tipo")}
           onChange={e=>{setCardType(e.target.value);setPage(0)}}>
-          <option value="">Todos os tipos</option>
+          <option value=""><T k="Todos os tipos"/></option>
           {types.map(t=><option key={t} value={t}>{t}</option>)}
         </select>
         <label className="flex items-center gap-2 text-xs text-muted">
           Cartas por página
-          <select className="field px-3 py-2" aria-label="Cartas por página"
+          <select className="field px-3 py-2" aria-label={t("Cartas por página")}
             value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(0)}}>
             {[10,20,30,40,50].map(n=><option key={n} value={n}>{n}</option>)}
           </select>
@@ -1330,11 +1337,11 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
 
         </button>)}
       </div>
-      {!visible.length&&<Empty>Nenhuma carta identificada para esta pesquisa.</Empty>}
+      {!visible.length&&<Empty><T k="Nenhuma carta identificada para esta pesquisa."/></Empty>}
       <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
-        <button type="button" className="btn-ghost disabled:opacity-30" disabled={page===0} onClick={()=>setPage(x=>x-1)}><ChevronLeft className="size-4"/>Anterior</button>
+        <button type="button" className="btn-ghost disabled:opacity-30" disabled={page===0} onClick={()=>setPage(x=>x-1)}><ChevronLeft className="size-4"/><T k="Anterior"/></button>
         <span className="text-xs text-muted">{page+1} / {pages}</span>
-        <button type="button" className="btn-ghost disabled:opacity-30" disabled={page+1>=pages} onClick={()=>setPage(x=>x+1)}>Próxima<ChevronRight className="size-4"/></button>
+        <button type="button" className="btn-ghost disabled:opacity-30" disabled={page+1>=pages} onClick={()=>setPage(x=>x+1)}><T k="Próxima"/><ChevronRight className="size-4"/></button>
       </div>
       <CardHoverPreview selection={preview} sha={sha} cards={cards} onClose={()=>setPreview(null)}/>
     </section>
@@ -1366,6 +1373,7 @@ function FusionIllustration({id,name,sha,card,role,onPreview}:{
 
 
 function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
+  const {t}=useI18n()
   const [query,setQuery]=useState("")
   const [searchScope,setSearchScope]=useState<FusionSearchScope>("all")
   const [sort,setSort]=useState<"id"|"atk"|"def"|"type"|"name">("id")
@@ -1393,17 +1401,17 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
     return()=>{mounted=false;window.clearTimeout(id)}
   },[sha,query,searchScope,offset,sort,cardType,pageSize])
   return <>
-    <Heading title="Biblioteca de Fusões" subtitle="Encontre combinações e resultados de fusão"/>
+    <Heading title={t("Biblioteca de Fusões")} subtitle={t("Encontre combinações e resultados de fusão")}/>
     <section className="panel rounded-xl p-4">
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-xs text-muted">
           Pesquisar em
           <select className="field min-h-10 px-3 py-2 text-sm text-foreground"
-            aria-label="Pesquisar fusões em" value={searchScope}
+            aria-label={t("Pesquisar fusões em")} value={searchScope}
             onChange={e=>{setSearchScope(e.target.value as FusionSearchScope);setOffset(0)}}>
-            <option value="all">Resultado ou material</option>
-            <option value="result">Resultado final da fusão</option>
-            <option value="material">Material da fusão</option>
+            <option value="all"><T k="Resultado ou material"/></option>
+            <option value="result"><T k="Resultado final da fusão"/></option>
+            <option value="material"><T k="Material da fusão"/></option>
           </select>
         </label>
         <label className="flex min-w-0 flex-[1_1_14rem] flex-col gap-1 text-xs text-muted">
@@ -1411,7 +1419,7 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
           <span className="field flex min-h-10 items-center gap-2 px-3 py-2">
             <Search className="size-4 shrink-0 text-primary" aria-hidden="true"/>
             <input className="w-full bg-transparent text-sm text-foreground outline-none"
-              aria-label="Buscar fusões por nome ou ID" maxLength={100}
+              aria-label={t("Buscar fusões por nome ou ID")} maxLength={100}
               placeholder={searchScope==="result"?"Nome ou ID do resultado":
                 searchScope==="material"?"Nome ou ID do material":
                   "Buscar resultado ou qualquer material"}
@@ -1421,20 +1429,20 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         <label className="text-xs text-muted">Ordenar resultado
           <select className="field ml-2 px-2 py-2 text-sm" value={sort}
             onChange={e=>{setSort(e.target.value as typeof sort);setOffset(0)}}>
-            <option value="id">ID</option><option value="atk">Maior ataque</option>
-            <option value="def">Maior defesa</option><option value="type">Tipo</option>
-            <option value="name">Alfabética (A–Z)</option>
+            <option value="id"><T k="ID"/></option><option value="atk"><T k="Maior ataque"/></option>
+            <option value="def"><T k="Maior defesa"/></option><option value="type"><T k="Tipo"/></option>
+            <option value="name"><T k="Alfabética (A–Z)"/></option>
           </select>
         </label>
         <label className="text-xs text-muted">Tipo do resultado
           <select className="field ml-2 px-2 py-2 text-sm" value={cardType}
             onChange={e=>{setCardType(e.target.value);setOffset(0)}}>
-            <option value="">Todos os tipos</option>
+            <option value=""><T k="Todos os tipos"/></option>
             {types.map(t=><option key={t} value={t}>{t}</option>)}
           </select>
         </label>
         <label className="flex items-center gap-2 text-xs text-muted">Por página
-          <select className="field px-2 py-2" aria-label="Fusões por página"
+          <select className="field px-2 py-2" aria-label={t("Fusões por página")}
             value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setOffset(0)}}>
             {[10,20,30,40,50].map(n=><option key={n} value={n}>{n}</option>)}
           </select>
@@ -1471,7 +1479,7 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             <ChevronLeft className="size-4"/> Anterior
           </button>
           <button type="button" className="btn-ghost disabled:opacity-30" disabled={offset+pageSize>=(records?.total??0)}
-            onClick={()=>setOffset(x=>x+pageSize)}>Próxima <ChevronRight className="size-4"/></button>
+            onClick={()=>setOffset(x=>x+pageSize)}><T k="Próxima"/> <ChevronRight className="size-4"/></button>
         </div>
       </div>
       <CardHoverPreview selection={preview} sha={sha} cards={cards} onClose={()=>setPreview(null)}/>
@@ -1480,14 +1488,15 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
 }
 
 export function DesktopPage({page}:{page:Page}) {
+  const {t}=useI18n()
   const {state,error,loading,refresh}=useDesktopState()
   return <div className="flex flex-col gap-3 lg:gap-4">
     <div className="panel flex min-w-0 flex-wrap items-center gap-3 rounded-xl px-3 py-2 text-xs sm:px-4">
 
-      <span className="text-muted">ISO ativa: <strong className="break-all font-semibold text-white">{state?.activeName??"Nenhuma ISO selecionada"}</strong></span>
+      <span className="text-muted"><T k="ISO ativa:"/> <strong className="break-all font-semibold text-white">{state?.activeName??t("Nenhuma ISO selecionada")}</strong></span>
     </div>
     {error&&<p className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm text-gold" role="status">{error}</p>}
-    {loading&&<p className="text-sm text-muted">Carregando dados locais...</p>}
+    {loading&&<p className="text-sm text-muted"><T k="Carregando dados locais..."/></p>}
     {page==="inicio"&&<Home sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>}
     {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}

@@ -1,5 +1,7 @@
 "use client"
 
+import {T,useI18n} from "@/lib/i18n"
+
 import Image from "next/image"
 import {createPortal} from "react-dom"
 import {useEffect,useMemo,useRef,useState} from "react"
@@ -40,6 +42,7 @@ export function CardHoverPreview({selection,sha,cards,onClose}:{
   cards:LocalCard[]
   onClose:()=>void
 }) {
+  const {t}=useI18n()
   const [mounted,setMounted]=useState(false)
   const [history,setHistory]=useState<LocalCard[]>([])
   const [fusions,setFusions]=useState<CardFusionPaths|null>(null)
@@ -171,14 +174,14 @@ export function CardHoverPreview({selection,sha,cards,onClose}:{
         <header className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             {history.length>1&&<button type="button" onClick={back}
-              aria-label="Voltar para a carta anterior"
+              aria-label={t("Voltar para a carta anterior")}
               className="flex items-center gap-1 rounded-md border border-primary/30 px-2 py-1.5 text-xs text-primary hover:bg-primary/10">
               <ArrowLeft className="size-4"/>Voltar
             </button>}
-            <span className="text-xs font-semibold text-gold">DUELTRACE · Detalhes da carta</span>
+            <span className="text-xs font-semibold text-gold"><T k="DUELTRACE · Detalhes da carta"/></span>
           </div>
           <button ref={closeButton} type="button" onClick={onClose}
-            aria-label="Fechar informações da carta"
+            aria-label={t("Fechar informações da carta")}
             className="rounded-lg p-1.5 text-muted hover:bg-primary/10 hover:text-white">
             <X className="size-5"/>
           </button>
@@ -215,7 +218,7 @@ export function CardHoverPreview({selection,sha,cards,onClose}:{
                   <p className="whitespace-pre-line break-words text-foreground/85">{description}</p>
                 </div>}
                 {effect&&!duplicateText&&<div>
-                  <h3 className="font-semibold text-gold">Efeito</h3>
+                  <h3 className="font-semibold text-gold"><T k="Efeito"/></h3>
                   <p className="whitespace-pre-line break-words text-foreground/85">{effect}</p>
                 </div>}
               </div>:<p className="text-muted">

@@ -1,5 +1,7 @@
 "use client"
 
+import {T,useI18n} from "@/lib/i18n"
+
 import {useEffect,useRef} from "react"
 import {createPortal} from "react-dom"
 import {BookOpen,CheckCircle2,X} from "lucide-react"
@@ -14,6 +16,7 @@ type Props={
 
 /** Modal local: não navega para o GitHub e não interpreta Markdown/HTML remoto. */
 export function UpdatePatchNotes({open,onClose,version,notes}:Props){
+  const {t}=useI18n()
   const dialogRef=useRef<HTMLDivElement>(null)
   const closeRef=useRef<HTMLButtonElement>(null)
 
@@ -64,7 +67,7 @@ export function UpdatePatchNotes({open,onClose,version,notes}:Props){
               </p>
             </div>
           </div>
-          <button ref={closeRef} type="button" onClick={onClose} aria-label="Fechar patch notes"
+          <button ref={closeRef} type="button" onClick={onClose} aria-label={t("Fechar patch notes")}
             className="rounded-lg p-2 text-muted transition-colors hover:bg-white/10 hover:text-white">
             <X className="size-4"/>
           </button>
@@ -87,7 +90,7 @@ export function UpdatePatchNotes({open,onClose,version,notes}:Props){
         </div>
         <footer className="flex justify-end border-t border-line/70 px-5 py-3">
           <button type="button" className="btn-gold rounded-lg px-5 py-2 text-xs font-semibold"
-            onClick={onClose}>Fechar</button>
+            onClick={onClose}><T k="Fechar"/></button>
         </footer>
       </div>
     </div>,document.body)

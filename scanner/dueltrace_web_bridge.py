@@ -133,6 +133,16 @@ class DueltraceWebBridge:
             target=monitor,daemon=True,name="dueltrace-memory-card-sync")
         self._memory_sync_thread.start()
 
+    def get_ui_settings(self):
+        from dueltrace_preferences import public_settings
+        with self._lock:
+            return public_settings(self.settings_path)
+
+    def set_ui_language(self, language):
+        from dueltrace_preferences import save_language
+        with self._lock:
+            return save_language(self.settings_path, language)
+
     def get_alpha_preferences(self):
         """Return only allowlisted UI preferences, not emulator settings."""
         with self._lock:

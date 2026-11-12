@@ -2,8 +2,9 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Cpu, House, Infinity as InfinityIcon, Layers, Gift, Users, BookMarked } from "lucide-react"
+import { Cpu, House, Infinity as InfinityIcon, Layers, Gift, Users, BookMarked, Settings2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {T,useI18n} from "@/lib/i18n"
 
 const navItems = [
   { label: "Início", href: "/inicio", icon: House, enabled: true },
@@ -13,14 +14,16 @@ const navItems = [
   { label: "Drops", href: "/drops", icon: Gift, enabled: true },
   { label: "Oponentes", href: "/oponentes", icon: Users, enabled: true },
   { label: "Decks", href: "/decks", icon: BookMarked, enabled: true },
+  { label: "Configurações", href: "/configuracoes", icon: Settings2, enabled: true },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
+  const {t}=useI18n()
 
   return (
     <aside className="dt-nav-sidebar min-w-0 lg:w-56 lg:shrink-0">
-      <nav aria-label="Navegação principal">
+      <nav aria-label={t("Navegação principal")}>
         <ul className="dt-nav-list grid grid-cols-3 gap-1 min-[600px]:grid-cols-4 lg:grid-cols-1 lg:flex lg:flex-col lg:gap-1.5">
           {navItems.map(({ label, href, icon: Icon, enabled }) => {
             const active = pathname.startsWith(href)
@@ -38,10 +41,10 @@ export function Sidebar() {
                 {enabled ? (
                   <Link href={href} className={className} aria-current={active ? "page" : undefined}>
                     {icon}
-                    {label}
+                    <T k={label}/>
                   </Link>
                 ) : (
-                  <span className={cn(className, "cursor-default")} title="Em breve" aria-disabled="true">
+                  <span className={cn(className, "cursor-default")} title={t("Em breve")} aria-disabled="true">
                     {icon}
                     {label}
                   </span>

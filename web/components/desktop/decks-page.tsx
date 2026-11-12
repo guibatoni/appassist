@@ -1,5 +1,7 @@
 "use client"
 
+import {T,useI18n} from "@/lib/i18n"
+
 import {useEffect,useMemo,useState} from "react"
 import {BookMarked,Layers,RefreshCcw,Save} from "lucide-react"
 import {desktopApi} from "@/lib/desktop"
@@ -9,6 +11,7 @@ import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
 
 export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
+  const {t}=useI18n()
   const [chosen,setChosen]=useState("")
   const [state,setState]=useState<DeckLibrary|null>(null)
   const [busy,setBusy]=useState(false)
@@ -65,8 +68,8 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   return <section className="flex flex-col gap-4">
     <header className="panel rounded-xl border-gold/40 bg-gradient-to-r from-[#142b51] to-[#061126] p-4">
       <div className="flex items-center gap-3"><Layers className="size-6 text-gold"/>
-        <div><h1 className="font-display text-2xl font-bold text-gold">Decks</h1>
-          <p className="text-sm text-muted">Deck gravado no Memory Card, decks salvos e fusões possíveis</p></div>
+        <div><h1 className="font-display text-2xl font-bold text-gold"><T k="Decks"/></h1>
+          <p className="text-sm text-muted"><T k="Deck gravado no Memory Card, decks salvos e fusões possíveis"/></p></div>
       </div>
     </header>
     <div className="panel rounded-xl p-4">
@@ -84,14 +87,14 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       </div>
       {error&&<p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
       {state?.activeInEmulatorVerified&&
-        <p className="mt-2 text-sm text-primary">Leitura ao vivo confirmada na RAM do ePSXe iniciado pelo DUELTRACE. Alterações ainda não salvas no Memory Card podem aparecer aqui.</p>}
-      <p className="mt-3 text-xs text-muted">O DUELTRACE identifica o título do save PS1 quando disponível e associa cada bloco ao mod que você selecionou. Mods que compartilham o mesmo identificador do jogo não podem ser diferenciados só por esse código. O ePSXe continua responsável pelo cartão original.</p>
+        <p className="mt-2 text-sm text-primary"><T k="Leitura ao vivo confirmada na RAM do ePSXe iniciado pelo DUELTRACE. Alterações ainda não salvas no Memory Card podem aparecer aqui."/></p>}
+      <p className="mt-3 text-xs text-muted"><T k="O DUELTRACE identifica o título do save PS1 quando disponível e associa cada bloco ao mod que você selecionou. Mods que compartilham o mesmo identificador do jogo não podem ser diferenciados só por esse código. O ePSXe continua responsável pelo cartão original."/></p>
       {(state?.saves?.length??0)>0&&
         <label className="mt-4 flex flex-col gap-1 text-sm text-muted">Saves identificados neste Memory Card
           <select className="field max-w-xl px-3 py-2" value={state?.selectedBlock??""}
             disabled={busy}
             onChange={e=>{if(e.target.value)void chooseSave(Number(e.target.value))}}>
-            <option value="">Escolha o save correto</option>
+            <option value=""><T k="Escolha o save correto"/></option>
             {state!.saves.map(save=><option key={save.block} value={save.block}>
               {save.displayName}
             </option>)}
@@ -102,18 +105,18 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       <label className="mt-4 flex flex-col gap-1 text-sm text-muted">Selecionar deck
         <select value={chosen} onChange={e=>{setChosen(e.target.value);setPreview(null)}}
           className="field max-w-xl px-3 py-2 text-sm">
-          <option value="">Deck gravado no Memory Card</option>
+          <option value=""><T k="Deck gravado no Memory Card"/></option>
           {(state?.saved??[]).map(item=>
             <option key={item.id} value={item.id}>{item.name} · {item.source==="memory_card"?"Automático":"Salvo"}</option>)}
         </select>
       </label>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input className="field min-w-52 flex-1 px-3 py-2 text-sm"
-          aria-label="Nome do novo deck salvo" placeholder="Nome para salvar o deck ativo"
+          aria-label={t("Nome do novo deck salvo")} placeholder={t("Nome para salvar o deck ativo")}
           value={name} maxLength={72} onChange={e=>setName(e.target.value)}/>
         <button type="button" className="btn-gold disabled:opacity-50"
           disabled={busy||state?.deckCount!==40||(!state?.activeInEmulatorVerified&&!state?.saveName)||!name.trim()||!desktopApi()}
-          onClick={()=>void saveDeck()}><Save className="size-4"/> Salvar deck</button>
+          onClick={()=>void saveDeck()}><Save className="size-4"/> <T k="Salvar deck"/></button>
       </div>
     </div>
     <div className="panel rounded-xl p-4">
@@ -134,12 +137,12 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
           </div>
         </button>)}
       </div>:
-      <p className="mt-3 text-sm text-muted">Nenhum deck foi aprovado nas verificações de integridade deste save. Se houver vários saves no cartão, selecione a partida correta.</p>}
+      <p className="mt-3 text-sm text-muted"><T k="Nenhum deck foi aprovado nas verificações de integridade deste save. Se houver vários saves no cartão, selecione a partida correta."/></p>}
     </div>
     <div className="panel rounded-xl p-4">
-      <h2 className="font-display text-lg font-semibold text-gold">Fusões possíveis com este deck</h2>
-      <p className="mt-1 text-xs text-muted">Combinações calculadas com as receitas disponíveis do mod ativo. Não representam garantia de fusão em duelo.</p>
-      {state?.fusions.provisional&&<p className="mt-2 text-xs text-gold">Inclui receitas candidatas da ISO ainda não confirmadas durante uma partida.</p>}
+      <h2 className="font-display text-lg font-semibold text-gold"><T k="Fusões possíveis com este deck"/></h2>
+      <p className="mt-1 text-xs text-muted"><T k="Combinações calculadas com as receitas disponíveis do mod ativo. Não representam garantia de fusão em duelo."/></p>
+      {state?.fusions.provisional&&<p className="mt-2 text-xs text-gold"><T k="Inclui receitas candidatas da ISO ainda não confirmadas durante uma partida."/></p>}
       <p className="mt-2 text-sm text-primary">{state?.fusions.total??0} resultados encontrados</p>
       <div className="mt-3 grid gap-2 md:grid-cols-2">
         {(state?.fusions.rows??[]).map((f,i)=><div key={i}
@@ -150,7 +153,7 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
           <p className="mt-1 text-[11px] text-muted">{f.source}</p>
         </div>)}
       </div>
-      {(state?.fusions.total??0)>80&&<p className="mt-2 text-xs text-muted">Exibindo os primeiros 80 resultados.</p>}
+      {(state?.fusions.total??0)>80&&<p className="mt-2 text-xs text-muted"><T k="Exibindo os primeiros 80 resultados."/></p>}
     </div>
     <CardHoverPreview selection={preview} sha={sha} cards={cards} onClose={()=>setPreview(null)}/>
   </section>

@@ -19,6 +19,7 @@ from urllib.parse import unquote, urlsplit
 from dueltrace_web_bridge import DueltraceWebBridge
 from dueltrace_web_security import ProtectedDesktopApi
 from dueltrace_native_resize import enable_native_edge_resize
+from dueltrace_preferences import WindowPreferenceStore
 from dueltrace_display_layout import (
     window_geometry, tool_geometry, windows_work_area,
 )
@@ -226,9 +227,12 @@ def main():
     # A native Win32 caption loop performs the entire drag on the WinForms UI
     # thread; WebView2 pointermove loses capture when the form moves.
     work_width,work_height=windows_work_area()
-    main_size=window_geometry(work_width,work_height)
+    default_size=window_geometry(work_width,work_height)
     static=assets_path()
     bridge=DueltraceWebBridge()
+    geometry_store=WindowPreferenceStore(
+        bridge.settings_path,work_width,work_height,default_size)
+    main_size=geometry_store.starting_geometry()
     token=secrets.token_urlsafe(32)
     api=ProtectedDesktopApi(bridge,token)
     handler=local_handler(static,bridge)
@@ -244,6 +248,8 @@ def main():
             url=url,js_api=api,
             width=main_size["width"],height=main_size["height"],
             min_size=(main_size["min_width"],main_size["min_height"]),
+            **({ "x":main_size["x"], "y":main_size["y"] }
+               if "x" in main_size and "y" in main_size else {}),
             background_color="#040a1a",
             frameless=True,easy_drag=False,resizable=True)
         if window is None:
@@ -254,6 +260,8 @@ def main():
         # No HWND/system call is exposed to the browser.
         def restore_resize_border():
             enable_native_edge_resize(window)
+            if main_size.get("maximized") is True:
+                window.maximize()
         window.events.shown+=restore_resize_border
         # The local authenticated API starts the native Win32 caption drag.
         # Only the already attached main window can be moved.
@@ -261,11 +269,16 @@ def main():
         def mark_maximized():
             with api._native_window_lock:
                 api._native_maximized=True
+            geometry_store.set_maximized(True)
         def mark_restored():
             with api._native_window_lock:
                 api._native_maximized=False
+            geometry_store.set_maximized(False)
         window.events.maximized+=mark_maximized
         window.events.restored+=mark_restored
+        window.events.resized+=geometry_store.normal_resize
+        window.events.moved+=geometry_store.normal_move
+        window.events.closing+=geometry_store.close
         def secure_loaded(window):
             current=window.get_current_url()
             if current in ("about:blank", "", None):
@@ -368,6 +381,7 @@ def main():
         bridge._request_shutdown=close_for_update
         webview.start(debug=False,private_mode=True)
     finally:
+        geometry_store.close()
         server.shutdown()
         server.server_close()
 

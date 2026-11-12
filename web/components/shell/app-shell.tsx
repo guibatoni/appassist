@@ -4,8 +4,9 @@ import {usePathname} from "next/navigation"
 import Image from "next/image"
 import { Sidebar } from "./sidebar"
 import { TopBar } from "./top-bar"
+import {I18nProvider} from "@/lib/i18n"
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+function ShellBody({ children }: { children: React.ReactNode }) {
   const route=usePathname()
   if(route.startsWith("/ferramentas/")){
     // Small native pywebview window: no main sidebar or window toolbar.
@@ -36,4 +37,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
     </div>
   )
+}
+
+export function AppShell({children}:{children:React.ReactNode}) {
+  return <I18nProvider><ShellBody>{children}</ShellBody></I18nProvider>
 }
