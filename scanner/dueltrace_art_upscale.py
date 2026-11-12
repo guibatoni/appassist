@@ -12,7 +12,7 @@ import os
 import re
 from pathlib import Path
 
-UPSCALE_REVISION = 1
+UPSCALE_REVISION = 2
 UPSCALE_FACTOR = 3
 MAX_INPUT_BYTES = 2 * 1024 * 1024
 MAX_OUTPUT_BYTES = 4 * 1024 * 1024
@@ -23,7 +23,7 @@ ART_ID = re.compile(r"[0-9]{3}\.png\Z")
 
 def upscale_extracted_arts(originals: Path, output: Path) -> dict:
     """Idempotent processing for 722 exact PS1 artworks. Fails soft per card."""
-    from PIL import Image, ImageFile
+    from PIL import Image, ImageFilter
     originals = Path(originals).resolve(strict=True)
     output = Path(output)
     if not originals.is_dir() or output.is_symlink():
@@ -83,6 +83,9 @@ def upscale_extracted_arts(originals: Path, output: Path) -> dict:
                 resized = image.convert("RGB").resize(
                     (102 * UPSCALE_FACTOR, 96 * UPSCALE_FACTOR),
                     resample=Image.Resampling.LANCZOS)
+                # Nitidez moderada, preservando os pixels da arte original.
+                resized = resized.filter(ImageFilter.UnsharpMask(
+                    radius=0.9, percent=88, threshold=4))
             temporary = output / (name + ".tmp")
             try:
                 resized.save(temporary, format="PNG", optimize=True)
@@ -100,7 +103,7 @@ def upscale_extracted_arts(originals: Path, output: Path) -> dict:
                 warnings.append(f"ID {cid}: {str(exc)[:100]}")
     manifest = {
         "schema": 1, "revision": UPSCALE_REVISION,
-        "factor": UPSCALE_FACTOR, "algorithm": "Pillow Lanczos 3x",
+        "factor": UPSCALE_FACTOR, "algorithm": "Pillow Lanczos 3x + UnsharpMask leve",
         "files": updated,
     }
     pending = output / (MANIFEST_FILE + ".tmp")

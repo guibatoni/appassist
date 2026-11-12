@@ -6,7 +6,7 @@ import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardCopy, FilePlus2, Gamepad2,
   GitMerge, Layers, Pencil, Play, RefreshCcw, Search, Shield, Swords, Trash2, Upload,
 } from "lucide-react"
-import {cardClassicHd, cardArt, cardWithFrame, desktopApi, useDesktopState} from "@/lib/desktop"
+import {cardClassicHd, cardArtHd, cardArt, cardWithFrame, desktopApi, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
 import {RankScoreDisplay} from "./rank-score-display"
 import {copyOpponentReport} from "@/lib/opponent-report"
@@ -24,12 +24,13 @@ function Heading({title,subtitle}:{title:string;subtitle:string}) {
 }
 
 function CardThumbnail({card,sha,expanded=false}:{card:LocalCard|null;sha:string|null;expanded?:boolean}) {
-  const [source,setSource]=useState<"classic"|"composite"|"large"|"none">("classic")
+  const [source,setSource]=useState<"classic"|"hd"|"composite"|"large"|"none">("classic")
   useEffect(()=>setSource("classic"),[sha,card?.id])
   const classic=card?cardClassicHd(sha,card.id):null
+  const hd=card?cardArtHd(sha,card.id):null
   const framed=card?cardWithFrame(sha,card.id):null
   const large=card?cardArt(sha,card.id):null
-  const url=source==="classic"?classic:
+  const url=source==="classic"?classic:source==="hd"?hd:
     source==="composite"?framed:source==="large"?large:null
   const ratio=source==="classic"?"aspect-[9/13]":
     source==="composite"?"aspect-[52/60]":"aspect-[102/96]"
@@ -38,7 +39,7 @@ function CardThumbnail({card,sha,expanded=false}:{card:LocalCard|null;sha:string
     {url?<Image src={url} alt={"Carta "+(card?.name??"")} fill unoptimized
       sizes={expanded?"240px":"180px"}
       className={source==="composite"?"object-fill [image-rendering:pixelated]":"object-contain"}
-      onError={()=>setSource(old=>old==="classic"?"composite":old==="composite"?"large":"none")}/>:
+      onError={()=>setSource(old=>old==="classic"?"hd":old==="hd"?"composite":old==="composite"?"large":"none")}/>:
       <Layers className="size-9 text-primary/45" aria-label="Imagem não extraída"/>}
     {card&&source!=="classic"&&<span className="absolute left-1 top-1 rounded bg-black/70 px-1 text-[10px] text-gold">
       #{card.id}
@@ -101,6 +102,8 @@ function RankPanel({sha}:{sha:string|null}) {
 function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const cardsById=useMemo(()=>new Map(cards.map(c=>[c.id,c])),[cards])
   const [hand,setHand]=useState<HandState|null>(null)
+  const [preview,setPreview]=useState<CardPreviewSelection|null>(null)
+  useEffect(()=>setPreview(null),[sha])
   const [mode,setMode]=useState<"pairs"|"chains">("pairs")
   const [showAll,setShowAll]=useState(false)
   const [tipsVisible,setTipsVisible]=useState(true)
@@ -141,7 +144,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   },[sha])
   useEffect(()=>setShowAll(false),[mode,sha])
   const combinations=mode==="pairs"?hand?.pairs??[]:hand?.chains??[]
-  const visibleCombinations=showAll?combinations:combinations.slice(0,6)
+  const visibleCombinations=showAll?combinations:combinations.slice(0,5)
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-2 px-1">
       <div>
@@ -164,11 +167,14 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             return <div key={slot}
               className="min-w-0 rounded-lg border border-line/60 bg-background/50 px-2 py-3">
               <p className="mb-2 text-center text-[11px] text-gold">{slot+1}</p>
-              <CardThumbnail card={card} sha={sha}/>
+              {card?<button type="button" className="block w-full rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                onClick={()=>setPreview({card})} aria-label={"Abrir detalhes da carta "+card.name}>
+                <CardThumbnail card={card} sha={sha}/>
+              </button>:<CardThumbnail card={card} sha={sha}/>}
               <p className="mt-2 min-h-8 break-words text-center text-xs font-semibold text-white">
                 {card?.name??"Aguardando"}
               </p>
-              <MonsterStats card={card} className="text-center"/>
+              
             </div>
           })}
         </div>
@@ -209,7 +215,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         {!hand?.ready?<Empty>As sugestões aparecerão quando o ePSXe identificar sua mão.</Empty>:
           visibleCombinations.length===0?<Empty>Nenhuma fusão identificada para estas cartas.</Empty>:
           mode==="pairs"?<div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {hand.pairs.slice(0,showAll?undefined:6).map((item,i)=>
+            {hand.pairs.slice(0,showAll?undefined:5).map((item,i)=>
               <div key={i} className="rounded-lg border border-line/60 bg-background/40 p-3">
                 <p className="text-xs text-primary">Posições {item.slot_a} + {item.slot_b}</p>
                 <div className="mt-2 grid grid-cols-3 gap-2">
@@ -219,7 +225,12 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
                     {key:"result",name:"Resultado",card:cardsById.get(item.result)??null},
                   ]).map(part=><div key={part.key} className="min-w-0 text-center">
                     <p className="mb-1 text-[10px] uppercase text-muted">{part.name}</p>
-                    <div className="mx-auto w-16"><CardThumbnail card={part.card} sha={sha}/></div>
+                    <div className="mx-auto w-16">{part.card?<button type="button"
+                      onClick={()=>setPreview({card:part.card!})}
+                      aria-label={"Abrir detalhes de "+part.card.name}
+                      className="block w-full rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                      <CardThumbnail card={part.card} sha={sha}/>
+                    </button>:<CardThumbnail card={part.card} sha={sha}/>}</div>
                     <p className="mt-1 line-clamp-2 text-xs font-semibold text-white">
                       {part.card?.name??(part.key==="result"?item.result_name:"Carta")}
                     </p>
@@ -231,7 +242,7 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
                 <MonsterStats card={cardsById.get(item.result)??null} className="mt-2"/>
               </div>)}
           </div>:<div className="grid gap-2 md:grid-cols-2">
-            {hand.chains.slice(0,showAll?undefined:6).map((item,i)=>
+            {hand.chains.slice(0,showAll?undefined:5).map((item,i)=>
               <div key={i} className="rounded-lg border border-gold/20 bg-background/40 p-3">
                 <p className="text-xs text-primary">Ordem: {item.slot_order.join(" → ")}</p>
                 <div className="mt-2 flex max-w-full flex-wrap justify-center gap-2">
@@ -258,13 +269,15 @@ function Home({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
               </div>)}
           </div>}
       </div>
-      {tipsVisible&&hand?.ready&&combinations.length>6&&<button type="button"
+      {tipsVisible&&hand?.ready&&combinations.length>5&&<button type="button"
         className="btn-ghost mt-3" onClick={()=>setShowAll(v=>!v)}>
         {showAll?"Mostrar menos":`Ver todas as ${combinations.length} combinações`}
       </button>}
       {tipsVisible&&hand?.ready&&mode==="chains"&&hand.chainsComplete===false&&
         <p className="mt-2 text-xs text-gold">Busca parcial: limite de combinações atingido.</p>}
     </section>
+    <CardHoverPreview selection={preview} sha={sha} cards={cards}
+      onClose={()=>setPreview(null)}/>
   </div>
 }
 

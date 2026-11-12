@@ -29,7 +29,7 @@ class ClassicCardsTest(unittest.TestCase):
         original = Image.new("RGB", (102, 96), (15, 70, 190))
         before = original.tobytes()
         image = render_card(self.card, original)
-        self.assertEqual(image.size, (360, 520))
+        self.assertEqual(image.size, (540, 780))
         self.assertEqual(image.mode, "RGB")
         self.assertNotEqual(image.getpixel((6, 6)), image.getpixel((180, 250)))
         self.assertEqual(original.tobytes(), before)
@@ -66,7 +66,7 @@ class ClassicCardsTest(unittest.TestCase):
             first = render_card_pack([self.card], original, enhanced, cache)
             self.assertEqual(first["rendered"], 1)
             self.assertEqual(first["available"], 1)
-            self.assertEqual(first["dimensions"], [360, 520])
+            self.assertEqual(first["dimensions"], [540, 780])
             self.assertTrue(first["originalsPreserved"])
             second = render_card_pack([self.card], original, enhanced, cache)
             self.assertEqual(second["cached"], 1)
@@ -77,7 +77,7 @@ class ClassicCardsTest(unittest.TestCase):
             self.assertEqual(third["cached"], 0)
             self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), digest)
             manifest = json.loads((cache / "cartas-hd-cache.json").read_text("utf-8"))
-            self.assertEqual(manifest["revision"], 1)
+            self.assertEqual(manifest["revision"], 3)
             with Image.open(cache / "001.png") as generated:
                 self.assertEqual(generated.size, SIZE)
 

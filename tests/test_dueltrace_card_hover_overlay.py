@@ -45,11 +45,11 @@ class CardDetailDialogTests(unittest.TestCase):
         self.assertIn('previous.slice(-19)', MODAL)
         self.assertIn('closeButton.current?.focus()', MODAL)
 
-    def test_five_material_and_five_result_suggestions(self):
+    def test_five_total_suggestions_per_card(self):
         self.assertIn('api.get_card_fusion_paths(cardId)', MODAL)
         self.assertIn('data.romSha===sha&&data.cardId===cardId', MODAL)
-        self.assertIn('fusions.materialRows.slice(0,5)', MODAL)
-        self.assertIn('fusions.resultRows.slice(0,5)', MODAL)
+        self.assertIn('materialCandidates.slice(0,5-reservedResults)', MODAL)
+        self.assertIn('resultCandidates.slice(0,5-materialRows.length)', MODAL)
         self.assertIn('Fusões usando esta carta como material', MODAL)
         self.assertIn('Fusões que resultam nesta carta', MODAL)
         self.assertIn('cardLink(row.partnerId,row.partnerName)', MODAL)

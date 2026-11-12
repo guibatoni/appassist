@@ -52,7 +52,7 @@ class ArtUpscaleTests(unittest.TestCase):
                 with Image.open(item) as original:
                     self.assertEqual(original.size, (102, 96))
             info = json.loads((output / MANIFEST_FILE).read_text("utf-8"))
-            self.assertEqual(info["algorithm"], "Pillow Lanczos 3x")
+            self.assertEqual(info["algorithm"], "Pillow Lanczos 3x + UnsharpMask leve")
             self.assertEqual(info["schema"], 1)
 
     def test_repeated_extraction_reuses_cache_and_rebuilds_only_changed_art(self):

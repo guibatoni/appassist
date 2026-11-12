@@ -29,8 +29,8 @@ class FloatingVisorUiTests(unittest.TestCase):
         source=TOOL.read_text(encoding="utf-8")
         fusion=source.split("export function FloatingFusionTips()",1)[1]
         self.assertIn("api.get_hand()",fusion)
-        self.assertIn("pairs.slice(0,6)",fusion)
-        self.assertIn("chains.slice(0,4)",fusion)
+        self.assertIn("pairs.slice(0,3)",fusion)
+        self.assertIn("chains.slice(0,Math.max(0,5-Math.min(3,pairs.length)))",fusion)
         self.assertIn("Mão",fusion)
         for forbidden in ("onChange","setMode","setExpanded",
                           "Calcular SPOILS","calculate_spoils("):

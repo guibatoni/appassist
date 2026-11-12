@@ -3,22 +3,23 @@
 import Image from "next/image"
 import {useEffect, useMemo, useState} from "react"
 import {ChevronLeft, ChevronRight, RefreshCcw, Search} from "lucide-react"
-import {cardClassicHd, cardArt, cardWithFrame, desktopApi} from "@/lib/desktop"
+import {cardClassicHd, cardArtHd, cardArt, cardWithFrame, desktopApi} from "@/lib/desktop"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
 import type {DropsPage, DropRow, LocalCard} from "@/lib/desktop"
 
 function DropArtwork({sha,id,name}:{sha:string|null;id:number;name:string}) {
-  const [source,setSource]=useState<"classic"|"frame"|"art"|"none">("classic")
+  const [source,setSource]=useState<"classic"|"hd"|"frame"|"art"|"none">("classic")
   useEffect(()=>setSource("classic"),[sha,id])
   const src=source==="classic"?cardClassicHd(sha,id):
+    source==="hd"?cardArtHd(sha,id):
     source==="frame"?cardWithFrame(sha,id):
     source==="art"?cardArt(sha,id):null
-  return <div className={"relative w-[78px] shrink-0 overflow-hidden rounded border border-gold/40 bg-[#0b1932] "+
+  return <div className={"relative w-[96px] shrink-0 overflow-hidden rounded border border-gold/40 bg-[#0b1932] "+
     (source==="classic"?"aspect-[9/13]":"h-[90px]")}>
-    {src?<Image src={src} alt={"Carta "+name} fill unoptimized sizes="78px"
+    {src?<Image src={src} alt={"Carta "+name} fill unoptimized sizes="96px"
       className={source==="frame"?"object-fill [image-rendering:pixelated]":"object-contain"}
-      onError={()=>setSource(old=>old==="classic"?"frame":old==="frame"?"art":"none")}/>:
+      onError={()=>setSource(old=>old==="classic"?"hd":old==="hd"?"frame":old==="frame"?"art":"none")}/>:
       <span className="flex h-full items-center justify-center text-xs text-muted">#{id}</span>}
   </div>
 }

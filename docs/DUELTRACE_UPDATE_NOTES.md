@@ -1,17 +1,18 @@
-# DUELTRACE v0.13.0 — Preview
+# DUELTRACE v0.14.0 — Preview
 
 ## Novidades
-- **Visual clássico do anime:** nome, atributo, estrelas, arte, descrição e ATK/DEF aparecem dentro da própria carta.
-- **Cartas completas em HD:** cada imagem é renderizada em 360×520 pixels com a arte extraída da ISO ativa.
-- **Detalhes ampliados:** ao clicar, a janela mostra a carta completa e mantém dicas de fusões e drops.
+- **Visual clássico do anime em alta definição:** novo render nativo de 540×780 pixels em Biblioteca de Cartas, Fusões, Drops e Mão.
+- **ATK e DEF dentro da carta:** valores do mod aparecem em uma caixa própria, como na referência clássica.
+- **Cartas da Mão por clique:** abrir detalhes de cada carta e consultar suas fusões e drops.
 
 ## Melhorias
-- **Bibliotecas harmonizadas:** Cartas, Fusões e Drops agora compartilham o mesmo visual clássico.
-- **Grade mais limpa:** ATK e DEF não aparecem duplicados abaixo das miniaturas.
-- **Cache automático:** só regeneramos a carta quando seus dados ou a arte original mudarem.
-- **Fallback seguro:** se faltar a carta HD, a interface exibe a arte anterior sem bloquear o usuário.
+- **Artes mais legíveis:** upscale local Lanczos 3× com nitidez suave, sem substituir artes extraídas do jogo.
+- **Nome, estrelas e atributos:** melhor alinhamento e legibilidade, inclusive em nomes extensos e níveis altos.
+- **Visual consistente:** miniaturas da Biblioteca, resultados de Fusões e Drops priorizam a mesma carta HD; fallback usa arte ampliada quando necessário.
+- **Janela ampliada:** descrição, ATK/DEF e receitas consultadas por clique com navegação entre cartas.
+- **Dicas de fusão:** até cinco receitas inicialmente por carta, evitando excesso de informações.
 
 ## Correções
-- **Dados reais:** o render usa nome, nível, tipo, atributo, ATK e DEF da ISO, sem inventar valores ausentes.
-- **Segurança local:** só a ISO ativa pode fornecer imagens de cartas pelo servidor do aplicativo.
-- **Atualização v0.13.0:** o aviso de atualização e os Patch Notes continuam disponíveis após instalar.
+- **Caches seguros:** alterações visuais geram novos arquivos derivados sem alterar ISOs, PNGs originais ou valores de ATK/DEF.
+- **Compatibilidade com mods:** cartas não-monstras não recebem estatísticas inventadas; dados ausentes permanecem ausentes.
+- **Atualizador:** versão e notas preparadas para publicação pelo canal de atualização dentro do aplicativo após build Windows validada.

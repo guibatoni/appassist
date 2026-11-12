@@ -3,7 +3,7 @@
 import {useEffect,useState} from "react"
 import Image from "next/image"
 import {Calculator,Swords,X} from "lucide-react"
-import {desktopApi,useDesktopState,cardWithFrame,cardArt} from "@/lib/desktop"
+import {desktopApi,useDesktopState,cardClassicHd,cardArtHd,cardWithFrame,cardArt} from "@/lib/desktop"
 import type {HandState,RankState,LocalCard} from "@/lib/desktop"
 import {RankScoreDisplay} from "./rank-score-display"
 
@@ -81,16 +81,18 @@ export function FloatingCalculator(){
 function FusionTipCard({card,sha,label,fallback}:{
   card:LocalCard|null|undefined;sha:string|null;label:string;fallback?:string
 }){
-  const [mode,setMode]=useState<"frame"|"art"|"none">("frame")
-  useEffect(()=>setMode("frame"),[sha,card?.id])
-  const img=card&&sha?(mode==="frame"?cardWithFrame(sha,card.id):
+  const [mode,setMode]=useState<"classic"|"hd"|"frame"|"art"|"none">("classic")
+  useEffect(()=>setMode("classic"),[sha,card?.id])
+  const img=card&&sha?(mode==="classic"?cardClassicHd(sha,card.id):
+    mode==="hd"?cardArtHd(sha,card.id):
+    mode==="frame"?cardWithFrame(sha,card.id):
     mode==="art"?cardArt(sha,card.id):null):null
   return <div className="flex min-w-[3.5rem] max-w-24 flex-[1_1_3.5rem] flex-col items-center gap-1">
     <p className="text-[10px] uppercase tracking-wide text-muted">{label}</p>
-    <div className="relative h-[66px] w-[56px] shrink-0 overflow-hidden rounded border border-gold/30 bg-background/75 min-[390px]:h-[78px] min-[390px]:w-[68px]">
-      {img?<Image src={img} alt={card?.name??"Carta"} fill unoptimized sizes="68px"
-        className="object-fill [image-rendering:pixelated]"
-        onError={()=>setMode(mode==="frame"?"art":"none")}/>:
+    <div className="relative aspect-[9/13] w-[64px] shrink-0 overflow-hidden rounded border border-gold/30 bg-background/75 min-[390px]:w-[78px]">
+      {img?<Image src={img} alt={card?.name??"Carta"} fill unoptimized sizes="78px"
+        className="object-contain"
+        onError={()=>setMode(old=>old==="classic"?"hd":old==="hd"?"frame":old==="frame"?"art":"none")}/>:
         <div className="flex h-full items-center justify-center text-xs text-primary">
           {card?`#${card.id}`:"—"}
         </div>}
@@ -151,7 +153,7 @@ export function FloatingFusionTips(){
           Duplas · {pairs.length}
         </h2>
         <div className="space-y-2">
-          {pairs.slice(0,6).map((item,i)=>
+          {pairs.slice(0,3).map((item,i)=>
             <div key={`${item.slot_a}-${item.slot_b}-${item.result}-${i}`}
               className="rounded-md border border-line/70 bg-background/40 px-3 py-2">
               <p className="mb-2 text-center text-[11px] text-muted">
@@ -169,8 +171,8 @@ export function FloatingFusionTips(){
               </div>
             </div>)}
         </div>
-        {pairs.length>6&&<p className="mt-2 text-[11px] text-muted">
-          +{pairs.length-6} combinações adicionais na aba Fusões.
+        {pairs.length>3&&<p className="mt-2 text-[11px] text-muted">
+          +{pairs.length-3} combinações adicionais na aba Fusões.
         </p>}
       </section>}
       {chains.length>0&&<section aria-label="Fusões em cadeia">
@@ -178,7 +180,7 @@ export function FloatingFusionTips(){
           Cadeias · {chains.length}
         </h2>
         <div className="space-y-2">
-          {chains.slice(0,4).map((item,i)=>
+          {chains.slice(0,Math.max(0,5-Math.min(3,pairs.length))).map((item,i)=>
             <div key={`${item.result}-${item.slot_order.join("-")}-${i}`}
               className="rounded-md border border-line/70 bg-background/40 px-3 py-2">
               <p className="mb-2 text-[11px] text-muted">
@@ -194,8 +196,8 @@ export function FloatingFusionTips(){
               </div>
             </div>)}
         </div>
-        {chains.length>4&&<p className="mt-2 text-[11px] text-muted">
-          +{chains.length-4} cadeias adicionais na aba Fusões.
+        {chains.length>Math.max(0,5-Math.min(3,pairs.length))&&<p className="mt-2 text-[11px] text-muted">
+          +{chains.length-Math.max(0,5-Math.min(3,pairs.length))} cadeias adicionais na aba Fusões.
         </p>}
         {hand?.chainsComplete===false&&<p className="mt-2 text-[11px] text-gold">
           Busca de cadeias parcial.

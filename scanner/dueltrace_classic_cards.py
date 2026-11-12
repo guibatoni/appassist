@@ -14,12 +14,13 @@ from pathlib import Path
 from functools import lru_cache
 
 from PIL import Image, ImageDraw, ImageFont
+from dueltrace_card_renderer_v014 import render_card_v014
 
-REVISION = 1
-SIZE = (360, 520)
+REVISION = 3
+SIZE = (540, 780)
 CACHE_FILE = "cartas-hd-cache.json"
 MAX_CARDS = 722
-MAX_IMAGE_BYTES = 4_000_000
+MAX_IMAGE_BYTES = 8_000_000
 MAX_NAME = 150
 MAX_DESCRIPTION = 550
 
@@ -141,95 +142,8 @@ def _wrap(draw, text, font, max_width, max_lines):
 
 
 def render_card(card, art: Image.Image) -> Image.Image:
-    """360x520: name, attribute, stars, art, info, ATK/DEF and ID footer."""
-    if art.width < 16 or art.height < 16 or art.width > 2048 or art.height > 2048:
-        raise ValueError("Dimensões da arte inválidas.")
-    fields = card_fields(card)
-    image = Image.new("RGB", SIZE)
-    draw = ImageDraw.Draw(image)
-    # Subtle parchment shading, no copied frame image or generated noise.
-    for y in range(SIZE[1]):
-        edge = abs(y - SIZE[1] // 2) / (SIZE[1] / 2)
-        red = int(211 - 22 * edge)
-        green = int(162 - 33 * edge)
-        blue = int(69 - 17 * edge)
-        draw.line((0, y, SIZE[0], y), fill=(red, green, blue))
-    draw.rounded_rectangle((4, 4, 355, 515), radius=12,
-                           outline=(75, 45, 16), width=5)
-    draw.rounded_rectangle((11, 11, 348, 508), radius=9,
-                           outline=(246, 209, 121), width=3)
-    # Nameplate & attribute are distinctly separated for long names.
-    draw.rounded_rectangle((24, 23, 338, 67), radius=5, fill=PANEL,
-                           outline=(123, 78, 21), width=3)
-    draw.line((28, 28, 332, 28), fill=LIGHT, width=2)
-    title, name_font = _text(draw, fields["name"], 263, 22, bold=True)
-    draw.text((35, 35), title, font=name_font, fill=INK,
-              stroke_width=0)
-    draw.ellipse((295, 29, 331, 65), fill=(58, 52, 35),
-                 outline=(250, 232, 159), width=3)
-    attr, attr_font = _text(draw, fields["attribute"], 31, 9, bold=True)
-    tx = (295 + 331 - draw.textbbox((0, 0), attr, font=attr_font)[2]) / 2
-    draw.text((tx, 41), attr, font=attr_font, fill=LIGHT)
-    # Eight first orbs, then condensed badge for very large mod levels.
-    level = fields["level"]
-    if level is not None and level > 0:
-        count = min(level, 11)
-        radius = 9 if count <= 8 else 7
-        step = 26 if count <= 8 else 22
-        width = count * step
-        first = 328 - width
-        for i in range(count):
-            x = first + i * step + radius
-            y = 90
-            draw.ellipse((x-radius, y-radius, x+radius, y+radius),
-                         fill=(197, 65, 14), outline=(110, 47, 9), width=2)
-            draw.ellipse((x-3, y-5, x+1, y-1), fill=(255, 216, 83))
-        if level > count:
-            draw.text((30, 82), f"NV {level}", font=_font(12, True), fill=INK)
-
-    # The illustration remains unmodified, except a controlled scale.
-    draw.rounded_rectangle((33, 109, 327, 378), radius=6,
-                           fill=(20, 22, 21), outline=(101, 75, 33), width=5)
-    draw.rectangle((39, 115, 321, 371), outline=(242, 203, 105), width=3)
-    art_rgb = art.convert("RGB")
-    art_rgb.thumbnail((275, 248), Image.Resampling.LANCZOS)
-    image.paste(art_rgb, (180 - art_rgb.width // 2, 243 - art_rgb.height // 2))
-    draw.rectangle((41, 117, 319, 369), outline=(23, 32, 40), width=2)
-
-    # Description panel and numeric stats occupy separate boxes, per reference.
-    draw.rounded_rectangle((23, 389, 220, 489), radius=4,
-                           fill=PANEL, outline=BORDER, width=3)
-    draw.rounded_rectangle((230, 389, 338, 489), radius=4,
-                           fill=PANEL, outline=BORDER, width=3)
-    name_kind, kind_font = _text(draw, "[" + fields["kind"] + "]", 181, 13, bold=True)
-    draw.text((31, 396), name_kind, font=kind_font, fill=INK)
-    description = fields["description"]
-    if description:
-        body_font = _font(11)
-        for j, line in enumerate(_wrap(draw, description, body_font, 180, 5)[:5]):
-            draw.text((31, 419 + j * 13), line, font=body_font, fill=INK)
-    else:
-        draw.text((31, 426), "Texto não disponível",
-                  font=_font(11), fill=(102, 76, 42))
-    draw.line((237, 439, 331, 439), fill=(129, 89, 32), width=2)
-    if fields["monster"]:
-        draw.text((238, 404), "ATK", font=_font(14, True), fill=INK)
-        draw.text((238, 451), "DEF", font=_font(14, True), fill=INK)
-        for number, y in ((fields["atk"], 404), (fields["def"], 451)):
-            label = str(number) if number is not None else "—"
-            font = _font(18, True)
-            right = draw.textbbox((0, 0), label, font=font)[2]
-            draw.text((331 - right, y - 1), label, font=font, fill=INK)
-    else:
-        short, font = _text(draw, fields["category"], 93, 13, bold=True)
-        draw.text((237, 431), short, font=font, fill=INK)
-    cid = _bounded_integer(card.get("id"), MAX_CARDS)
-    draw.text((21, 493), f"DT-{cid:03d}" if cid else "DUELTRACE",
-              font=_font(11, True), fill=(70, 47, 25))
-    draw.text((260, 495), "LOCAL • MOD", font=_font(9),
-              fill=(82, 55, 29))
-    return image
-
+    """High-resolution classic renderer, using only the active ISO's data."""
+    return render_card_v014(card_fields(card), art, card.get("id"))
 
 def render_card_pack(cards, originals: Path, enhanced: Path, dest: Path):
     """Build once per verified source art + actual card metadata, with cache."""

@@ -20,8 +20,8 @@ function EnlargedArtwork({card,sha}:{card:LocalCard;sha:string|null}) {
     source==="hd"?cardArtHd(sha,card.id):
     source==="original"?cardArt(sha,card.id):null
   const ratio=source==="classic"?"aspect-[9/13]":"aspect-[17/16]"
-  return <div className={"relative mx-auto w-full max-w-64 overflow-hidden rounded-lg border border-gold/45 bg-[#061126] shadow-[0_0_24px_rgb(56_200_255/0.14)] "+ratio}>
-    {url?<Image src={url} alt={"Carta "+card.name} fill unoptimized sizes="256px"
+  return <div className={"relative mx-auto w-full max-w-72 overflow-hidden rounded-lg border border-gold/45 bg-[#061126] shadow-[0_0_24px_rgb(56_200_255/0.14)] "+ratio}>
+    {url?<Image src={url} alt={"Carta "+card.name} fill unoptimized sizes="288px"
       className="object-contain"
       onError={()=>setSource(old=>old==="classic"?"hd":old==="hd"?"original":"none")}/>:
       <div className="flex h-full items-center justify-center">
@@ -138,8 +138,12 @@ export function CardHoverPreview({selection,sha,cards,onClose}:{
 
   if(!mounted||!selection||!card)return null
   const matchedFusions=fusions?.romSha===sha&&fusions.cardId===card.id
-  const materialRows=matchedFusions?fusions.materialRows.slice(0,5):[]
-  const resultRows=matchedFusions?fusions.resultRows.slice(0,5):[]
+  // Limit five fusion suggestions across both lists (not five per list).
+  const materialCandidates=matchedFusions?fusions.materialRows:[]
+  const resultCandidates=matchedFusions?fusions.resultRows:[]
+  const reservedResults=Math.min(2,resultCandidates.length)
+  const materialRows=materialCandidates.slice(0,5-reservedResults)
+  const resultRows=resultCandidates.slice(0,5-materialRows.length)
   const matchedDrops=drops?.romSha===sha&&drops.cardId===card.id&&drops.available
   const dropRows=matchedDrops?drops.rows.slice(0,4):
     !drops&&!dropError&&card.id===selection.card.id&&selection.fallbackDrop
@@ -163,7 +167,7 @@ export function CardHoverPreview({selection,sha,cards,onClose}:{
       onMouseDown={event=>{if(event.target===event.currentTarget)onClose()}}>
       <div ref={dialogRef} role="dialog" aria-modal="true"
         aria-label={"Informações e fusões de "+card.name}
-        className="dueltrace-scroll max-h-[calc(100dvh-16px)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-gold/50 bg-[#08172e] p-3 shadow-[0_25px_85px_rgb(0_0_0/0.85)] sm:max-h-[calc(100dvh-32px)] sm:p-5">
+        className="dueltrace-scroll max-h-[calc(100dvh-16px)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-gold/50 bg-[#08172e] p-3 shadow-[0_25px_85px_rgb(0_0_0/0.85)] sm:max-h-[calc(100dvh-32px)] sm:p-5">
         <header className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             {history.length>1&&<button type="button" onClick={back}
@@ -179,7 +183,7 @@ export function CardHoverPreview({selection,sha,cards,onClose}:{
             <X className="size-5"/>
           </button>
         </header>
-        <div className="grid gap-4 sm:grid-cols-[210px_minmax(0,1fr)]">
+        <div className="grid gap-4 sm:grid-cols-[240px_minmax(0,1fr)]">
           <div className="min-w-0">
             <EnlargedArtwork card={card} sha={sha}/>
             <p className="mt-2 text-center text-[11px] text-muted">
@@ -238,8 +242,8 @@ export function CardHoverPreview({selection,sha,cards,onClose}:{
               matchedFusions?"Nenhuma fusão cadastrada com esta carta como material.":
               "Consultando fusões…"}
           </p>}
-          {matchedFusions&&fusions.materialTotal>5&&<p className="mt-2 text-[11px] text-muted">
-            Mostrando 5 de {fusions.materialTotal} possibilidades.
+          {matchedFusions&&fusions.materialTotal>materialRows.length&&<p className="mt-2 text-[11px] text-muted">
+            Mostrando {materialRows.length} de {fusions.materialTotal} possibilidades.
           </p>}
         </section>
         <section className="mt-4 border-t border-line/70 pt-3">
@@ -260,8 +264,8 @@ export function CardHoverPreview({selection,sha,cards,onClose}:{
               matchedFusions?"Nenhuma receita cadastrada que produza esta carta.":
               "Consultando fusões…"}
           </p>}
-          {matchedFusions&&fusions.resultTotal>5&&<p className="mt-2 text-[11px] text-muted">
-            Mostrando 5 de {fusions.resultTotal} receitas.
+          {matchedFusions&&fusions.resultTotal>resultRows.length&&<p className="mt-2 text-[11px] text-muted">
+            Mostrando {resultRows.length} de {fusions.resultTotal} receitas.
           </p>}
           {matchedFusions&&fusions.provisional&&<p className="mt-2 text-[11px] text-gold/80">
             Algumas receitas são candidatas estruturais da ISO, ainda não confirmadas em duelo.
