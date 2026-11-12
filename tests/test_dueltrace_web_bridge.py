@@ -166,6 +166,15 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(snapshot["cards"][1]["effectSource"],"ROM-offset-auditado")
         self.assertNotIn("source_path",str(snapshot))
 
+    def test_long_card_description_is_preserved_up_to_4000_chars(self):
+        long_description="Descrição de carta da ISO ativa. " * 150
+        self.profile["cards"][0]["description_text"]=long_description
+        from_profile=self.bridge._cards(self.profile)[0]
+        self.assertEqual(from_profile["description"],long_description[:4000])
+        self.assertGreater(len(from_profile["description"]),550)
+        self.assertEqual(from_profile["descriptionSource"],"SLUS_014.11:0x1B11F4")
+        self.assertLessEqual(len(from_profile["description"]),4000)
+
     def test_forensic_private_upload_requires_explicit_action_and_current_sha(self):
         protected=ProtectedDesktopApi(self.bridge,"x"*64)
         image=self.home/"rom.iso"
