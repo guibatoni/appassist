@@ -1,17 +1,17 @@
-# DUELTRACE v0.12.0 — Preview
+# DUELTRACE v0.13.0 — Preview
 
 ## Novidades
-- **Detalhes por clique:** nas bibliotecas de Cartas, Fusões e Drops, clique na carta para abrir informações; mover o mouse não fecha mais a janela.
-- **Explorar cartas relacionadas:** toque em materiais ou resultados sugeridos para ver outra carta, sua arte, nome, ATK e DEF, usando Voltar para retornar.
-- **Fusões completas:** cada carta mostra até 5 fusões em que participa como material e até 5 receitas que produzem a própria carta.
-- **Arte mais nítida:** após extrair artes de um mod, o DUELTRACE cria automaticamente uma versão ampliada em 3×, preservando todos os PNGs originais.
+- **Visual clássico do anime:** Biblioteca, Fusões e Drops agora exibem cartas completas com barra de nome, atributo, estrelas, arte central, tipo, descrição e quadros de ATK/DEF dentro da moldura.
+- **Imagem HD da carta inteira:** renderização local em 360×520 pixels, combinando a arte melhorada da ISO com moldura e textos em alta resolução.
+- **Carta ampliada ao clicar:** a janela de detalhes abre a versão clássica completa, mantendo os atalhos para receitas de fusão, Voltar e informações de drops.
 
 ## Melhorias
-- **Navegação sem pop-ups em cascata:** sugestões clicáveis abrem a próxima carta na mesma janela; Esc fecha, Voltar recupera a anterior.
-- **Upscaling conservador:** método local Lanczos, sem redesenho por IA ou nitidez agressiva; cache evita processar novamente imagens idênticas.
-- **Exibição HD com fallback:** a janela tenta primeiro a arte ampliada da ISO ativa e usa o PNG original se necessário.
+- **Grade mais limpa:** ATK e DEF deixam de ficar repetidos abaixo das miniaturas; os valores aparecem no quadro inferior da carta.
+- **Identidade única:** mesma apresentação em Biblioteca de Cartas, Fusões, Drops e na janela ampliada; se a carta HD não existir, o aplicativo usa a arte original.
+- **Cache por mod:** cada carta é renderizada uma vez e regenerada somente quando a arte ou os dados extraídos mudarem, sem tocar nos arquivos originais.
+- **Qualidade visual conservadora:** ampliação da arte do PS1 sem IA generativa, com texto e contornos da carta desenhados diretamente em alta resolução.
 
 ## Correções
-- **Fusões ligadas ao mod ativo:** sugestões vêm somente das receitas da ISO selecionada, sem criar combinações ou probabilidades.
-- **Detalhes consistentes:** Cartas, Fusões e Drops compartilham a mesma experiência de clique; o mouse pode ser movido livremente enquanto a janela permanece aberta.
-- **Atualizações e Patch Notes:** versão atualizada para v0.12.0; notas acompanham o ZIP oficial e são apresentadas após a instalação.
+- **Informação fiel ao mod:** nome, tipo, nível, atributo, descrição, ataque e defesa são lidos da ISO ativa; campos ausentes não são inventados.
+- **Segurança:** as cartas HD só são servidas localmente e quando pertencem à ISO ativa, com verificação do caminho autorizado.
+- **Atualização em um clique:** versão oficial avançou para v0.13.0, com Patch Notes incluídos e aviso automático após instalar.
