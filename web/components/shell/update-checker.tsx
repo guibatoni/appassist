@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { BookOpen, CheckCircle2, Download, RefreshCw, ShieldAlert, X } from "lucide-react"
 import { UpdatePatchNotes } from "./update-patch-notes"
-import { desktopApi, type UpdateCheck } from "@/lib/desktop"
+import { desktopApi, type UpdateCheck, type InstalledUpdateNotice } from "@/lib/desktop"
 
 /**
  * Consulta automática e fluxo único: Atualizações > Baixar atualizações >
@@ -15,6 +15,9 @@ export function UpdateChecker() {
   const [result, setResult] = useState<UpdateCheck | null>(null)
   const [visible, setVisible] = useState(false)
   const [notesOpen, setNotesOpen] = useState(false)
+  const [notesMode, setNotesMode] = useState<"installed"|"available">("available")
+  const [installedNotice, setInstalledNotice] = useState<InstalledUpdateNotice | null>(null)
+  const startupNoticeChecked = useRef(false)
   const [checking, setChecking] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -63,6 +66,22 @@ export function UpdateChecker() {
       if (!api) {
         if (++attempts <= 20) handle = window.setTimeout(probe, 750)
         return
+      }
+      // O aviso da build já instalada não depende do feed remoto.
+      // É consultado uma vez por inicialização e marcado como lido só
+      // quando o usuário fechar a janela de novidades.
+      if (!startupNoticeChecked.current) {
+        startupNoticeChecked.current = true
+        void api.get_installed_update_notice().then(notice => {
+          if (!mounted) return
+          setInstalledNotice(notice)
+          if (notice.available && notice.unread && notice.notes.length > 0) {
+            setNotesMode("installed")
+            setNotesOpen(true)
+          }
+        }).catch(() => {
+          // Uma build antiga ou sem pacote de notas não inventa avisos.
+        })
       }
       refresh()
       // Consulta novamente se o usuário mantiver o DUELTRACE aberto.
@@ -128,6 +147,29 @@ export function UpdateChecker() {
     } finally {setInstalling(false)}
   }
 
+  const closeNotes = () => {
+    setNotesOpen(false)
+    if (notesMode !== "installed" || !installedNotice?.unread ||
+        typeof installedNotice.runId !== "number") return
+    const api = desktopApi()
+    if (!api) return
+    const runId = installedNotice.runId
+    // Somente a confirmação explícita fecha o aviso desta build.
+    void api.acknowledge_update_notice(runId).then(() => {
+      setInstalledNotice(previous => previous && previous.runId === runId
+        ? {...previous, unread:false} : previous)
+    }).catch(() => {
+      // Não marcar como lido se o disco estiver indisponível.
+    })
+  }
+
+  const openNotes = () => {
+    const hasIncoming = (result?.patchNotes?.length ?? 0) > 0 &&
+      result?.updateAvailable === true
+    setNotesMode(hasIncoming ? "available" : "installed")
+    setNotesOpen(true)
+  }
+
   const available = result?.updateAvailable === true
   const canDownload = available &&
     (result?.automaticPortableReady === true || result?.automaticPreviewReady === true)
@@ -139,9 +181,13 @@ export function UpdateChecker() {
       "Consulta concluída: nenhuma Preview mais recente que o build instalado." :
     result?.status === "unavailable" ? "Não foi possível consultar novas versões." :
     "Nenhuma atualização nova disponível."
-  const notesVersion = result?.patchNotesVersion ??
-    (result?.currentVersion ?? "")
-  const patchNotes = result?.patchNotes ?? []
+  const notesVersion = notesMode === "installed" && installedNotice?.available
+    ? installedNotice.version + (installedNotice.runId
+      ? " · build #" + installedNotice.runId : "")
+    : result?.patchNotesVersion ?? result?.currentVersion ?? ""
+  const patchNotes = notesMode === "installed"
+    ? installedNotice?.notes ?? []
+    : result?.patchNotes ?? []
   return <div className="relative">
     <button ref={triggerRef} type="button"
       className="btn-ghost inline-flex items-center gap-2 rounded-lg border border-primary/30 px-3 py-2 text-xs font-semibold transition-colors hover:border-primary hover:text-white disabled:cursor-wait disabled:opacity-60"
@@ -219,7 +265,7 @@ export function UpdateChecker() {
             {installing?"Baixando atualização…":"Atualizar agora"}
           </button>
           <button type="button" disabled={checking}
-            onClick={()=>setNotesOpen(true)}
+            onClick={openNotes}
             className="btn-ghost inline-flex items-center gap-2 rounded-lg border border-primary/40 px-3 py-2 text-xs transition-colors hover:border-primary disabled:opacity-50"
             aria-label="Abrir patch notes">
             <BookOpen className="size-4 text-primary"/>Patch notes
@@ -230,7 +276,7 @@ export function UpdateChecker() {
         </p>}
         </section>
       </div>, document.body)}
-    <UpdatePatchNotes open={notesOpen} onClose={()=>setNotesOpen(false)}
+    <UpdatePatchNotes open={notesOpen} onClose={closeNotes}
       version={notesVersion} notes={patchNotes}/>
   </div>
 }
