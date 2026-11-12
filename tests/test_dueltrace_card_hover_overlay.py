@@ -1,140 +1,88 @@
-"""Regressão da mesma prévia sobre carta nas abas Fusões e Drops."""
-from pathlib import Path
+"""Regressões da janela de detalhes por clique em Biblioteca/Fusões/Drops.
+
+Testes de contrato visual: não dependem de WebView ou imagens comerciais.
+"""
 import unittest
+from pathlib import Path
 
-ROOT=Path(__file__).resolve().parents[1]
-SHARED=ROOT/"web/components/desktop/card-hover-preview.tsx"
-FUSION=ROOT/"web/components/desktop/desktop-page.tsx"
-DROPS=ROOT/"web/components/desktop/drops-page.tsx"
-
-
-class SharedCardPreviewTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.overlay=SHARED.read_text(encoding="utf-8")
-        cls.fusions=FUSION.read_text(encoding="utf-8")
-        cls.drops=DROPS.read_text(encoding="utf-8")
-
-    def test_preview_waits_one_second_for_hover_or_selection(self):
-        source=self.overlay
-        self.assertIn("const CARD_PREVIEW_DELAY_MS=1000",source)
-        self.assertIn("window.setTimeout(()=>{",source)
-        self.assertIn("},CARD_PREVIEW_DELAY_MS)",source)
-        self.assertIn("return()=>window.clearTimeout(timer)",source)
-        self.assertIn("setRevealed(null)",source)
-        self.assertIn("if(!selection)return",source)
-        self.assertIn("if(selection.anchor.isConnected)setRevealed(selection)",source)
-        self.assertIn("revealed===selection?revealed:null",source)
-        self.assertIn("if(!mounted||!activeSelection||!card)return null",source)
-
-    def test_background_and_lookup_start_only_when_preview_is_visible(self):
-        source=self.overlay
-        self.assertIn("const card=activeSelection?.card??null",source)
-        self.assertIn("const cardId=card?.id??null",source)
-        self.assertIn("if(!sha||cardId===null)return",source)
-        self.assertIn("if(!mounted||!activeSelection||!card)return null",source)
-        self.assertIn("if(selection.anchor.isConnected)setRevealed(selection)",source)
-        self.assertNotIn("setPosition(",source)
-        self.assertIn('event.key==="Escape"',source)
-        # A mesma prévia é usada nas três bibliotecas.
-        for page in (self.fusions,self.drops):
-            self.assertIn('<CardHoverPreview selection={preview} sha={sha}',page)
-
-    def test_drops_preview_uses_full_card_details_from_active_iso(self):
-        # Mesma coleção utilizada na Biblioteca de Cartas e nas Fusões.
-        self.assertIn('<DropsPage sha={state?.activeSha??null} cards={state?.cards??[]}/>',self.fusions)
-        self.assertIn("export function DropsPage({sha,cards}:",self.drops)
-        self.assertIn("new Map(cards.map(card=>[card.id,card]))",self.drops)
-        self.assertIn("cardsById.get(row.cardId)??null",self.drops)
-        self.assertIn("cardDetails?.id===row.cardId?cardDetails",self.drops)
-
-    def test_shows_verified_description_and_effect_without_exposing_file_paths(self):
-        source=self.overlay
-        self.assertIn("card.descriptionSource&&card.description?.trim()",source)
-        self.assertIn("card.effectSource&&card.effect?.trim()",source)
-        self.assertIn('duplicateText?"Descrição / efeito":"Descrição"',source)
-        self.assertIn('>Efeito</h4>',source)
-        self.assertIn('duplicateText',source)
-        self.assertIn('Descrição e efeito não disponíveis para esta carta.',source)
-        self.assertIn('whitespace-pre-line break-words',source)
-        self.assertNotIn('{card.descriptionSource}',source)
-        self.assertNotIn('{card.effectSource}',source)
-        self.assertIn("CARD_PREVIEW_DELAY_MS=1000",source)
-        self.assertIn("Onde conseguir",source)
-
-    def test_overlay_centers_in_viewport_instead_of_on_selected_card(self):
-        source=self.overlay
-        self.assertIn("createPortal(<>",source)
-        self.assertIn("document.body",source)
-        self.assertIn('fixed inset-0 z-[100] flex items-center justify-center',source)
-        self.assertIn('max-h-[calc(100dvh-24px)]',source)
-        self.assertIn('overflow-y-auto',source)
-        self.assertIn('w-[min(calc(100vw-24px),500px)]',source)
-        self.assertNotIn("getBoundingClientRect()",source)
-        self.assertNotIn("window.innerWidth-width-margin",source)
-        self.assertNotIn("style={position",source)
-        self.assertNotIn("bottom-4 right-4",source)
-        # Este layout responsivo não depende das dimensões da carta selecionada.
-        self.assertNotIn("ResizeObserver",source)
-
-    def test_background_darkens_without_blocking_mouse(self):
-        source=self.overlay
-        self.assertIn('fixed inset-0 z-[90] bg-[#020713]/75',source)
-        self.assertIn('pointer-events-none fixed inset-0 z-[100]',source)
-        self.assertIn('dueltrace-scroll max-h-[calc(100dvh-24px)]',source)
-        self.assertIn('role={activeSelection.pinned?"dialog":"tooltip"}',source)
-        self.assertIn('pointer-events-auto ',source)
-        self.assertIn('event.key==="Escape"',source)
-        self.assertIn('onClose()',source)
-        self.assertIn('onMouseLeave={()=>onPreview(null)}',self.fusions)
-        self.assertIn('onMouseLeave={()=>onPreview(null)}',self.drops)
-
-    def test_fusions_and_drops_share_identical_preview(self):
-        for source in (self.fusions,self.drops):
-            self.assertIn('import {CardHoverPreview} from "./card-hover-preview"',source)
-            self.assertIn('<CardHoverPreview selection={preview} sha={sha}',source)
-            self.assertIn('onFocus={event=>onPreview(',source)
-            self.assertIn('onMouseEnter={event=>onPreview(',source)
-        self.assertNotIn('WA offset:',self.drops)
-
-    def test_retrieves_validated_drops_for_active_iso(self):
-        source=self.overlay
-        self.assertIn('api.get_card_drop_sources(cardId)',source)
-        self.assertIn('data.cardId===cardId&&data.romSha===sha',source)
-        self.assertIn('matched&&result.available',source)
-        self.assertIn('rows.slice(0,4)',source)
-        self.assertIn('row.eligibleRanks.join(" / ")',source)
-        self.assertIn('row.chancePercent.toLocaleString("pt-BR"',source)
-        self.assertNotIn('result.source',source)
-        self.assertNotIn('sourceOffset',source)
+ROOT = Path(__file__).resolve().parents[1]
+MODAL = (ROOT / "web/components/desktop/card-hover-preview.tsx").read_text("utf-8")
+PAGE = (ROOT / "web/components/desktop/desktop-page.tsx").read_text("utf-8")
+DROPS = (ROOT / "web/components/desktop/drops-page.tsx").read_text("utf-8")
+CLIENT = (ROOT / "web/lib/desktop.ts").read_text("utf-8")
+BRIDGE = (ROOT / "scanner/dueltrace_web_bridge.py").read_text("utf-8")
+SECURITY = (ROOT / "scanner/dueltrace_web_security.py").read_text("utf-8")
 
 
-    def test_drops_and_library_show_exact_fusion_partners_with_attack(self):
-        source=self.overlay
-        self.assertIn('api.get_card_fusions(cardId,fusionPage*8,8,fusionSort)',source)
-        self.assertIn('data.romSha===sha&&data.cardId===cardId',source)
-        self.assertIn('Possíveis fusões',source)
-        self.assertIn('fusion.partnerName',source)
-        self.assertIn('fusion.resultName',source)
-        self.assertIn('fusion.atk??"—"',source)
-        self.assertIn('aria-label="Ordenar fusões possíveis"',source)
-        self.assertIn('aria-label="Mais fusões"',source)
-        self.assertIn('pinned:true',self.drops)
-        library=self.fusions.split('function Library(',1)[1].split('function FusionIllustration(',1)[0]
-        self.assertIn('pinned:true',library)
-        self.assertIn('<CardHoverPreview selection={preview} sha={sha}',library)
-        self.assertNotIn('<aside',library)
-        self.assertIn('onMouseEnter={event=>onPreview(',library)
-        self.assertIn('onFocus={event=>onPreview(',library)
+class CardDetailDialogTests(unittest.TestCase):
+    def test_click_only_opens_card_details_without_hover_or_mouse_leave(self):
+        for source in (PAGE, DROPS):
+            self.assertIn('onClick=', source)
+            self.assertIn('<CardHoverPreview selection={preview} sha={sha} cards={cards}', source)
+            self.assertNotIn('onMouseEnter={event=>onPreview(', source)
+            self.assertNotIn('onMouseLeave={()=>onPreview(null)}', source)
+            self.assertNotIn('onFocus={event=>onPreview(', source)
+            self.assertNotIn('pinned:true', source)
+        self.assertIn('onClick={()=>setPreview({card})}', PAGE)
+        self.assertIn('onClick={()=>onPreview({card:displayed})}', PAGE)
+        self.assertIn('onClick={()=>onPreview({card,fallbackDrop:row})}', DROPS)
+        self.assertNotIn('CARD_PREVIEW_DELAY_MS', MODAL)
+        self.assertNotIn('onMouseLeave', MODAL)
+        self.assertIn('role="dialog"', MODAL)
+        self.assertIn('aria-modal="true"', MODAL)
+        self.assertIn('document.body.style.overflow="hidden"', MODAL)
 
-    def test_preview_is_larger_than_list_thumbnail_and_reset_when_filter_changes(self):
-        self.assertIn('w-32 shrink-0 min-[480px]:w-40 sm:w-48',self.overlay)
-        self.assertIn('sizes="192px"',self.overlay)
-        self.assertIn('w-[min(calc(100vw-24px),500px)]',self.overlay)
-        self.assertIn('useEffect(()=>{setPreview(null)},[sha,query,searchScope,offset,sort,cardType])',self.fusions)
-        self.assertIn('setPreview(null)',self.drops)
-        self.assertIn('fallbackDrop:row',self.drops)
+    def test_clickable_suggestions_stay_open_with_back_history(self):
+        self.assertIn('const [history,setHistory]', MODAL)
+        self.assertIn('setHistory(previous=>', MODAL)
+        self.assertIn('setHistory(old=>old.length>1?old.slice(0,-1):old)', MODAL)
+        self.assertIn('Voltar para a carta anterior', MODAL)
+        self.assertIn('onClick={()=>navigate(id,name)}', MODAL)
+        self.assertIn('cardById.get(id)', MODAL)
+        self.assertIn('cardById=useMemo(()=>new Map(cards.map(card=>[card.id,card]))', MODAL)
+        self.assertIn('if(event.key==="Escape")', MODAL)
+        self.assertIn('event.key==="Backspace"&&event.altKey', MODAL)
+        self.assertIn('previous.slice(-19)', MODAL)
+        self.assertIn('closeButton.current?.focus()', MODAL)
+
+    def test_five_material_and_five_result_suggestions(self):
+        self.assertIn('api.get_card_fusion_paths(cardId)', MODAL)
+        self.assertIn('data.romSha===sha&&data.cardId===cardId', MODAL)
+        self.assertIn('fusions.materialRows.slice(0,5)', MODAL)
+        self.assertIn('fusions.resultRows.slice(0,5)', MODAL)
+        self.assertIn('Fusões usando esta carta como material', MODAL)
+        self.assertIn('Fusões que resultam nesta carta', MODAL)
+        self.assertIn('cardLink(row.partnerId,row.partnerName)', MODAL)
+        self.assertIn('cardLink(row.resultId,row.resultName)', MODAL)
+        self.assertIn('cardLink(row.materialAId,row.materialAName)', MODAL)
+        self.assertIn('cardLink(row.materialBId,row.materialBName)', MODAL)
+        self.assertIn('materialTotal', MODAL)
+        self.assertIn('resultTotal', MODAL)
+        self.assertIn('def??"—"', MODAL)
+
+    def test_mod_data_is_bound_and_no_other_iso_details_leak(self):
+        self.assertIn('card.descriptionSource&&card.description?.trim()', MODAL)
+        self.assertIn('card.effectSource&&card.effect?.trim()', MODAL)
+        self.assertIn('data.romSha===sha&&data.cardId===cardId', MODAL)
+        self.assertIn('api.get_card_drop_sources(cardId)', MODAL)
+        self.assertIn('row.chancePercent.toLocaleString', MODAL)
+        self.assertIn('card.id===selection.card.id', MODAL)
+        self.assertIn('cardArtHd(sha,card.id)', MODAL)
+        self.assertIn('cardArt(sha,card.id)', MODAL)
+        self.assertIn('onError={()=>setSource(old=>old==="hd"?"original":"none")}', MODAL)
+        self.assertIn('/__art_hd__/', CLIENT)
+        self.assertNotIn('sourceOffset', MODAL)
+        self.assertNotIn('result.source', MODAL)
+
+    def test_new_local_endpoint_is_capability_protected(self):
+        self.assertIn('def get_card_fusion_paths(self, card_id):', BRIDGE)
+        self.assertIn('def get_card_fusion_paths(self, credential, card_id):', SECURITY)
+        self.assertIn('self._authorize(credential)', SECURITY)
+        self.assertIn('get_card_fusion_paths(cardId: number)', CLIENT)
+        self.assertIn('native.get_card_fusion_paths(token, cardId)', CLIENT)
+        self.assertIn('"materialRows": materials[:5]', BRIDGE)
+        self.assertIn('"resultRows": results[:5]', BRIDGE)
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     unittest.main()
