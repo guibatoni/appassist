@@ -36,6 +36,18 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
     return()=>{active=false;window.clearInterval(poll)}
   },[sha,chosen,refresh])
 
+  const chooseSave=async(block:number)=>{
+    const api=desktopApi()
+    if(!api)return
+    setBusy(true)
+    try{
+      await api.select_memory_save(block)
+      setChosen("")
+      setRefresh(v=>v+1)
+    }catch(e){setError(e instanceof Error?e.message:"Não foi possível selecionar o save.")}
+    finally{setBusy(false)}
+  }
+
   const saveDeck=async()=>{
     const api=desktopApi()
     if(!api||!name.trim())return
@@ -54,7 +66,7 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
     <header className="panel rounded-xl border-gold/40 bg-gradient-to-r from-[#142b51] to-[#061126] p-4">
       <div className="flex items-center gap-3"><Layers className="size-6 text-gold"/>
         <div><h1 className="font-display text-2xl font-bold text-gold">Decks</h1>
-          <p className="text-sm text-muted">Deck ativo do Memory Card, decks salvos e fusões possíveis</p></div>
+          <p className="text-sm text-muted">Deck gravado no Memory Card, decks salvos e fusões possíveis</p></div>
       </div>
     </header>
     <div className="panel rounded-xl p-4">
@@ -69,11 +81,22 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         </button>
       </div>
       {error&&<p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
-      <p className="mt-3 text-xs text-muted">A leitura é automática quando o cartão muda. O ePSXe grava o cartão original; o DUELTRACE preserva cópias locais sem sobrescrevê-lo. A integridade interna do save ainda não foi confirmada em jogo.</p>
+      <p className="mt-3 text-xs text-muted">O DUELTRACE valida as verificações internas do save e acompanha alterações no arquivo. O cartão pode conter um deck salvo diferente do deck atualmente carregado no ePSXe. A seleção de ISO não confirma automaticamente qual save o emulador abriu.</p>
+      {(state?.saves?.length??0)>1&&
+        <label className="mt-4 flex flex-col gap-1 text-sm text-muted">Selecionar partida salva no cartão
+          <select className="field max-w-xl px-3 py-2" value={state?.selectedBlock??""}
+            disabled={busy}
+            onChange={e=>{if(e.target.value)void chooseSave(Number(e.target.value))}}>
+            <option value="">Escolha o save correto</option>
+            {state!.saves.map(save=><option key={save.block} value={save.block}>
+              Bloco {save.block} · {save.saveName} · sequência {save.saveSequence}
+            </option>)}
+          </select>
+        </label>}
       <label className="mt-4 flex flex-col gap-1 text-sm text-muted">Selecionar deck
         <select value={chosen} onChange={e=>{setChosen(e.target.value);setPreview(null)}}
           className="field max-w-xl px-3 py-2 text-sm">
-          <option value="">Deck ativo do Memory Card</option>
+          <option value="">Deck gravado no Memory Card</option>
           {(state?.saved??[]).map(item=>
             <option key={item.id} value={item.id}>{item.name} · {item.source==="memory_card"?"Automático":"Salvo"}</option>)}
         </select>
@@ -90,7 +113,7 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
     <div className="panel rounded-xl p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-gold">
-          <BookMarked className="size-5"/> {state?.displayName??"Deck ativo"}
+          <BookMarked className="size-5"/> {state?.displayName??"Deck gravado"}
         </h2>
         <p className="text-sm text-primary">{state?.deckCount??0}/40 cartas</p>
       </div>
@@ -105,7 +128,7 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
           </div>
         </button>)}
       </div>:
-      <p className="mt-3 text-sm text-muted">Nenhum deck de 40 cartas confirmado estruturalmente neste Memory Card.</p>}
+      <p className="mt-3 text-sm text-muted">Nenhum deck foi aprovado nas verificações de integridade deste save. Se houver vários saves no cartão, selecione a partida correta.</p>}
     </div>
     <div className="panel rounded-xl p-4">
       <h2 className="font-display text-lg font-semibold text-gold">Fusões possíveis com este deck</h2>

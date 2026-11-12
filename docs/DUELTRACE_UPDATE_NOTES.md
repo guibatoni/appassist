@@ -1,16 +1,16 @@
-# DUELTRACE v0.17.0 — Preview
+# DUELTRACE v0.17.1 — Preview
 
 ## Novidades
-- Nova aba Oponentes: cartas possíveis do deck e consulta opcional de drops.
-- Nova aba Decks: deck ativo do Memory Card, decks salvos e fusões possíveis.
-- Botão Selecionar Memory Card na Biblioteca de Mods com leitura automática do cartão.
+- Validação da integridade do Memory Card usando os três selos do save do jogo.
+- Seleção do bloco de save quando o cartão contém mais de uma partida.
+- Pools de deck candidatos por oponente quando a ISO possui 39 matrizes estruturais reconhecidas.
 
 ## Melhorias
-- Memory Card vinculado à ISO ativa, com releitura ao atualizar e cópias de segurança locais.
-- Decks salvos por mod, com atualização quando o ePSXe gravar novamente o cartão.
-- Fusões de deck respeitam quantidades de cartas e excluem receitas conflitantes.
+- A aba Decks diferencia o deck gravado do deck realmente ativo no emulador.
+- Pools provisórios mostram pesos reais sem declarar oponentes identificados em duelo.
+- Snapshots antigos sem integridade comprovada deixam de aparecer como decks válidos.
 
 ## Correções
-- Pools ponderados dos oponentes não são mostrados como decks fixos de 40 cartas.
-- Cartões PS1 inválidos e saves sem 40 IDs legíveis não geram decks inventados.
-- Arquivos de Memory Card do ePSXe nunca são sobrescritos pelo DUELTRACE.
+- Corrigida a chamada de drops na aba Oponentes (erro de ordenação).
+- Drops indisponíveis mostram um aviso em vez de carregamento infinito.
+- Um save corrompido ou de outro formato não é aceito apenas por conter 40 IDs válidos.

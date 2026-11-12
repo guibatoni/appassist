@@ -554,6 +554,9 @@ class DueltraceWebBridge:
                     return {}
                 wa = disc.get(resource_name)
                 rewards = discover_dynamic_reward_pools(wa, family)
+                from dueltrace_deck_library import decode_candidate_deck_pools
+                candidate_decks = decode_candidate_deck_pools(
+                    wa,rewards,rom_sha256=sha)
             finally:
                 disc.close()
             if (source.stat().st_size, source.stat().st_mtime_ns) != (
@@ -616,6 +619,7 @@ class DueltraceWebBridge:
             self._alpha_bundle_cache = {
                 "rewardProfile": provisional,
                 "rewardEvidence": {k:v for k,v in rewards.items() if k!="rows"},
+                "deckCandidates": candidate_decks,
                 "fusions": fusions,
                 "sourceSha": sha,
                 "runtimeVerified": False,
@@ -1551,7 +1555,13 @@ class DueltraceWebBridge:
         with self._lock:
             active,entry,profile=self._active()
             card_index={c["id"]:c for c in self._cards(profile)}
-            result=opponent_deck_view(profile,opponent_id,cards=card_index)
+            available=profile.get("decks") if profile else []
+            source_bound={}
+            if profile and not available and entry:
+                source_bound=self._alpha_bundle(
+                    active.get("sha256"),entry,profile).get("deckCandidates",{})
+            result=opponent_deck_view(
+                profile,opponent_id,cards=card_index,candidate=source_bound)
             result["romSha"]=active.get("sha256") if profile else None
             return result
 
@@ -1576,6 +1586,16 @@ class DueltraceWebBridge:
             self._ensure_memory_monitor()
             return {"cancelled":False,**result}
 
+    def select_memory_save(self, block):
+        """Choose among multiple *integrity-validated* saves in selected card."""
+        from dueltrace_memory_cards import MemoryCardStore
+        with self._lock:
+            active,entry,profile=self._active()
+            if not profile:
+                raise ValueError("Ative uma ISO antes de selecionar um save.")
+            return MemoryCardStore(self.catalog.home).select_save(
+                active["sha256"],block)
+
     def get_deck_library(self, deck_id=""):
         """Releitura automática do cartão; opcionalmente um deck salvo do mod."""
         if type(deck_id) is not str or len(deck_id)>90:
@@ -1589,7 +1609,7 @@ class DueltraceWebBridge:
             memory=store.read(sha)
             cards={c["id"]:c for c in self._cards(profile)}
             ids=memory.get("deckIds",[])
-            display_name="Deck ativo do Memory Card"
+            display_name="Deck gravado no Memory Card"
             if deck_id:
                 chosen=next((row for row in memory.get("saved",[])
                              if row.get("id")==deck_id),None)
@@ -1615,7 +1635,10 @@ class DueltraceWebBridge:
                     "cardName":memory.get("cardName"),
                     "saveName":memory.get("saveName"),
                     "status":memory.get("status",""),
-                    "gameIntegrityVerified":False,
+                    "gameIntegrityVerified":memory.get("gameIntegrityVerified") is True,
+                    "activeInEmulatorVerified":False,
+                    "saves":memory.get("saves",[]),
+                    "selectedBlock":memory.get("selectedBlock"),
                     "deckIds":ids,"deckCount":len(ids),"cards":current_counts,
                     "displayName":display_name, "selectedDeckId":deck_id,
                     "saved":memory.get("saved",[]),

@@ -886,11 +886,16 @@ export type OpponentDeck = {
   cards:Array<{id:number;name:string;type:string;atk:number|null;def:number|null;weight:number;chancePercent:number|null}>
   totalWeight:number
   fixed:boolean
+  provisional?:boolean
+  opponentMappingVerified?:boolean
   status:string
 }
 export type DeckLibrary = {
   romSha:string|null;linked:boolean;cardName:string|null;saveName:string|null
-  status:string;displayName:string;selectedDeckId:string;gameIntegrityVerified:false
+  status:string;displayName:string;selectedDeckId:string;gameIntegrityVerified:boolean
+  activeInEmulatorVerified:boolean
+  saves:Array<{block:number;saveName:string;duelistCode:number;saveSequence:number}>
+  selectedBlock:number|null
   deckIds:number[];deckCount:number
   cards:Array<{id:number;count:number;name:string;atk:number|null;def:number|null}>
   saved:Array<{id:string;name:string;ids:number[];createdAt:string;source:string}>
@@ -934,6 +939,7 @@ export interface DesktopAPI {
   get_fusions(query: string, offset: number, limit: number, sort?: string, cardType?: string, searchScope?: FusionSearchScope): Promise<FusionPage>
   get_opponent_deck(opponentId?:number):Promise<OpponentDeck>
   select_memory_card():Promise<{cancelled:boolean;selected?:boolean;status?:string}>
+  select_memory_save(block:number):Promise<{selected:boolean;block:number}>
   get_deck_library(deckId?:string):Promise<DeckLibrary>
   save_current_deck(name:string):Promise<{saved:boolean;name:string;status:string}>
   get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
@@ -1005,6 +1011,7 @@ interface ProtectedNativeAPI {
   get_fusions(token: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, searchScope?: FusionSearchScope): Promise<FusionPage>
   get_opponent_deck(token:string, opponentId?:number):Promise<OpponentDeck>
   select_memory_card(token:string):Promise<{cancelled:boolean;selected?:boolean;status?:string}>
+  select_memory_save(token:string,block:number):Promise<{selected:boolean;block:number}>
   get_deck_library(token:string,deckId?:string):Promise<DeckLibrary>
   save_current_deck(token:string,name:string):Promise<{saved:boolean;name:string;status:string}>
   get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
@@ -1092,6 +1099,7 @@ export function desktopApi(): DesktopAPI | null {
       native.get_fusions(token, query, offset, limit, sort, cardType, searchScope),
     get_opponent_deck: (opponentId=0) => native.get_opponent_deck(token,opponentId),
     select_memory_card: () => native.select_memory_card(token),
+    select_memory_save: (block) => native.select_memory_save(token,block),
     get_deck_library: (deckId="") => native.get_deck_library(token,deckId),
     save_current_deck: (name) => native.save_current_deck(token,name),
     get_drops: (opponentId, group, query, offset, limit, sort, cardType, rank) => native.get_drops(token, opponentId, group, query, offset, limit, sort, cardType, rank),

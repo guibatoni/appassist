@@ -1,6 +1,7 @@
 """v0.17: deck pools, PS1 memory-card binding, snapshots and fusion regressions."""
 import hashlib
 import json
+import struct
 import sys
 import tempfile
 import unittest
@@ -11,7 +12,9 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"scanner"))
 
 from dueltrace_memory_cards import MemoryCardStore, parse_memory_card, SIZE, BLOCK
-from dueltrace_deck_library import opponent_deck_view, fusion_pairs_for_deck
+from dueltrace_save_integrity import TABLES, STATE_SIZE, crc_xmodem, _mask_words, decode_save_block
+from dueltrace_deck_library import (
+    opponent_deck_view, fusion_pairs_for_deck, decode_candidate_deck_pools)
 from dueltrace_web_security import ProtectedDesktopApi
 
 SHA="a"*64
@@ -39,6 +42,14 @@ def memory_bytes(ids=None,save_name=b"BASLUS-01411-YUGIOH"):
     ids=ids if ids is not None else list(range(1,41))
     for i,cid in enumerate(ids):
         image[BLOCK+0x200+i*2:BLOCK+0x202+i*2]=cid.to_bytes(2,"little")
+    state=bytearray(image[BLOCK+0x200:BLOCK+0x200+STATE_SIZE])
+    for start,length,mask_at,count,crc_at in TABLES:
+        checksum=crc_xmodem(state[start:start+length])
+        struct.pack_into("<HH",state,crc_at,checksum,checksum)
+        for i,value in enumerate(_mask_words(checksum,count)):
+            struct.pack_into("<I",state,mask_at-i*4,value)
+    image[BLOCK+0x200:BLOCK+0x200+STATE_SIZE]=state
+    image[BLOCK+0x880:BLOCK+0x880+STATE_SIZE]=state
     return bytes(image)
 
 
@@ -47,7 +58,40 @@ class MemoryCardTests(unittest.TestCase):
         data=parse_memory_card(memory_bytes())
         self.assertEqual(data["detectedSaveCount"],1)
         self.assertEqual(data["saves"][0]["deckIds"],list(range(1,41)))
-        self.assertFalse(data["gameIntegrityVerified"])
+        self.assertTrue(data["gameIntegrityVerified"])
+
+    def test_bad_crc_in_both_copies_is_not_a_deck(self):
+        blob=bytearray(memory_bytes())
+        blob[BLOCK+0x200+1] ^= 1
+        blob[BLOCK+0x880+1] ^= 1
+        parsed=parse_memory_card(bytes(blob))
+        self.assertFalse(parsed["saves"])
+        self.assertFalse(parsed["gameIntegrityVerified"])
+
+    def test_valid_duplicate_recovers_damaged_primary(self):
+        blob=bytearray(memory_bytes())
+        blob[BLOCK+0x200+2] ^= 1
+        parsed=parse_memory_card(bytes(blob))
+        self.assertEqual(parsed["detectedSaveCount"],1)
+        self.assertEqual(parsed["saves"][0]["integrityCopy"],"duplicate")
+
+    def test_multi_save_requires_selection_instead_of_faking_active(self):
+        with tempfile.TemporaryDirectory() as td:
+            raw=bytearray(memory_bytes())
+            raw[256:384]=raw[128:256]
+            frame_checksum(raw,256)
+            raw[BLOCK*2:BLOCK*3]=raw[BLOCK:BLOCK*2]
+            first=Path(td)/"two_saves.mcr"
+            first.write_bytes(bytes(raw))
+            store=MemoryCardStore(Path(td)/"data")
+            store.select(SHA,first)
+            listing=store.read(SHA)
+            self.assertEqual(len(listing["saves"]),2)
+            self.assertEqual(listing["deckIds"],[])
+            self.assertIsNone(listing["selectedBlock"])
+            self.assertTrue(store.select_save(SHA,2)["selected"])
+            self.assertEqual(store.read(SHA)["selectedBlock"],2)
+            self.assertEqual(len(store.read(SHA)["deckIds"]),40)
 
     def test_invalid_directory_checksum_rejected_without_guessing(self):
         blob=bytearray(memory_bytes())
@@ -133,13 +177,44 @@ class OpponentDeckTests(unittest.TestCase):
         self.assertEqual(row["totalWeight"],2048)
         self.assertFalse(row["fixed"])
         self.assertEqual(row["cards"][0]["chancePercent"],50)
-        self.assertIn("não deck fixo",row["status"])
+        self.assertIn("não é fixa",row["status"])
 
     def test_unverified_opponent_identity_is_never_promoted(self):
         p=self.profile();p["verified"]["oponentes"]="extraidos_estruturalmente"
         self.assertFalse(opponent_deck_view(p,1,cards={})["available"])
         with self.assertRaises(ValueError):
             opponent_deck_view(p,40,cards={})
+
+    def test_structural_weights_are_source_bound_and_not_verified_opponent_id(self):
+        p=self.profile()
+        p["rom_sha256"]=SHA
+        p["verified"]["oponentes"]="extraidos_estruturalmente"
+        p["decks"]=[]
+        candidate={"available":True,"rom_sha256":SHA,
+                   "rows":[{"opponent_id":1,"card_id":1,"weight":1024},
+                           {"opponent_id":1,"card_id":2,"weight":1024}]}
+        result=opponent_deck_view(p,1,cards={},candidate=candidate)
+        self.assertTrue(result["available"])
+        self.assertTrue(result["provisional"])
+        self.assertFalse(result["opponentMappingVerified"])
+        self.assertIn("não foi confirmada",result["status"])
+        self.assertFalse(opponent_deck_view(
+            p,1,cards={},candidate={**candidate,"rom_sha256":OTHER})["available"])
+
+    def test_structural_39_deck_matrices_from_same_resource(self):
+        from dueltrace_alpha_reward_pools import BLOCK_BYTES
+        raw=bytearray(BLOCK_BYTES*40)
+        for n in range(39):
+            at=BLOCK_BYTES*(n+1)
+            struct.pack_into("<HHH",raw,at,1024,512,512)
+        result=decode_candidate_deck_pools(
+            bytes(raw),{"available":True,"base":BLOCK_BYTES,
+                        "opponentBlocks":39,
+                        "candidateMode":"40_block_retail_mapping_hypothesis"},
+            rom_sha256=SHA)
+        self.assertTrue(result["available"])
+        self.assertEqual(len(result["rows"]),39*3)
+        self.assertFalse(result["verified"])
 
     def test_empty_decks_are_explicit(self):
         self.assertFalse(opponent_deck_view(self.profile(),2,cards={})["available"])
@@ -171,6 +246,8 @@ class ClientContractTests(unittest.TestCase):
         self.assertIn('kind=="memory_card"',picker)
         self.assertIn('page==="decks"',main)
         self.assertIn('page==="oponentes"',main)
+        opponents=(ROOT/"web/components/desktop/opponents-page.tsx").read_text("utf8")
+        self.assertIn('get_drops(selected,"","",0,100,"id","","")',opponents)
 
     def test_native_api_requires_token(self):
         backend=Mock()
@@ -179,6 +256,8 @@ class ClientContractTests(unittest.TestCase):
             api.select_memory_card("wrong")
         with self.assertRaises(PermissionError):
             api.get_deck_library("wrong")
+        with self.assertRaises(PermissionError):
+            api.select_memory_save("wrong",1)
         with self.assertRaises(PermissionError):
             api.get_opponent_deck("wrong",1)
         api.get_deck_library("x"*64)

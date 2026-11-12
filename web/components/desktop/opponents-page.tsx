@@ -13,6 +13,7 @@ export function OpponentsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [query,setQuery]=useState("")
   const [result,setResult]=useState<OpponentDeck|null>(null)
   const [drops,setDrops]=useState<DropsModel|null>(null)
+  const [dropsError,setDropsError]=useState("")
   const [showDrops,setShowDrops]=useState(false)
   const [error,setError]=useState("")
   const [loading,setLoading]=useState(false)
@@ -22,7 +23,7 @@ export function OpponentsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
 
   useEffect(()=>{
     setSelected(0);setResult(null);setShowDrops(false);setDrops(null)
-    setPreview(null);setError("");setQuery("")
+    setDropsError("");setPreview(null);setError("");setQuery("")
   },[sha])
   useEffect(()=>{
     let live=true
@@ -38,12 +39,15 @@ export function OpponentsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   useEffect(()=>{
     let live=true
     setDrops(null)
+    setDropsError("")
     if(!showDrops||!sha||!selected)return
     const api=desktopApi()
     if(!api)return
-    void api.get_drops(selected,"","",0,100).then(v=>{
-      if(live)setDrops(v)
-    }).catch(e=>{if(live)setError(String(e))})
+    void api.get_drops(selected,"","",0,100,"id","","").then(v=>{
+      if(live){setDrops(v);setDropsError("")}
+    }).catch(e=>{
+      if(live){setDrops(null);setDropsError(e instanceof Error?e.message:String(e))}
+    })
     return()=>{live=false}
   },[sha,selected,showDrops,refresh])
 
@@ -81,6 +85,7 @@ export function OpponentsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       {error&&<p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
       {loading&&<p className="mt-3 text-sm text-muted">Lendo a tabela do oponente…</p>}
       {result&&<p className="mt-3 text-sm text-muted">{result.status}</p>}
+      {result?.provisional&&<p className="mt-2 text-xs text-gold">Atenção: a lista representa a posição estrutural do pool nesta ISO. O nome do oponente ainda não foi confirmado por testes em duelo.</p>}
       {result?.available&&<div className="mt-3 flex flex-wrap gap-2 text-sm text-primary">
         <span>{result.cards.length} tipos de cartas possíveis</span>
         <span>· Pool com {result.totalWeight.toLocaleString("pt-BR")} pontos de peso</span>
@@ -104,8 +109,11 @@ export function OpponentsPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
     {showDrops&&<div className="panel rounded-xl p-4">
       <h2 className="mb-2 font-display text-lg font-semibold text-gold">Drops do oponente</h2>
       <p className="text-xs text-muted">Recompensas exibidas somente quando o scanner possui dados associados ao oponente.</p>
-      {!drops&&<p className="mt-3 text-sm text-muted">Consultando drops…</p>}
-      {drops&&!drops.rows.length&&<p className="mt-3 text-sm text-muted">Sem drops reconhecidos para este oponente.</p>}
+      {!drops&&!dropsError&&<p className="mt-3 text-sm text-muted">Consultando drops…</p>}
+      {dropsError&&<p role="alert" className="mt-3 text-sm text-red-300">{dropsError}</p>}
+      {drops&&<p className="mt-3 text-xs text-muted">{drops.status}</p>}
+      {drops?.provisional&&<p className="mt-2 text-xs text-gold">DROPS CANDIDATOS · correspondência nome/ID e grupos de RANK ainda sem validação em duelo.</p>}
+      {drops&&!drops.rows.length&&<p className="mt-3 text-sm text-muted">Nenhum drop publicado para este oponente com a evidência disponível.</p>}
       {drops?.rows?.map((row,i)=><div key={i} className="mt-2 flex gap-3 rounded-lg border border-line/70 p-2">
         <button type="button" className="min-w-0 flex-1 text-left"
           onClick={()=>selectCard(row.cardId)}>

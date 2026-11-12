@@ -306,6 +306,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.select_memory_card()
 
+    def select_memory_save(self, credential, block):
+        self._authorize(credential)
+        return self._bridge.select_memory_save(block)
+
     def get_deck_library(self, credential, deck_id=""):
         self._authorize(credential)
         return self._bridge.get_deck_library(deck_id)

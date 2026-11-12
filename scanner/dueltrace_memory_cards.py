@@ -13,6 +13,7 @@ import json
 import os
 import re
 import struct
+from dueltrace_save_integrity import decode_save_block
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,19 +51,14 @@ def _extract_saves(blob):
         if not SAVE_NAME_RE.search(filename):
             continue
         data=blob[block*BLOCK:(block+1)*BLOCK]
-        if data[:2] != b"SC" or data[2] not in (0x11,0x12,0x13):
-            continue
-        # 0x200: após o quadro de título, CLUT e quadros de ícones.
-        raw=data[COPY_OFFSET:COPY_OFFSET+CARD_COUNT*2]
-        ids=list(struct.unpack("<40H",raw))
-        # Sem todos os 40 IDs válidos, não inventar deck.
-        if not all(1<=cid<=CARD_LIMIT for cid in ids):
+        checked=decode_save_block(data)
+        if checked is None:
             continue
         found.append({"block":block,"saveName":filename,
-                      "deckIds":ids,"deckCount":CARD_COUNT,
-                      "status":"estrutura_deck_compativel_nao_validada_no_jogo"})
+                      "deckCount":CARD_COUNT,
+                      "status":"save_ps1_integridade_validada_nao_comprovado_ativo",
+                      **checked})
     return found
-
 
 def parse_memory_card(blob):
     if not isinstance(blob,bytes):
@@ -70,7 +66,7 @@ def parse_memory_card(blob):
     saves=_extract_saves(blob)
     return {"schema":1,"format":"PS1-RAW","bytes":len(blob),
             "saves":saves,"detectedSaveCount":len(saves),
-            "gameIntegrityVerified":False}
+            "gameIntegrityVerified":bool(saves)}
 
 
 def _write_atomic(path,contents):
@@ -123,13 +119,33 @@ class MemoryCardStore:
             raise ValueError("Ative primeiro uma ISO cadastrada.")
         source,blob,result=self._load_card(path)
         data=self._binding_data()
-        data.setdefault("links",{})[rom_sha256]={"path":str(source)}
+        data.setdefault("links",{})[rom_sha256]={
+            "path":str(source),
+            "selectedBlock":result["saves"][0]["block"]
+                if len(result["saves"])==1 else None,
+        }
         _write_atomic(self.binding_file,
                       (json.dumps(data,ensure_ascii=False,indent=2)+"\n").encode("utf-8"))
         self._backup(rom_sha256,blob,result)
         return {"selected":True,"cardName":source.name,
                 "detectedSaveCount":result["detectedSaveCount"],
                 "status":"Cartão vinculado. Leitura automática habilitada; o ePSXe continua salvando o original."}
+
+    def select_save(self,rom_sha256,block):
+        if (not isinstance(rom_sha256,str) or not ROM_RE.fullmatch(rom_sha256)
+                or type(block) is not int or not 1 <= block <= 15):
+            raise ValueError("Save do Memory Card inválido.")
+        data=self._binding_data()
+        link=data.get("links",{}).get(rom_sha256)
+        if not isinstance(link,dict) or not link.get("path"):
+            raise ValueError("Selecione primeiro o Memory Card desta ISO.")
+        _path,blob,parsed=self._load_card(link["path"])
+        if block not in [save["block"] for save in parsed["saves"]]:
+            raise ValueError("Esse save não foi validado no cartão atual.")
+        data["links"][rom_sha256]["selectedBlock"]=block
+        _write_atomic(self.binding_file,
+                      (json.dumps(data,ensure_ascii=False,indent=2)+"\n").encode("utf-8"))
+        return {"selected":True,"block":block}
 
     def _backup(self,sha,blob,parsed):
         digest=hashlib.sha256(blob).hexdigest()
@@ -152,6 +168,9 @@ class MemoryCardStore:
                           "id":"auto-"+fp,"name":"Deck automático · bloco "+str(save["block"]),
                           "cards":deck,"source":"memory_card","saveName":save["saveName"],
                           "verifiedInGame":False,
+                          "saveIntegrityVerified":True,
+                          "duelistCode":save["duelistCode"],
+                          "saveSequence":save["saveSequence"],
                           "createdAt":datetime.now(timezone.utc).isoformat()}
                 _write_atomic(dest,(json.dumps(snapshot,ensure_ascii=False,indent=2)+"\n").encode("utf-8"))
         return digest
@@ -168,8 +187,9 @@ class MemoryCardStore:
                 payload=json.loads(path.read_text("utf-8"))
             except (OSError,ValueError):
                 continue
-            if (payload.get("rom_sha256")!=sha or
-                    not isinstance(payload.get("cards"),list) or
+            if (payload.get("rom_sha256")!=sha
+                    or payload.get("saveIntegrityVerified") is not True
+                    or not isinstance(payload.get("cards"),list) or
                     len(payload["cards"])!=CARD_COUNT or
                     not all(type(x) is int and 1<=x<=CARD_LIMIT for x in payload["cards"])):
                 continue
@@ -182,28 +202,46 @@ class MemoryCardStore:
 
     def read(self,rom_sha256):
         if not isinstance(rom_sha256,str) or not ROM_RE.fullmatch(rom_sha256):
-            return {"linked":False,"status":"Nenhum mod ativo.","saved":[],"deckIds":[]}
+            return {"linked":False,"status":"Nenhum mod ativo.","saved":[],
+                    "deckIds":[],"saves":[],"selectedBlock":None}
         data=self._binding_data()
         link=(data.get("links") or {}).get(rom_sha256)
-        base={"linked":False,"status":"Selecione um Memory Card na Biblioteca de Mods.",
-              "saved":self._saved(rom_sha256),"deckIds":[],
-              "cardName":None,"saveName":None,"gameIntegrityVerified":False}
+        base={"linked":False,
+              "status":"Selecione um Memory Card na Biblioteca de Mods.",
+              "saved":self._saved(rom_sha256),"deckIds":[],"cardName":None,
+              "saveName":None,"saves":[],"selectedBlock":None,
+              "gameIntegrityVerified":False,"activeInEmulatorVerified":False}
         if not isinstance(link,dict) or not link.get("path"):
             return base
         try:
             path,blob,result=self._load_card(link["path"])
         except (OSError,ValueError):
             return {**base,"linked":True,
-                    "status":"Memory Card indisponível, formato incorreto ou sendo gravado pelo emulador."}
+                    "status":"Memory Card indisponível, inválido ou sendo gravado pelo ePSXe."}
         digest=self._backup(rom_sha256,blob,result)
         saves=result["saves"]
+        choices=[{"block":row["block"],"saveName":row["saveName"],
+                  "duelistCode":row["duelistCode"],
+                  "saveSequence":row["saveSequence"]} for row in saves]
+        selected=link.get("selectedBlock")
+        if not type(selected) is int or selected not in {row["block"] for row in saves}:
+            selected=saves[0]["block"] if len(saves)==1 else None
+        chosen=next((row for row in saves if row["block"]==selected),None)
+        status=(
+            "Save válido e íntegro; este é o deck GRAVADO no cartão, não necessariamente o deck ativo no emulador."
+            if chosen else
+            "Há vários saves; escolha o bloco correto. Nenhum deck é presumido como ativo."
+            if saves else
+            "Memory Card válido, mas não há save FM com integridade comprovada.")
         return {**base,"linked":True,"cardName":path.name,
-                "saveName":saves[0]["saveName"] if saves else None,
-                "deckIds":saves[0]["deckIds"] if saves else [],
-                "saved":self._saved(rom_sha256),
+                "saves":choices,"selectedBlock":selected,
                 "backupFingerprint":digest[:16],
-                "status":("Deck carregado automaticamente; o ePSXe controla os saves."
-                          if saves else "Memory Card válido, mas nenhum save FM com deck foi identificado.")}
+                "saveName":chosen["saveName"] if chosen else None,
+                "deckIds":chosen["deckIds"] if chosen else [],
+                "saved":self._saved(rom_sha256),
+                "gameIntegrityVerified":bool(chosen),
+                "status":status}
+
 
     def save_snapshot(self,sha,name):
         if not isinstance(name,str) or not 1<=len(name.strip())<=72:
@@ -214,6 +252,7 @@ class MemoryCardStore:
             raise ValueError("Não há deck de 40 cartas para salvar.")
         fp=uuid4().hex
         item={"schema":1,"rom_sha256":sha,"id":"manual-"+fp,
+              "saveIntegrityVerified":bool(current.get("gameIntegrityVerified")),
               "name":name.strip(),"cards":ids,
               "source":"user_snapshot","verifiedInGame":False,
               "createdAt":datetime.now(timezone.utc).isoformat()}
