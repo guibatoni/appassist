@@ -428,6 +428,31 @@ export type CardFusionSuggestions = {
   }>
 }
 
+export type CardFusionPaths = {
+  romSha: string | null
+  cardId: number
+  available: boolean
+  provisional: boolean
+  materialTotal: number
+  resultTotal: number
+  materialRows: Array<{
+    partnerId: number
+    partnerName: string
+    resultId: number
+    resultName: string
+    atk: number | null
+    def: number | null
+  }>
+  resultRows: Array<{
+    materialAId: number
+    materialAName: string
+    materialBId: number
+    materialBName: string
+    materialAAtk: number | null
+    materialBAtk: number | null
+  }>
+}
+
 export type DropRow = {
   opponentId: number
   opponentName: string
@@ -888,6 +913,7 @@ export interface DesktopAPI {
   get_fusions(query: string, offset: number, limit: number, sort?: string, cardType?: string, searchScope?: FusionSearchScope): Promise<FusionPage>
   get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
   get_card_fusions(cardId: number, offset?: number, limit?: number, sort?: "atk" | "name" | "id"): Promise<CardFusionSuggestions>
+  get_card_fusion_paths(cardId: number): Promise<CardFusionPaths>
   get_card_drop_sources(cardId: number): Promise<CardDropSources>
   get_rank_trace_status(): Promise<MipsTraceResult>
   import_rank_trace(duelId?: string | null): Promise<MipsTraceResult>
@@ -954,6 +980,7 @@ interface ProtectedNativeAPI {
   get_fusions(token: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, searchScope?: FusionSearchScope): Promise<FusionPage>
   get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
   get_card_fusions(token: string, cardId: number, offset?: number, limit?: number, sort?: "atk" | "name" | "id"): Promise<CardFusionSuggestions>
+  get_card_fusion_paths(token: string, cardId: number): Promise<CardFusionPaths>
   get_card_drop_sources(token: string, cardId: number): Promise<CardDropSources>
   get_rank_trace_status(token: string): Promise<MipsTraceResult>
   import_rank_trace(token: string, duelId?: string | null): Promise<MipsTraceResult>
@@ -1036,6 +1063,7 @@ export function desktopApi(): DesktopAPI | null {
       native.get_fusions(token, query, offset, limit, sort, cardType, searchScope),
     get_drops: (opponentId, group, query, offset, limit, sort, cardType, rank) => native.get_drops(token, opponentId, group, query, offset, limit, sort, cardType, rank),
     get_card_fusions: (cardId, offset=0, limit=8, sort="atk") => native.get_card_fusions(token, cardId, offset, limit, sort),
+    get_card_fusion_paths: (cardId) => native.get_card_fusion_paths(token, cardId),
     get_card_drop_sources: (cardId) => native.get_card_drop_sources(token, cardId),
     get_rank_trace_status: () => native.get_rank_trace_status(token),
     import_rank_trace: (duelId) => native.import_rank_trace(token, duelId),
@@ -1116,6 +1144,12 @@ export function cardWithFrame(activeSha: string | null, id: number): string | nu
   if (!activeSha || !/^[a-f0-9]{64}$/.test(activeSha) ||
       !Number.isInteger(id) || id < 1 || id > 722) return null
   return `/__card__/${activeSha}/${id}.png`
+}
+
+export function cardArtHd(activeSha: string | null, id: number): string | null {
+  if (!activeSha || !/^[a-f0-9]{64}$/.test(activeSha) ||
+      !Number.isInteger(id) || id < 1 || id > 722) return null
+  return `/__art_hd__/${activeSha}/${id}.png`
 }
 
 export function cardArt(activeSha: string | null, id: number): string | null {
