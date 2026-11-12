@@ -44,14 +44,14 @@ class PublicUiContractTests(unittest.TestCase):
         self.assertIn('mod.requiresReview',self.mods)
         self.assertNotIn("CardMatchPanel mods=",self.mods)
 
-    def test_fusions_use_shared_overlay_for_mouse_and_keyboard(self):
+    def test_fusions_use_shared_persistent_click_dialog(self):
         source=self.fusions
-        self.assertIn("onMouseEnter={event=>onPreview(",source)
-        self.assertIn("onMouseLeave={()=>onPreview(null)}",source)
-        self.assertIn("onFocus={event=>onPreview(",source)
-        self.assertIn("onBlur={()=>onPreview(null)}",source)
+        self.assertIn("onClick={()=>onPreview({card:displayed})}",source)
+        self.assertNotIn("onMouseEnter={event=>onPreview(",source)
+        self.assertNotIn("onMouseLeave={()=>onPreview(null)}",source)
+        self.assertNotIn("onFocus={event=>onPreview(",source)
         self.assertIn('onPreview={setPreview}',source)
-        self.assertIn('<CardHoverPreview selection={preview} sha={sha}',source)
+        self.assertIn('<CardHoverPreview selection={preview} sha={sha} cards={cards}',source)
         self.assertNotIn('role="tooltip"',source)
         self.assertNotIn("fixed bottom-4 right-4",source)
 
@@ -78,7 +78,7 @@ class PublicUiContractTests(unittest.TestCase):
 
     def test_fusions_keep_exact_source_card_and_sha(self):
         source=self.fusions
-        self.assertIn("card:displayed,anchor:event.currentTarget",source)
+        self.assertIn("onClick={()=>onPreview({card:displayed})}",source)
         self.assertIn('<CardHoverPreview selection={preview} sha={sha}',source)
         self.assertIn("useEffect(()=>{setPreview(null)},[sha,query,searchScope,offset,sort,cardType])",source)
 
