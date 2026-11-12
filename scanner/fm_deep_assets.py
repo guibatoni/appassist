@@ -197,6 +197,22 @@ def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
         warnings.append(
             str(upscaling["failed"]) + " arte(s) não ampliadas; originais preservadas.")
 
+    # A montagem completa reproduz a organização clássica da referência:
+    # nome, atributo, estrelas, arte HD, texto e ATK/DEF dentro da carta.
+    # É uma camada visual derivada; nem a ISO nem as artes originais mudam.
+    classic_cards = {"rendered": 0, "cached": 0, "failed": 0, "available": 0}
+    if good_art:
+        try:
+            from dueltrace_classic_cards import render_card_pack
+            classic_cards = render_card_pack(
+                cards, folders["artes_722"], out / "artes_upscaled",
+                out / "cartas_classicas_hd")
+        except (OSError, ValueError, ImportError) as exc:
+            warnings.append("Cartas clássicas HD: " + str(exc)[:120])
+    if classic_cards.get("failed"):
+        warnings.append(
+            f"{classic_cards['failed']} carta(s) clássicas não renderizadas; originais preservadas.")
+
     # Miniaturas repetidas divergentes são uma característica auditável do
     # mod, não tornam inválidas as imagens extraídas com sucesso.
     unmatched=good_thumb-duplicate
@@ -211,6 +227,7 @@ def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
         "thumbnail_duplicate_matches":duplicate,
         "thumbnail_duplicate_mismatches":unmatched,
         "upscaling": upscaling,
+        "classic_cards": classic_cards,
         "status":"completo" if good_art==good_thumb==composed==CARD_COUNT
                  and len(frames)==6 else "parcial",
         "warnings":warnings[:80],"records":metadata,
