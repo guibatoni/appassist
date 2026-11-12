@@ -1146,6 +1146,13 @@ export function cardWithFrame(activeSha: string | null, id: number): string | nu
   return `/__card__/${activeSha}/${id}.png`
 }
 
+/** Full HD classic card, containing art, attributes, type and ATK/DEF. */
+export function cardClassicHd(activeSha: string | null, id: number): string | null {
+  if (!activeSha || !/^[a-f0-9]{64}$/.test(activeSha) ||
+      !Number.isInteger(id) || id < 1 || id > 722) return null
+  return `/__card_hd__/${activeSha}/${id}.png`
+}
+
 export function cardArtHd(activeSha: string | null, id: number): string | null {
   if (!activeSha || !/^[a-f0-9]{64}$/.test(activeSha) ||
       !Number.isInteger(id) || id < 1 || id > 722) return null
