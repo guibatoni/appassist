@@ -191,6 +191,11 @@ jobs:
       actions: read
       contents: write
     steps:
+      # O job de publicação roda em runner separado: precisa recuperar
+      # docs/DUELTRACE_UPDATE_NOTES.md antes de compor a pré-release.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           name: DUELTRACE-Windows-Preview-Unsigned-Security-Scanned

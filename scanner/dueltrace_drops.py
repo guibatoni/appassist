@@ -9,8 +9,8 @@ from collections import defaultdict
 import re
 from scanner_multiiso import X15_SHA
 from dueltrace_rank_system import (
-    available_ranks, drop_pool_labels, pool_ranks,
-    pool_index_for_rank, rank_system, is_x15_sha,
+    available_ranks, drop_filter_ranks, drop_pool_labels, pool_ranks,
+    pool_index_for_drop_filter, rank_system, is_x15_sha,
 )
 from dueltrace_library_sort import validate_sort,card_type_value,matches_type,sort_key
 
@@ -106,11 +106,14 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
                                   or bound_sha.casefold() != iso_sha.casefold()):
         return empty
     ranks=available_ranks(iso_sha)
+    filters=drop_filter_ranks(iso_sha)
     labels=drop_pool_labels(iso_sha)
     grouped_ranks=pool_ranks(iso_sha)
-    if rank and rank not in ranks:
+    # Expose six useful classic menu choices instead of listing B/C/D
+    # separately for POW and TEC. Keep legacy single-rank queries valid.
+    if rank and rank not in filters and rank not in ranks:
         raise ValueError("O RANK não pertence ao sistema desta ISO.")
-    selected_group=(raw_groups[pool_index_for_rank(iso_sha,rank)]
+    selected_group=(raw_groups[pool_index_for_drop_filter(iso_sha,rank)]
                     if rank else "")
     if group and selected_group and group!=selected_group:
         raise ValueError("O RANK solicitado pertence a outro banco de drops.")
@@ -244,7 +247,7 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
             {"value":raw,"label":labels[i],"ranks":list(grouped_ranks[i])}
             for i,raw in enumerate(raw_groups)
         ],
-        "rankOptions":list(ranks),"rankSelected":rank,
+        "rankOptions":list(filters),"rankSelected":rank,
         "rankSystem":rank_system(iso_sha),
         "cardTypes": card_types,
         "rankLabelsVerified": is_known and not alpha_candidate,

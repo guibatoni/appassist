@@ -15,8 +15,11 @@ class CardSourcesAndUpdateContractTests(unittest.TestCase):
             "scanner/dueltrace_web_bridge.py": "def get_card_drop_sources(self, card_id)",
             "scanner/dueltrace_web_security.py": "def get_card_drop_sources(self, credential, card_id)",
             "web/lib/desktop.ts": "get_card_drop_sources(cardId: number)",
-            "web/components/desktop/desktop-page.tsx": "get_card_drop_sources(card.id)",
+            "web/components/desktop/card-hover-preview.tsx": "api.get_card_drop_sources(cardId)",
         }
+        # A Biblioteca usa a mesma prévia de Drops/Fusões, não o painel lateral.
+        library=(ROOT/"web/components/desktop/desktop-page.tsx").read_text(encoding="utf-8")
+        self.assertIn("<CardHoverPreview selection={preview}",library)
         for filename, expected in sources.items():
             with self.subTest(file=filename):
                 self.assertIn(expected, (ROOT / filename).read_text(encoding="utf-8"))

@@ -1303,6 +1303,66 @@ class DueltraceWebBridge:
                            if alpha_added else "Receitas do perfil ativo."),
             }
 
+    def get_card_fusions(self, card_id, offset=0, limit=8, sort="atk"):
+        """List exact same-ISO fusion recipes using this card as a material.
+
+        Unlike a partial-text search, only recipe material IDs are matched.
+        Results are suggestions and do not assert in-game verification.
+        """
+        if type(card_id) is not int or not 1<=card_id<=722:
+            raise ValueError("ID de carta inválido")
+        if type(offset) is not int or not 0<=offset<=1000000:
+            raise ValueError("Página inválida")
+        if type(limit) is not int or not 1<=limit<=50:
+            raise ValueError("Limite inválido")
+        if type(sort) is not str or sort not in ("atk","name","id"):
+            raise ValueError("Ordem de fusões inválida")
+        with self._lock:
+            active,entry,profile=self._active()
+            sha=(active or {}).get("sha256")
+            if not profile:
+                return {"romSha":sha,"cardId":card_id,"available":False,
+                        "total":0,"offset":offset,"rows":[],"provisional":False}
+            recipes,alpha_added=self._combined_fusion_recipes(sha,entry,profile)
+            cards={card["id"]:card for card in self._cards(profile)}
+            rows=[]
+            seen=set()
+            for item in recipes:
+                if not isinstance(item,dict):
+                    continue
+                a,b,dest_id=(item.get("a"),item.get("b"),item.get("result"))
+                if not all(type(v) is int and 1<=v<=722 for v in (a,b,dest_id)):
+                    continue
+                if card_id not in (a,b):
+                    continue
+                partner_id=b if a==card_id else a
+                key=(min(a,b),max(a,b),dest_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                partner=cards.get(partner_id,{})
+                dest=cards.get(dest_id,{})
+                rows.append({
+                    "partnerId":partner_id,
+                    "partnerName":partner.get("name") or f"Carta #{partner_id}",
+                    "resultId":dest_id,
+                    "resultName":dest.get("name") or f"Carta #{dest_id}",
+                    "atk":dest.get("atk") if type(dest.get("atk")) is int else None,
+                })
+            if sort=="atk":
+                rows.sort(key=lambda row:(
+                    row["atk"] is None,-(row["atk"] or 0),
+                    row["resultName"].casefold(),row["partnerId"],row["resultId"]))
+            elif sort=="name":
+                rows.sort(key=lambda row:(
+                    row["resultName"].casefold(),row["partnerName"].casefold(),
+                    row["resultId"],row["partnerId"]))
+            else:
+                rows.sort(key=lambda row:(row["resultId"],row["partnerId"]))
+            return {"romSha":sha,"cardId":card_id,"available":bool(recipes),
+                    "total":len(rows),"offset":offset,"rows":rows[offset:offset+limit],
+                    "provisional":alpha_added}
+
     def compare_mod_cards(self, source_sha, target_sha, query="",
                           offset=0, limit=40, confidence="todas"):
         """Retorna somente IDs/nomes/evidências: nenhuma arte/ISO é transmitida."""

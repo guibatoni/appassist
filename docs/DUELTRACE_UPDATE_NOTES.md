@@ -1,6 +1,8 @@
 # DUELTRACE — Notas da atualização
 
 ## Novidades
+- **Biblioteca de Drops:** filtros de recompensa **BCD-POW** e **BCD-TEC** agrupam B, C e D, sem alterar os RANKs individuais dos duelos. Remaster X15 mantém Z-POW, S-POW e S-TEC.
+- **Atualização pelo aplicativo:** a Preview é consultada em GitHub Releases e instalada pelo botão **Atualizar agora**, com validação SHA-256, substituição na mesma pasta e reinício automático.
 - **Interface adaptável:** o DUELTRACE reorganiza navegação, cartas, fusões, drops e detalhes em telas 9:16, 16:9, 16:10, 4:3 e ultrawide, sem distorcer as cartas.
 - **ePSXe:** busca dinâmica de RAM quando o endereço antigo não funciona, com suporte a executáveis identificados por número de versão (somente Windows).
 - Atualizações privadas podem ser encontradas pelo mesmo botão quando o proprietário já autenticou o GitHub CLI no Windows.

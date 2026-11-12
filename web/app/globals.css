@@ -124,18 +124,6 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
 }
 
-/* The library detail panel should only take a 330px column when the
-   *main content*, not merely the monitor, has room for it. */
-.dt-library-layout {
-  display: grid;
-  min-width: 0;
-  gap: 1rem;
-  grid-template-columns: minmax(0, 1fr);
-}
-@container (min-width: 1050px) {
-  .dt-library-layout { grid-template-columns: minmax(0, 1fr) 330px; }
-}
-
 .dt-adaptive-drops {
   display: grid;
   gap: 0.75rem;

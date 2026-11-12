@@ -57,6 +57,25 @@ class DropCatalogTests(unittest.TestCase):
         self.assertEqual(get_drop_catalog(p,query="2")["total"],39)
         self.assertEqual(len(get_drop_catalog(p,offset=100,limit=10)["rows"]),10)
 
+    def test_rank_dropdown_groups_classic_bcd_pow_and_tec(self):
+        p=fake_profile()
+        result=get_drop_catalog(p)
+        self.assertEqual(result["rankOptions"],[
+            "S-POW","A-POW","BCD-POW","BCD-TEC","A-TEC","S-TEC"])
+        self.assertNotIn("B-POW",result["rankOptions"])
+        self.assertNotIn("C-POW",result["rankOptions"])
+        self.assertNotIn("D-TEC",result["rankOptions"])
+        for rank in ("BCD-POW","BCD-TEC"):
+            with self.subTest(rank=rank):
+                filtered=get_drop_catalog(p,opponent_id=3,rank=rank)
+                self.assertEqual(filtered["rankSelected"],rank)
+                self.assertEqual(filtered["total"],1)
+                self.assertEqual(filtered["rows"][0]["cardId"],2)
+                self.assertEqual(filtered["rows"][0]["chancePercent"],100)
+        remaster=get_drop_catalog(fake_profile(
+            X15_SHA,["Z-POW","S-POW","S-TEC"]))
+        self.assertEqual(remaster["rankOptions"],["Z-POW","S-POW","S-TEC"])
+
     def test_correct_known_rank_labels_only_for_matching_sha(self):
         p=fake_profile(X15_SHA,["Z-POW","S-POW","S-TEC"])
         self.assertTrue(get_drop_catalog(p)["rankLabelsVerified"])
