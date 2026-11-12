@@ -37,7 +37,7 @@ WA_CARD_SECTOR_START=722
 WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
-ART_PARSER_REVISION=6  # busca de RANK por conteúdo no WA completo, mesmo sem artes
+ART_PARSER_REVISION=7  # gerar arte HD com cache após extração, preservando a origem
 SCAN_PARSER_REVISION=30  # Rising/Enhance: FD 38+1, WA distante e janelas 40x39
 
 
