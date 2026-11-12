@@ -308,6 +308,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_card_fusions(card_id, offset, limit, sort)
 
+    def get_card_fusion_paths(self, credential, card_id):
+        self._authorize(credential)
+        return self._bridge.get_card_fusion_paths(card_id)
+
     def get_card_drop_sources(self, credential, card_id):
         self._authorize(credential)
         return self._bridge.get_card_drop_sources(card_id)
