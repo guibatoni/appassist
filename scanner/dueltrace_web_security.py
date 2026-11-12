@@ -206,6 +206,14 @@ class ProtectedDesktopApi:
             raise RuntimeError("Janelas auxiliares indisponíveis nesta plataforma.")
         return callback(kind)
 
+    def get_installed_update_notice(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_installed_update_notice()
+
+    def acknowledge_update_notice(self, credential, run_id):
+        self._authorize(credential)
+        return self._bridge.acknowledge_update_notice(run_id)
+
     def check_updates(self, credential):
         self._authorize(credential)
         return self._bridge.check_updates()
