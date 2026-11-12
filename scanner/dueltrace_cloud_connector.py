@@ -291,6 +291,7 @@ def make_handler(bridge, *, allowed_origins, token):
                 search = _text_param(query, "q", "", limit=80)
                 page = _int_param(query, "page", 0, minimum=0, maximum=10000)
                 opponent = _int_param(query, "opponent", 0, minimum=0, maximum=39)
+                card_id = _int_param(query, "id", 0, minimum=0, maximum=722)
                 msg = _text_param(query, "msg", "", limit=24)
                 messages = {
                     "activated": "Mod ativado. Os dados permanecem no PC.",
@@ -306,6 +307,8 @@ def make_handler(bridge, *, allowed_origins, token):
                         panel = _local_live(bridge)
                     elif tab == "fusoes":
                         panel = bridge.get_fusions(query=search, offset=0, limit=100)
+                    elif tab == "carta" and 1 <= card_id <= 722:
+                        panel = bridge.get_card_fusion_paths(card_id)
                     elif tab == "oponentes":
                         panel = bridge.get_opponent_deck(opponent)
                     elif tab == "drops":
@@ -318,7 +321,8 @@ def make_handler(bridge, *, allowed_origins, token):
                         panel = bridge.get_deck_library("")
                 page_html = render_local_page(
                     state, token=token, tab=tab, query=search, opponent=opponent,
-                    page=page, panel=panel, notice=messages.get(msg, ""))
+                    page=page, panel=panel, card_id=card_id,
+                    notice=messages.get(msg, ""))
                 raw = page_html.encode("utf-8")
                 if len(raw) > MAX_JSON:
                     self._json(413, {"error": "Página muito grande"})
