@@ -1,24 +1,22 @@
 "use client"
 
 import {useCallback,useEffect,useMemo,useState} from "react"
-import {CloudOff,Gamepad2,Link2,LockKeyhole,RefreshCcw,ShieldCheck,Upload,CreditCard,Search} from "lucide-react"
+import {CloudOff,Gamepad2,Link2,LockKeyhole,RefreshCcw,ShieldCheck,Upload,CreditCard,Search,Settings2,BookOpen,Layers,Users,Gift} from "lucide-react"
+import {useCloudUi} from "@/lib/cloud-ui"
 import {
   cloudGet,cloudPost,cloudArt,type CloudCard,type CloudState,
   type CloudFusionResult,type CloudOpponentResult,type CloudDropResult,
   type CloudDeckResult,type CloudLiveResult,
 } from "@/lib/cloud-local"
 
-type Tab="cards"|"fusions"|"opponents"|"drops"|"decks"|"live"
-const TABS:Array<[Tab,string]>=[
-  ["cards","Cartas"],["fusions","Fusões"],["opponents","Oponentes"],
-  ["drops","Drops"],["decks","Decks"],["live","Duelo ao vivo"],
-]
-const panel="rounded-xl border border-[#315174]/60 bg-[#09172b]/95 p-5"
-const action="rounded-lg border border-[#3d7193] px-3 py-2 text-sm hover:bg-[#183a56] disabled:opacity-50"
+const panel="panel rounded-xl border-line/60 p-4"
+const action="btn-ghost text-sm disabled:opacity-50"
+const head="panel rounded-xl border-gold/40 bg-gradient-to-r from-[#142b51] to-[#061126] px-4 py-4"
+
 function value(x:number|null|undefined){
   return typeof x==="number"?x.toLocaleString("pt-BR"):"—"
 }
-function ImageFromPC({token,sha,card}:{token:string;sha:string|null;card:CloudCard|null}){
+function ImageFromPC({token,sha,card,compact=false}:{token:string;sha:string|null;card:CloudCard|null;compact?:boolean}){
   const [url,setUrl]=useState<string|null>(null)
   useEffect(()=>{
     let cancelled=false
@@ -30,9 +28,10 @@ function ImageFromPC({token,sha,card}:{token:string;sha:string|null;card:CloudCa
     }).catch(()=>setUrl(null))
     return()=>{cancelled=true;if(objectUrl)URL.revokeObjectURL(objectUrl)}
   },[token,sha,card])
-  return <div className="flex min-h-48 items-center justify-center rounded-lg border border-[#2e5675] bg-[#020b16] p-2">
-    {url?<img src={url} alt={card?.name||"Carta"} className="max-h-80 max-w-full object-contain"/>:
-      <span className="text-center text-xs text-[#98a9c5]">Arte HD disponível somente quando extraída do mod local</span>}
+  return <div className={"relative flex items-center justify-center overflow-hidden rounded-md border border-gold/40 bg-[#061126] "+(compact?"mx-auto aspect-[65/90] w-full max-w-28":"min-h-48 p-2")}>
+    {url?<img src={url} alt={card?.name||"Carta"} className="h-full w-full object-contain"/>:
+      compact?<Layers className="size-7 text-primary/45" aria-label="Arte local indisponível"/>:
+      <span className="text-center text-xs text-muted">Arte HD disponível somente quando extraída do mod local</span>}
   </div>
 }
 
@@ -40,9 +39,11 @@ export function CloudPrototype(){
   const [pairKey,setPairKey]=useState("")
   const [token,setToken]=useState("")
   const [state,setState]=useState<CloudState|null>(null)
-  const [tab,setTab]=useState<Tab>("cards")
+  const {tab,setTab,setConnected}=useCloudUi()
   const [query,setQuery]=useState("")
   const [selectedCard,setSelectedCard]=useState<CloudCard|null>(null)
+  const [page,setPage]=useState(0)
+  const [pageSize,setPageSize]=useState(20)
   const [opponent,setOpponent]=useState(0)
   const [deckId,setDeckId]=useState("")
   const [fusions,setFusions]=useState<CloudFusionResult|null>(null)
@@ -56,11 +57,17 @@ export function CloudPrototype(){
 
   const connect=async()=>{
     const key=pairKey.trim()
-    setBusy(true);setError("")
+    setError("")
+    if(key.length<24){
+      setError("A chave está incompleta. Copie a chave temporária inteira do PowerShell (mínimo de 24 caracteres).")
+      return
+    }
+    setBusy(true)
     try{
       const result=await cloudGet<CloudState>(key,"/v1/state")
       if(result.storage!=="local-only"||result.cloudUpload!==false)throw Error("Connector incompatível")
       setState(result);setToken(key);setPairKey("")
+      setConnected(true);setTab("mods")
       setNotice("Conexão local autenticada. Nenhum dado do jogo foi enviado à nuvem.")
     }catch(e){setError(e instanceof Error?e.message:"Não foi possível conectar.")}
     finally{setBusy(false)}
@@ -72,10 +79,10 @@ export function CloudPrototype(){
   const refresh=useCallback(async()=>{
     if(!token||!state?.activeSha)return
     try{
-      if(tab==="fusions"){
+      if(tab==="fusoes"){
         setFusions(await cloudGet<CloudFusionResult>(
           token,"/v1/fusions?limit=100&query="+encodeURIComponent(query)))
-      }else if(tab==="opponents"){
+      }else if(tab==="oponentes"){
         setOpponents(await cloudGet<CloudOpponentResult>(
           token,"/v1/opponents?opponent="+opponent))
       }else if(tab==="drops"){
@@ -87,16 +94,16 @@ export function CloudPrototype(){
       }else if(tab==="decks"){
         setDecks(await cloudGet<CloudDeckResult>(
           token,"/v1/decks?deck="+encodeURIComponent(deckId)))
-      }else if(tab==="live"){
+      }else if(tab==="inicio"){
         setLive(await cloudGet<CloudLiveResult>(token,"/v1/live"))
       }
       setError("")
     }catch(e){setError(e instanceof Error?e.message:"Não foi possível ler os dados locais.")}
   },[token,state?.activeSha,tab,query,opponent,deckId])
   useEffect(()=>{
-    if(!token||!state?.activeSha||tab==="cards")return
+    if(!token||!state?.activeSha||tab==="biblioteca")return
     void refresh()
-    if(tab==="live"){
+    if(tab==="inicio"){
       const timer=window.setInterval(()=>void refresh(),1800)
       return()=>window.clearInterval(timer)
     }
@@ -118,46 +125,48 @@ export function CloudPrototype(){
       }
       setNotice(kind==="import"?"ISO/BIN analisada localmente. Ative o mod.":
         kind==="memory-card"?"Memory Card selecionado localmente.":"Mod ativado.")
+      if(kind==="activate")setTab("biblioteca")
     }catch(e){setError(e instanceof Error?e.message:"Operação indisponível.")}
     finally{setBusy(false)}
   }
   const cards=useMemo(()=>state?.cards||[],[state])
+  const cardsById=useMemo(()=>new Map(cards.map(c=>[c.id,c])),[cards])
   const visibleCards=useMemo(()=>{
     const q=query.trim().toLowerCase()
     return cards.filter(c=>!q||[c.id,c.name,c.type,c.description,c.effect]
-      .filter(Boolean).join(" ").toLowerCase().includes(q)).slice(0,72)
+      .filter(Boolean).join(" ").toLowerCase().includes(q))
   },[cards,query])
 
-  return <div className="min-h-dvh bg-[#040a1a] px-4 py-7 text-[#e9f3ff] sm:px-7">
-    <div className="mx-auto max-w-7xl space-y-5">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#2d5078] pb-5">
-        <div className="flex items-center gap-3">
-          <Gamepad2 className="size-9 text-[#68ccfa]"/>
-          <div><h1 className="text-2xl font-extrabold tracking-wide text-[#f2be60]">DUELTRACE <span className="text-[#72c5ef]">CLOUD</span></h1>
-            <p className="text-xs text-[#a4bdd8]">ALPHA · Extração e leitura no computador do jogador</p>
-          </div>
+  return <div className="flex min-w-0 flex-col gap-4 py-2">
+    <div className={head}>
+      <div className="flex items-center gap-3">
+        <Gamepad2 className="size-7 text-gold"/>
+        <div><h1 className="font-display text-2xl font-bold text-gold">DUELTRACE Cloud</h1>
+          <p className="text-sm text-muted">MultiMod Companion · Alpha local-first</p>
         </div>
-        <div className="rounded-full border border-[#326484] px-4 py-2 text-xs text-[#9bd7f4]">
-          {token?"Connector local conectado":"Connector desconectado"}
-        </div>
-      </header>
-
+      </div>
+    </div>
       {!token?<div className="grid gap-5 lg:grid-cols-2">
         <section className={panel+" space-y-5"}>
-          <div className="flex items-center gap-2"><Link2 className="size-6 text-[#69cdf8]"/>
-            <h2 className="text-xl font-semibold">Conectar ao ePSXe e aos mods do PC</h2></div>
+          <div className="flex items-center gap-2"><Link2 className="size-6 text-primary"/>
+            <h2 className="font-display text-xl font-semibold text-gold">Conectar ao ePSXe e aos mods do PC</h2></div>
           <p className="text-sm text-[#adbed2]">O navegador comunica-se apenas com o DUELTRACE Connector no seu próprio Windows. As ISOs, Memory Cards e RAM nunca são enviados ao site.</p>
           <label className="block text-sm font-semibold" htmlFor="cloud-pair">Chave temporária do Connector</label>
-          <input id="cloud-pair" value={pairKey} onChange={e=>setPairKey(e.target.value)}
+          <input id="cloud-pair" value={pairKey} onChange={e=>{setPairKey(e.target.value);setError("")}}
             type="password" autoComplete="off" spellCheck={false} maxLength={128}
             placeholder="Cole aqui a chave que aparece no terminal"
-            onKeyDown={e=>{if(e.key==="Enter")void connect()}}
-            className="w-full rounded-lg border border-[#436686] bg-[#030d20] px-4 py-3 outline-none focus:border-[#68c9ff]"/>
-          <button disabled={busy||pairKey.trim().length<24} onClick={()=>void connect()}
-            className="flex items-center gap-2 rounded-lg bg-[#ebbd5a] px-5 py-3 font-bold text-[#12213a] hover:bg-[#ffd681] disabled:opacity-50">
-            <LockKeyhole className="size-4"/>{busy?"Autenticando…":"Conectar ao computador"}
+            onKeyDown={e=>{if(e.key==="Enter"&&!busy)void connect()}}
+            className="field w-full px-4 py-3 text-white outline-none focus:border-primary"/>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+            <span>Chave recebida: {pairKey.trim().length} caracteres</span>
+            {pairKey.trim().length>=24&&<span className="text-success">Pronta para autenticar</span>}
+          </div>
+          <button type="button" disabled={busy} onClick={()=>void connect()}
+            className="btn-gold min-h-11 px-5 py-3 font-semibold disabled:opacity-50">
+            <LockKeyhole className="size-4"/>{busy?"Conectando…":"Conectar ao computador"}
           </button>
-          {error&&<p role="alert" className="text-sm text-[#ff9b9b]">{error}</p>}
+          {busy&&<p role="status" className="text-sm text-primary">Consultando o Connector local em 127.0.0.1:8765…</p>}
+          {error&&<p role="alert" className="text-sm text-danger">{error}</p>}
         </section>
         <section className={panel+" space-y-4"}>
           <h2 className="text-lg font-semibold">Primeiro acesso</h2>
@@ -183,93 +192,140 @@ export function CloudPrototype(){
               <button onClick={()=>void reloadState()} className={action}><RefreshCcw className="inline size-4"/> Recarregar</button>
               <button disabled={busy} onClick={()=>void actionLocal("import")} className={action}><Upload className="inline size-4"/> Selecionar ISO/BIN</button>
               <button disabled={busy||!state?.activeSha} onClick={()=>void actionLocal("memory-card")} className={action}><CreditCard className="inline size-4"/> Memory Card</button>
-              <button onClick={()=>{setToken("");setState(null);setSelectedCard(null);setLive(null)}} className={action}>Desconectar</button>
+              <button onClick={()=>{setToken("");setState(null);setSelectedCard(null);setLive(null);setConnected(false);setTab("inicio")}} className={action}>Desconectar</button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          {tab==="mods"&&<div className="flex flex-wrap gap-2">
             {state?.mods.map(mod=><button key={mod.sha256} disabled={busy}
               onClick={()=>void actionLocal("activate",mod.sha256)}
-              className={"rounded-full border px-3 py-1.5 text-xs disabled:opacity-50 "+
-                (mod.sha256===state?.activeSha?"border-[#e6b34f] bg-[#57401c] text-[#fbe1a0]":
-                  "border-[#35608b] bg-[#0b223f] hover:bg-[#183554]")}>{mod.name}</button>)}
-          </div>
+              className={"rounded-lg border px-3 py-2 text-xs disabled:opacity-50 "+
+                (mod.sha256===state?.activeSha?"border-gold bg-gold/15 text-gold":
+                  "border-line text-foreground hover:border-primary hover:bg-primary/10")}>{mod.name}</button>)}
+          </div>}
           {notice&&<p role="status" className="text-xs text-[#8be7b8]">{notice}</p>}
           {error&&<p role="alert" className="text-xs text-[#ff9a9a]">{error}</p>}
         </section>
-        <nav aria-label="Seções do DUELTRACE Cloud" className="flex flex-wrap gap-2">
-          {TABS.map(([id,label])=><button key={id} onClick={()=>{
-            setTab(id);setQuery("");setError("");setSelectedCard(null)}}
-            className={"rounded-lg border px-4 py-2.5 text-sm "+(tab===id?
-              "border-[#e0af50] bg-[#ecbd5d] font-semibold text-[#102037]":
-              "border-[#355477] bg-[#0c2039] hover:bg-[#1b3452]")}>{label}</button>)}
-        </nav>
-        {!state?.activeSha?<section className={panel}>
-          Ative uma ISO/BIN já importada ou selecione um arquivo pelo botão acima.
+        {tab==="configuracoes"?<section className={panel+" space-y-4"}>
+          <h2 className="font-display text-xl font-bold text-gold">Configurações</h2>
+          <p className="text-sm text-muted">A interface web utiliza os mesmos elementos visuais do DUELTRACE Windows. Os dados de jogo são processados exclusivamente no computador.</p>
+          <p className="font-semibold text-white">Desenvolvido por Batoni Dev - Guilherme Batoni</p>
+          <p className="rounded-lg border border-gold/40 p-3 text-sm text-gold">Não permitida a distribuição do aplicativo.</p>
+        </section>:tab==="mods"?<section className={panel+" space-y-3"}>
+          <h2 className="font-display text-xl font-bold text-gold">Biblioteca de Mods</h2>
+          <p className="text-sm text-muted">Importe arquivos ISO/BIN com o seletor Windows do Connector e ative o mod desejado.</p>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {state?.mods.map(mod=><button key={mod.sha256} type="button" disabled={busy}
+              onClick={()=>void actionLocal("activate",mod.sha256)}
+              className={"rounded-xl border bg-panel-strong/70 p-4 text-left hover:border-primary "+
+                (state?.activeSha===mod.sha256?"border-gold":"border-line")}>
+              <p className="font-semibold text-white">{mod.name}</p>
+              <p className="mt-2 text-xs text-muted">{mod.cards} cartas · {mod.fusions} fusões · {mod.opponents} oponentes</p>
+              <p className="mt-2 text-xs text-primary">{state?.activeSha===mod.sha256?"Mod ativo":"Ativar mod"}</p>
+            </button>)}
+          </div>
+        </section>:!state?.activeSha?<section className={panel}>
+          Ative uma ISO/BIN já importada em Biblioteca de Mods ou selecione um arquivo pelo botão acima.
         </section>:
         <section className="space-y-4">
-          {(tab==="cards"||tab==="fusions")&&<label className="flex items-center gap-2 rounded-lg border border-[#315c81] bg-[#081930] px-4 py-3">
+          {(tab==="biblioteca"||tab==="fusoes")&&<label className="flex items-center gap-2 rounded-lg border border-[#315c81] bg-[#081930] px-4 py-3">
             <Search className="size-4 text-[#75d7ff]"/><input value={query} onChange={e=>setQuery(e.target.value)}
               placeholder="Nome, ID, tipo, efeito ou descrição"
               className="w-full bg-transparent text-sm outline-none"/>
           </label>}
-          {tab==="cards"&&<div className="grid gap-4 lg:grid-cols-[1fr_285px]">
-            <div className={panel}>
-              <h3 className="mb-3 font-semibold">Biblioteca de cartas · {cards.length} cartas</h3>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {visibleCards.map(card=><button key={card.id} onClick={()=>setSelectedCard(card)}
-                  className="rounded-lg border border-[#2c4b70] bg-[#08172c] p-3 text-left hover:border-[#77d1ff]">
-                  <span className="text-xs text-[#79d4fd]">#{card.id}</span>
-                  <h4 className="my-1 truncate text-sm font-semibold">{card.name}</h4>
-                  <p className="truncate text-xs text-[#93afc9]">{card.type||card.category}</p>
-                  <p className="mt-1 text-xs text-[#eebd67]">ATK {value(card.atk)} · DEF {value(card.def)}</p>
-                </button>)}
-              </div>
+          {tab==="biblioteca"&&<section className={panel}>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-display text-xl font-bold text-gold">Biblioteca de Cartas</h2>
+              <label className="flex items-center gap-2 text-xs text-muted">Cartas por página
+                <select className="field px-2 py-2" value={pageSize}
+                  onChange={e=>{setPageSize(Number(e.target.value));setPage(0)}}>
+                  {[10,20,30,40,50].map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
             </div>
-            <aside className={panel+" space-y-3"}>
-              {selectedCard?<><ImageFromPC token={token} sha={state.activeSha} card={selectedCard}/>
-                <h3 className="font-bold text-[#f2bd67]">{selectedCard.name}</h3>
-                <p className="text-xs text-[#adc0d2]">#{selectedCard.id} · {selectedCard.type} · ATK {value(selectedCard.atk)} / DEF {value(selectedCard.def)}</p>
-                {selectedCard.description&&<p className="whitespace-pre-wrap text-sm text-[#cbd5e5]">{selectedCard.description}</p>}
-                {selectedCard.effect&&<p className="whitespace-pre-wrap text-sm text-[#7fcdec]">{selectedCard.effect}</p>}
-              </>:<p className="text-sm text-[#a6bbd4]">Clique em uma carta para exibir a arte HD e as informações extraídas da ISO.</p>}
-            </aside>
-          </div>}
-          {tab==="fusions"&&<div className={panel}>
-            <h3 className="mb-3 font-semibold">Fusões disponíveis · {fusions?.total??0} combinações</h3>
-            <div className="grid gap-2 md:grid-cols-2">
-              {fusions?.rows.map((row,i)=><div key={row.a+"-"+row.b+"-"+i} className="rounded-lg border border-[#2c4b70] p-3 text-sm">
-                <span>{row.nameA} + {row.nameB} </span><strong className="text-[#efc574]">= {row.nameResult}</strong>
-                <p className="mt-1 text-xs text-[#9baec9]">{row.source}</p>
-              </div>)}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+              {visibleCards.slice(page*pageSize,(page+1)*pageSize).map(card=><button key={card.id}
+                onClick={()=>setSelectedCard(card)}
+                className="rounded-lg border border-line/70 bg-panel-strong/60 p-2 text-center hover:border-primary hover:bg-primary/10">
+                <ImageFromPC token={token} sha={state.activeSha} card={card} compact/>
+                <p className="mt-2 min-h-8 break-words text-xs font-semibold text-white">{card.name}</p>
+                <p className="mt-1 text-[11px] text-primary">ATK {value(card.atk)} · DEF {value(card.def)}</p>
+              </button>)}
             </div>
-          </div>}
-          {(tab==="opponents"||tab==="drops")&&<div className={panel+" space-y-3"}>
+            {!visibleCards.length&&<p className="mt-4 text-sm text-muted">Nenhuma carta encontrada.</p>}
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <button className="btn-ghost disabled:opacity-30" disabled={page===0} onClick={()=>setPage(n=>n-1)}>Anterior</button>
+              <span className="text-xs text-muted">{page+1} / {Math.max(1,Math.ceil(visibleCards.length/pageSize))}</span>
+              <button className="btn-ghost disabled:opacity-30"
+                disabled={(page+1)*pageSize>=visibleCards.length} onClick={()=>setPage(n=>n+1)}>Próxima</button>
+            </div>
+          </section>}
+          {tab==="fusoes"&&<section className={panel+" space-y-4"}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-semibold">{tab==="opponents"?"Deck dos oponentes":"Drops do adversário"}</h3>
+              <h2 className="font-display text-xl font-bold text-gold">Biblioteca de Fusões</h2>
+              <p className="text-sm text-primary">{fusions?.total??0} combinações extraídas da ISO ativa</p>
+            </div>
+            {fusions?.provisional&&<p className="text-xs text-gold">Existem receitas candidatas ainda não confirmadas em duelo.</p>}
+            <div className="dt-adaptive-cards">
+              {fusions?.rows.map((row,i)=><article key={row.a+"-"+row.b+"-"+row.result+"-"+i}
+                className="rounded-xl border border-line/80 bg-gradient-to-br from-panel-strong/90 via-[#0b1a35] to-background p-3">
+                <div className="grid grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)_24px_minmax(0,1fr)] items-center gap-1">
+                  {([
+                    {id:row.a,name:row.nameA,role:"Material A"},
+                    {id:row.b,name:row.nameB,role:"Material B"},
+                    {id:row.result,name:row.nameResult,role:"Resultado"},
+                  ] as const).map((c,index)=><div key={c.id+"-"+index} className="contents">
+                    {index>0&&<span className={"text-center font-display text-xl "+(index===1?"text-primary":"text-gold")}>
+                      {index===1?"+":"→"}
+                    </span>}
+                    <button className="flex min-w-0 flex-col items-center gap-1 text-center"
+                      type="button" onClick={()=>setSelectedCard(cardsById.get(c.id)??null)}>
+                      <p className="text-[10px] uppercase text-muted">{c.role}</p>
+                      <ImageFromPC token={token} sha={state.activeSha} card={cardsById.get(c.id)??null} compact/>
+                      <span className="text-xs font-semibold text-gold">#{c.id}</span>
+                      <span className="line-clamp-2 text-xs text-white">{c.name}</span>
+                    </button>
+                  </div>)}
+                </div>
+                <p className="mt-3 border-t border-line/50 pt-2 text-[11px] text-muted">
+                  #{row.a} + #{row.b} → #{row.result} · {row.source}
+                </p>
+              </article>)}
+            </div>
+            {!fusions?.rows.length&&<p className="text-sm text-muted">Nenhuma fusão identificada neste mod para a pesquisa atual.</p>}
+          </section>}
+          {(tab==="oponentes"||tab==="drops")&&<div className={panel+" space-y-3"}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold text-white">{tab==="oponentes"?"Deck dos oponentes":"Drops do adversário"}</h3>
               <select value={opponent} onChange={e=>setOpponent(Number(e.target.value))}
                 className="rounded-lg border border-[#355878] bg-[#081930] px-3 py-2 text-sm">
                 <option value={0}>Primeiro oponente</option>
                 {opponents?.opponents.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
             </div>
-            <p className="text-xs text-[#abc0d8]">{tab==="opponents"?opponents?.status:drops?.status}</p>
-            {(tab==="opponents"?opponents?.provisional:drops?.provisional)&&
+            <p className="text-xs text-[#abc0d8]">{tab==="oponentes"?opponents?.status:drops?.status}</p>
+            {(tab==="oponentes"?opponents?.provisional:drops?.provisional)&&
               <p className="text-xs text-[#eec274]">Dados candidatos, ainda não confirmados em duelo.</p>}
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {tab==="opponents"?opponents?.cards.map(c=><div key={c.id} className="rounded-lg border border-[#29496d] p-3">
-                <p className="text-xs text-[#7cccf5]">#{c.id}</p><p className="font-semibold">{c.name}</p>
-                <p className="text-xs text-[#adc1d8]">Peso {c.weight}</p>
-              </div>):
-              drops?.rows.map((c,i)=><div key={c.cardId+"-"+i} className="rounded-lg border border-[#29496d] p-3">
-                <p className="text-xs text-[#7cccf5]">#{c.cardId} · {c.groupLabel}</p>
-                <p className="font-semibold">{c.cardName}</p>
-                <p className="text-xs text-[#adc1d8]">{value(c.chancePercent)}%</p>
-              </div>)}
+              {tab==="oponentes"?opponents?.cards.map(c=><button type="button" key={c.id}
+                onClick={()=>setSelectedCard(cardsById.get(c.id)??null)}
+                className="flex min-w-0 gap-3 rounded-xl border border-line/70 bg-[#0b1b34]/80 p-3 text-left hover:border-primary">
+                <div className="w-20 shrink-0"><ImageFromPC token={token} sha={state.activeSha} card={cardsById.get(c.id)??null} compact/></div>
+                <div className="min-w-0"><p className="text-xs text-gold">#{c.id}</p><p className="font-semibold text-white">{c.name}</p>
+                  <p className="mt-2 text-xs text-primary">Peso: {c.weight}</p></div>
+              </button>):
+              drops?.rows.map((c,i)=><button type="button" key={c.cardId+"-"+i}
+                onClick={()=>setSelectedCard(cardsById.get(c.cardId)??null)}
+                className="flex min-w-0 gap-3 rounded-xl border border-line/70 bg-[#0b1b34]/80 p-3 text-left hover:border-primary">
+                <div className="w-20 shrink-0"><ImageFromPC token={token} sha={state.activeSha} card={cardsById.get(c.cardId)??null} compact/></div>
+                <div className="min-w-0"><p className="text-xs text-gold">#{c.cardId} · {c.groupLabel}</p>
+                  <p className="font-semibold text-white">{c.cardName}</p>
+                  <p className="text-xs text-primary">{value(c.chancePercent)}%</p></div>
+              </button>)}
             </div>
           </div>}
-          {tab==="decks"&&<div className={panel+" space-y-4"}>
+                    {tab==="decks"&&<div className={panel+" space-y-4"}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-semibold">Deck e fusões do jogador</h3>
+              <h3 className="font-semibold text-white">Deck e fusões do jogador</h3>
               <select value={deckId} onChange={e=>setDeckId(e.target.value)}
                 className="max-w-full rounded-lg border border-[#355878] bg-[#081930] px-3 py-2 text-sm">
                 <option value="">Deck ativo ou gravado</option>
@@ -277,11 +333,16 @@ export function CloudPrototype(){
               </select>
             </div>
             <p className="text-xs text-[#adc1d8]">{decks?.status}</p>
-            <p className="text-xs text-[#efc574]">{decks?.saveDisplayName}</p>
+            <p className="text-xs text-gold">{decks?.saveDisplayName}</p>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {decks?.cards.map(c=><div key={c.id} className="rounded-lg border border-[#29496d] p-3 text-sm">
-                <p className="text-xs text-[#7cccf5]">#{c.id} · {c.count}x</p><p className="font-semibold">{c.name}</p>
-              </div>)}
+              {decks?.cards.map(c=><button type="button" key={c.id}
+                onClick={()=>setSelectedCard(cardsById.get(c.id)??null)}
+                className="flex min-w-0 gap-3 rounded-xl border border-line/70 bg-[#0b1b34]/80 p-3 text-left text-sm hover:border-primary">
+                <div className="w-20 shrink-0"><ImageFromPC token={token} sha={state.activeSha} card={cardsById.get(c.id)??null} compact/></div>
+                <div><p className="text-xs text-gold">#{c.id} · {c.count}x</p>
+                  <p className="font-semibold text-white">{c.name}</p>
+                  <p className="mt-2 text-xs text-muted">ATK {value(c.atk)} · DEF {value(c.def)}</p></div>
+              </button>)}
             </div>
             <h4 className="font-semibold text-[#eabf69]">Fusões possíveis: {decks?.fusions.total??0}</h4>
             <div className="grid gap-2 md:grid-cols-2">
@@ -290,15 +351,19 @@ export function CloudPrototype(){
               </div>)}
             </div>
           </div>}
-          {tab==="live"&&<div className="grid gap-4 lg:grid-cols-2">
+          {tab==="inicio"&&<div className="grid gap-4 lg:grid-cols-2">
             <div className={panel+" space-y-3"}>
-              <h3 className="font-semibold">Mão ao vivo · ePSXe</h3>
+              <h3 className="font-semibold text-white">Mão ao vivo · ePSXe</h3>
               <p className="text-xs text-[#a3bdda]">{live?.hand.status||"Aguardando o emulador…"}</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {live?.hand.cards.map((c,i)=><div key={c.id+"-"+i} className="rounded-lg border border-[#29496d] p-3 text-sm">
-                  <p className="text-xs text-[#7cccf5]">Posição {c.slot}</p><p className="font-semibold">{c.name}</p>
-                  <p className="text-xs">ATK {value(c.atk)}</p>
-                </div>)}
+                {live?.hand.cards.map((c,i)=><button type="button" key={c.id+"-"+i}
+                  onClick={()=>setSelectedCard(cardsById.get(c.id)??null)}
+                  className="rounded-lg border border-line/70 bg-background/50 p-2 text-center text-sm hover:border-primary">
+                  <p className="mb-2 text-xs text-gold">{c.slot}</p>
+                  <ImageFromPC token={token} sha={state.activeSha} card={cardsById.get(c.id)??null} compact/>
+                  <p className="mt-2 min-h-8 text-xs font-semibold text-white">{c.name}</p>
+                  <p className="text-xs text-primary">ATK {value(c.atk)}</p>
+                </button>)}
               </div>
               {(live?.hand.pairs?.length||0)>0&&<div className="space-y-2 border-t border-[#29496d] pt-3">
                 <h4 className="font-semibold text-[#edc16e]">Até 5 fusões possíveis da mão</h4>
@@ -317,7 +382,7 @@ export function CloudPrototype(){
               </div>}
             </div>
             <div className={panel+" space-y-3"}>
-              <h3 className="font-semibold">RANK ao vivo</h3>
+              <h3 className="font-semibold text-white">RANK ao vivo</h3>
               <div className="text-4xl font-bold text-[#eec579]">{live?.rank.category||"—"}</div>
               <p className="text-sm text-[#a3bdda]">Pontuação: {value(live?.rank.score)}</p>
               <p className="text-xs text-[#a3bdda]">{live?.rank.status||"Aguardando leitura local…"}</p>
@@ -325,11 +390,30 @@ export function CloudPrototype(){
           </div>}
         </section>}
       </>}
-      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[#29496e] pt-5 text-xs text-[#9bb2cd]">
+      {selectedCard&&state?.activeSha&&<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-3"
+        role="presentation" onClick={()=>setSelectedCard(null)}>
+        <section className="panel w-full max-w-2xl overflow-y-auto rounded-xl border-gold/50 p-5 shadow-2xl"
+          role="dialog" aria-modal="true" aria-label={"Detalhes de "+selectedCard.name}
+          onClick={e=>e.stopPropagation()}>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="font-display text-xl font-bold text-gold">{selectedCard.name} · #{selectedCard.id}</h2>
+            <button className="btn-ghost" type="button" onClick={()=>setSelectedCard(null)}>Fechar</button>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-[180px_minmax(0,1fr)]">
+            <ImageFromPC token={token} sha={state.activeSha} card={selectedCard}/>
+            <div className="space-y-3">
+              <p className="text-sm text-primary">ATK {value(selectedCard.atk)} · DEF {value(selectedCard.def)}</p>
+              <p className="text-xs text-muted">{selectedCard.type||selectedCard.category}</p>
+              <p className="whitespace-pre-wrap text-sm text-white">{selectedCard.description||"Descrição indisponível."}</p>
+              {selectedCard.effect&&<p className="whitespace-pre-wrap text-sm text-primary">{selectedCard.effect}</p>}
+            </div>
+          </div>
+        </section>
+      </div>}
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-line/60 pt-4 text-xs text-muted">
         <span className="flex items-center gap-2"><CloudOff className="size-4"/> ISO, Memory Card e RAM permanecem no PC</span>
         <span className="flex items-center gap-2"><ShieldCheck className="size-4"/> Conexão local autenticada</span>
         <span>Batoni Dev · DUELTRACE Cloud Alpha</span>
       </footer>
-    </div>
   </div>
 }

@@ -48,19 +48,38 @@ export type CloudLiveResult={
 async function request<T>(token:string,path:string,method:"GET"|"POST",body?:object):Promise<T>{
   if(!token||token.length<24)throw new Error("Informe a chave temporária do Connector.")
   if(!path.startsWith("/v1/")||path.startsWith("//"))throw new Error("Rota local inválida.")
-  const response=await fetch(CONNECTOR_BASE+path,{
-    method,cache:"no-store",mode:"cors",credentials:"omit",referrerPolicy:"no-referrer",
-    headers:{
-      Authorization:"Bearer "+token,
-      ...(method==="POST"?{"Content-Type":"application/json"}:{}),
-    },
-    ...(method==="POST"?{body:JSON.stringify(body||{})}:{}),
-  })
-  if(!response.ok){
-    const message=await response.json().catch(()=>({error:"Conector não disponível"}))
-    throw new Error(typeof message.error==="string"?message.error:"Falha ao conectar")
+  // GET polling must never leave the UI stuck on "Connecting".
+  // Importing a large ISO through the native Windows file picker is slower.
+  const timeoutMs=method==="POST"&&path==="/v1/import"?240000:
+    method==="POST"?45000:12000
+  const controller=new AbortController()
+  const timeout=window.setTimeout(()=>controller.abort(),timeoutMs)
+  try{
+    const response=await fetch(CONNECTOR_BASE+path,{
+      method,cache:"no-store",mode:"cors",credentials:"omit",referrerPolicy:"no-referrer",
+      signal:controller.signal,
+      headers:{
+        Authorization:"Bearer "+token,
+        ...(method==="POST"?{"Content-Type":"application/json"}:{}),
+      },
+      ...(method==="POST"?{body:JSON.stringify(body||{})}:{}),
+    })
+    if(!response.ok){
+      const message=await response.json().catch(()=>({error:"Conector não disponível"}))
+      throw new Error(typeof message.error==="string"?message.error:"Falha ao conectar")
+    }
+    return await response.json() as T
+  }catch(err){
+    if(err instanceof Error&&err.name==="AbortError"){
+      throw new Error("O Connector não respondeu. Confirme que o PowerShell continua aberto na porta 8765 e tente novamente.")
+    }
+    if(err instanceof TypeError){
+      throw new Error("Não foi possível alcançar 127.0.0.1:8765. Verifique o Connector, a origem do site e a permissão de rede local do Chrome.")
+    }
+    throw err
+  }finally{
+    window.clearTimeout(timeout)
   }
-  return response.json() as Promise<T>
 }
 export function cloudGet<T>(token:string,path:string):Promise<T>{
   return request<T>(token,path,"GET")

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { Cpu, House, Infinity as InfinityIcon, Layers, Gift, Users, BookMarked, Settings2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {T,useI18n} from "@/lib/i18n"
+import {useCloudUi,CLOUD_NAV,type CloudTab} from "@/lib/cloud-ui"
 
 const navItems = [
   { label: "Início", href: "/inicio", icon: House, enabled: true },
@@ -20,13 +21,16 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname()
   const {t}=useI18n()
+  const {tab,setTab}=useCloudUi()
+  const isCloud=pathname.startsWith("/cloud")
 
   return (
     <aside className="dt-nav-sidebar min-w-0 lg:w-56 lg:shrink-0">
       <nav aria-label={t("Navegação principal")}>
         <ul className="dt-nav-list grid grid-cols-3 gap-1 min-[600px]:grid-cols-4 lg:grid-cols-1 lg:flex lg:flex-col lg:gap-1.5">
-          {navItems.map(({ label, href, icon: Icon, enabled }) => {
-            const active = pathname.startsWith(href)
+          {navItems.map(({ label, href, icon: Icon, enabled }, index) => {
+            const cloudTab=CLOUD_NAV[index]?.id as CloudTab|undefined
+            const active = isCloud ? tab===cloudTab : pathname.startsWith(href)
             const className = cn(
               "dt-nav-link group flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 text-center text-[11px] leading-tight transition-all min-[600px]:text-xs lg:flex-row lg:justify-start lg:gap-3 lg:px-4 lg:py-3 lg:text-left lg:text-[15px]",
               active
@@ -38,7 +42,13 @@ export function Sidebar() {
             )
             return (
               <li key={href}>
-                {enabled ? (
+                {isCloud && cloudTab ? (
+                  <button type="button" onClick={()=>setTab(cloudTab)} className={className}
+                    aria-current={active?"page":undefined}>
+                    {icon}
+                    <T k={label}/>
+                  </button>
+                ) : enabled ? (
                   <Link href={href} className={className} aria-current={active ? "page" : undefined}>
                     {icon}
                     <T k={label}/>

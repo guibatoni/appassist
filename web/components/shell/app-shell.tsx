@@ -5,13 +5,11 @@ import Image from "next/image"
 import { Sidebar } from "./sidebar"
 import { TopBar } from "./top-bar"
 import {I18nProvider} from "@/lib/i18n"
+import {CloudUiProvider} from "@/lib/cloud-ui"
 
 function ShellBody({ children }: { children: React.ReactNode }) {
   const route=usePathname()
-  // Cloud gets its own responsive browser layout, not the Windows title bar.
-  if(route.startsWith("/cloud")){
-    return <>{children}</>
-  }
+  // Cloud deliberately shares the same background, header, frame and navigation.
   if(route.startsWith("/ferramentas/")){
     // Small native pywebview window: no main sidebar or window toolbar.
     return <div className="dueltrace-scroll h-dvh overflow-y-auto bg-background p-3">{children}</div>
@@ -44,5 +42,5 @@ function ShellBody({ children }: { children: React.ReactNode }) {
 }
 
 export function AppShell({children}:{children:React.ReactNode}) {
-  return <I18nProvider><ShellBody>{children}</ShellBody></I18nProvider>
+  return <I18nProvider><CloudUiProvider><ShellBody>{children}</ShellBody></CloudUiProvider></I18nProvider>
 }

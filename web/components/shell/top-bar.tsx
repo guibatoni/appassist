@@ -3,7 +3,9 @@
 import { type PointerEvent as ReactPointerEvent } from "react"
 import { desktopApi } from "@/lib/desktop"
 import Link from "next/link"
-import { ShieldCheck, Settings2 } from "lucide-react"
+import {usePathname} from "next/navigation"
+import {useCloudUi} from "@/lib/cloud-ui"
+import { ShieldCheck, Settings2, Cloud, Wifi, WifiOff } from "lucide-react"
 import {T,useI18n} from "@/lib/i18n"
 import { UpdateChecker } from "./update-checker"
 import { WindowControls } from "./window-controls"
@@ -37,8 +39,10 @@ function Logo() {
 
 export function TopBar() {
   const {t}=useI18n()
+  const isCloud=usePathname().startsWith("/cloud")
+  const {connected,setTab}=useCloudUi()
   const onHeaderPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-    if (!event.isPrimary || event.button !== 0) return
+    if (isCloud || !event.isPrimary || event.button !== 0) return
     const target = event.target
     // Native Windows caption drag must never intercept actionable controls.
     if (target instanceof Element &&
@@ -55,7 +59,7 @@ export function TopBar() {
   return (
     <header
       onPointerDown={onHeaderPointerDown}
-      className="relative sticky top-0 z-[60] flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 rounded-t-2xl border-b border-line/40 bg-[#040b1f]/95 px-2 py-2 cursor-grab select-none active:cursor-grabbing backdrop-blur-xl sm:gap-x-3 sm:px-5 sm:py-3 lg:px-6"
+      className={"relative sticky top-0 z-[60] flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 rounded-t-2xl border-b border-line/40 bg-[#040b1f]/95 px-2 py-2 select-none backdrop-blur-xl sm:gap-x-3 sm:px-5 sm:py-3 lg:px-6 "+(isCloud?"cursor-default":"cursor-grab active:cursor-grabbing")}
       aria-label={t("Barra superior — arraste para mover o DUELTRACE")}
     >
       {/* Authenticated native Win32 caption dragging handles the complete mouse gesture. */}
@@ -63,19 +67,32 @@ export function TopBar() {
         <Logo />
       </div>
       <div className="relative z-10 order-3 flex min-w-0 w-full items-center justify-start gap-2 sm:order-2 sm:w-auto sm:shrink-0 sm:justify-end">
-        <Link href="/configuracoes" data-no-window-drag aria-label={t("Configurações")} title={t("Configurações")}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 px-2 py-1.5 text-sm text-primary hover:bg-primary/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-          <Settings2 className="size-4"/><span className="hidden sm:inline"><T k="Configurações"/></span>
-        </Link>
-        <UpdateChecker />
-        <div className="hidden items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary 2xl:flex">
+        {isCloud ? <>
+          <button type="button" onClick={()=>setTab("configuracoes")} data-no-window-drag
+            aria-label={t("Configurações")} title={t("Configurações")}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 px-2 py-1.5 text-sm text-primary hover:bg-primary/15">
+            <Settings2 className="size-4"/><span className="hidden sm:inline"><T k="Configurações"/></span>
+          </button>
+          <span className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary">
+            {connected?<Wifi className="size-4"/>:<WifiOff className="size-4"/>}
+            <span className="hidden min-[390px]:inline">{connected?"ePSXe Connector":"Conector desconectado"}</span>
+            <Cloud className="size-4"/>
+          </span>
+        </> : <>
+          <Link href="/configuracoes" data-no-window-drag aria-label={t("Configurações")} title={t("Configurações")}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 px-2 py-1.5 text-sm text-primary hover:bg-primary/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+            <Settings2 className="size-4"/><span className="hidden sm:inline"><T k="Configurações"/></span>
+          </Link>
+          <UpdateChecker />
+        </>}
+        {!isCloud&&<div className="hidden items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary 2xl:flex">
           <ShieldCheck className="size-5" />
           <span><T k="Interface local · Windows"/></span>
-        </div>
+        </div>}
       </div>
-      <div className="relative z-10 order-2 shrink-0 sm:order-3">
+      {!isCloud&&<div className="relative z-10 order-2 shrink-0 sm:order-3">
         <WindowControls />
-      </div>
+      </div>}
     </header>
   )
 }
