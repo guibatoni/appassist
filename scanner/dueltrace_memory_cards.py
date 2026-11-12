@@ -188,7 +188,8 @@ class MemoryCardStore:
             except (OSError,ValueError):
                 continue
             if (payload.get("rom_sha256")!=sha
-                    or payload.get("saveIntegrityVerified") is not True
+                    or (payload.get("saveIntegrityVerified") is not True
+                        and payload.get("liveRamVerified") is not True)
                     or not isinstance(payload.get("cards"),list) or
                     len(payload["cards"])!=CARD_COUNT or
                     not all(type(x) is int and 1<=x<=CARD_LIMIT for x in payload["cards"])):
@@ -242,6 +243,26 @@ class MemoryCardStore:
                 "gameIntegrityVerified":bool(chosen),
                 "status":status}
 
+
+    def save_live_snapshot(self,sha,name,ids):
+        """Save a manually requested snapshot of a verified live RAM deck."""
+        if not isinstance(sha,str) or not ROM_RE.fullmatch(sha):
+            raise ValueError("ISO ativa inválida.")
+        if not isinstance(name,str) or not 1<=len(name.strip())<=72:
+            raise ValueError("Nome do deck deve ter 1 a 72 caracteres.")
+        if (not isinstance(ids,list) or len(ids)!=40 or
+                not all(type(cid) is int and 1<=cid<=CARD_LIMIT for cid in ids)):
+            raise ValueError("Deck em RAM inválido.")
+        fp=uuid4().hex
+        item={"schema":1,"rom_sha256":sha,"id":"manual-"+fp,
+              "name":name.strip(),"cards":list(ids),
+              "source":"live_ram","liveRamVerified":True,
+              "verifiedInGame":True,
+              "createdAt":datetime.now(timezone.utc).isoformat()}
+        dest=self.home/"deck_snapshots"/sha/("manual-"+fp+".json")
+        _write_atomic(dest,(json.dumps(item,ensure_ascii=False,indent=2)+"\n").encode("utf-8"))
+        return {"saved":True,"name":item["name"],"id":item["id"],
+                "status":"Deck ativo salvo no DUELTRACE sem modificar o ePSXe."}
 
     def save_snapshot(self,sha,name):
         if not isinstance(name,str) or not 1<=len(name.strip())<=72:

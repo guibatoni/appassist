@@ -1596,6 +1596,15 @@ class DueltraceWebBridge:
             return MemoryCardStore(self.catalog.home).select_save(
                 active["sha256"],block)
 
+    def _get_confirmed_live_deck(self,sha):
+        """Only trust RAM from a process this app launched for this SHA."""
+        if (type(sha) is not str or self._launched_rom_sha!=sha
+                or self._process is None or self._process.poll() is not None):
+            return None
+        from dueltrace_live_deck import read_live_deck
+        found=read_live_deck(self._process.pid)
+        return found if found.get("ready") is True else None
+
     def get_deck_library(self, deck_id=""):
         """Releitura automática do cartão; opcionalmente um deck salvo do mod."""
         if type(deck_id) is not str or len(deck_id)>90:
@@ -1610,6 +1619,10 @@ class DueltraceWebBridge:
             cards={c["id"]:c for c in self._cards(profile)}
             ids=memory.get("deckIds",[])
             display_name="Deck gravado no Memory Card"
+            live=None if deck_id else self._get_confirmed_live_deck(sha)
+            if live is not None:
+                ids=live["deckIds"]
+                display_name="Deck ativo no ePSXe (RAM confirmada)"
             if deck_id:
                 chosen=next((row for row in memory.get("saved",[])
                              if row.get("id")==deck_id),None)
@@ -1634,9 +1647,13 @@ class DueltraceWebBridge:
             return {"romSha":sha,"linked":memory.get("linked",False),
                     "cardName":memory.get("cardName"),
                     "saveName":memory.get("saveName"),
-                    "status":memory.get("status",""),
+                    "status":(
+                        "Deck lido da RAM de um ePSXe iniciado pelo DUELTRACE. "
+                        "Se você trocou a ISO diretamente no emulador, nomes "
+                        "e IDs podem divergir."
+                        if live is not None else memory.get("status","")),
                     "gameIntegrityVerified":memory.get("gameIntegrityVerified") is True,
-                    "activeInEmulatorVerified":False,
+                    "activeInEmulatorVerified":live is not None,
                     "saves":memory.get("saves",[]),
                     "selectedBlock":memory.get("selectedBlock"),
                     "deckIds":ids,"deckCount":len(ids),"cards":current_counts,
@@ -1651,8 +1668,12 @@ class DueltraceWebBridge:
             active,entry,profile=self._active()
             if not profile:
                 raise ValueError("Ative uma ISO antes de salvar o deck.")
-            return MemoryCardStore(self.catalog.home).save_snapshot(
-                active["sha256"],name)
+            store=MemoryCardStore(self.catalog.home)
+            live=self._get_confirmed_live_deck(active["sha256"])
+            if live is not None:
+                return store.save_live_snapshot(
+                    active["sha256"],name,live["deckIds"])
+            return store.save_snapshot(active["sha256"],name)
 
     def get_drops(self, opponent_id=0, group="", query="", offset=0, limit=36,
                   sort="id", card_type="", rank=""):

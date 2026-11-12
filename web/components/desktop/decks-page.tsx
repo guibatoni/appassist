@@ -81,6 +81,8 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         </button>
       </div>
       {error&&<p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
+      {state?.activeInEmulatorVerified&&
+        <p className="mt-2 text-sm text-primary">Leitura ao vivo confirmada na RAM do ePSXe iniciado pelo DUELTRACE. Alterações ainda não salvas no Memory Card podem aparecer aqui.</p>}}
       <p className="mt-3 text-xs text-muted">O DUELTRACE valida as verificações internas do save e acompanha alterações no arquivo. O cartão pode conter um deck salvo diferente do deck atualmente carregado no ePSXe. A seleção de ISO não confirma automaticamente qual save o emulador abriu.</p>
       {(state?.saves?.length??0)>1&&
         <label className="mt-4 flex flex-col gap-1 text-sm text-muted">Selecionar partida salva no cartão
@@ -106,7 +108,7 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
           aria-label="Nome do novo deck salvo" placeholder="Nome para salvar o deck ativo"
           value={name} maxLength={72} onChange={e=>setName(e.target.value)}/>
         <button type="button" className="btn-gold disabled:opacity-50"
-          disabled={busy||!state?.linked||!state?.saveName||!name.trim()||!desktopApi()}
+          disabled={busy||state?.deckCount!==40||(!state?.activeInEmulatorVerified&&!state?.saveName)||!name.trim()||!desktopApi()}
           onClick={()=>void saveDeck()}><Save className="size-4"/> Salvar deck</button>
       </div>
     </div>
