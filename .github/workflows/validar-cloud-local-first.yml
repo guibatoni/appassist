@@ -1,0 +1,36 @@
+name: DUELTRACE Cloud — local-first proof
+
+on:
+  push:
+    branches:
+      - "feature/dueltrace-cloud-*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-browser-and-connector:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate localhost isolation and connector security
+        run: python -m unittest discover -s tests -p 'test_dueltrace_cloud_*.py' -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install locked frontend dependencies
+        run: npm ci --prefix web
+      - name: Build static browser frontend
+        run: npm run build --prefix web
+      - name: Verify static cloud route
+        shell: bash
+        run: |
+          test -s web/out/cloud/index.html
+          echo "DUELTRACE Cloud HTML export verified."

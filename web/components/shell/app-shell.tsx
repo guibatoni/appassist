@@ -8,6 +8,10 @@ import {I18nProvider} from "@/lib/i18n"
 
 function ShellBody({ children }: { children: React.ReactNode }) {
   const route=usePathname()
+  // Cloud gets its own responsive browser layout, not the Windows title bar.
+  if(route.startsWith("/cloud")){
+    return <>{children}</>
+  }
   if(route.startsWith("/ferramentas/")){
     // Small native pywebview window: no main sidebar or window toolbar.
     return <div className="dueltrace-scroll h-dvh overflow-y-auto bg-background p-3">{children}</div>
