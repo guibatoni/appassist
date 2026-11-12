@@ -16,7 +16,7 @@ class UpdateVisibilityV49Tests(unittest.TestCase):
     def base(self):
         return {
             "status":"unavailable","updateAvailable":False,
-            "currentVersion":"0.9.7","channel":"preview",
+            "currentVersion":bridge_mod.CURRENT_VERSION,"channel":"preview",
             "previewError":None,"automaticInstallReason":"",
         }
 
@@ -41,7 +41,7 @@ class UpdateVisibilityV49Tests(unittest.TestCase):
         self.assertEqual(result["previewCheckStatus"],"checked")
         self.assertTrue(result["automaticPreviewReady"])
         self.assertTrue(result["updateAvailable"])
-        fetch.assert_called_once_with(current_version="0.9.7",
+        fetch.assert_called_once_with(current_version=bridge_mod.CURRENT_VERSION,
                                       installed_run_id=42935155350)
 
     def test_checked_feed_without_new_release_is_not_authentication_failure(self):
