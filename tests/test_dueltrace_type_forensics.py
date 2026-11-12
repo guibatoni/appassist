@@ -35,8 +35,8 @@ class AutomaticTypeForensicTests(unittest.TestCase):
 
     def test_extended_5bit_type_detected_from_iso_records(self):
         rows = original_cards()
-        rows[0].update(tipo=24, nivel=9, atk=3900, def=3300)
-        rows[1].update(tipo=24, nivel=10, atk=4000, def=4000)
+        rows[0].update({"tipo": 24, "nivel": 9, "atk": 3900, "def": 3300})
+        rows[1].update({"tipo": 24, "nivel": 10, "atk": 4000, "def": 4000})
         report = analyze_iso_types(rows, rom_sha256=ISO_A)
         self.assertEqual(report["unresolvedCodes"], [24])
         self.assertEqual(report["monsterLikeCodes"], [24])
@@ -54,7 +54,7 @@ class AutomaticTypeForensicTests(unittest.TestCase):
     def test_fm_special_type_remapped_to_monster(self):
         rows = original_cards()
         for i in range(5):
-            rows[i].update(tipo=20, nivel=6, atk=2000, def=1200)
+            rows[i].update({"tipo": 20, "nivel": 6, "atk": 2000, "def": 1200})
         report = analyze_iso_types(rows, rom_sha256=ISO_A)
         self.assertEqual(report["unresolvedCodes"], [20])
         self.assertEqual(report["suspectedRemaps"], [20])
@@ -63,8 +63,8 @@ class AutomaticTypeForensicTests(unittest.TestCase):
     def test_isolated_special_anomaly_does_not_hide_normal_spells(self):
         rows = original_cards()
         for i in range(10):
-            rows[i].update(tipo=20, nivel=0, atk=0, def=0)
-        rows[0].update(nivel=8, atk=2800, def=2400)
+            rows[i].update({"tipo": 20, "nivel": 0, "atk": 0, "def": 0})
+        rows[0].update({"nivel": 8, "atk": 2800, "def": 2400})
         report = analyze_iso_types(rows, rom_sha256=ISO_A)
         self.assertNotIn(20, report["unresolvedCodes"])
         self.assertIn(1, report["isolatedCardIds"])
@@ -87,7 +87,7 @@ class AutomaticTypeForensicTests(unittest.TestCase):
 
     def test_never_invents_a_label_for_unknown_type(self):
         rows = original_cards()
-        rows[0].update(tipo=31, atk=0, def=0, nivel=0)
+        rows[0].update({"tipo": 31, "atk": 0, "def": 0, "nivel": 0})
         report = analyze_iso_types(rows, rom_sha256=ISO_A)
         catalog = [{"id": 1, "type_id": 31, "category": "Não identificado",
                     "type_label": "Código 31"}]
