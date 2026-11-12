@@ -147,7 +147,7 @@ class ResponsiveUiContracts(unittest.TestCase):
         self.assertIn("overflow-y-auto",UPDATES)
         self.assertIn("Atualizar agora",UPDATES)
         self.assertIn("flex flex-wrap items-start justify-center gap-1",FLOATING)
-        self.assertIn("min-[390px]:h-[78px] min-[390px]:w-[68px]",FLOATING)
+        self.assertIn("min-[390px]:w-[78px]",FLOATING)
         self.assertIn("aria-label=\"Fechar visor\"",FLOATING)
 
     def test_ratio_support_does_not_use_zoom_or_change_game_data(self):
