@@ -75,7 +75,12 @@ class FakeBridge:
     def get_hand(self):
         return {"ready":True,"hand":[
             {"id":1,"slot":1,"name":"Dragão","atk":100,"def":50,
-             "address":"0xBFF484"}],"pairs":[],
+             "address":"0xBFF484"}],
+            "pairs":[{"slot_a":1,"slot_b":2,"result":3,
+                      "result_name":"Fusion Test","atk":2200,
+                      "validation":"ISO","pid":321}],
+            "chains":[{"result":4,"result_name":"Chain Test","atk":2400,
+                       "ram_address":"0xBFF484"}],
             "status":"mão validada","pid":321,"ram_address":"0xBFF484"}
 
     def get_rank_auto(self):
@@ -179,6 +184,8 @@ class CloudSecurityTests(unittest.TestCase):
         self.assertNotIn(b"ram_address",live_raw)
         self.assertNotIn(b"secret_memory_dump",live_raw)
         self.assertEqual(json.loads(live_raw)["hand"]["cards"][0]["id"],1)
+        self.assertEqual(len(json.loads(live_raw)["hand"]["pairs"]),1)
+        self.assertEqual(json.loads(live_raw)["hand"]["chains"][0]["result_name"],"Chain Test")
 
     def test_invalid_or_unregistered_sha_cannot_activate(self):
         self.assertEqual(self.request(

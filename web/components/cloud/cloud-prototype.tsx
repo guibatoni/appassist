@@ -79,6 +79,9 @@ export function CloudPrototype(){
         setOpponents(await cloudGet<CloudOpponentResult>(
           token,"/v1/opponents?opponent="+opponent))
       }else if(tab==="drops"){
+        // Drop view also needs opponent names if opened first.
+        setOpponents(await cloudGet<CloudOpponentResult>(
+          token,"/v1/opponents?opponent="+opponent))
         setDrops(await cloudGet<CloudDropResult>(
           token,"/v1/drops?opponent="+opponent))
       }else if(tab==="decks"){
@@ -297,6 +300,21 @@ export function CloudPrototype(){
                   <p className="text-xs">ATK {value(c.atk)}</p>
                 </div>)}
               </div>
+              {(live?.hand.pairs?.length||0)>0&&<div className="space-y-2 border-t border-[#29496d] pt-3">
+                <h4 className="font-semibold text-[#edc16e]">Até 5 fusões possíveis da mão</h4>
+                {live!.hand.pairs.slice(0,5).map((p,i)=><div key={i}
+                  className="rounded-lg border border-[#29496d] p-2 text-xs">
+                  Posições {p.slot_a} + {p.slot_b}: <strong className="text-[#92dcff]">{p.result_name}</strong>
+                  <span className="ml-2 text-[#aec5d8]">ATK {value(p.atk)}</span>
+                </div>)}
+              </div>}
+              {(live?.hand.chains?.length||0)>0&&<div className="space-y-1">
+                <h4 className="font-semibold text-[#edc16e]">Rotas de fusão</h4>
+                {live!.hand.chains.slice(0,5).map((route,i)=><div key={i}
+                  className="text-xs text-[#abc9df]">
+                  {route.result_name} · ATK {value(route.atk)}
+                </div>)}
+              </div>}
             </div>
             <div className={panel+" space-y-3"}>
               <h3 className="font-semibold">RANK ao vivo</h3>

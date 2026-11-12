@@ -41,7 +41,7 @@ export type CloudDeckResult={
 }
 export type CloudLiveResult={
   localOnly:true
-  hand:{ready:boolean;status:string;cards:Array<{id:number;slot:number;name:string;atk:number|null;def:number|null}>;pairs:unknown[]}
+  hand:{ready:boolean;status:string;cards:Array<{id:number;slot:number;name:string;atk:number|null;def:number|null}>;pairs:Array<{slot_a:number;slot_b:number;result:number;result_name:string;atk:number|null;validation:string}>;chains:Array<{result:number;result_name:string;atk:number|null}>}
   rank:{ready?:boolean;state?:string;status?:string;category?:string|null;score?:number|null;rankSystem?:string|null}
 }
 

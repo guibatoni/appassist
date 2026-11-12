@@ -93,12 +93,26 @@ def _local_live(bridge):
             rows.append({key: card.get(key) for key in (
                 "id", "slot", "name", "type", "atk", "def",
             )})
+    # Only derived, visible suggestion fields. Never forward engine objects
+    # wholesale (future fields could include sensitive diagnostic addresses).
+    pairs = []
+    for item in (hand.get("pairs") or [])[:5]:
+        if isinstance(item, dict):
+            pairs.append({key: item.get(key) for key in (
+                "slot_a", "slot_b", "result", "result_name", "atk", "validation",
+            )})
+    chains = []
+    for item in (hand.get("chains") or [])[:5]:
+        if isinstance(item, dict):
+            chains.append({key: item.get(key) for key in (
+                "result", "result_name", "atk",
+            )})
     # Suggestions and RANK values are derived; raw address, PID and memory
     # dumps are never exposed to the page.
     return {
         "hand": {"ready": bool(hand.get("ready")), "status": str(
             hand.get("status") or "")[:220], "cards": rows,
-            "pairs": (hand.get("pairs") or [])[:10]},
+            "pairs": pairs, "chains": chains},
         "rank": {key: rank.get(key) for key in (
             "ready", "state", "status", "category", "score", "rankSystem",
             "sourceMode", "final",
