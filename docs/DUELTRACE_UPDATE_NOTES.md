@@ -1,18 +1,16 @@
-# DUELTRACE v0.14.0 — Preview
+# DUELTRACE v0.15.0 — Preview
 
 ## Novidades
-- **Visual clássico do anime em alta definição:** novo render nativo de 540×780 pixels em Biblioteca de Cartas, Fusões, Drops e Mão.
-- **ATK e DEF dentro da carta:** valores do mod aparecem em uma caixa própria, como na referência clássica.
-- **Cartas da Mão por clique:** abrir detalhes de cada carta e consultar suas fusões e drops.
+- **Análise automática dos tipos por ISO:** a importação e a opção Atualizar dados auditam os códigos de tipo realmente lidos nos registros do executável PS1 do mod ativo.
+- **Identificação de tipos personalizados:** códigos fora do padrão 0–23, suspeitas de remapeamento e cartas isoladas incompatíveis com as regras originais ficam identificados como **Tipo #N (a verificar)**.
+- **Relatório local por mod:** o arquivo `tipos_iso.json` registra códigos encontrados, quantidades e evidências, vinculado ao SHA-256 da ISO, sem modificar a imagem original.
 
 ## Melhorias
-- **Artes mais legíveis:** upscale local Lanczos 3× com nitidez suave, sem substituir artes extraídas do jogo.
-- **Nome, estrelas e atributos:** melhor alinhamento e legibilidade, inclusive em nomes extensos e níveis altos.
-- **Visual consistente:** miniaturas da Biblioteca, resultados de Fusões e Drops priorizam a mesma carta HD; fallback usa arte ampliada quando necessário.
-- **Janela ampliada:** descrição, ATK/DEF e receitas consultadas por clique com navegação entre cartas.
-- **Dicas de fusão:** até cinco receitas inicialmente por carta, evitando excesso de informações.
+- **Cartas mais fiéis aos mods:** Biblioteca, Fusões, Drops e Mão priorizam o tipo detectado para cada ISO, em vez de aplicar indiscriminadamente a tabela fixa do jogo original.
+- **ATK e DEF preservados:** cartas com evidências estruturais de monstro continuam exibindo as estatísticas realmente extraídas, sem inventar nomes de classes.
+- **Cache atualizado automaticamente:** a revisão do scanner força nova análise após atualização de dados, e o render HD é regenerado quando a classificação muda.
 
 ## Correções
-- **Caches seguros:** alterações visuais geram novos arquivos derivados sem alterar ISOs, PNGs originais ou valores de ATK/DEF.
-- **Compatibilidade com mods:** cartas não-monstras não recebem estatísticas inventadas; dados ausentes permanecem ausentes.
-- **Atualizador:** versão e notas preparadas para publicação pelo canal de atualização dentro do aplicativo após build Windows validada.
+- **Sem herança entre mods:** uma interpretação de tipo de outra ISO não é reutilizada; o relatório exige SHA-256 correspondente.
+- **Molduras seguras:** tipos desconhecidos ou suspeitos não recebem arbitrariamente a moldura de magia, ritual ou armadilha do jogo original.
+- **Confiança explícita:** códigos compatíveis não comprovam semântica idêntica ao original. Quando a ISO não fornece uma tabela confiável de nomes de tipos, a classificação exata permanece pendente de validação, inclusive em duelo.

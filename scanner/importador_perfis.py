@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from scanner_multiiso import process, sha256, X15_SHA
 from card_catalog import enrich_cards, attach_effect_manifest, effect_sidecar_path, category_summary
+from dueltrace_type_forensics import analyze_iso_types, apply_iso_type_evidence
 from mod_effects_iso import extract_embedded_effects
 from dueltrace_rank_profiles import rank_profile_for_image
 from dueltrace_rank_system import CLASSIC_RANKS
@@ -67,6 +68,18 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
                   and not opponent_structural and not rank_group_unknown
                   and association_validation["valid"])
 
+    # Reutilizar SOMENTE a auditoria extraída da ISO correspondente.
+    # Se o resultado anterior não a tiver, recalcular a partir dos 722
+    # registros brutos em vez de declarar a semântica FM como comprovada.
+    type_analysis = result.get("type_analysis")
+    if (not isinstance(type_analysis, dict)
+            or type_analysis.get("rom_sha256") != result["sha256"]
+            or type_analysis.get("analyzed") != 722):
+        type_analysis = analyze_iso_types([
+            {"id": integer(r.get("id")), "tipo": integer(r.get("tipo")),
+             "nivel": integer(r.get("nivel")), "atk": integer(r.get("atk")),
+             "def": integer(r.get("def"))}
+            for r in cards], rom_sha256=result["sha256"])
     # Códigos de tipo extraídos do executável; não inferimos por nome.
     # Textos de efeito são opcionais e externos quando o mod os fornece.
     catalog = enrich_cards([
@@ -79,6 +92,9 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
          "guardian_star_2": integer(r.get("estrela_2"))}
         for r in cards
     ], known_fm_layout=True) if card_ok else []
+    if catalog:
+        catalog = apply_iso_type_evidence(
+            catalog, type_analysis, rom_sha256=result["sha256"])
     from fm_card_text import attach_descriptions
     candidate_descriptions={
         integer(row.get("id")):{"text":row["descricao"],"source":row["descricao_fonte"]}
@@ -140,7 +156,10 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "regras_de_pontuacao": "verificado_x15" if known_x15 else "não_extraídas",
         "fusoes": "não_extraídas",
         "artes": "extraídas" if result.get("artes_extraidas") == 722 else "indisponíveis",
-        "categorias": "codigo_fm_padrao" if card_ok else "nao_identificadas",
+        "categorias": ("tipos_iso_diferentes_a_verificar"
+                        if card_ok and (type_analysis.get("unresolvedCodes") or
+                                        type_analysis.get("isolatedCardIds"))
+                        else "codigo_fm_padrao" if card_ok else "nao_identificadas"),
         "efeitos": effects_info["status"],
         "descricoes":"texto_slus_extraido" if description_info["descriptions_attached"] else "não_identificadas",
         "molduras":"extraidas_do_WA" if result.get("molduras_extraidas")==6 else "indisponiveis",
@@ -153,6 +172,7 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
         "exe_sha256": result.get("hash_executavel"),
         "wa_sha256": result.get("hash_wa"),
         "catalog_validation": identity_validation,
+        "type_analysis": type_analysis,
         "candidate_catalogue": (result.get("candidate_catalogue")
                                 if isinstance(result.get("candidate_catalogue"),dict)
                                 else {"status":"nao_identificado","cards":0,"opponents":0}),

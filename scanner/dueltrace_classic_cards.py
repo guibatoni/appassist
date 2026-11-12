@@ -16,7 +16,7 @@ from functools import lru_cache
 from PIL import Image, ImageDraw, ImageFont
 from dueltrace_card_renderer_v014 import render_card_v014
 
-REVISION = 3
+REVISION = 4
 SIZE = (540, 780)
 CACHE_FILE = "cartas-hd-cache.json"
 MAX_CARDS = 722
@@ -76,6 +76,13 @@ def _bounded_integer(value, maximum):
 
 
 def _category(card):
+    # Respeitar a classificação vinculada ao SHA desta ISO. A versão
+    # anterior reinterpretava o código usando a tabela do jogo original.
+    if card.get("category_source") == "sondagem_iso_sem_mapeamento_confirmado":
+        return (str(card.get("category") or "Não identificado")[:40],
+                str(card.get("type_label") or "Tipo a verificar")[:40])
+    if card.get("category") and card.get("type_label"):
+        return str(card["category"])[:40], str(card["type_label"])[:40]
     raw = _read(card, "type_id", "tipo")
     if isinstance(raw, str) and raw.isascii() and raw.isdigit():
         raw = int(raw)
@@ -145,7 +152,8 @@ def render_card(card, art: Image.Image) -> Image.Image:
     """High-resolution classic renderer, using only the active ISO's data."""
     return render_card_v014(card_fields(card), art, card.get("id"))
 
-def render_card_pack(cards, originals: Path, enhanced: Path, dest: Path):
+def render_card_pack(cards, originals: Path, enhanced: Path, dest: Path, *,
+                     type_analysis=None):
     """Build once per verified source art + actual card metadata, with cache."""
     originals = Path(originals).resolve(strict=True)
     enhanced = Path(enhanced).resolve()
@@ -168,6 +176,11 @@ def render_card_pack(cards, originals: Path, enhanced: Path, dest: Path):
         old = {}
     index = {}
     counts = {"rendered": 0, "cached": 0, "failed": 0}
+    if isinstance(type_analysis, dict):
+        from dueltrace_type_forensics import apply_iso_type_evidence
+        cards = apply_iso_type_evidence(
+            cards, type_analysis,
+            rom_sha256=type_analysis.get("rom_sha256"))
     for card in cards[:MAX_CARDS]:
         cid = _bounded_integer(card.get("id"), MAX_CARDS)
         if not cid or f"{cid:03d}.png" in index:

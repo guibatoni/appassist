@@ -27,7 +27,7 @@ FRAME_ATLAS_COLUMN=2
 FRAME_V,FRAME_W,FRAME_H=128,52,60
 FRAME_ROW_STRIDE=64*2
 FRAME_NAMES=("monstro","magica","armadilha","ritual","roxo","laranja")
-ASSET_REVISION=2
+ASSET_REVISION=3
 
 
 def bgr555(value:int,*,transparent_zero=False):
@@ -121,7 +121,8 @@ def _has_detail(im)->bool:
 
 
 def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
-                       rom_sha256:str,wa_name="DATA/WA_MRG.MRG")->dict:
+                       rom_sha256:str,wa_name="DATA/WA_MRG.MRG",
+                       type_analysis:dict|None=None)->dict:
     """Extrai 722 PNGs grandes, 722 miniaturas e composições por tipo localmente."""
     try:
         from PIL import Image
@@ -139,6 +140,14 @@ def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
     for folder in folders.values():
         folder.mkdir(parents=True,exist_ok=True)
     warnings=[]
+    # O relatório só é válido se vinculado ao SHA desta ISO.
+    unresolved_types = set()
+    isolated_ids = set()
+    if (isinstance(type_analysis, dict)
+            and type_analysis.get("rom_sha256") == rom_sha256
+            and type_analysis.get("analyzed") == CARD_COUNT):
+        unresolved_types = set(type_analysis.get("unresolvedCodes", []))
+        isolated_ids = set(type_analysis.get("isolatedCardIds", []))
     frames={}
     for index,name in enumerate(FRAME_NAMES):
         try:
@@ -165,7 +174,9 @@ def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
             thumb.save(folders["miniaturas_722"]/f"{cid:03d}.png",optimize=True)
             good_thumb+=1
             if match:duplicate+=1
-            fi=frame_index(card.get("type_id",card.get("tipo")))
+            raw_type=card.get("type_id",card.get("tipo"))
+            fi=(None if raw_type in unresolved_types or cid in isolated_ids
+                else frame_index(raw_type))
             if fi in frames:
                 picture=frames[fi].copy()
                 # Visual da mão do PS1: miniatura sobre o frame em (6,6).
@@ -206,7 +217,7 @@ def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
             from dueltrace_classic_cards import render_card_pack
             classic_cards = render_card_pack(
                 cards, folders["artes_722"], out / "artes_upscaled",
-                out / "cartas_classicas_hd")
+                out / "cartas_classicas_hd", type_analysis=type_analysis)
         except (OSError, ValueError, ImportError) as exc:
             warnings.append("Cartas clássicas HD: " + str(exc)[:120])
     if classic_cards.get("failed"):

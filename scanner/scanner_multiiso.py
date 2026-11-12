@@ -37,8 +37,8 @@ WA_CARD_SECTOR_START=722
 WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
-ART_PARSER_REVISION=9  # renderizar cartas clássicas HD após extrair artes do mod
-SCAN_PARSER_REVISION=30  # Rising/Enhance: FD 38+1, WA distante e janelas 40x39
+ART_PARSER_REVISION=10  # detecção dos tipos aplicada também à moldura de cartas
+SCAN_PARSER_REVISION=31  # auditar automaticamente tipos de carta por ISO
 
 
 def sha256(path:Path, progress=None):
@@ -506,7 +506,8 @@ def process(path,output,with_art=False,digest=None,progress=None):
     for previous in ('cartas.csv','oponentes.csv','drops_por_oponente.csv',
                      'decks.csv','validacao_pesos.csv',
                      'catalogo_candidato_nao_verificado.json',
-                     'oponentes_candidatos_nao_verificados.json'):
+                     'oponentes_candidatos_nao_verificados.json',
+                     'tipos_iso.json'):
         (dest/previous).unlink(missing_ok=True)
     disc=None
     try:
@@ -775,6 +776,15 @@ def process(path,output,with_art=False,digest=None,progress=None):
                 row=descriptions.get(card['id'])
                 card['descricao']=row['text'] if row else ''
                 card['descricao_fonte']=row['source'] if row else ''
+        # Ler os códigos de tipo DIRETAMENTE da tabela de atributos desta ISO.
+        # Não aceitar rótulos fixos quando os bits divergem da semântica FM.
+        from dueltrace_type_forensics import analyze_iso_types
+        info["type_analysis"] = analyze_iso_types(
+            cards, rom_sha256=info["sha256"])
+        if cards and info["type_analysis"].get("analyzed") == CARD_COUNT:
+            (dest / "tipos_iso.json").write_text(
+                json.dumps(info["type_analysis"], ensure_ascii=False, indent=2),
+                encoding="utf-8")
         # Recursos independentes: falha nos 39 adversários não apaga 722 cartas.
         if cards:
             write_csv(dest/'cartas.csv',cards)
@@ -848,7 +858,8 @@ def process(path,output,with_art=False,digest=None,progress=None):
             if opponents and wa:
                 from fm_deep_assets import extract_asset_pack
                 pack=extract_asset_pack(wa,cards,dest,rom_sha256=info['sha256'],
-                                        wa_name=wa_names[0])
+                                        wa_name=wa_names[0],
+                                        type_analysis=info.get("type_analysis"))
                 info['artes_extraidas']=pack['art_count']
                 info['miniaturas_extraidas']=pack['thumbnail_count']
                 info['molduras_extraidas']=pack['frame_count']
