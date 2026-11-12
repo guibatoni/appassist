@@ -27,6 +27,10 @@ SHA_RE = re.compile(r"[0-9a-f]{64}\Z")
 MAX_BODY = 2048
 MAX_JSON = 2_000_000
 DEV_ORIGINS = frozenset(("http://127.0.0.1:3000", "http://localhost:3000"))
+# Exact published DUELTRACE Cloud domain. Never allow *.vercel.app
+# or all origins to access the Windows user's local engine.
+CLOUD_ORIGINS = frozenset(("https://dueltrace-cloud.vercel.app",))
+DEFAULT_ALLOWED_ORIGINS = DEV_ORIGINS | CLOUD_ORIGINS
 
 
 def _is_allowed_origin(value: str | None, allowed: frozenset[str]) -> bool:
@@ -441,6 +445,10 @@ def make_handler(bridge, *, allowed_origins, token):
             self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+            # Chromium's Private Network Access preflight for a public HTTPS
+            # page calling 127.0.0.1 is allowed ONLY from a trusted Origin.
+            if self.headers.get("Access-Control-Request-Private-Network", "").lower() == "true":
+                self.send_header("Access-Control-Allow-Private-Network", "true")
             self.send_header("Access-Control-Max-Age", "600")
             self.send_header("Content-Length", "0")
             self.end_headers()
@@ -576,7 +584,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if not 1024 <= args.port <= 65535:
         parser.error("A porta deve estar entre 1024 e 65535")
-    allowed = DEV_ORIGINS | frozenset(args.origin)
+    allowed = DEFAULT_ALLOWED_ORIGINS | frozenset(args.origin)
     token = secrets.token_urlsafe(32)
     from dueltrace_web_bridge import DueltraceWebBridge
     bridge = DueltraceWebBridge(file_picker=_picker)
