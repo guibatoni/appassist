@@ -82,7 +82,7 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       </div>
       {error&&<p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
       {state?.activeInEmulatorVerified&&
-        <p className="mt-2 text-sm text-primary">Leitura ao vivo confirmada na RAM do ePSXe iniciado pelo DUELTRACE. Alterações ainda não salvas no Memory Card podem aparecer aqui.</p>}}
+        <p className="mt-2 text-sm text-primary">Leitura ao vivo confirmada na RAM do ePSXe iniciado pelo DUELTRACE. Alterações ainda não salvas no Memory Card podem aparecer aqui.</p>}
       <p className="mt-3 text-xs text-muted">O DUELTRACE valida as verificações internas do save e acompanha alterações no arquivo. O cartão pode conter um deck salvo diferente do deck atualmente carregado no ePSXe. A seleção de ISO não confirma automaticamente qual save o emulador abriu.</p>
       {(state?.saves?.length??0)>1&&
         <label className="mt-4 flex flex-col gap-1 text-sm text-muted">Selecionar partida salva no cartão
