@@ -6,7 +6,7 @@ import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardCopy, FilePlus2, Gamepad2,
   GitMerge, Layers, Pencil, Play, RefreshCcw, Search, Shield, Swords, Trash2, Upload,
 } from "lucide-react"
-import {cardArt, cardWithFrame, desktopApi, useDesktopState} from "@/lib/desktop"
+import {cardClassicHd, cardArt, cardWithFrame, desktopApi, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
 import {RankScoreDisplay} from "./rank-score-display"
 import {copyOpponentReport} from "@/lib/opponent-report"
@@ -24,21 +24,25 @@ function Heading({title,subtitle}:{title:string;subtitle:string}) {
 }
 
 function CardThumbnail({card,sha,expanded=false}:{card:LocalCard|null;sha:string|null;expanded?:boolean}) {
-  const [source,setSource]=useState<"composite"|"large"|"none">("composite")
-  useEffect(()=>setSource("composite"),[sha,card?.id])
+  const [source,setSource]=useState<"classic"|"composite"|"large"|"none">("classic")
+  useEffect(()=>setSource("classic"),[sha,card?.id])
+  const classic=card?cardClassicHd(sha,card.id):null
   const framed=card?cardWithFrame(sha,card.id):null
   const large=card?cardArt(sha,card.id):null
-  const url=source==="composite"?framed:source==="large"?large:null
-  return <div className={"relative mx-auto flex w-full items-center justify-center overflow-hidden bg-[#061126] shadow-[0_0_18px_rgb(56_200_255/0.18)] "+
-      (expanded?"max-w-48 ":"max-w-32 ")+
-      (source==="composite"
-        ? "aspect-[52/60] rounded-sm border border-gold/20"
-        : "aspect-[102/96] rounded-lg border border-line/50 p-1")}>
-    {url?<Image src={url} alt={card?.name??""} fill unoptimized sizes={expanded?"240px":"160px"}
-      className={source==="composite"?"object-fill [image-rendering:pixelated]":"object-contain p-1"}
-      onError={()=>setSource(source==="composite"?"large":"none")}/>:
+  const url=source==="classic"?classic:
+    source==="composite"?framed:source==="large"?large:null
+  const ratio=source==="classic"?"aspect-[9/13]":
+    source==="composite"?"aspect-[52/60]":"aspect-[102/96]"
+  return <div className={"relative mx-auto flex w-full items-center justify-center overflow-hidden rounded-md border border-gold/35 bg-[#061126] shadow-[0_0_18px_rgb(56_200_255/0.15)] "+
+      (expanded?"max-w-48 ":"max-w-36 ")+ratio}>
+    {url?<Image src={url} alt={"Carta "+(card?.name??"")} fill unoptimized
+      sizes={expanded?"240px":"180px"}
+      className={source==="composite"?"object-fill [image-rendering:pixelated]":"object-contain"}
+      onError={()=>setSource(old=>old==="classic"?"composite":old==="composite"?"large":"none")}/>:
       <Layers className="size-9 text-primary/45" aria-label="Imagem não extraída"/>}
-    {card&&<span className="absolute left-1 top-1 rounded bg-black/70 px-1 text-[10px] text-gold">#{card.id}</span>}
+    {card&&source!=="classic"&&<span className="absolute left-1 top-1 rounded bg-black/70 px-1 text-[10px] text-gold">
+      #{card.id}
+    </span>}
   </div>
 }
 
@@ -1301,7 +1305,7 @@ function Library({cards,sha}:{cards:LocalCard[];sha:string|null}) {
           onClick={()=>setPreview({card})}>
           <CardThumbnail key={String(sha)+"-"+card.id} card={card} sha={sha}/>
           <p className="mt-2 min-h-9 text-xs font-semibold text-white">{card.name}</p>
-          <MonsterStats card={card} className="mt-1 text-center"/>
+
         </button>)}
       </div>
       {!visible.length&&<Empty>Nenhuma carta identificada para esta pesquisa.</Empty>}
@@ -1333,7 +1337,7 @@ function FusionIllustration({id,name,sha,card,role,onPreview}:{
       </div>
       <span className="text-center text-[11px] font-semibold text-gold">#{id}</span>
       <span className="line-clamp-2 min-h-8 break-words text-center text-xs font-medium text-foreground">{name}</span>
-      <MonsterStats card={displayed} className="text-center text-[10px]"/>
+
     </button>
   </div>
 }
@@ -1429,7 +1433,7 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/50 pt-2">
             <span className="text-xs text-muted">#{r.a} + #{r.b} → #{r.result}</span>
-            <MonsterStats card={cardsById.get(r.result)??null} className="text-sm"/>
+
           </div>
         </article>)}
       </div>
