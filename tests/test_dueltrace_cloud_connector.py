@@ -210,7 +210,7 @@ class CloudSecurityTests(unittest.TestCase):
 
     def test_art_path_and_unknown_route_fail_closed(self):
         self.assertEqual(self.request("/v1/art?sha="+SHA+"&id=1")[0],503)
-        self.assertEqual(self.request("/v1/art?sha=bad&id=1")[0],400)
+        self.assertEqual(self.request("/v1/art?sha=bad&id=1")[0],404)
         self.assertEqual(self.request("/etc/passwd")[0],404)
 
     def test_http_host_rebinding_is_rejected(self):

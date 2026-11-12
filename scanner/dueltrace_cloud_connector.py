@@ -325,7 +325,7 @@ def make_handler(bridge, *, allowed_origins, token):
                         raise ValueError()
                     result = _local_state_after_activation(bridge, sha)
                 elif uri.path == "/v1/import":
-                    if body != {"chooseLocalFile": True}:
+                    if set(body) != {"chooseLocalFile"} or body["chooseLocalFile"] is not True:
                         raise ValueError()
                     result = bridge.import_iso()
                     if isinstance(result, dict) and isinstance(result.get("mod"), dict):
@@ -334,7 +334,7 @@ def make_handler(bridge, *, allowed_origins, token):
                                   "mod":{"sha256":mod.get("sha256"),
                                          "name":mod.get("name")}}
                 else:
-                    if body != {"chooseLocalFile": True}:
+                    if set(body) != {"chooseLocalFile"} or body["chooseLocalFile"] is not True:
                         raise ValueError()
                     result = bridge.select_memory_card()
                     if isinstance(result, dict):
