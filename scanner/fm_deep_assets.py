@@ -181,6 +181,22 @@ def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
             })
         except (OSError,ValueError,struct.error) as exc:
             warnings.append(f"ID {cid}: {str(exc)[:120]}")
+    # O pós-processamento é local e não altera o PNG original nem a ISO.
+    # Se o mod usa outro formato ou faltar espaço, as artes originais
+    # continuam disponíveis para visualização e o relatório registra a falha.
+    upscaling = {"available": 0, "generated": 0, "cached": 0,
+                 "failed": 0, "mode": "indisponivel"}
+    if good_art:
+        try:
+            from dueltrace_art_upscale import upscale_extracted_arts
+            upscaling = upscale_extracted_arts(
+                folders["artes_722"], out / "artes_upscaled")
+        except (OSError, ValueError, ImportError) as exc:
+            warnings.append("Upscaling opcional: " + str(exc)[:120])
+    if upscaling.get("failed"):
+        warnings.append(
+            str(upscaling["failed"]) + " arte(s) não ampliadas; originais preservadas.")
+
     # Miniaturas repetidas divergentes são uma característica auditável do
     # mod, não tornam inválidas as imagens extraídas com sucesso.
     unmatched=good_thumb-duplicate
@@ -194,6 +210,7 @@ def extract_asset_pack(wa:bytes,cards:list[dict],out:Path,*,
         "frame_count":len(frames),"composed_count":composed,
         "thumbnail_duplicate_matches":duplicate,
         "thumbnail_duplicate_mismatches":unmatched,
+        "upscaling": upscaling,
         "status":"completo" if good_art==good_thumb==composed==CARD_COUNT
                  and len(frames)==6 else "parcial",
         "warnings":warnings[:80],"records":metadata,
