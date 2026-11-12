@@ -37,6 +37,9 @@ class ClassicCardsTest(unittest.TestCase):
         self.assertEqual(card_fields(self.card)["atk"], 3000)
         self.assertEqual(card_fields(self.card)["def"], 2500)
         self.assertEqual(card_fields(self.card)["category"], "Monstros")
+        self.assertEqual(card_fields(self.card)["attribute"], "ÁGUA")
+        self.assertEqual(card_fields(dict(self.card, attribute="ASTRAL"))["attribute"], "ASTRAL")
+        self.assertEqual(card_fields(dict(self.card, atributo=21))["attribute"], "ATR 21")
 
     def test_non_monster_never_invents_atk_level_or_element(self):
         spell = {"id": 4, "name": "Carta de magia", "tipo": 20,
