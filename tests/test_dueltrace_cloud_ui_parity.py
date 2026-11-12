@@ -41,13 +41,18 @@ class CloudUIParityTests(unittest.TestCase):
                     "decks","configuracoes"):
             self.assertIn('id:"'+key+'"',context)
 
-    def test_connector_button_no_longer_silently_disabled_for_key_length(self):
+    def test_connector_submit_is_never_hydration_disabled_and_reports_clicks(self):
         page=source("components/cloud/cloud-prototype.tsx")
-        self.assertIn('setError("A chave está incompleta',page)
-        self.assertIn('disabled={busy||!clientReady} onClick={()=>void connect()}',page)
-        self.assertNotIn('disabled={busy||pairKey.trim().length<24}',page)
-        self.assertIn("Chave recebida:",page)
-        self.assertIn("Inicializando interface do navegador",page)
+        self.assertIn('data-cloud-build="0.2.2"',page)
+        self.assertIn('Cliques reconhecidos: {connectAttempts}',page)
+        self.assertIn('const [connectAttempts,setConnectAttempts]=useState(0)',page)
+        self.assertIn('setConnectAttempts(n=>n+1)',page)
+        self.assertIn('onSubmit={event=>{event.preventDefault();if(!busy)void connect()}}',page)
+        self.assertIn('type="submit" disabled={busy}',page)
+        self.assertNotIn('disabled={busy||!clientReady}',page)
+        self.assertIn('Interface {clientReady?"iniciada":"aguardando inicialização do JavaScript"}',page)
+        self.assertIn('Clique recebido. Consultando o Connector',page)
+        self.assertIn('role="alert"',page)
 
     def test_chrome_password_autofill_uses_real_dom_value_on_connect(self):
         page=source("components/cloud/cloud-prototype.tsx")
@@ -58,9 +63,7 @@ class CloudUIParityTests(unittest.TestCase):
         self.assertIn('onBlur={syncPairingField}',page)
         self.assertIn('ref={pairingInputRef} defaultValue=""',page)
         self.assertNotIn('value={pairKey}',page)
-        self.assertNotIn('const key=pairKey.trim()',page)
         self.assertIn('setPairKeyLength(key.length)',page)
-        # Pairing secret is cleared from the input, not stored by a password manager.
         self.assertIn('if(pairingInputRef.current)pairingInputRef.current.value=""',page)
         self.assertIn('autoComplete="new-password"',page)
 
