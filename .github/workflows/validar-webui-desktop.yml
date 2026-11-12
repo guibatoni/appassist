@@ -29,6 +29,7 @@ on:
       - 'web/**'
       - 'scanner/**'
       - 'tests/**'
+      - 'docs/DUELTRACE_UPDATE_NOTES.md'
       - 'tools/security/**'
       - '.github/workflows/validar-webui-desktop.yml'
   pull_request:
@@ -36,6 +37,7 @@ on:
       - 'web/**'
       - 'scanner/**'
       - 'tests/**'
+      - 'docs/DUELTRACE_UPDATE_NOTES.md'
       - 'tools/security/**'
       - '.github/workflows/validar-webui-desktop.yml'
 
@@ -165,9 +167,10 @@ jobs:
           # Run only after Python/Next.js tests, archive audit and Defender passed.
           # This is a private repository, not a public release.
           $branch = $env:GITHUB_REF_NAME
-          $found = [regex]::Match($branch, '^feature/dueltrace-v([0-9])([0-9])([0-9])-[a-z0-9][a-z0-9-]*$')
-          if (-not $found.Success) { throw "Branch Preview inválida." }
-          $version = "$($found.Groups[1].Value).$($found.Groups[2].Value).$($found.Groups[3].Value)"
+          # Read the canonical version and validate it against the branch, just
+          # like the primary publisher. Works for v0.10.0 and later releases.
+          $version = (python tools/security/verify_preview_metadata.py --branch $branch --print-version).Trim()
+          if ($LASTEXITCODE -ne 0) { throw "Versão ou branch Preview inválida." }
           $zip = (Resolve-Path 'dist/DUELTRACE-WebUI-Windows-Preview.zip').Path
           $size = (Get-Item $zip).Length
           if ($size -lt 1000000) { throw "ZIP Preview incompleto." }
