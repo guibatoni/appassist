@@ -50,6 +50,14 @@ background:linear-gradient(110deg,#1a2b50,#071126);margin-bottom:17px}
 .card h3,.card p{overflow-wrap:anywhere}
 .card img{display:block;width:100%;height:160px;object-fit:contain;background:#050b1a;border-radius:6px;margin-bottom:9px}
 .card .stats{color:#7fe3ff;font-size:12px}
+.card-link{color:inherit;text-decoration:none;display:block}.card-link:hover{color:#fff}
+.card:has(.card-link):hover{border-color:#38c8ff;box-shadow:0 0 16px #38c8ff33}
+.card:has(.card-link):focus-within{outline:2px solid var(--blue)}
+.detail-layout{display:grid;grid-template-columns:minmax(190px,300px) minmax(0,1fr);gap:20px}
+.detail-image{width:100%;max-height:435px;object-fit:contain;background:#050b1a;border:1px solid var(--line);border-radius:9px}
+.detail-pair{padding:12px;background:#091a35;border:1px solid #294d7d;border-radius:8px;margin:9px 0}
+.detail-pair a{font-weight:600;text-decoration:underline}
+@media(max-width:700px){.detail-layout{grid-template-columns:1fr}.detail-image{max-height:370px}}
 label{display:block;color:#bed0eb;font-weight:600;margin:0 0 6px}
 button,.button{display:inline-block;border:1px solid #c39233;border-radius:7px;
 padding:10px 14px;background:#4a3618;color:#ffce63;font-weight:700;cursor:pointer;
@@ -96,6 +104,13 @@ def post_button(action, token, text, *, sha=None):
             f'{extra}<button type="submit">{esc(text)}</button></form>')
 
 
+def card_anchor(card_id, label):
+    """Link to a same-origin card detail page; HTML escapes label text."""
+    if type(card_id) is not int or not 1 <= card_id <= 722:
+        return esc(label)
+    return f'<a href="{link("carta",id=card_id)}">{esc(label)}</a>'
+
+
 def _table(headers, rows):
     heading = "".join(f"<th>{esc(h)}</th>" for h in headers)
     body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) +
@@ -128,10 +143,10 @@ def _filters(tab, *, query="", opponent=None, page=None, opponents=None):
 
 
 def render_local_page(state, *, token, tab="inicio", query="", opponent=0,
-                      page=0, panel=None, notice=""):
+                      page=0, panel=None, notice="", card_id=0):
     """Render only sanitized, derived data. No JS/hydration and no remote assets."""
     tabs = {row[0] for row in TABS}
-    tab = tab if tab in tabs else "inicio"
+    tab = tab if tab in tabs or tab == "carta" else "inicio"
     panel = panel if isinstance(panel, dict) else {}
     query = str(query)[:80]
     page = max(0, min(int(page), 10000))
@@ -140,7 +155,7 @@ def render_local_page(state, *, token, tab="inicio", query="", opponent=0,
     cards = state.get("cards") or []
     active_name = state.get("activeName") or "Nenhum mod ativado"
     navigation = "".join(
-        f'<a class="{"active" if ident == tab else ""}" href="{link(ident)}">'
+        f'<a class="{"active" if ident == tab or (tab == "carta" and ident == "biblioteca") else ""}" href="{link(ident)}">'
         f'<span class="sym">{sym}</span>{esc(title)}</a>'
         for ident, sym, title in TABS
     )
@@ -205,13 +220,14 @@ def render_local_page(state, *, token, tab="inicio", query="", opponent=0,
             cid = c.get("id")
             art = ('<img loading="lazy" alt="" src="/local/art?' +
                    urlencode({"sha": active, "id": cid}) + '">' if active else "")
-            blocks.append('<article class="card">' + art +
+            blocks.append('<article class="card"><a class="card-link" href="' +
+                          link("carta", id=cid) + '">' + art +
                           f'<h3>#{number(cid)} · {esc(c.get("name"))}</h3>'
                           f'<p class="stats">ATK {number(c.get("atk"))} · '
                           f'DEF {number(c.get("def"))}</p>'
                           f'<p class="muted small">{esc(c.get("type") or c.get("category"))}</p>'
-                          f'<p class="small">{esc(c.get("effect") or c.get("description"))}</p>'
-                          '</article>')
+                          '<span class="small">Clique para ver informações e fusões</span>'
+                          '</a></article>')
         sections.append('<section class="panel"><h2>Biblioteca de Cartas</h2>' +
                         _filters(tab, query=query) +
                         f'<p class="muted">{len(selection)} cartas encontradas</p>'
@@ -220,13 +236,77 @@ def render_local_page(state, *, token, tab="inicio", query="", opponent=0,
                                if page > 0 else "") +
                         (f'<a class="button blue" href="{link(tab,q=query,page=page+1)}">Próxima</a>'
                          if start + 30 < len(selection) else "") + '</p></section>')
+    elif tab == "carta":
+        card = next((c for c in cards if c.get("id") == card_id), None)
+        if card is None:
+            sections.append('<section class="panel">Carta não encontrada na ISO ativa.'
+                            f' <a href="{link("biblioteca")}">Voltar à biblioteca</a></section>')
+        else:
+            art = '<img class="detail-image" alt="" src="/local/art?' + urlencode(
+                {"sha": active, "id": card_id}) + '">'
+            sections.append('<section class="panel">'
+                            f'<p><a href="{link("biblioteca")}">← Biblioteca de Cartas</a></p>'
+                            '<div class="detail-layout"><div>' + art +
+                            '</div><div>'
+                            f'<h2>#{number(card_id)} · {esc(card.get("name"))}</h2>'
+                            f'<p class="stats">ATK {number(card.get("atk"))} · '
+                            f'DEF {number(card.get("def"))}</p>'
+                            f'<p><strong>Tipo:</strong> {esc(card.get("type") or card.get("category"))}</p>'
+                            f'<p><strong>Atributo:</strong> {esc(card.get("attribute") or "—")}</p>'
+                            f'<p><strong>Nível:</strong> {number(card.get("level"))}</p>'
+                            f'<p>{esc(card.get("effect") or card.get("description") or
+                                      "Sem descrição validada para este mod.")}</p>'
+                            '</div></div></section>')
+            materials_all = (panel.get("materialRows") or []) if isinstance(panel, dict) else []
+            results_all = (panel.get("resultRows") or []) if isinstance(panel, dict) else []
+            # Five suggestions total across both directions; no crowded UI.
+            materials = materials_all[:3]
+            results = results_all[:max(0, 5 - len(materials))]
+            if len(materials) + len(results) < 5:
+                materials = materials_all[:5 - len(results)]
+            provisional = panel.get("provisional") is True
+            if provisional:
+                sections.append('<div class="notice">Fusões provisórias: o jogo ainda '
+                                'não confirmou individualmente estas receitas.</div>')
+            fusion_parts = ['<section class="panel"><h2>Fusões desta carta</h2>'
+                            f'<p class="muted">{number(panel.get("materialTotal", 0))} '
+                            'receitas usando a carta · '
+                            f'{number(panel.get("resultTotal", 0))} '
+                            'receitas que produzem a carta · '
+                            'até 5 dicas exibidas</p>']
+            fusion_parts.append('<h3>Esta carta como material</h3>')
+            for row in materials:
+                if not isinstance(row, dict):
+                    continue
+                fusion_parts.append('<div class="detail-pair">Esta carta + ' +
+                                    card_anchor(row.get("partnerId"), row.get("partnerName")) +
+                                    ' → ' + card_anchor(row.get("resultId"),
+                                                        row.get("resultName")) +
+                                    f' · ATK {number(row.get("atk"))} / '
+                                    f'DEF {number(row.get("def"))}</div>')
+            if not materials:
+                fusion_parts.append('<p class="muted">Nenhuma receita de material disponível.</p>')
+            fusion_parts.append('<h3>Como criar esta carta</h3>')
+            for row in results:
+                if not isinstance(row, dict):
+                    continue
+                fusion_parts.append('<div class="detail-pair">' +
+                                    card_anchor(row.get("materialAId"),
+                                                row.get("materialAName")) + ' + ' +
+                                    card_anchor(row.get("materialBId"),
+                                                row.get("materialBName")) +
+                                    ' → esta carta</div>')
+            if not results:
+                fusion_parts.append('<p class="muted">Nenhuma receita de resultado disponível.</p>')
+            fusion_parts.append('</section>')
+            sections.append(''.join(fusion_parts))
     elif tab == "fusoes":
         rows = []
         for f in (panel.get("rows") or []):
             if isinstance(f, dict):
-                rows.append((number(f.get("a")), esc(f.get("nameA")),
-                             number(f.get("b")), esc(f.get("nameB")),
-                             number(f.get("result")), esc(f.get("nameResult"))))
+                rows.append((number(f.get("a")), card_anchor(f.get("a"), f.get("nameA")),
+                             number(f.get("b")), card_anchor(f.get("b"), f.get("nameB")),
+                             number(f.get("result")), card_anchor(f.get("result"), f.get("nameResult"))))
         sections.append('<section class="panel"><h2>Fusões</h2>' +
                         _filters(tab, query=query) +
                         f'<p class="muted">Total: {number(panel.get("total", 0))}</p>' +
@@ -238,17 +318,17 @@ def render_local_page(state, *, token, tab="inicio", query="", opponent=0,
                         _filters(tab, query=None, opponent=opponent, opponents=others) +
                         f'<p class="muted">{esc(panel.get("status", ""))}</p>')
         if tab == "oponentes":
-            rows = [(number(c.get("id")), esc(c.get("name")),
+            rows = [(number(c.get("id")), card_anchor(c.get("id"), c.get("name")),
                      number(c.get("weight")), number(c.get("chancePercent")))
                     for c in (panel.get("cards") or []) if isinstance(c, dict)]
             sections.append(_table(("ID", "Carta", "Peso", "%"), rows) + "</section>")
         else:
-            rows = [(number(c.get("cardId")), esc(c.get("cardName")),
+            rows = [(number(c.get("cardId")), card_anchor(c.get("cardId"), c.get("cardName")),
                      esc(c.get("groupLabel")), number(c.get("chancePercent")))
                     for c in (panel.get("rows") or []) if isinstance(c, dict)]
             sections.append(_table(("ID", "Carta", "Grupo RANK", "%"), rows) + "</section>")
     elif tab == "decks":
-        rows = [(number(c.get("id")), esc(c.get("name")),
+        rows = [(number(c.get("id")), card_anchor(c.get("id"), c.get("name")),
                  number(c.get("count")), number(c.get("atk")), number(c.get("def")))
                 for c in (panel.get("cards") or []) if isinstance(c, dict)]
         sections.append('<section class="panel"><h2>Decks / Memory Card</h2>'
@@ -260,7 +340,7 @@ def render_local_page(state, *, token, tab="inicio", query="", opponent=0,
                         '<p>Modo local: dados processados apenas neste computador.</p>'
                         '<p>Este navegador se comunica com 127.0.0.1; '
                         'não é necessário Node.js, PowerShell ou chave digitada.</p>'
-                        '<p class="muted">DUELTRACE Cloud v0.3.0 · diagnóstico '
+                        '<p class="muted">DUELTRACE Cloud v0.5.0 · diagnóstico '
                         'independente de JavaScript</p></section>')
 
     return ('''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
@@ -274,7 +354,7 @@ fill="none" stroke="#38c8ff" stroke-width="3"/></svg><div>
 <span class="pill">● Connector local ativo · Sem login</span></header>
 <div class="layout"><nav aria-label="Navegação">''' + navigation +
             '''</nav><main><div class="hero"><h1>DUELTRACE Cloud</h1>
-<span class="muted">MultiMod Companion · modo local no Chrome · v0.3.0</span>
+<span class="muted">MultiMod Companion · modo local no Chrome · v0.5.0</span>
 </div>''' + "".join(sections) +
             '''<footer>🔒 ISO, Memory Card e RAM permanecem no PC ·
 Acesso local 127.0.0.1 · Batoni Dev</footer></main></div></body></html>''')

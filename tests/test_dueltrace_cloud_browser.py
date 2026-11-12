@@ -56,7 +56,7 @@ class LocalChromeBrowserTests(unittest.TestCase):
         self.assertIn(b"frame-ancestors 'none'", headers.get(
             "Content-Security-Policy", "").encode())
         self.assertIn(b"DUELTRACE Cloud", body)
-        self.assertIn(b"v0.3.0", body)
+        self.assertIn(b"v0.5.0", body)
         self.assertNotIn(b"<script", body.lower())
         self.assertNotIn(b"__next", body.lower())
         self.assertNotIn(b"Conectar ao computador", body)
@@ -80,6 +80,28 @@ class LocalChromeBrowserTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(b'name="csrf"', body)
         self.assertIn(b'name="action"', body)
+
+    def test_clickable_card_details_show_five_hints_total_without_js(self):
+        status, _, library = self.browser_request("/local/?tab=biblioteca")
+        self.assertEqual(status, 200)
+        self.assertIn(b'class="card-link"', library)
+        status, _, page = self.browser_request("/local/?tab=carta&id=1")
+        self.assertEqual(status, 200)
+        self.assertIn(b'class="detail-image"', page)
+        self.assertIn(b"5 dicas exibidas", page)
+        self.assertIn(b"Fus", page)
+        self.assertEqual(page.count(b'class="detail-pair"'), 5)
+        self.assertIn(b"Fus\xc3\xb5es provis\xc3\xb3rias", page)
+        self.assertNotIn(b"Resultado <teste>", page)
+        self.assertIn(b"Resultado &lt;teste&gt;", page)
+        self.assertNotIn(b"<script", page.lower())
+
+    def test_invalid_card_id_is_not_read(self):
+        status, _, _ = self.browser_request("/local/?tab=carta&id=723")
+        self.assertEqual(status, 400)
+        status, _, page = self.browser_request("/local/?tab=carta&id=0")
+        self.assertEqual(status, 200)
+        self.assertIn(b"Carta n\xc3\xa3o encontrada", page)
 
     def test_html_does_not_reflect_script_in_search_or_query(self):
         payload = "<script>alert(1)</script>"
