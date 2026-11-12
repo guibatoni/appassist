@@ -94,7 +94,11 @@ def card_fields(card):
     attribute = _read(card, "attribute")
     aid = _bounded_integer(_read(card, "attribute_id", "atributo"), 31)
     if not attribute:
-        attribute = f"ATR {aid}" if aid is not None and monster else category.upper()[:8]
+        # Retail nibble mapping. A mod-supplied label always overrides it.
+        retail = {0: "LUZ", 1: "TREVAS", 2: "TERRA",
+                  3: "ÁGUA", 4: "FOGO", 5: "VENTO"}
+        attribute = (retail.get(aid, f"ATR {aid}") if aid is not None and monster
+                     else category.upper()[:8])
     description = _read(card, "description_text", "descricao", "description")
     # A description on the scan result is explicitly extracted from this ISO.
     if not isinstance(description, str):
