@@ -221,7 +221,10 @@ def make_handler(bridge, *, allowed_origins, token):
                 self.send_header("Vary", "Origin")
             self.send_header("Cache-Control", "no-store, max-age=0")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Referrer-Policy", "no-referrer")
+            # Never send secrets in URLs. Preserve *same-origin* Referer for
+            # HTML forms as a secure fallback when Chrome omits POST Origin.
+            self.send_header("Referrer-Policy",
+                             "same-origin" if browser_page else "no-referrer")
             if browser_page:
                 # The local dashboard is server-rendered. No scripts, remote
                 # fonts, frames, browser storage or external requests.
@@ -256,12 +259,32 @@ def make_handler(bridge, *, allowed_origins, token):
                 return False
             # Forbid drive-by loads from unrelated web pages and iframes.
             site = self.headers.get("Sec-Fetch-Site", "").lower()
-            if site not in ("", "none", "same-origin"):
+            if site == "cross-site" or site not in (
+                    "", "none", "same-origin", "same-site"):
                 return False
             request_origin = self.headers.get("Origin")
-            if write:
-                return request_origin == origin
-            return request_origin in (None, origin)
+            # A real, conflicting Origin is never ignored, including "null".
+            if request_origin is not None and request_origin != origin:
+                return False
+            if not write:
+                return site != "same-site" or request_origin == origin
+            if request_origin == origin:
+                return True
+            # Browser privacy/Chrome navigation modes may omit Origin for
+            # regular HTML form POSTs. Accept only an explicit same-origin
+            # Fetch Metadata signal OR an exact local Referer. A separate
+            # high-entropy, single-run CSRF token is still required below.
+            if site == "same-origin":
+                return True
+            referer = self.headers.get("Referer", "")
+            try:
+                source = urlsplit(referer)
+                return (source.scheme == "http"
+                        and source.netloc.lower() == expected_host
+                        and source.path in ("/local", "/local/")
+                        and not source.username and not source.password)
+            except ValueError:
+                return False
 
         def _browser_html(self, uri):
             if not self._local_browser_trusted():
