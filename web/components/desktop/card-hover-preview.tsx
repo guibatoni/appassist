@@ -282,9 +282,9 @@ export function CardHoverPreview({selection,sha,cards,onClose}:{
               </span>
             </li>)}
           </ul>:<p className="text-xs text-muted">
-            {dropError?"Drops indisponíveis neste mod.":
-              matchedDrops?"Nenhum drop registrado para esta carta.":
-              "Consultando drops…"}
+            {dropError || (drops && !drops.available)
+              ?"Drops indisponíveis neste mod.":matchedDrops
+                ?"Nenhum drop registrado para esta carta.":"Consultando drops…"}
           </p>}
         </section>
         <p className="mt-3 text-[11px] text-muted">
