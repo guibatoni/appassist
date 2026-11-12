@@ -205,6 +205,7 @@ class MemoryCardPinnedSlotTests(unittest.TestCase):
             store=MemoryCardStore(folder/"userdata")
             store.select(SHA_A,card,mod_name="RISING")
             store.select_save(SHA_A,4,mod_name="RISING")
+            store.read(SHA_A)  # Create the valid current snapshot first.
             snapshot_dir=store.home/"deck_snapshots"/SHA_A
             legacy=snapshot_dir/"auto-old-bug.json"
             legacy.write_text(json.dumps({
