@@ -24,6 +24,7 @@ from dueltrace_display_layout import (
 )
 
 ART_PATTERN=re.compile(r"^/__art__/([0-9a-f]{64})/([0-9]{1,3})\.png$")
+ART_HD_PATTERN=re.compile(r"^/__art_hd__/([0-9a-f]{64})/([0-9]{1,3})\.png$")
 CARD_PATTERN=re.compile(r"^/__card__/([0-9a-f]{64})/([0-9]{1,3})\.png$")
 
 
@@ -100,7 +101,7 @@ def local_handler(directory: Path, bridge: DueltraceWebBridge):
             clean=self._valid_path()
             if clean is None:
                 return
-            if clean.startswith(("/__art__/","/__card__/")):
+            if clean.startswith(("/__art__/","/__art_hd__/","/__card__/")):
                 self.send_error(405,"Operação não suportada")
                 return
             return super().do_HEAD()
@@ -129,9 +130,10 @@ def local_handler(directory: Path, bridge: DueltraceWebBridge):
             if clean is None:
                 return
             raw_match=ART_PATTERN.fullmatch(clean)
+            hd_match=ART_HD_PATTERN.fullmatch(clean)
             composite_match=CARD_PATTERN.fullmatch(clean)
-            match=raw_match or composite_match
-            if clean.startswith(("/__art__/","/__card__/")) and match is None:
+            match=raw_match or hd_match or composite_match
+            if clean.startswith(("/__art__/","/__art_hd__/","/__card__/")) and match is None:
                 self.send_error(404,"Imagem não encontrada")
                 return
             if match:
@@ -150,9 +152,11 @@ def local_handler(directory: Path, bridge: DueltraceWebBridge):
                     if composite_match and not profile.get("supported_features",{}).get("composed_cards"):
                         self.send_error(404)
                         return
-                    folder="cartas_com_moldura" if composite_match else "artes_722"
+                    folder=("cartas_com_moldura" if composite_match else
+                            "artes_upscaled" if hd_match else "artes_722")
                     image=(root/folder/f"{int(cid):03d}.png").resolve(strict=True)
-                    if not image.is_relative_to(root) or image.stat().st_size>1_000_000:
+                    max_size=4_000_000 if hd_match else 1_000_000
+                    if not image.is_relative_to(root) or image.stat().st_size>max_size:
                         self.send_error(404)
                         return
                     body=image.read_bytes()
