@@ -137,7 +137,7 @@ def runtime_smoke_test():
         with urllib.request.urlopen(url, timeout=15) as response:
             page = response.read()
             return (response.status == 200 and b"DUELTRACE Cloud" in page
-                    and b"v0.5.0" in page and b"<script" not in page.lower())
+                    and b"v0.5.1" in page and b"<script" not in page.lower())
     finally:
         server.shutdown()
         server.server_close()

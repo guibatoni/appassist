@@ -1,0 +1,131 @@
+name: DUELTRACE Cloud Connector Windows v0.5.1 Preview
+
+on:
+  push:
+    branches:
+      - "fix/dueltrace-cloud-v0.5.1-*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cloud-connector-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package-connector:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned Windows Python dependencies
+        run: |
+          python -m pip install -r tools/security/requirements-webui-build.txt
+          if ($LASTEXITCODE -ne 0) { throw "Dependencies failed" }
+      - name: Run connector regressions on Windows
+        run: |
+          python -m unittest discover -s tests -p 'test_dueltrace_cloud_*.py' -v
+          if ($LASTEXITCODE -ne 0) { throw "Connector regression tests failed" }
+      - name: Smoke test local engine and HTML (source)
+        run: |
+          python scanner/dueltrace_cloud_windows.py --self-test
+          if ($LASTEXITCODE -ne 0) { throw "Local HTTP smoke test failed" }
+      - name: Build portable executable using PyInstaller
+        run: |
+          $argsList = @(
+            '--noconfirm','--clean','--onedir','--windowed',
+            '--name','DUELTRACE-Connector',
+            '--paths','scanner',
+            '--hidden-import','dueltrace_card_on_demand',
+            '--hidden-import','dueltrace_web_bridge',
+            '--hidden-import','scanner_multiiso',
+            '--hidden-import','extrator_fusoes',
+            '--hidden-import','dueltrace_memory_cards',
+            '--hidden-import','dueltrace_deck_library',
+            '--hidden-import','dueltrace_live_deck',
+            '--hidden-import','dueltrace_live_opponent',
+            '--hidden-import','dueltrace_live_diagnostics',
+            '--hidden-import','dueltrace_iso_forensic_lab',
+            '--hidden-import','dueltrace_forensic_ai',
+            '--collect-all','PIL',
+            '--collect-all','capstone',
+            'scanner/dueltrace_cloud_windows.py'
+          )
+          python -m PyInstaller @argsList
+          if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
+          if (-not (Test-Path "dist/DUELTRACE-Connector/DUELTRACE-Connector.exe")) {
+            throw "Executable missing"
+          }
+      - name: Test actual packaged Windows exe
+        run: |
+          $file = (Resolve-Path "dist/DUELTRACE-Connector/DUELTRACE-Connector.exe").Path
+          $process = Start-Process -FilePath $file -ArgumentList "--self-test" -PassThru
+          if (-not $process.WaitForExit(120000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw "Frozen Connector smoke test timeout"
+          }
+          $process.Refresh()
+          if ($process.ExitCode -ne 0) { throw "Frozen runtime smoke test failed: $($process.ExitCode)" }
+      - name: Create portable ZIP and instructions
+        run: |
+          @'
+          DUELTRACE Cloud Connector Windows v0.5.1 (unsigned preview)
+
+          1. Extract the entire ZIP into a new folder.
+          2. Double-click DUELTRACE-Connector.exe.
+          3. Chrome opens automatically to http://127.0.0.1:8765/local/
+          4. Keep the small Connector window open while using Cloud.
+
+          No Python, npm, Node, PowerShell, or pairing key required.
+          ISO/BIN, RAM and Memory Cards remain on your own computer.
+          Keep the _internal folder beside the executable.
+
+          This is an UNSIGNED PREVIEW, not a finished installer.
+          Windows SmartScreen may warn. Verify the SHA-256 digest.
+          Do not replace the separate original DUELTRACE Windows app.
+          '@ | Set-Content -Encoding utf8 "dist/DUELTRACE-Connector/LEIA-ME.txt"
+          Compress-Archive -Path "dist/DUELTRACE-Connector/*" -DestinationPath "dist/DUELTRACE-Connector-Windows-v0.5.1.zip" -Force
+      - name: Microsoft Defender scan and SHA-256
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = (Resolve-Path 'dist/DUELTRACE-Connector-Windows-v0.5.1.zip').Path
+          $exe = (Resolve-Path 'dist/DUELTRACE-Connector/DUELTRACE-Connector.exe').Path
+          if (-not (Get-Command Start-MpScan -ErrorAction SilentlyContinue)) {
+            throw 'Microsoft Defender unavailable'
+          }
+          Start-MpScan -ScanType CustomScan -ScanPath $zip -ErrorAction Stop
+          Start-MpScan -ScanType CustomScan -ScanPath $exe -ErrorAction Stop
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          "SHA256  $hash  DUELTRACE-Connector-Windows-v0.5.1.zip" |
+            Set-Content -Encoding ascii "dist/DUELTRACE-Connector-Windows-v0.5.1.sha256.txt"
+          Write-Host "ZIP sha256: $hash"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DUELTRACE-Connector-Windows-v0.5.1-Preview
+          path: |
+            dist/DUELTRACE-Connector-Windows-v0.5.1.zip
+            dist/DUELTRACE-Connector-Windows-v0.5.1.sha256.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish verified unsigned GitHub prerelease
+        if: github.event_name == 'push' && github.repository == 'guibatoni/appassist'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "cloud-connector-preview-v0.5.1-r$env:GITHUB_RUN_ID"
+          @'
+          DUELTRACE Cloud Connector v0.5.1 for Windows, unsigned PREVIEW.
+          Extract all files and run DUELTRACE-Connector.exe to open Chrome locally.
+          No Python, Node, npm or manual pairing key. No game files uploaded.
+          CI and Microsoft Defender checked this ZIP, but live ePSXe/ISO tests are pending.
+          Not a signed installer. Does not update the separate desktop DUELTRACE.
+          '@ | Set-Content -Encoding utf8 "dist/RELEASE-NOTES.md"
+          gh release create $tag "dist/DUELTRACE-Connector-Windows-v0.5.1.zip" "dist/DUELTRACE-Connector-Windows-v0.5.1.sha256.txt" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "DUELTRACE Cloud Connector Windows v0.5.1 preview" --notes-file "dist/RELEASE-NOTES.md" --prerelease --latest=false
+          if ($LASTEXITCODE -ne 0) { throw "Preview release failed" }

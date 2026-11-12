@@ -56,7 +56,7 @@ class LocalChromeBrowserTests(unittest.TestCase):
         self.assertIn(b"frame-ancestors 'none'", headers.get(
             "Content-Security-Policy", "").encode())
         self.assertIn(b"DUELTRACE Cloud", body)
-        self.assertIn(b"v0.5.0", body)
+        self.assertIn(b"v0.5.1", body)
         self.assertNotIn(b"<script", body.lower())
         self.assertNotIn(b"__next", body.lower())
         self.assertNotIn(b"Conectar ao computador", body)
@@ -136,6 +136,59 @@ class LocalChromeBrowserTests(unittest.TestCase):
         self.assertEqual(status, 200)  # follows 303 to the local UI
         self.assertEqual(len(self.bridge.activations), before + 1)
         self.assertIn(b"Mod ativado", body)
+
+    def test_chrome_iso_form_without_origin_uses_same_origin_fetch_metadata(self):
+        """Regression from Windows Chrome: selecting ISO hit /local/action 403."""
+        form = {"action": "import", "csrf": TOKEN}
+        before = self.bridge.imports
+        status, _, body = self.browser_request(
+            "/local/action", method="POST", data=form,
+            headers={"Sec-Fetch-Site": "same-origin",
+                     "Sec-Fetch-Mode": "navigate",
+                     "Sec-Fetch-Dest": "document"})
+        self.assertEqual(status, 200)  # POST 303 -> local HTML
+        self.assertEqual(self.bridge.imports, before + 1)
+        self.assertIn(b"Importa", body)
+        self.assertNotIn(b"origem n", body)
+
+    def test_local_referer_is_safe_fallback_for_browser_without_origin_or_fetch_metadata(self):
+        before = self.bridge.memories
+        status, _, body = self.browser_request(
+            "/local/action", method="POST",
+            data={"action": "memory-card", "csrf": TOKEN},
+            headers={"Referer": self.base + "/local/?tab=mods"})
+        self.assertEqual(status, 200)
+        self.assertEqual(self.bridge.memories, before + 1)
+        self.assertIn(b"Memory Card", body)
+        self.assertEqual(self.browser_request(
+            "/local/", headers={"Sec-Fetch-Site": "none"})[1].get("Referrer-Policy"),
+            "same-origin")
+
+    def test_origin_fallback_never_allows_cross_site_invalid_token_or_null(self):
+        form = {"action": "import", "csrf": TOKEN}
+        before = self.bridge.imports
+        samples = [
+            {"Origin": "null", "Sec-Fetch-Site": "same-origin"},
+            {"Sec-Fetch-Site": "cross-site"},
+            {"Sec-Fetch-Site": "same-site"},
+            {"Referer": "https://evil.example/local/"},
+            {"Referer": self.base + ".evil.example/local/"},
+            {"Origin": "https://evil.example",
+             "Referer": self.base + "/local/?tab=mods"},
+            {"Sec-Fetch-Site": "cross-site",
+             "Origin": self.base},
+            {},
+        ]
+        for headers in samples:
+            with self.subTest(headers=headers):
+                self.assertEqual(self.browser_request(
+                    "/local/action", method="POST", data=form,
+                    headers=headers)[0], 403)
+        self.assertEqual(self.browser_request(
+            "/local/action", method="POST",
+            data={**form, "csrf": "invalid"},
+            headers={"Sec-Fetch-Site": "same-origin"})[0], 403)
+        self.assertEqual(self.bridge.imports, before)
 
     def test_original_cross_origin_api_still_requires_secret(self):
         status, _, _ = self.browser_request("/v1/state", origin=ORIGIN)
