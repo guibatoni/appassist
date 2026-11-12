@@ -1295,6 +1295,8 @@ class BridgeTests(unittest.TestCase):
         (self.analysis/"artes_722"/"001.png").write_bytes(b"\x89PNG\r\n\x1a\nSYNTHETIC")
         (self.analysis/"cartas_com_moldura").mkdir()
         (self.analysis/"cartas_com_moldura"/"001.png").write_bytes(b"\x89PNG\r\n\x1a\nFRAMED")
+        (self.analysis/"artes_upscaled").mkdir()
+        (self.analysis/"artes_upscaled"/"001.png").write_bytes(b"HD-ART-SYNTHETIC")
         static=self.home/"static"
         static.mkdir()
         (static/"index.html").write_text("<html>DUELTRACE</html>",encoding="utf-8")
@@ -1308,6 +1310,15 @@ class BridgeTests(unittest.TestCase):
                 self.assertTrue(response.read().startswith(b"\x89PNG"))
             with urlopen(base+"/__card__/"+self.sha+"/1.png") as response:
                 self.assertIn(b"FRAMED",response.read())
+            with urlopen(base+"/__art_hd__/"+self.sha+"/1.png") as response:
+                self.assertEqual(response.read(),b"HD-ART-SYNTHETIC")
+                self.assertEqual(response.headers["Content-Type"],"image/png")
+            with self.assertRaises(HTTPError) as foreign_hd:
+                urlopen(base+"/__art_hd__/"+"b"*64+"/1.png")
+            self.assertEqual(foreign_hd.exception.code,404)
+            with self.assertRaises(HTTPError) as forbidden_hd_head:
+                urlopen(Request(base+"/__art_hd__/"+self.sha+"/1.png",method="HEAD"))
+            self.assertEqual(forbidden_hd_head.exception.code,405)
             with self.assertRaises(HTTPError) as foreign_card:
                 urlopen(base+"/__card__/"+"b"*64+"/1.png")
             self.assertEqual(foreign_card.exception.code,404)
