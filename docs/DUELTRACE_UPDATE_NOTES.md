@@ -1,16 +1,17 @@
-# DUELTRACE v0.11.0 — Preview
+# DUELTRACE v0.12.0 — Preview
 
 ## Novidades
-- **SA-POW:** novo filtro que agrupa S-POW e A-POW na Biblioteca de Drops.
-- **SA-TEC:** novo filtro que agrupa S-TEC e A-TEC na Biblioteca de Drops.
-- **Menu simplificado:** o sistema original passa a mostrar SA-POW, BCD-POW, BCD-TEC e SA-TEC.
+- **Detalhes por clique:** nas bibliotecas de Cartas, Fusões e Drops, clique na carta para abrir informações; mover o mouse não fecha mais a janela.
+- **Explorar cartas relacionadas:** toque em materiais ou resultados sugeridos para ver outra carta, sua arte, nome, ATK e DEF, usando Voltar para retornar.
+- **Fusões completas:** cada carta mostra até 5 fusões em que participa como material e até 5 receitas que produzem a própria carta.
+- **Arte mais nítida:** após extrair artes de um mod, o DUELTRACE cria automaticamente uma versão ampliada em 3×, preservando todos os PNGs originais.
 
 ## Melhorias
-- **Consulta mais rápida:** os filtros agrupados evitam opções repetidas e mostram os drops corretos sem alterar os pesos.
-- **Compatibilidade:** consultas existentes por RANK individual continuam funcionando.
-- **Patch Notes:** mantidos dentro do aplicativo, com aviso ao abrir uma nova build.
+- **Navegação sem pop-ups em cascata:** sugestões clicáveis abrem a próxima carta na mesma janela; Esc fecha, Voltar recupera a anterior.
+- **Upscaling conservador:** método local Lanczos, sem redesenho por IA ou nitidez agressiva; cache evita processar novamente imagens idênticas.
+- **Exibição HD com fallback:** a janela tenta primeiro a arte ampliada da ISO ativa e usa o PNG original se necessário.
 
 ## Correções
-- **Tabelas reais:** SA-POW usa o primeiro banco de drops e SA-TEC usa o terceiro, sem inventar tabelas.
-- **RANK de duelo preservado:** o cálculo continua com as dez classificações originais.
-- **Remaster X15 preservado:** seus filtros continuam Z-POW, S-POW e S-TEC.
+- **Fusões ligadas ao mod ativo:** sugestões vêm somente das receitas da ISO selecionada, sem criar combinações ou probabilidades.
+- **Detalhes consistentes:** Cartas, Fusões e Drops compartilham a mesma experiência de clique; o mouse pode ser movido livremente enquanto a janela permanece aberta.
+- **Atualizações e Patch Notes:** versão atualizada para v0.12.0; notas acompanham o ZIP oficial e são apresentadas após a instalação.
