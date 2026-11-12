@@ -1434,9 +1434,9 @@ class DueltraceWebBridge:
             materials.sort(key=lambda r:(
                 r["atk"] is None, -(r["atk"] or 0),
                 r["resultName"].casefold(), r["partnerId"], r["resultId"]))
-            results.sort(key=lambda r:(
-                r["materialAName"].casefold(), r["materialBName"].casefold(),
-                r["materialAId"], r["materialBId"]))
+            # Deterministic numeric material IDs avoid lexicographic "10" < "2"
+            # and are easier to follow when navigating multiple recipes.
+            results.sort(key=lambda r:(r["materialAId"],r["materialBId"]))
             return {
                 "romSha": sha, "cardId": card_id, "available": bool(recipes),
                 "provisional": bool(alpha_added),
