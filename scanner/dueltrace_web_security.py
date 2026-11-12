@@ -298,6 +298,22 @@ class ProtectedDesktopApi:
         return self._bridge.get_fusions(
             query,offset,limit,sort,card_type,search_scope)
 
+    def get_opponent_deck(self, credential, opponent_id=0):
+        self._authorize(credential)
+        return self._bridge.get_opponent_deck(opponent_id)
+
+    def select_memory_card(self, credential):
+        self._authorize(credential)
+        return self._bridge.select_memory_card()
+
+    def get_deck_library(self, credential, deck_id=""):
+        self._authorize(credential)
+        return self._bridge.get_deck_library(deck_id)
+
+    def save_current_deck(self, credential, name):
+        self._authorize(credential)
+        return self._bridge.save_current_deck(name)
+
     def get_drops(self, credential, opponent_id=0, group="", query="",
                   offset=0, limit=36, sort="id", card_type="", rank=""):
         self._authorize(credential)

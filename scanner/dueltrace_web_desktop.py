@@ -348,6 +348,8 @@ def main():
                     save_filename="DUELTRACE-RANK-EVIDENCE.json",
                     file_types=("JSON (*.json)",))
             file_types=(
+                ("Memory Card PS1 (*.mcr;*.mcd;*.mc;*.srm;*.mem;*.vm1)",)
+                if kind=="memory_card" else
                 ("Imagens de jogo (*.iso;*.bin)",)
                 if kind=="iso" else
                 ("Log MIPS de duelo (*.log;*.txt)",) if kind=="trace" else

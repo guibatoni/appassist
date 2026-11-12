@@ -1519,6 +1519,91 @@ class DueltraceWebBridge:
             evidence={**data,"rows":[dict(row) for row in data["rows"]]}
         return review_card_candidates(evidence)
 
+    def get_opponent_deck(self, opponent_id=0):
+        """Oponente selecionado: pool de deck pertencente à ISO ativa."""
+        from dueltrace_deck_library import opponent_deck_view
+        with self._lock:
+            active,entry,profile=self._active()
+            card_index={c["id"]:c for c in self._cards(profile)}
+            result=opponent_deck_view(profile,opponent_id,cards=card_index)
+            result["romSha"]=active.get("sha256") if profile else None
+            return result
+
+    def select_memory_card(self):
+        """Usuário escolhe o .mcr em diálogo nativo; resto é automático."""
+        if self._file_picker is None:
+            raise RuntimeError("Seletor de Memory Card disponível somente no Windows.")
+        with self._lock:
+            active,entry,profile=self._active()
+            sha=active.get("sha256") if profile else None
+        if not sha:
+            raise ValueError("Ative uma ISO antes de selecionar o Memory Card.")
+        selected=self._file_picker("memory_card")
+        if not selected:
+            return {"cancelled":True}
+        from dueltrace_memory_cards import MemoryCardStore
+        with self._lock:
+            active2,entry2,profile2=self._active()
+            if not profile2 or active2.get("sha256")!=sha:
+                raise RuntimeError("A ISO ativa mudou durante a seleção.")
+            return {"cancelled":False,**MemoryCardStore(self.catalog.home).select(
+                sha,selected[0])}
+
+    def get_deck_library(self, deck_id=""):
+        """Releitura automática do cartão; opcionalmente um deck salvo do mod."""
+        if type(deck_id) is not str or len(deck_id)>90:
+            raise ValueError("Identificador do deck salvo inválido.")
+        from dueltrace_memory_cards import MemoryCardStore
+        from dueltrace_deck_library import fusion_pairs_for_deck
+        with self._lock:
+            active,entry,profile=self._active()
+            sha=active.get("sha256") if profile else None
+            store=MemoryCardStore(self.catalog.home)
+            memory=store.read(sha)
+            cards={c["id"]:c for c in self._cards(profile)}
+            ids=memory.get("deckIds",[])
+            display_name="Deck ativo do Memory Card"
+            if deck_id:
+                chosen=next((row for row in memory.get("saved",[])
+                             if row.get("id")==deck_id),None)
+                if chosen is None:
+                    raise ValueError("Deck salvo indisponível para esta ISO.")
+                ids=chosen["ids"]
+                display_name=chosen["name"]
+            current_counts=[]
+            if len(ids)==40:
+                from collections import Counter
+                counts=Counter(ids)
+                current_counts=[{"id":cid,"count":amount,
+                                 "name":cards.get(cid,{}).get("name") or f"Carta #{cid}",
+                                 "atk":cards.get(cid,{}).get("atk"),
+                                 "def":cards.get(cid,{}).get("def")}
+                                for cid,amount in sorted(counts.items())]
+                recipes,provisional=self._combined_fusion_recipes(sha,entry,profile)
+                fusions=fusion_pairs_for_deck(ids,recipes,cards)
+                fusions["provisional"]=provisional
+            else:
+                fusions={"total":0,"rows":[],"provisional":False}
+            return {"romSha":sha,"linked":memory.get("linked",False),
+                    "cardName":memory.get("cardName"),
+                    "saveName":memory.get("saveName"),
+                    "status":memory.get("status",""),
+                    "gameIntegrityVerified":False,
+                    "deckIds":ids,"deckCount":len(ids),"cards":current_counts,
+                    "displayName":display_name, "selectedDeckId":deck_id,
+                    "saved":memory.get("saved",[]),
+                    "fusions":fusions}
+
+    def save_current_deck(self,name):
+        """Salva cópia local no DUELTRACE; NUNCA sobrescreve o .mcr."""
+        from dueltrace_memory_cards import MemoryCardStore
+        with self._lock:
+            active,entry,profile=self._active()
+            if not profile:
+                raise ValueError("Ative uma ISO antes de salvar o deck.")
+            return MemoryCardStore(self.catalog.home).save_snapshot(
+                active["sha256"],name)
+
     def get_drops(self, opponent_id=0, group="", query="", offset=0, limit=36,
                   sort="id", card_type="", rank=""):
         """Catalog confirmed tables, or explicitly labeled local ISO Alpha candidates."""

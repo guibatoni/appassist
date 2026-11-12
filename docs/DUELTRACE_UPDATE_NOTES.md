@@ -1,16 +1,16 @@
-# DUELTRACE v0.16.0 — Preview
+# DUELTRACE v0.17.0 — Preview
 
 ## Novidades
-- Novo design HD da carta gerado automaticamente mesmo quando o cache antigo não existe.
-- Extração automática de nomes de tipos por tabela textual encontrada no executável da ISO.
-- Detecção de nomes substituídos por mod, incluindo GOD no lugar de Réptil quando houver tabela comprovável.
+- Nova aba Oponentes: cartas possíveis do deck e consulta opcional de drops.
+- Nova aba Decks: deck ativo do Memory Card, decks salvos e fusões possíveis.
+- Botão Selecionar Memory Card na Biblioteca de Mods com leitura automática do cartão.
 
 ## Melhorias
-- Biblioteca, Fusões, Drops, Mão e detalhes priorizam sempre a carta completa HD.
-- O backend associa nomes de tipos ao SHA-256 da ISO selecionada sem configuração manual.
-- Layout das cartas com nome, atributo, estrelas, arte, descrição e ATK/DEF dentro da moldura.
+- Memory Card vinculado à ISO ativa, com releitura ao atualizar e cópias de segurança locais.
+- Decks salvos por mod, com atualização quando o ePSXe gravar novamente o cartão.
+- Fusões de deck respeitam quantidades de cartas e excluem receitas conflitantes.
 
 ## Correções
-- O servidor local regenera imagens antigas ou incompatíveis antes de exibi-las.
-- Strings isoladas como GOD não são confundidas com tabelas completas de tipos.
-- O scanner rejeita mapeamentos ambíguos e mantém nomes desconhecidos sem inventar dados.
+- Pools ponderados dos oponentes não são mostrados como decks fixos de 40 cartas.
+- Cartões PS1 inválidos e saves sem 40 IDs legíveis não geram decks inventados.
+- Arquivos de Memory Card do ePSXe nunca são sobrescritos pelo DUELTRACE.

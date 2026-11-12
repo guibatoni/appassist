@@ -4,17 +4,19 @@ import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardCopy, FilePlus2, Gamepad2,
-  GitMerge, Layers, Pencil, Play, RefreshCcw, Search, Shield, Swords, Trash2, Upload,
+  GitMerge, Layers, Pencil, Play, RefreshCcw, Search, Shield, Swords, Trash2, Upload, CreditCard,
 } from "lucide-react"
 import {cardClassicHd, cardArtHd, cardArt, cardWithFrame, desktopApi, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
+import {OpponentsPage} from "./opponents-page"
+import {DecksPage} from "./decks-page"
 import {RankScoreDisplay} from "./rank-score-display"
 import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
 import type {LocalCard, HandState, FusionPage, FusionSearchScope, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison, IsoForensicAudit, MipsTraceResult, AlphaDiscovery} from "@/lib/desktop"
 
-type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops"
+type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops" | "oponentes" | "decks"
 
 function Heading({title,subtitle}:{title:string;subtitle:string}) {
   return <div className="panel rounded-xl border-gold/40 bg-gradient-to-r from-[#142b51] to-[#061126] px-3 py-3 sm:px-5 sm:py-4">
@@ -1154,6 +1156,13 @@ function Mods({mods,sha,onRefresh,configured}:{
           onClick={()=>void perform(()=>desktopApi()!.import_iso(),"Mod adicionado à biblioteca.")}>
           <FilePlus2 className="size-4"/> Adicionar mod
         </button>
+        <button type="button" className="btn-ghost" disabled={busy||!desktopApi()||!sha}
+          onClick={()=>void perform(async()=>{
+            const selected=await desktopApi()!.select_memory_card()
+            if(selected.cancelled)throw new Error("Seleção cancelada.")
+          },"Memory Card selecionado. Leitura e backup automáticos ativados.")}>
+          <CreditCard className="size-4"/> Selecionar Memory Card
+        </button>
         <button type="button" className="btn-ghost" disabled={busy||!desktopApi()}
           onClick={()=>void perform(()=>desktopApi()!.configure_epsxe(),"Emulador configurado.")}>
           <Gamepad2 className="size-4"/>{configured?"Alterar emulador":"Configurar emulador"}
@@ -1484,5 +1493,7 @@ export function DesktopPage({page}:{page:Page}) {
     {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="fusoes"&&<Fusions sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="drops"&&<DropsPage sha={state?.activeSha??null} cards={state?.cards??[]}/>}
+    {page==="oponentes"&&<OpponentsPage sha={state?.activeSha??null} cards={state?.cards??[]}/>}
+    {page==="decks"&&<DecksPage sha={state?.activeSha??null} cards={state?.cards??[]}/>}
   </div>
 }

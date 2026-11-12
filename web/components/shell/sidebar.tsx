@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Cpu, House, Infinity as InfinityIcon, Layers, MonitorPlay, Settings, Swords, Gift } from "lucide-react"
+import { Cpu, House, Infinity as InfinityIcon, Layers, Gift, Users, BookMarked } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navItems = [
@@ -11,6 +11,8 @@ const navItems = [
   { label: "Biblioteca de Cartas", href: "/biblioteca", icon: Layers, enabled: true },
   { label: "Fusões", href: "/fusoes", icon: InfinityIcon, enabled: true },
   { label: "Drops", href: "/drops", icon: Gift, enabled: true },
+  { label: "Oponentes", href: "/oponentes", icon: Users, enabled: true },
+  { label: "Decks", href: "/decks", icon: BookMarked, enabled: true },
 ]
 
 export function Sidebar() {
@@ -19,7 +21,7 @@ export function Sidebar() {
   return (
     <aside className="dt-nav-sidebar min-w-0 lg:w-56 lg:shrink-0">
       <nav aria-label="Navegação principal">
-        <ul className="dt-nav-list grid grid-cols-3 gap-1 min-[600px]:grid-cols-5 lg:flex lg:flex-col lg:gap-1.5">
+        <ul className="dt-nav-list grid grid-cols-3 gap-1 min-[600px]:grid-cols-4 lg:grid-cols-1 lg:flex lg:flex-col lg:gap-1.5">
           {navItems.map(({ label, href, icon: Icon, enabled }) => {
             const active = pathname.startsWith(href)
             const className = cn(

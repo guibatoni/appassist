@@ -878,6 +878,27 @@ export type WindowControlState={maximized:boolean}
 export type PopoutKind="calculadora"|"fusoes"
 export type PopoutState={opened?:boolean;closed?:boolean;reused?:boolean;kind:PopoutKind}
 
+export type OpponentDeck = {
+  romSha:string|null
+  available:boolean
+  opponentId:number
+  opponents:Array<{id:number;name:string}>
+  cards:Array<{id:number;name:string;type:string;atk:number|null;def:number|null;weight:number;chancePercent:number|null}>
+  totalWeight:number
+  fixed:boolean
+  status:string
+}
+export type DeckLibrary = {
+  romSha:string|null;linked:boolean;cardName:string|null;saveName:string|null
+  status:string;displayName:string;selectedDeckId:string;gameIntegrityVerified:false
+  deckIds:number[];deckCount:number
+  cards:Array<{id:number;count:number;name:string;atk:number|null;def:number|null}>
+  saved:Array<{id:string;name:string;ids:number[];createdAt:string;source:string}>
+  fusions:{total:number;provisional:boolean;rows:Array<{
+    a:number;b:number;result:number;nameA:string;nameB:string;nameResult:string;source:string
+  }>}
+}
+
 export interface DesktopAPI {
   window_control(action:WindowControlAction):Promise<WindowControlState>
   drag_window_native():Promise<{started:boolean}>
@@ -911,6 +932,10 @@ export interface DesktopAPI {
   get_pending_rank_capture(): Promise<RankCapture>
   get_rank_comparison(): Promise<RankComparison>
   get_fusions(query: string, offset: number, limit: number, sort?: string, cardType?: string, searchScope?: FusionSearchScope): Promise<FusionPage>
+  get_opponent_deck(opponentId?:number):Promise<OpponentDeck>
+  select_memory_card():Promise<{cancelled:boolean;selected?:boolean;status?:string}>
+  get_deck_library(deckId?:string):Promise<DeckLibrary>
+  save_current_deck(name:string):Promise<{saved:boolean;name:string;status:string}>
   get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
   get_card_fusions(cardId: number, offset?: number, limit?: number, sort?: "atk" | "name" | "id"): Promise<CardFusionSuggestions>
   get_card_fusion_paths(cardId: number): Promise<CardFusionPaths>
@@ -978,6 +1003,10 @@ interface ProtectedNativeAPI {
   get_pending_rank_capture(token: string): Promise<RankCapture>
   get_rank_comparison(token: string): Promise<RankComparison>
   get_fusions(token: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, searchScope?: FusionSearchScope): Promise<FusionPage>
+  get_opponent_deck(token:string, opponentId?:number):Promise<OpponentDeck>
+  select_memory_card(token:string):Promise<{cancelled:boolean;selected?:boolean;status?:string}>
+  get_deck_library(token:string,deckId?:string):Promise<DeckLibrary>
+  save_current_deck(token:string,name:string):Promise<{saved:boolean;name:string;status:string}>
   get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
   get_card_fusions(token: string, cardId: number, offset?: number, limit?: number, sort?: "atk" | "name" | "id"): Promise<CardFusionSuggestions>
   get_card_fusion_paths(token: string, cardId: number): Promise<CardFusionPaths>
@@ -1061,6 +1090,10 @@ export function desktopApi(): DesktopAPI | null {
     get_rank_comparison: () => native.get_rank_comparison(token),
     get_fusions: (query, offset, limit, sort, cardType, searchScope) =>
       native.get_fusions(token, query, offset, limit, sort, cardType, searchScope),
+    get_opponent_deck: (opponentId=0) => native.get_opponent_deck(token,opponentId),
+    select_memory_card: () => native.select_memory_card(token),
+    get_deck_library: (deckId="") => native.get_deck_library(token,deckId),
+    save_current_deck: (name) => native.save_current_deck(token,name),
     get_drops: (opponentId, group, query, offset, limit, sort, cardType, rank) => native.get_drops(token, opponentId, group, query, offset, limit, sort, cardType, rank),
     get_card_fusions: (cardId, offset=0, limit=8, sort="atk") => native.get_card_fusions(token, cardId, offset, limit, sort),
     get_card_fusion_paths: (cardId) => native.get_card_fusion_paths(token, cardId),
