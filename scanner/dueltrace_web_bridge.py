@@ -62,6 +62,9 @@ from dueltrace_preview_installer import (
 )
 from dueltrace_preview_updates import installed_preview_build_id
 from dueltrace_private_update_source import PrivateUpdateUnavailable
+from dueltrace_update_notice import (
+    read_installed_update_notice, acknowledge_installed_update_notice
+)
 
 
 class DueltraceWebBridge:
@@ -332,6 +335,14 @@ class DueltraceWebBridge:
             "requiresReview":summary.get("requires_review",True),
             "verified":summary.get("validated",{}),
         }
+
+    def get_installed_update_notice(self):
+        """Notas locais da build que foi realmente instalada, sem Internet."""
+        return read_installed_update_notice(self.catalog.home)
+
+    def acknowledge_update_notice(self, run_id):
+        """Marca as novidades desta build como vistas somente após o fechamento."""
+        return acknowledge_installed_update_notice(self.catalog.home, run_id)
 
     def check_updates(self):
         """Identifica apenas atualizações oficiais verificáveis da pasta atual."""
