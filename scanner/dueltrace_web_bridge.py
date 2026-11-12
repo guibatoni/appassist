@@ -106,6 +106,32 @@ class DueltraceWebBridge:
         self._cross_mod_cards_cache_key = None
         self._cross_mod_cards_cache = None
         self.settings_path = self.catalog.home / "dueltrace_desktop_settings.json"
+        self._memory_sync_stop = threading.Event()
+        self._memory_sync_thread = None
+        # Restore the user's saved Memory Card link on app startup.
+        from dueltrace_memory_cards import MemoryCardStore
+        if MemoryCardStore(self.catalog.home).has_bindings():
+            self._ensure_memory_monitor()
+
+    def _ensure_memory_monitor(self):
+        """Read emulator saves periodically without touching the original."""
+        if self._memory_sync_thread is not None and self._memory_sync_thread.is_alive():
+            return
+        def monitor():
+            from dueltrace_memory_cards import MemoryCardStore
+            store=MemoryCardStore(self.catalog.home)
+            while not self._memory_sync_stop.wait(5):
+                try:
+                    with self._lock:
+                        active,entry,profile=self._active()
+                        sha=active.get("sha256") if profile else None
+                    if sha:
+                        store.read(sha)
+                except (OSError,ValueError,TypeError):
+                    pass  # The emulator may be saving; retry at next tick.
+        self._memory_sync_thread=threading.Thread(
+            target=monitor,daemon=True,name="dueltrace-memory-card-sync")
+        self._memory_sync_thread.start()
 
     def get_alpha_preferences(self):
         """Return only allowlisted UI preferences, not emulator settings."""
@@ -1546,8 +1572,9 @@ class DueltraceWebBridge:
             active2,entry2,profile2=self._active()
             if not profile2 or active2.get("sha256")!=sha:
                 raise RuntimeError("A ISO ativa mudou durante a seleção.")
-            return {"cancelled":False,**MemoryCardStore(self.catalog.home).select(
-                sha,selected[0])}
+            result=MemoryCardStore(self.catalog.home).select(sha,selected[0])
+            self._ensure_memory_monitor()
+            return {"cancelled":False,**result}
 
     def get_deck_library(self, deck_id=""):
         """Releitura automática do cartão; opcionalmente um deck salvo do mod."""

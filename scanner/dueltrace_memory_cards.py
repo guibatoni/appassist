@@ -99,14 +99,22 @@ class MemoryCardStore:
         except (OSError,ValueError,TypeError):
             return {"schema":1,"links":{}}
 
+    def has_bindings(self):
+        return bool(self._binding_data().get("links"))
+
     def _load_card(self,path):
         path=Path(path).expanduser().resolve(strict=True)
         if (not path.is_file() or path.is_symlink()
                 or path.suffix.lower() not in CARD_EXTENSIONS
                 or path.stat().st_size != SIZE):
             raise ValueError("Selecione um cartão PS1 bruto .mcr/.mcd/.srm de 128 KB.")
+        before=path.stat()
         with path.open("rb") as stream:
             blob=stream.read(SIZE+1)
+        after=path.stat()
+        if (before.st_size!=after.st_size or before.st_mtime_ns!=after.st_mtime_ns
+                or before.st_ino!=after.st_ino):
+            raise ValueError("Memory Card está sendo gravado; leitura será repetida.")
         result=parse_memory_card(blob)
         return path,blob,result
 
