@@ -2,246 +2,294 @@
 
 import Image from "next/image"
 import {createPortal} from "react-dom"
-import {useEffect,useState} from "react"
-import {ChevronLeft,ChevronRight,Layers,X} from "lucide-react"
-import {cardArt,cardWithFrame,desktopApi} from "@/lib/desktop"
-import type {CardDropSources,CardFusionSuggestions,DropRow,LocalCard} from "@/lib/desktop"
+import {useEffect,useMemo,useRef,useState} from "react"
+import {ArrowLeft,BookOpen,Layers,X} from "lucide-react"
+import {cardArtHd,cardArt,desktopApi} from "@/lib/desktop"
+import type {CardDropSources,CardFusionPaths,DropRow,LocalCard} from "@/lib/desktop"
 
+/** Click-only selection. No hover timer, mouse-leave or focus popup. */
 export type CardPreviewSelection = {
   card:LocalCard
-  anchor:HTMLElement
   fallbackDrop?:DropRow
-  pinned?:boolean
 }
 
-// A prévia e o fundo escurecido só aparecem após um segundo de permanência.
-const CARD_PREVIEW_DELAY_MS=1000
-
 function EnlargedArtwork({card,sha}:{card:LocalCard;sha:string|null}) {
-  const [source,setSource]=useState<"frame"|"art"|"none">("frame")
-  useEffect(()=>setSource("frame"),[sha,card.id])
-  const url=source==="frame"?cardWithFrame(sha,card.id):
-    source==="art"?cardArt(sha,card.id):null
-  return <div className="relative mx-auto aspect-[52/60] w-full max-w-48 overflow-hidden rounded border border-gold/40 bg-[#061126] shadow-[0_0_24px_rgb(56_200_255/0.18)]">
-    {url?<Image src={url} alt={card.name} fill unoptimized sizes="192px"
-      className={source==="frame"?"object-fill [image-rendering:pixelated]":"object-contain [image-rendering:pixelated]"}
-      onError={()=>setSource(source==="frame"?"art":"none")}/>:
-      <div className="flex h-full items-center justify-center"><Layers className="size-12 text-primary/45" aria-label="Arte indisponível"/></div>}
+  // The HD file is derived from the mod's original pixels, never AI-invented.
+  const [source,setSource]=useState<"hd"|"original"|"none">("hd")
+  useEffect(()=>setSource("hd"),[sha,card.id])
+  const url=source==="hd"?cardArtHd(sha,card.id):
+    source==="original"?cardArt(sha,card.id):null
+  return <div className="relative mx-auto aspect-[17/16] w-full max-w-64 overflow-hidden rounded-lg border border-gold/45 bg-[#061126] shadow-[0_0_24px_rgb(56_200_255/0.14)]">
+    {url?<Image src={url} alt={"Arte original do mod: "+card.name} fill unoptimized sizes="256px"
+      className="object-contain"
+      onError={()=>setSource(old=>old==="hd"?"original":"none")}/>:
+      <div className="flex h-full items-center justify-center">
+        <Layers className="size-12 text-primary/45" aria-label="Arte indisponível"/>
+      </div>}
   </div>
 }
 
-/**
- * Prévia única de Biblioteca, Fusões e Drops, centralizada na janela.
- * O escurecimento e a janela não interceptam o mouse, preservando o hover
- * sobre a carta original e o atraso de um segundo sem piscadas.
+/** Card details shared by Library, Fusions and Drops.
+ * Click a recommendation to navigate within this one stable dialog.
+ * The back stack belongs to this dialog; no extra windows are spawned.
  */
-export function CardHoverPreview({selection,sha,onClose}:{
-  selection:CardPreviewSelection|null;sha:string|null;onClose:()=>void
+export function CardHoverPreview({selection,sha,cards,onClose}:{
+  selection:CardPreviewSelection|null
+  sha:string|null
+  cards:LocalCard[]
+  onClose:()=>void
 }) {
   const [mounted,setMounted]=useState(false)
-  const [revealed,setRevealed]=useState<CardPreviewSelection|null>(null)
-  const [result,setResult]=useState<CardDropSources|null>(null)
-  const [error,setError]=useState(false)
-  const [fusions,setFusions]=useState<CardFusionSuggestions|null>(null)
+  const [history,setHistory]=useState<LocalCard[]>([])
+  const [fusions,setFusions]=useState<CardFusionPaths|null>(null)
   const [fusionError,setFusionError]=useState(false)
-  const [fusionSort,setFusionSort]=useState<"atk"|"name"|"id">("atk")
-  const [fusionPage,setFusionPage]=useState(0)
-  // Um novo hover/foco inicia a contagem; sair da carta cancela o timer.
-  // A identidade da seleção impede que uma prévia anterior pisque na tela.
-  useEffect(()=>{
-    setRevealed(null)
-    if(!selection)return
-    if(selection.pinned){
-      if(selection.anchor.isConnected)setRevealed(selection)
-      return
-    }
-    const timer=window.setTimeout(()=>{
-      if(selection.anchor.isConnected)setRevealed(selection)
-    },CARD_PREVIEW_DELAY_MS)
-    return()=>window.clearTimeout(timer)
-  },[selection])
-
-  const activeSelection=selection&&revealed===selection?revealed:null
-  const card=activeSelection?.card??null
-  const cardId=card?.id??null
+  const [drops,setDrops]=useState<CardDropSources|null>(null)
+  const [dropError,setDropError]=useState(false)
+  const closeButton=useRef<HTMLButtonElement>(null)
+  const dialogRef=useRef<HTMLDivElement>(null)
+  const cardById=useMemo(()=>new Map(cards.map(card=>[card.id,card])),[cards])
 
   useEffect(()=>setMounted(true),[])
+  useEffect(()=>{
+    setHistory(selection?[selection.card]:[])
+  },[selection,sha])
+  const card=history.length?history[history.length-1]:null
+  const cardId=card?.id??null
 
-  useEffect(()=>{setFusionSort("atk");setFusionPage(0)},[sha,cardId])
-
-  // Requests are tied to the selected ISO and card ID: never reuse data from
-  // another mod, and do not infer fusions from the names of the cards.
   useEffect(()=>{
     setFusions(null)
     setFusionError(false)
-    if(!sha||cardId===null)return
+    if(!sha||cardId===null||!selection)return
     const api=desktopApi()
-    if(!api)return
+    if(!api){setFusionError(true);return}
     let active=true
-    void api.get_card_fusions(cardId,fusionPage*8,8,fusionSort).then(data=>{
+    void api.get_card_fusion_paths(cardId).then(data=>{
       if(!active)return
       if(data.romSha===sha&&data.cardId===cardId)setFusions(data)
       else setFusionError(true)
     }).catch(()=>{if(active)setFusionError(true)})
     return()=>{active=false}
-  },[sha,cardId,fusionPage,fusionSort])
+  },[sha,cardId,selection])
 
   useEffect(()=>{
-    setResult(null)
-    setError(false)
-    if(!sha||cardId===null)return
+    setDrops(null)
+    setDropError(false)
+    if(!sha||cardId===null||!selection)return
     const api=desktopApi()
-    if(!api)return
+    if(!api){setDropError(true);return}
     let active=true
-    const timer=window.setTimeout(()=>{
-      void api.get_card_drop_sources(cardId).then(data=>{
-        if(!active)return
-        if(data.cardId===cardId&&data.romSha===sha)setResult(data)
-        else setError(true)
-      }).catch(()=>{if(active)setError(true)})
-    },140)
-    return()=>{active=false;window.clearTimeout(timer)}
-  },[sha,cardId])
+    void api.get_card_drop_sources(cardId).then(data=>{
+      if(!active)return
+      if(data.romSha===sha&&data.cardId===cardId)setDrops(data)
+      else setDropError(true)
+    }).catch(()=>{if(active)setDropError(true)})
+    return()=>{active=false}
+  },[sha,cardId,selection])
 
   useEffect(()=>{
     if(!selection)return
-    const escape=(event:KeyboardEvent)=>{
-      if(event.key==="Escape")onClose()
+    const previouslyFocused=document.activeElement instanceof HTMLElement
+      ?document.activeElement:null
+    const oldOverflow=document.body.style.overflow
+    document.body.style.overflow="hidden"
+    closeButton.current?.focus()
+    const onKey=(event:KeyboardEvent)=>{
+      if(event.key==="Escape"){event.preventDefault();onClose();return}
+      if(event.key==="Backspace"&&event.altKey) {
+        event.preventDefault()
+        setHistory(old=>old.length>1?old.slice(0,-1):old)
+        return
+      }
+      if(event.key!=="Tab"||!dialogRef.current)return
+      const controls=Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]),select:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])'))
+      if(!controls.length)return
+      const first=controls[0],last=controls[controls.length-1]
+      if(event.shiftKey&&document.activeElement===first){
+        event.preventDefault();last.focus()
+      }else if(!event.shiftKey&&document.activeElement===last){
+        event.preventDefault();first.focus()
+      }
     }
-    document.addEventListener("keydown",escape)
-    return()=>document.removeEventListener("keydown",escape)
+    document.addEventListener("keydown",onKey)
+    return()=>{
+      document.removeEventListener("keydown",onKey)
+      document.body.style.overflow=oldOverflow
+      previouslyFocused?.focus()
+    }
   },[selection,onClose])
 
-  if(!mounted||!activeSelection||!card)return null
-  const matched=result?.romSha===sha&&result.cardId===card.id
+  const navigate=(id:number,name:string)=>{
+    if(!Number.isInteger(id)||id<1||id>722)return
+    const destination=cardById.get(id)??{
+      id,name,type:"",category:"Não identificada",attribute:"",
+      atk:null,def:null,effect:null,effectSource:null,
+    }
+    setHistory(previous=>{
+      if(previous[previous.length-1]?.id===id)return previous
+      // Bounded history avoids huge navigation stacks on cyclic recipes.
+      return [...previous.slice(-19),destination]
+    })
+    dialogRef.current?.scrollTo({top:0,behavior:"instant"})
+  }
+  const back=()=>setHistory(previous=>
+    previous.length>1?previous.slice(0,-1):previous)
+
+  if(!mounted||!selection||!card)return null
   const matchedFusions=fusions?.romSha===sha&&fusions.cardId===card.id
-  const fusionRows=matchedFusions?fusions.rows:[]
-  const fusionTotal=matchedFusions?fusions.total:0
-  const fusionPages=Math.max(1,Math.ceil(fusionTotal/8))
-  const rows=matched&&result.available?result.rows:[]
-  const dropRows=rows.length?rows.slice(0,4):
-    !result&&!error&&activeSelection.fallbackDrop?[activeSelection.fallbackDrop]:[]
-  const more=Math.max(0,rows.length-dropRows.length)
-  // Apenas textos com procedência no perfil selecionado são apresentados.
-  const description=card.descriptionSource&&card.description?.trim()?card.description.trim():null
-  const effect=card.effectSource&&card.effect?.trim()?card.effect.trim():null
+  const materialRows=matchedFusions?fusions.materialRows.slice(0,5):[]
+  const resultRows=matchedFusions?fusions.resultRows.slice(0,5):[]
+  const matchedDrops=drops?.romSha===sha&&drops.cardId===card.id&&drops.available
+  const dropRows=matchedDrops?drops.rows.slice(0,4):
+    !drops&&!dropError&&card.id===selection.card.id&&selection.fallbackDrop
+      ?[selection.fallbackDrop]:[]
+  const description=card.descriptionSource&&card.description?.trim()
+    ?card.description.trim():null
+  const effect=card.effectSource&&card.effect?.trim()
+    ?card.effect.trim():null
   const duplicateText=Boolean(description&&effect&&description===effect)
 
-  return createPortal(<>
-    <div aria-hidden="true" onClick={activeSelection.pinned?onClose:undefined}
-      className={(activeSelection.pinned?"pointer-events-auto ":"pointer-events-none ")+"fixed inset-0 z-[90] bg-[#020713]/75 backdrop-blur-[2px]"}/>
-    <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center p-3">
-      <div role={activeSelection.pinned?"dialog":"tooltip"} aria-modal={activeSelection.pinned?true:undefined}
-        aria-label={activeSelection.pinned?`Informações de ${card.name}`:undefined}
-        id={"card-preview-"+card.id}
-        className={(activeSelection.pinned?"pointer-events-auto ":"pointer-events-none ")+"dueltrace-scroll max-h-[calc(100dvh-24px)] w-[min(calc(100vw-24px),500px)] overflow-y-auto rounded-2xl border border-gold/55 bg-[#08172e]/98 p-3 sm:p-4 shadow-[0_25px_85px_rgb(0_0_0/0.85)] backdrop-blur-xl transition-[opacity,transform] duration-200 scale-100 opacity-100"}>
-      {activeSelection.pinned&&<button type="button" aria-label="Fechar informações da carta"
-        onClick={onClose} className="mb-2 ml-auto flex rounded-md p-1 text-muted hover:bg-primary/10 hover:text-white">
-        <X className="size-5"/>
-      </button>}
-      <div className="flex flex-col items-center gap-3 min-[480px]:flex-row min-[480px]:items-start min-[480px]:gap-4">
-        <div className="w-32 shrink-0 min-[480px]:w-40 sm:w-48">
-          <EnlargedArtwork card={card} sha={sha}/>
+  const cardLink=(id:number,name:string)=>{
+    return <button type="button" onClick={()=>navigate(id,name)}
+      className="rounded px-0.5 font-semibold text-gold underline-offset-2 hover:text-white hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+      aria-label={"Abrir informações de "+name}>
+      {name} <span className="text-[10px] text-muted">#{id}</span>
+    </button>
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9997] flex items-center justify-center bg-[#020713]/80 p-2 backdrop-blur-sm sm:p-4"
+      onMouseDown={event=>{if(event.target===event.currentTarget)onClose()}}>
+      <div ref={dialogRef} role="dialog" aria-modal="true"
+        aria-label={"Informações e fusões de "+card.name}
+        className="dueltrace-scroll max-h-[calc(100dvh-16px)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-gold/50 bg-[#08172e] p-3 shadow-[0_25px_85px_rgb(0_0_0/0.85)] sm:max-h-[calc(100dvh-32px)] sm:p-5">
+        <header className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {history.length>1&&<button type="button" onClick={back}
+              aria-label="Voltar para a carta anterior"
+              className="flex items-center gap-1 rounded-md border border-primary/30 px-2 py-1.5 text-xs text-primary hover:bg-primary/10">
+              <ArrowLeft className="size-4"/>Voltar
+            </button>}
+            <span className="text-xs font-semibold text-gold">DUELTRACE · Detalhes da carta</span>
+          </div>
+          <button ref={closeButton} type="button" onClick={onClose}
+            aria-label="Fechar informações da carta"
+            className="rounded-lg p-1.5 text-muted hover:bg-primary/10 hover:text-white">
+            <X className="size-5"/>
+          </button>
+        </header>
+        <div className="grid gap-4 sm:grid-cols-[210px_minmax(0,1fr)]">
+          <div className="min-w-0">
+            <EnlargedArtwork card={card} sha={sha}/>
+            <p className="mt-2 text-center text-[11px] text-muted">
+              Arte extraída do mod selecionado
+            </p>
+          </div>
+          <div className="min-w-0">
+            <span className="text-xs font-bold text-gold">#{card.id}</span>
+            <h2 className="mt-1 break-words font-display text-xl font-bold text-white">
+              {card.name}
+            </h2>
+            {(card.type||card.attribute)&&<p className="mt-2 text-sm text-muted">
+              {[card.type,card.attribute].filter(Boolean).join(" · ")}
+            </p>}
+            <div className="mt-3 flex flex-wrap gap-2 text-sm font-semibold tabular-nums">
+              <span className="rounded-lg border border-primary/45 bg-primary/10 px-3 py-1.5 text-primary">
+                ATK {card.atk??"—"}
+              </span>
+              <span className="rounded-lg border border-gold/45 bg-gold/10 px-3 py-1.5 text-gold">
+                DEF {card.def??"—"}
+              </span>
+            </div>
+            <div className="mt-3 border-t border-line/70 pt-3 text-xs leading-relaxed">
+              {description||effect?<div className="space-y-2">
+                {description&&<div>
+                  <h3 className="font-semibold text-gold">
+                    {duplicateText?"Descrição / efeito":"Descrição"}
+                  </h3>
+                  <p className="whitespace-pre-line break-words text-foreground/85">{description}</p>
+                </div>}
+                {effect&&!duplicateText&&<div>
+                  <h3 className="font-semibold text-gold">Efeito</h3>
+                  <p className="whitespace-pre-line break-words text-foreground/85">{effect}</p>
+                </div>}
+              </div>:<p className="text-muted">
+                Descrição e efeito não disponíveis para esta carta.
+              </p>}
+            </div>
+          </div>
         </div>
-        <div className="min-w-0 w-full flex-1">
-          <span className="text-xs font-bold text-gold">#{card.id}</span>
-          <h3 className="mt-1 break-words font-display text-lg font-bold text-white">{card.name}</h3>
-          {(card.type||card.attribute)&&<p className="mt-2 text-xs text-muted">
-            {[card.type,card.attribute].filter(Boolean).join(" · ")}
+        <section className="mt-4 border-t border-line/70 pt-3">
+          <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-primary">
+            <BookOpen className="size-4"/>Fusões usando esta carta como material
+          </h3>
+          {materialRows.length?<ul className="space-y-1.5">
+            {materialRows.map(row=><li key={row.partnerId+"-"+row.resultId}
+              className="rounded-lg border border-line/60 bg-panel-strong/60 px-3 py-2 text-xs">
+              <span className="text-muted">+ </span>
+              {cardLink(row.partnerId,row.partnerName)}
+              <span className="mx-2 text-primary">→</span>
+              {cardLink(row.resultId,row.resultName)}
+              <span className="ml-2 text-primary">ATK {row.atk??"—"} · DEF {row.def??"—"}</span>
+            </li>)}
+          </ul>:<p className="text-xs text-muted">
+            {fusionError?"Não foi possível consultar fusões deste mod.":
+              matchedFusions?"Nenhuma fusão cadastrada com esta carta como material.":
+              "Consultando fusões…"}
           </p>}
-          {card.category==="Monstros"&&<p className="mt-3 text-sm font-semibold tabular-nums text-primary">
-            ATK {card.atk??"—"} · DEF {card.def??"—"}
+          {matchedFusions&&fusions.materialTotal>5&&<p className="mt-2 text-[11px] text-muted">
+            Mostrando 5 de {fusions.materialTotal} possibilidades.
           </p>}
-        </div>
-      </div>
-      <div className="mt-3 border-t border-line/70 pt-3">
-        {description||effect?<div className="space-y-2">
-          {description&&<div>
-            <h4 className="mb-1 text-xs font-semibold text-gold">
-              {duplicateText?"Descrição / efeito":"Descrição"}
-            </h4>
-            <p className="whitespace-pre-line break-words line-clamp-4 text-xs leading-relaxed text-foreground/85">{description}</p>
-          </div>}
-          {effect&&!duplicateText&&<div>
-            <h4 className="mb-1 text-xs font-semibold text-gold">Efeito</h4>
-            <p className="whitespace-pre-line break-words line-clamp-4 text-xs leading-relaxed text-foreground/85">{effect}</p>
-          </div>}
-        </div>:<p className="text-xs text-muted">Descrição e efeito não disponíveis para esta carta.</p>}
-      </div>
-      <div className="mt-3 border-t border-line/70 pt-3">
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">Onde conseguir</h4>
-        {dropRows.length?<>
-          <div className="space-y-1.5">
-            {dropRows.map(row=><div key={row.opponentId+"-"+row.group}
+        </section>
+        <section className="mt-4 border-t border-line/70 pt-3">
+          <h3 className="mb-2 text-sm font-bold text-primary">
+            Fusões que resultam nesta carta
+          </h3>
+          {resultRows.length?<ul className="space-y-1.5">
+            {resultRows.map(row=><li key={row.materialAId+"-"+row.materialBId}
+              className="rounded-lg border border-line/60 bg-panel-strong/60 px-3 py-2 text-xs">
+              {cardLink(row.materialAId,row.materialAName)}
+              <span className="mx-2 text-muted">+</span>
+              {cardLink(row.materialBId,row.materialBName)}
+              <span className="mx-2 text-primary">→</span>
+              <span className="font-semibold text-white">{card.name}</span>
+            </li>)}
+          </ul>:<p className="text-xs text-muted">
+            {fusionError?"Não foi possível consultar fusões deste mod.":
+              matchedFusions?"Nenhuma receita cadastrada que produza esta carta.":
+              "Consultando fusões…"}
+          </p>}
+          {matchedFusions&&fusions.resultTotal>5&&<p className="mt-2 text-[11px] text-muted">
+            Mostrando 5 de {fusions.resultTotal} receitas.
+          </p>}
+          {matchedFusions&&fusions.provisional&&<p className="mt-2 text-[11px] text-gold/80">
+            Algumas receitas são candidatas estruturais da ISO, ainda não confirmadas em duelo.
+          </p>}
+        </section>
+        <section className="mt-4 border-t border-line/70 pt-3">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">
+            Onde conseguir
+          </h3>
+          {dropRows.length?<ul className="space-y-1.5">
+            {dropRows.map(row=><li key={row.opponentId+"-"+row.group}
               className="flex items-start justify-between gap-3 text-xs">
               <div className="min-w-0">
                 <p className="truncate font-semibold text-white">{row.opponentName}</p>
                 <p className="text-[11px] text-muted">{row.eligibleRanks.join(" / ")}</p>
               </div>
-              <span className="shrink-0 font-semibold tabular-nums text-gold">
+              <span className="shrink-0 font-semibold text-gold">
                 {row.chancePercent.toLocaleString("pt-BR",{maximumFractionDigits:3})}%
               </span>
-            </div>)}
-          </div>
-          {more>0&&<p className="mt-2 text-[11px] text-muted">+{more} outras possibilidades</p>}
-        </>:<p className="text-xs text-muted">
-          {matched&&result?.available?"Nenhum drop registrado para esta carta.":
-            result||error?"Drops não disponíveis neste mod.":"Consultando drops…"}
-        </p>}
-      </div>
-      <div className="mt-3 border-t border-line/70 pt-3">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-primary">Possíveis fusões</h4>
-          {activeSelection.pinned&&<select value={fusionSort} aria-label="Ordenar fusões possíveis"
-            onChange={event=>{setFusionSort(event.target.value as "atk"|"name"|"id");setFusionPage(0)}}
-            className="field max-w-full px-2 py-1 text-xs">
-            <option value="atk">Maior ATK</option><option value="name">Resultado A–Z</option>
-            <option value="id">ID do resultado</option>
-          </select>}
-        </div>
-        {fusionRows.length?<>
-          <ul className="space-y-1.5">
-            {fusionRows.map(fusion=><li key={fusion.partnerId+"-"+fusion.resultId}
-              className="rounded-lg border border-line/50 bg-panel-strong/60 px-2.5 py-2 text-xs">
-              <p className="break-words text-foreground/80">
-                + #{fusion.partnerId} <span className="font-semibold text-white">{fusion.partnerName}</span>
-              </p>
-              <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                <p className="min-w-0 break-words font-semibold text-gold">
-                  → #{fusion.resultId} {fusion.resultName}
-                </p>
-                <span className="shrink-0 font-semibold tabular-nums text-primary">
-                  ATK {fusion.atk??"—"}
-                </span>
-              </div>
             </li>)}
-          </ul>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] text-muted">{fusionTotal} combinação(ões) nesta ISO</span>
-            {activeSelection.pinned&&fusionPages>1&&<div className="flex items-center gap-1">
-              <button type="button" aria-label="Fusões anteriores"
-                disabled={fusionPage===0} onClick={()=>setFusionPage(x=>Math.max(0,x-1))}
-                className="rounded-md p-1 text-primary disabled:opacity-30"><ChevronLeft className="size-4"/></button>
-              <span className="text-[11px] tabular-nums text-muted">{fusionPage+1}/{fusionPages}</span>
-              <button type="button" aria-label="Mais fusões"
-                disabled={fusionPage+1>=fusionPages} onClick={()=>setFusionPage(x=>x+1)}
-                className="rounded-md p-1 text-primary disabled:opacity-30"><ChevronRight className="size-4"/></button>
-            </div>}
-            {!activeSelection.pinned&&fusionTotal>fusionRows.length&&
-              <span className="text-[11px] text-muted">Clique na carta para ver outras combinações.</span>}
-          </div>
-          {fusions?.provisional&&<p className="mt-2 text-[11px] text-muted">
-            Algumas combinações são candidatas extraídas da ISO, ainda não confirmadas em duelo.
+          </ul>:<p className="text-xs text-muted">
+            {dropError?"Drops indisponíveis neste mod.":
+              matchedDrops?"Nenhum drop registrado para esta carta.":
+              "Consultando drops…"}
           </p>}
-        </>:<p className="text-xs text-muted">{fusionError?"Fusões indisponíveis neste mod.":
-          matchedFusions?"Nenhuma fusão encontrada com esta carta como material.":
-          "Consultando fusões da ISO ativa…"}</p>}
+        </section>
+        <p className="mt-3 text-[11px] text-muted">
+          Clique nos nomes das cartas para explorar outras combinações. Use Voltar para retornar ou Esc para fechar.
+        </p>
       </div>
-      <p className="mt-3 text-[11px] text-muted">
-        {activeSelection.pinned?"Clique fora da janela ou pressione Esc para fechar.":
-          "Afaste o mouse ou pressione Esc para fechar. Clique na carta para explorar as fusões."}
-      </p>
-      </div>
-    </div>
-  </>,document.body)
+    </div>,document.body)
 }
