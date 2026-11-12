@@ -3,19 +3,22 @@
 import Image from "next/image"
 import {useEffect, useMemo, useState} from "react"
 import {ChevronLeft, ChevronRight, RefreshCcw, Search} from "lucide-react"
-import {cardArt, cardWithFrame, desktopApi} from "@/lib/desktop"
+import {cardClassicHd, cardArt, cardWithFrame, desktopApi} from "@/lib/desktop"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
 import type {DropsPage, DropRow, LocalCard} from "@/lib/desktop"
 
 function DropArtwork({sha,id,name}:{sha:string|null;id:number;name:string}) {
-  const [source,setSource]=useState<"frame"|"art"|"none">("frame")
-  useEffect(()=>setSource("frame"),[sha,id])
-  const src=source==="frame"?cardWithFrame(sha,id):source==="art"?cardArt(sha,id):null
-  return <div className="relative h-[90px] w-[78px] shrink-0 overflow-hidden rounded border border-gold/40 bg-[#0b1932]">
-    {src?<Image src={src} alt={"Arte extraída da carta "+name} fill unoptimized sizes="78px"
-      className={source==="frame"?"object-fill [image-rendering:pixelated]":"object-contain [image-rendering:pixelated]"}
-      onError={()=>setSource(source==="frame"?"art":"none")}/>:
+  const [source,setSource]=useState<"classic"|"frame"|"art"|"none">("classic")
+  useEffect(()=>setSource("classic"),[sha,id])
+  const src=source==="classic"?cardClassicHd(sha,id):
+    source==="frame"?cardWithFrame(sha,id):
+    source==="art"?cardArt(sha,id):null
+  return <div className={"relative w-[78px] shrink-0 overflow-hidden rounded border border-gold/40 bg-[#0b1932] "+
+    (source==="classic"?"aspect-[9/13]":"h-[90px]")}>
+    {src?<Image src={src} alt={"Carta "+name} fill unoptimized sizes="78px"
+      className={source==="frame"?"object-fill [image-rendering:pixelated]":"object-contain"}
+      onError={()=>setSource(old=>old==="classic"?"frame":old==="frame"?"art":"none")}/>:
       <span className="flex h-full items-center justify-center text-xs text-muted">#{id}</span>}
   </div>
 }
@@ -38,7 +41,7 @@ function DropCard({row,sha,cardDetails,onPreview}:{
     <div className="min-w-0 flex-1">
       <p className="text-xs text-gold">#{row.cardId} · {row.groupLabel}</p>
       <p className="mt-1 truncate font-semibold text-white" title={row.cardName}>{row.cardName}</p>
-      {row.category==="Monstros"&&<p className="mt-1 text-xs tabular-nums text-primary">ATK {row.atk??"—"} · DEF {row.def??"—"}</p>}
+
       <p className="mt-1 text-xs text-muted">{row.opponentName}</p>
     </div>
     <div className="ml-auto shrink-0 text-right">
