@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from functools import lru_cache
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -30,6 +31,7 @@ PANEL = (235, 203, 127)
 DARK_FRAME = (29, 43, 49)
 
 
+@lru_cache(maxsize=48)
 def _font(size: int, bold: bool = False):
     # Installed OS fonts only. No fonts shipped with the program.
     options = (["C:/Windows/Fonts/arialbd.ttf",
@@ -250,7 +252,7 @@ def render_card_pack(cards, originals: Path, enhanced: Path, dest: Path):
     counts = {"rendered": 0, "cached": 0, "failed": 0}
     for card in cards[:MAX_CARDS]:
         cid = _bounded_integer(card.get("id"), MAX_CARDS)
-        if not cid or f"{cid:03d}" in index:
+        if not cid or f"{cid:03d}.png" in index:
             continue
         filename = f"{cid:03d}.png"
         raw = originals / filename
