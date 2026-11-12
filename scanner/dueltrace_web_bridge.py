@@ -1374,6 +1374,76 @@ class DueltraceWebBridge:
                     "total":len(rows),"offset":offset,"rows":rows[offset:offset+limit],
                     "provisional":alpha_added}
 
+    def get_card_fusion_paths(self, card_id):
+        """Five real recipes for each direction of the same selected ISO.
+
+        Material: this card + a partner -> result. Final: a + b -> this card.
+        Recipes come exclusively from the active, SHA-bound fusion catalogue;
+        speculative or unconfirmed recipes retain the provisional flag.
+        """
+        if type(card_id) is not int or not 1 <= card_id <= 722:
+            raise ValueError("ID de carta inválido.")
+        with self._lock:
+            active, entry, profile = self._active()
+            sha = (active or {}).get("sha256")
+            empty = {"romSha": sha, "cardId": card_id, "available": False,
+                     "provisional": False, "materialTotal": 0,
+                     "resultTotal": 0, "materialRows": [], "resultRows": []}
+            if (not profile or profile.get("rom_sha256") != sha
+                    or not profile.get("supported_features", {}).get("cards")):
+                return empty
+            recipes, alpha_added = self._combined_fusion_recipes(sha, entry, profile)
+            cards = {card["id"]: card for card in self._cards(profile)}
+            if card_id not in cards:
+                return empty
+            materials, results = [], []
+            seen = set()
+            for item in recipes:
+                if not isinstance(item, dict):
+                    continue
+                a, b, dest = (item.get("a"), item.get("b"), item.get("result"))
+                if not all(type(v) is int and 1 <= v <= 722 for v in (a, b, dest)):
+                    continue
+                key = (min(a, b), max(a, b), dest)
+                if key in seen:
+                    continue
+                seen.add(key)
+                if card_id in (a, b):
+                    partner = b if a == card_id else a
+                    target = cards.get(dest, {})
+                    materials.append({
+                        "partnerId": partner,
+                        "partnerName": cards.get(partner, {}).get("name")
+                                       or f"Carta #{partner}",
+                        "resultId": dest,
+                        "resultName": target.get("name") or f"Carta #{dest}",
+                        "atk": target.get("atk") if type(target.get("atk")) is int else None,
+                        "def": target.get("def") if type(target.get("def")) is int else None,
+                    })
+                if dest == card_id:
+                    left = cards.get(a, {})
+                    right = cards.get(b, {})
+                    results.append({
+                        "materialAId": a,
+                        "materialAName": left.get("name") or f"Carta #{a}",
+                        "materialBId": b,
+                        "materialBName": right.get("name") or f"Carta #{b}",
+                        "materialAAtk": left.get("atk") if type(left.get("atk")) is int else None,
+                        "materialBAtk": right.get("atk") if type(right.get("atk")) is int else None,
+                    })
+            materials.sort(key=lambda r:(
+                r["atk"] is None, -(r["atk"] or 0),
+                r["resultName"].casefold(), r["partnerId"], r["resultId"]))
+            results.sort(key=lambda r:(
+                r["materialAName"].casefold(), r["materialBName"].casefold(),
+                r["materialAId"], r["materialBId"]))
+            return {
+                "romSha": sha, "cardId": card_id, "available": bool(recipes),
+                "provisional": bool(alpha_added),
+                "materialTotal": len(materials), "resultTotal": len(results),
+                "materialRows": materials[:5], "resultRows": results[:5],
+            }
+
     def compare_mod_cards(self, source_sha, target_sha, query="",
                           offset=0, limit=40, confidence="todas"):
         """Retorna somente IDs/nomes/evidências: nenhuma arte/ISO é transmitida."""
