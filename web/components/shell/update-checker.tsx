@@ -17,7 +17,6 @@ export function UpdateChecker() {
   const [notesOpen, setNotesOpen] = useState(false)
   const [notesMode, setNotesMode] = useState<"installed"|"available">("available")
   const [installedNotice, setInstalledNotice] = useState<InstalledUpdateNotice | null>(null)
-  const startupNoticeChecked = useRef(false)
   const [checking, setChecking] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -47,6 +46,7 @@ export function UpdateChecker() {
   useEffect(() => {
     let mounted = true
     let attempts = 0
+    let startupNoticeChecked = false
     let handle: number | undefined
     let recurring: number | undefined
     const refresh = () => {
@@ -70,8 +70,8 @@ export function UpdateChecker() {
       // O aviso da build já instalada não depende do feed remoto.
       // É consultado uma vez por inicialização e marcado como lido só
       // quando o usuário fechar a janela de novidades.
-      if (!startupNoticeChecked.current) {
-        startupNoticeChecked.current = true
+      if (!startupNoticeChecked) {
+        startupNoticeChecked = true
         void api.get_installed_update_notice().then(notice => {
           if (!mounted) return
           setInstalledNotice(notice)
