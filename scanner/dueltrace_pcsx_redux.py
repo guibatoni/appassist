@@ -153,9 +153,13 @@ def _single_pid(*, preferred_pid=None, pids=None) -> int | None:
     found=discover_redux_pids() if pids is None else list(pids)
     if not found or any(type(x) is not int or x<=0 for x in found):
         return None
-    if preferred_pid is not None:
-        return preferred_pid if preferred_pid in found else None
-    return found[0] if len(found)==1 else None
+    # HTTP port identity cannot be tied reliably to one of two Redux
+    # processes. Never associate an arbitrary HTTP server with a PID.
+    if len(found)!=1:
+        return None
+    if preferred_pid is not None and found[0]!=preferred_pid:
+        return None
+    return found[0]
 
 
 def connection_status(*, port: int=DEFAULT_PORT, fetch=_fetch, pids=None) -> dict:
@@ -267,3 +271,59 @@ def read_rank_candidate_redux(*, preferred_pid=None,port: int=DEFAULT_PORT,
     except (OSError,ValueError,urllib.error.URLError,TimeoutError):
         return {"ready":False,"pid":pid,"counters":None,
                 "status":"PCSX-Redux: RANK X15 não identificado nesta sessão."}
+
+
+def read_hand_from_redux_host(*, preferred_pid=None, pids=None) -> dict:
+    """Fallback for old Redux builds without compatible HTTP GET endpoints.
+
+    Uses the established version-agnostic Windows read-only process scanner
+    with STRICT Redux PID enumeration. No static offsets, injection or writes.
+    """
+    if sys.platform!="win32":
+        return {"ready":False,"pid":None,"hand_ids":None,
+                "status":"Leitura de RAM local requer Windows."}
+    found=discover_redux_pids() if pids is None else list(pids)
+    if preferred_pid is not None:
+        pid=preferred_pid if preferred_pid in found else None
+    else:
+        pid=found[0] if len(found)==1 else None
+    if pid is None:
+        return {"ready":False,"pid":None,"hand_ids":None,
+                "status":"PCSX-Redux não encontrado ou múltiplas instâncias."}
+    from dueltrace_live_hand import read_hand_from_epsxe
+    try:
+        result=read_hand_from_epsxe(preferred_pid=pid,pids=[pid])
+    except (OSError,ValueError,RuntimeError):
+        return {"ready":False,"pid":pid,"hand_ids":None,
+                "status":"PCSX-Redux: leitura do processo indisponível."}
+    return {**result,"emulator":"pcsx-redux",
+            "ramLayout":("windows-ram-dynamic"
+                         if result.get("ready") else None),
+            "status":str(result.get("status","RAM não identificada")).replace("ePSXe","PCSX-Redux")}
+
+
+def read_rank_candidate_redux_host(*, preferred_pid=None, pids=None) -> dict:
+    """X15-only fallback: reuse ePSXe's candidate reader on a verified Redux PID.
+
+    The caller MUST check the exact X15 ROM SHA. Unknown mods' bindings use
+    ePSXe Windows HOST addresses and must never be transported here.
+    """
+    if sys.platform!="win32":
+        return {"ready":False,"pid":None,"counters":None,
+                "status":"PCSX-Redux: RANK exige Windows."}
+    found=discover_redux_pids() if pids is None else list(pids)
+    if preferred_pid is not None:
+        pid=preferred_pid if preferred_pid in found else None
+    else:
+        pid=found[0] if len(found)==1 else None
+    if pid is None:
+        return {"ready":False,"pid":None,"counters":None,
+                "status":"PCSX-Redux não encontrado ou múltiplas instâncias."}
+    from dueltrace_rank_live import read_rank_candidate
+    try:
+        result=read_rank_candidate(preferred_pid=pid,pids=[pid])
+    except (OSError,ValueError,RuntimeError):
+        return {"ready":False,"pid":pid,"counters":None,
+                "status":"PCSX-Redux: contadores X15 não disponíveis."}
+    return {**result,"emulator":"pcsx-redux",
+            "status":str(result.get("status","RANK indisponível")).replace("ePSXe","PCSX-Redux")}
