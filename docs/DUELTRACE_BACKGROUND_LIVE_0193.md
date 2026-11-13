@@ -8,10 +8,11 @@ Anteriormente os componentes React `Home` e os pop-ups iniciavam seus próprios 
 **Origem única:** `scanner/dueltrace_background_live.py`, iniciado uma vez por `dueltrace_web_desktop.main()` **antes de renderizar a primeira página**.
 
 - Trabalhador principal lê mão/fusões e RANK na RAM do ePSXe; atualizações em intervalos aproximados de 1–2 segundos, respeitando o tempo real da leitura.
-- Trabalhador independente consulta o adversário candidato (~4,5 segundos), evitando que a inspeção mais lenta interrompa a mão.
+- Trabalhador independente consulta adversário candidato e deck ativo (~4,5 segundos), sem interromper mão e RANK. O deck ao vivo só é aceito quando o jogo foi iniciado pelo DUELTRACE e a leitura confirmou os 40 IDs.
 - Leituras são feitas pelo motor **Python** já existente, com regras atuais de reconhecimento e perfil do mod, não por cada aba.
 - `DueltraceWebBridge.get_hand()`, `get_rank_auto()` e `get_live_opponent()` respondem do cache compartilhado durante a execução Windows.
 - Central de Duelo, Fusões, Biblioteca, Drops, Oponentes, Decks e visores pop-up podem ser abertos/fechados livremente. O módulo continua acompanhando a partida até o fechamento do aplicativo.
+- A aba Decks consulta o deck de RAM já amostrado; a ação de **salvar deck** continua lendo a RAM novamente para não gravar cópias desatualizadas.
 - O indicador **Leitura ao vivo em segundo plano** fica visível na faixa superior das telas quando o monitor estiver iniciado.
 - Após troca da ISO ativa, as leituras da ISO anterior são rejeitadas imediatamente, e o cache expira automaticamente se a varredura ficar indisponível.
 - Quando não há ePSXe, são entregues estados de desconexão **sem varrer RAM** até o emulador voltar.
