@@ -242,6 +242,9 @@ def main():
                                    name="dueltrace-ui-assets",daemon=True)
     server_thread.start()
     url=f"http://127.0.0.1:{server.server_port}/"
+    # Start BEFORE the first page renders: live RAM reading continues even
+    # while the user browses Mods, Fusões, Drops, Biblioteca or pop-outs.
+    bridge.start_background_live()
     try:
         window=webview.create_window(
             "DUELTRACE — MultiMod Companion",
@@ -381,6 +384,9 @@ def main():
         bridge._request_shutdown=close_for_update
         webview.start(debug=False,private_mode=True)
     finally:
+        # A closing/minimized tab must not control the lifetime of RAM reads.
+        # Only the desktop tracker itself stops its background workers.
+        bridge.stop_background_live()
         geometry_store.close()
         server.shutdown()
         server.server_close()

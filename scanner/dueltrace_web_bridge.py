@@ -88,6 +88,9 @@ class DueltraceWebBridge:
         self._rank_experimental_sha = None
         self._process = None
         self._launched_rom_sha = None
+        # Launched explicitly by the Windows entrypoint, not by API calls or
+        # construction in tests. Keeps RAM work alive across route changes.
+        self._background_live = None
         self._lock = threading.RLock()
         self._live_diagnostics = None
         self._live_diagnostics_stop = None
@@ -479,6 +482,47 @@ class DueltraceWebBridge:
             raise RuntimeError("Não foi possível abrir o navegador padrão.")
         return {"opened":True}
 
+    def start_background_live(self):
+        """One read-only tracker for all desktop tabs and pop-out windows."""
+        from dueltrace_background_live import BackgroundLiveTracker
+        with self._lock:
+            if self._background_live is None:
+                self._background_live = BackgroundLiveTracker(self)
+            monitor = self._background_live
+        return monitor.start()
+
+    def stop_background_live(self):
+        monitor = self._background_live
+        if monitor is not None:
+            monitor.stop()
+
+    def _invalidate_background_live(self):
+        if self._background_live is not None:
+            self._background_live.invalidate()
+
+    def _cached_live_result(self, kind):
+        monitor = self._background_live
+        if monitor is None or not monitor.running:
+            return None
+        with self._lock:
+            active, _entry, profile = self._active()
+            sha = active.get("sha256") if isinstance(active,dict) and profile else None
+        return monitor.snapshot(kind, sha)
+
+    def _background_result(self, kind):
+        result = self._cached_live_result(kind)
+        if result is not None:
+            return result
+        if kind == "hand":
+            return {"ready":False,"status":"Iniciando leitura em segundo plano...",
+                    "hand":[],"pairs":[],"chains":[]}
+        if kind == "rank":
+            return {"ready":False,"state":"unavailable",
+                    "status":"Aguardando a próxima leitura de RANK...",
+                    "score":None,"category":None}
+        return {"ready":False,"status":"unavailable",
+                "runtimeOpponentId":None}
+
     def get_state(self):
         with self._lock:
             active, entry, profile = self._active()
@@ -495,6 +539,8 @@ class DueltraceWebBridge:
                     if profile and profile.get("supported_features",{}).get("fusions")
                     else 0,
                 "epsxeConfigured":bool(settings.get("epsxe_executable")),
+                "backgroundLiveRunning":bool(self._background_live and
+                                             self._background_live.running),
                 "warning":"O DUELTRACE não confirma automaticamente qual ISO o ePSXe abriu.",
             }
 
@@ -515,6 +561,7 @@ class DueltraceWebBridge:
                 self._alpha_bundle_cache={}
                 self._hand_suggestions_key=None
                 self._hand_suggestions=None
+                self._invalidate_background_live()
             return removed
 
     def _alpha_bundle(self, sha, entry, profile):
@@ -744,6 +791,12 @@ class DueltraceWebBridge:
         return self._fusion_cache
 
     def get_hand(self):
+        """Return one shared, always-current snapshot, not a new RAM scan."""
+        if self._background_live is not None and self._background_live.running:
+            return self._background_result("hand")
+        return self._get_hand_direct()
+
+    def _get_hand_direct(self):
         with self._lock:
             active,entry,profile=self._active()
             if not profile:
@@ -1098,6 +1151,12 @@ class DueltraceWebBridge:
 
 
     def get_rank_auto(self):
+        """Return shared RANK so UI and overlays never duplicate RAM reads."""
+        if self._background_live is not None and self._background_live.running:
+            return self._background_result("rank")
+        return self._get_rank_auto_direct()
+
+    def _get_rank_auto_direct(self):
         """Projeta automaticamente por ISO e PID, preservando a fórmula SPOILS.
 
         Requer duas consultas separadas com LP idênticos; o leitor de RAM
@@ -1644,7 +1703,16 @@ class DueltraceWebBridge:
             cards={c["id"]:c for c in self._cards(profile)}
             ids=memory.get("deckIds",[])
             display_name="Deck gravado no Memory Card"
-            live=None if deck_id else self._get_confirmed_live_deck(sha)
+            if deck_id:
+                live=None
+            elif self._background_live is not None and self._background_live.running:
+                # The same active-deck RAM sample is already maintained
+                # across tabs. Save actions continue to take a fresh read.
+                candidate=self._background_live.snapshot("deck",sha)
+                live=(candidate if isinstance(candidate,dict)
+                      and candidate.get("ready") is True else None)
+            else:
+                live=self._get_confirmed_live_deck(sha)
             if live is not None:
                 ids=live["deckIds"]
                 display_name="Deck ativo no ePSXe (RAM confirmada)"
@@ -2151,6 +2219,12 @@ class DueltraceWebBridge:
             return self._live_diagnostics.export_json()
 
     def get_live_opponent(self):
+        """Return the shared candidate opponent data across all tabs."""
+        if self._background_live is not None and self._background_live.running:
+            return self._background_result("opponent")
+        return self._get_live_opponent_direct()
+
+    def _get_live_opponent_direct(self):
         """Passive RAM reader with local, provisional ID logging.
 
         Auto-record only when THIS app launched the process for the
@@ -2479,6 +2553,7 @@ class DueltraceWebBridge:
         self._rank_last_snapshot=None
         self._rank_pending_capture=None
         self._rank_experimental_sha=None
+        self._invalidate_background_live()
         return self.get_state()
 
     def audit_mod_iso(self, sha):
@@ -2718,6 +2793,7 @@ class DueltraceWebBridge:
             self._hand_suggestions=None
             self._cross_mod_cards_cache_key=None
             self._cross_mod_cards_cache=None
+            self._invalidate_background_live()
             self._rank_calibration=None
             self._rank_legacy_trial=None
             self._rank_gap_started=None

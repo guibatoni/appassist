@@ -359,6 +359,7 @@ export type DesktopState = {
   mods: LocalMod[]
   fusionCount: number
   epsxeConfigured: boolean
+  backgroundLiveRunning?: boolean
   warning: string
 }
 
