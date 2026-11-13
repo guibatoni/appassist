@@ -785,6 +785,17 @@ export type SpoilsResult = {
   referenceOnly?: boolean
 }
 
+export type RankOverlaySettings = {
+  enabled: boolean
+  position: "top-center-right" | "top-left" | "top-center" | "top-right"
+  scale: number
+  opacity: number
+  supported: boolean
+  running: boolean
+  visible: boolean
+  error: string | null
+}
+
 export type RankState = {
   ready: boolean
   state: "unsupported" | "unavailable" | "needs_lp_confirmation" | "auto_calibrating" | "needs_ram_validation" | "lp_mismatch" | "provisional"
@@ -925,6 +936,8 @@ export interface DesktopAPI {
   get_alpha_preferences():Promise<{fusionTipsVisible:boolean}>
   set_alpha_preferences(visible:boolean):Promise<{fusionTipsVisible:boolean}>
   get_ui_settings():Promise<{language:string;languages:string[];windowRemembered:boolean}>
+  get_rank_overlay_settings():Promise<RankOverlaySettings>
+  set_rank_overlay_settings(enabled:boolean,position:RankOverlaySettings["position"],scale:number,opacity:number):Promise<RankOverlaySettings>
   set_ui_language(language:string):Promise<{language:string}>
   close_tool_window(kind:PopoutKind):Promise<PopoutState>
   get_installed_update_notice(): Promise<InstalledUpdateNotice>
@@ -999,6 +1012,8 @@ interface ProtectedNativeAPI {
   get_alpha_preferences(token:string):Promise<{fusionTipsVisible:boolean}>
   set_alpha_preferences(token:string,visible:boolean):Promise<{fusionTipsVisible:boolean}>
   get_ui_settings(token:string):Promise<{language:string;languages:string[];windowRemembered:boolean}>
+  get_rank_overlay_settings(token:string):Promise<RankOverlaySettings>
+  set_rank_overlay_settings(token:string,enabled:boolean,position:RankOverlaySettings["position"],scale:number,opacity:number):Promise<RankOverlaySettings>
   set_ui_language(token:string,language:string):Promise<{language:string}>
   close_tool_window(token:string,kind:PopoutKind):Promise<PopoutState>
   get_installed_update_notice(token:string): Promise<InstalledUpdateNotice>
@@ -1087,6 +1102,9 @@ export function desktopApi(): DesktopAPI | null {
     get_alpha_preferences: () => native.get_alpha_preferences(token),
     set_alpha_preferences: (visible) => native.set_alpha_preferences(token,visible),
     get_ui_settings: () => native.get_ui_settings(token),
+    get_rank_overlay_settings: () => native.get_rank_overlay_settings(token),
+    set_rank_overlay_settings: (enabled,position,scale,opacity) =>
+      native.set_rank_overlay_settings(token,enabled,position,scale,opacity),
     set_ui_language: (language) => native.set_ui_language(token,language),
     close_tool_window: (kind) => native.close_tool_window(token,kind),
     get_installed_update_notice: () => native.get_installed_update_notice(token),
