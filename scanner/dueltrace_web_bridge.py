@@ -1680,13 +1680,29 @@ class DueltraceWebBridge:
                 mod_name=self._memory_mod_name(entry,profile))
 
     def _get_confirmed_live_deck(self,sha):
-        """Only trust RAM from a process this app launched for this SHA."""
+        """Corroborate the guessed deck RAM address against a sealed save.
+
+        A confirmed hand anchor verifies the PS1 memory base, NOT the deck
+        offset. Forty in-range values alone can describe an unrelated array.
+        Never publish a live deck if no integrity-verified save matches it.
+        """
         if (type(sha) is not str or self._launched_rom_sha!=sha
                 or self._process is None or self._process.poll() is not None):
             return None
+        from dueltrace_memory_cards import MemoryCardStore
+        memory=MemoryCardStore(self.catalog.home).read(sha)
+        reference=memory.get("deckIds",[])
+        if (memory.get("gameIntegrityVerified") is not True
+                or not isinstance(reference,list) or len(reference)!=40):
+            return None
         from dueltrace_live_deck import read_live_deck
         found=read_live_deck(self._process.pid)
-        return found if found.get("ready") is True else None
+        if (not isinstance(found,dict) or found.get("ready") is not True
+                or found.get("pid")!=self._process.pid
+                or found.get("deckIds")!=reference):
+            return None
+        return {**found,"matchesVerifiedSave":True,
+                "status":"40 IDs da RAM coincidem com save íntegro no Memory Card."}
 
     def get_deck_library(self, deck_id=""):
         """Releitura automática do cartão; opcionalmente um deck salvo do mod."""
@@ -1713,9 +1729,14 @@ class DueltraceWebBridge:
                       and candidate.get("ready") is True else None)
             else:
                 live=self._get_confirmed_live_deck(sha)
-            if live is not None:
-                ids=live["deckIds"]
-                display_name="Deck ativo no ePSXe (RAM confirmada)"
+            # Keep the explicit Memory Card selection authoritative. A
+            # candidate RAM offset can be wrong even with 40 plausible IDs.
+            # Live evidence is a corroborating annotation, not the source.
+            if (not isinstance(live,dict)
+                    or live.get("matchesVerifiedSave") is not True
+                    or live.get("deckIds")!=ids
+                    or memory.get("gameIntegrityVerified") is not True):
+                live=None
             if deck_id:
                 chosen=next((row for row in memory.get("saved",[])
                              if row.get("id")==deck_id),None)
@@ -1743,14 +1764,22 @@ class DueltraceWebBridge:
                     "saveDisplayName":memory.get("saveDisplayName"),
                     "activeModName":memory.get("activeModName"),
                     "savePinned":memory.get("savePinned") is True,
-                    "status":(
-                        "Deck lido da RAM de um ePSXe iniciado pelo DUELTRACE. "
-                        "Se você trocou a ISO diretamente no emulador, nomes "
-                        "e IDs podem divergir."
-                        if live is not None else memory.get("status","")),
+                    "status":((
+                        "Este é um snapshot local salvo, não necessariamente "
+                        "o deck atual do emulador."
+                        ) if deck_id else memory.get("status","")),
+                    "deckSource":("snapshot" if deck_id else "memory_card"),
+                    "liveDeckMatchesSave":live is not None,
+                    "liveDeckStatus":(
+                        "Candidato da RAM coincide com as cartas do save; "
+                        "a posição do deck ativo ainda exige validação no jogo."
+                        if live is not None else
+                        "Deck mostrado a partir do Memory Card. A leitura "
+                        "do deck ativo pela RAM não está comprovada."),
                     "gameIntegrityVerified":memory.get("gameIntegrityVerified") is True,
-                    "activeInEmulatorVerified":live is not None,
+                    "activeInEmulatorVerified":False,
                     "saves":memory.get("saves",[]),
+                    "blocks":memory.get("blocks",[]),
                     "selectedBlock":memory.get("selectedBlock"),
                     "deckIds":ids,"deckCount":len(ids),"cards":current_counts,
                     "displayName":display_name, "selectedDeckId":deck_id,
