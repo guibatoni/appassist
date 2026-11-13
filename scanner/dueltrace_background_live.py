@@ -15,7 +15,7 @@ from time import monotonic
 HAND_INTERVAL = 1.25
 RANK_INTERVAL = 0.95
 OPPONENT_INTERVAL = 4.5
-MAX_AGE = {"hand": 4.0, "rank": 3.0, "opponent": 10.0}
+MAX_AGE = {"hand": 4.0, "rank": 3.0, "opponent": 10.0, "deck": 10.0}
 
 
 def epsxe_running() -> bool:
@@ -120,6 +120,7 @@ class BackgroundLiveTracker:
                          "score": None, "category": None},
                 "opponent": {"ready": False, "status": "no_epsxe",
                              "runtimeOpponentId": None},
+                "deck": {"ready": False, "deckIds": []},
             }
             value = empty[kind]
         else:
@@ -128,8 +129,13 @@ class BackgroundLiveTracker:
                     "hand": self.bridge._get_hand_direct,
                     "rank": self.bridge._get_rank_auto_direct,
                     "opponent": self.bridge._get_live_opponent_direct,
+                    # Only the already-confirmed active deck of a game
+                    # launched by DUELTRACE. No Memory Card writes.
+                    "deck": lambda: self.bridge._get_confirmed_live_deck(sha),
                 }
                 value = readers[kind]()
+                if kind == "deck" and value is None:
+                    value = {"ready": False, "deckIds": []}
                 if not isinstance(value, dict):
                     raise ValueError("Leitura de RAM inválida.")
             except (OSError, RuntimeError, ValueError, TypeError, KeyError):
@@ -138,8 +144,10 @@ class BackgroundLiveTracker:
                     value.update(hand=[], pairs=[], chains=[])
                 elif kind == "rank":
                     value.update(state="unavailable", score=None, category=None)
-                else:
+                elif kind == "opponent":
                     value.update(runtimeOpponentId=None)
+                else:
+                    value.update(deckIds=[])
         # The active ISO can change while the RAM reader is busy. Never
         # publish a result derived from the old profile into a new tab.
         try:
@@ -177,6 +185,8 @@ class BackgroundLiveTracker:
             start = self.clock()
             try:
                 self.sample_once("opponent")
+                if not self._stop.is_set():
+                    self.sample_once("deck")
             except Exception:
                 self.invalidate()
             self._stop.wait(max(0.3, OPPONENT_INTERVAL -
