@@ -1,34 +1,26 @@
-# DUELTRACE v0.20.0 — Preview
+# DUELTRACE v0.20.1 — Preview
 
 ## Novidades
-- Novo **overlay nativo de RANK** sobre o ePSXe Windows, transparente, compacto e sem bordas.
-- O overlay acompanha a janela de jogo e não intercepta mouse, teclado nem cliques.
-- Mostra **RANK previsto** e classificação (ex.: S-POW) quando há leitura coerente em duelo.
-- Em fase de calibração, indica **ANALISANDO**, sem inventar pontos de RANK.
-- Em Configurações, é possível ativar/desativar o overlay, alterar posição, tamanho e opacidade.
+- O overlay do ePSXe agora utiliza a **mesma fonte Exo 2** e a identidade visual da calculadora do DUELTRACE.
+- Pontuação branca com marcador `pts`, letra do RANK destacada e etiqueta POW/TEC com bordas arredondadas.
+- Cores idênticas às da calculadora: S magenta, A vermelho, B amarelo, C verde, D cinza e Z dourado.
+- Fundo do overlay permanece transparente e os cliques passam direto para o ePSXe.
+- O overlay segue disponível em Configurações com controles de posição, tamanho, opacidade e ativação.
 
 ## Melhorias
-- Usa o monitor de RAM compartilhado iniciado pelo DUELTRACE; não cria um segundo scanner.
-- Segue a área útil (client area) do ePSXe ao mover/redimensionar a janela.
-- Oculta automaticamente quando o emulador é minimizado, perde o foco ou a leitura de duelo termina.
-- Preferências persistentes no próprio DUELTRACE, com validação estrita e sem exigir plugin no ePSXe.
-- Preservadas as abas Decks, Meus Decks, Fusões, Drops, Biblioteca, a leitura em segundo plano e os arquivos de Memory Card.
+- POW usa fundo vermelho com texto branco; TEC usa fundo azul com texto branco e contorno suave.
+- Letras, números e bordas do overlay são desenhados com suavização para acompanhar a interface Windows.
+- A fonte Exo 2 já presente no projeto é incluída no aplicativo Windows, sem exigir instalação de fontes no sistema.
+- A imagem nativa do overlay é atualizada quando o RANK muda, sem criar nova leitura de RAM.
+- Preservadas as abas Decks, Meus Decks, fusões, biblioteca e o conteúdo do Memory Card.
 
 ## Correções
-- Sem sobreposição permanente em outros programas; somente ePSXe ativo e em primeiro plano.
-- Valores provisórios não são apresentados como resultado oficial do jogo.
-- Janelas e processos auxiliares são encerrados junto com o DUELTRACE Windows.
-- Nenhum processo ePSXe recebe escrita de RAM, injeção ou interceptação de controles.
+- Substituída a tipografia Segoe UI, que destoava da calculadora principal.
+- Removida a exibição do RANK como texto branco uniforme; nota e modo seguem o padrão visual do painel.
+- Sem alteração dos cálculos SPOILS, RANK, compatibilidade com mods ou dados do emulador.
 
 ## Limitações
-- A sobreposição é opt-in: ative-a uma vez em Configurações > Overlay de RANK no ePSXe.
-- RANK só é exibido quando o motor já reconheceu um duelo e conseguiu uma leitura plausível.
-- O RANK é uma previsão e continua sujeito à validação por ISO; não substitui a pontuação final do jogo.
-- Recomendado **ePSXe em modo janela ou janela maximizada**. Fullscreen exclusivo pode ocultar a sobreposição.
-- A posição e transparência dependem das janelas nativas do Windows; validar no ePSXe real.
-- Emuladores múltiplos simultâneos não são suportados pelo overlay inicial.
-- Não existe API pública, transmissão de vídeo, HTTP/WebSocket externo ou compartilhamento remoto.
-
-## Créditos e direitos
-- Desenvolvido por Batoni Dev - Guilherme Batoni.
-- Distribuição somente com autorização expressa do desenvolvedor.
+- Preview Windows, recomendado ePSXe em modo janela ou maximizado; tela cheia exclusiva pode ocultar o overlay.
+- O RANK exibido permanece uma previsão: valores não confirmados não são mostrados como resultado oficial.
+- A aparência precisa de validação visual no seu Windows com o ePSXe aberto.
+- Sem plugin, DLL injetada, gravação de RAM nem conexão remota.
