@@ -2,7 +2,7 @@
 
 import {useEffect,useMemo,useState} from "react"
 import Link from "next/link"
-import {BookMarked,Layers,Search,RefreshCcw,ArrowLeft} from "lucide-react"
+import {BookMarked,Search,RefreshCcw,ArrowLeft} from "lucide-react"
 import {desktopApi} from "@/lib/desktop"
 import type {DeckLibrary,LocalCard} from "@/lib/desktop"
 import {CardFace} from "./deck-card-face"
@@ -159,7 +159,7 @@ export function SavedDecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) 
       </section>
 
       <div className="min-w-0 space-y-4">
-        {detail&&selected?
+        {detail&&selected&&detail.selectedDeckId===selectedId?
         <>
           <section className="panel rounded-xl p-4">
             <h2 className="font-display text-xl font-semibold text-gold">{selected.name}</h2>
