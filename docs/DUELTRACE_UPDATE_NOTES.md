@@ -8,6 +8,7 @@
 ## Melhorias
 - Deck mostrado no DUELTRACE usa o save selecionado e validado, sem ser substituído por dados suspeitos da RAM.
 - Trocar explicitamente de Memory Card escolhe o save FM único do novo cartão quando for inequívoco.
+- Snapshots automáticos ficam vinculados ao cartão selecionado; o deck do cartão anterior não aparece como atual.
 - Mão, fusões, RANK, biblioteca, Memory Card e monitoramento em segundo plano continuam disponíveis.
 
 ## Correções
