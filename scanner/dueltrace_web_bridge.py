@@ -1794,10 +1794,9 @@ class DueltraceWebBridge:
             if not profile:
                 raise ValueError("Ative uma ISO antes de salvar o deck.")
             store=MemoryCardStore(self.catalog.home)
-            live=self._get_confirmed_live_deck(active["sha256"])
-            if live is not None:
-                return store.save_live_snapshot(
-                    active["sha256"],name,live["deckIds"])
+            # A RAM deck offset is not independently in-game validated.
+            # Explicit saves therefore copy ONLY the integrity-checked
+            # Memory Card selection, never a speculative memory buffer.
             return store.save_snapshot(active["sha256"],name)
 
     def get_drops(self, opponent_id=0, group="", query="", offset=0, limit=36,
