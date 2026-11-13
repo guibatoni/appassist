@@ -459,6 +459,18 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.configure_epsxe()
 
+    def get_emulator_status(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_emulator_status()
+
+    def set_emulator(self, credential, mode, port=8080):
+        self._authorize(credential)
+        return self._bridge.set_emulator(mode,port)
+
+    def configure_pcsx_redux(self, credential):
+        self._authorize(credential)
+        return self._bridge.configure_pcsx_redux()
+
     def start_game(self, credential):
         self._authorize(credential)
         return self._bridge.start_game()
