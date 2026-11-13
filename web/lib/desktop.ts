@@ -350,6 +350,19 @@ export type LocalMod = {
   requiresReview: boolean
 }
 
+export type EmulatorMode = "auto" | "epsxe" | "pcsx-redux"
+export type EmulatorStatus = {
+  mode: EmulatorMode
+  active: "epsxe" | "pcsx-redux"
+  port: number
+  epsxeConfigured: boolean
+  pcsxReduxConfigured: boolean
+  reduxAvailable: boolean
+  reduxRunning: boolean
+  status: string
+  warning: string
+}
+
 export type DesktopState = {
   connected: boolean
   source: string
@@ -359,6 +372,8 @@ export type DesktopState = {
   mods: LocalMod[]
   fusionCount: number
   epsxeConfigured: boolean
+  pcsxReduxConfigured?: boolean
+  emulatorMode?: EmulatorMode
   warning: string
 }
 
@@ -979,6 +994,9 @@ export interface DesktopAPI {
   upload_iso_forensic(sha: string): Promise<{synced:boolean;fingerprint:string;kind:string}>
   import_iso(): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(): Promise<{cancelled: boolean; configured?: boolean}>
+  configure_pcsx_redux(): Promise<{cancelled: boolean; configured?: boolean}>
+  get_emulator_status(): Promise<EmulatorStatus>
+  set_emulator(mode:EmulatorMode,port:number): Promise<EmulatorStatus>
   start_game(): Promise<{started: boolean; status: string}>
 }
 
@@ -1053,6 +1071,9 @@ interface ProtectedNativeAPI {
   upload_iso_forensic(token: string, sha: string): Promise<{synced:boolean;fingerprint:string;kind:string}>
   import_iso(token: string): Promise<{cancelled: boolean; investigation?: string}>
   configure_epsxe(token: string): Promise<{cancelled: boolean; configured?: boolean}>
+  configure_pcsx_redux(token: string): Promise<{cancelled: boolean; configured?: boolean}>
+  get_emulator_status(token: string): Promise<EmulatorStatus>
+  set_emulator(token:string,mode:EmulatorMode,port:number): Promise<EmulatorStatus>
   start_game(token: string): Promise<{started: boolean; status: string}>
 }
 
@@ -1147,6 +1168,9 @@ export function desktopApi(): DesktopAPI | null {
     upload_iso_forensic: (sha) => native.upload_iso_forensic(token,sha),
     import_iso: () => native.import_iso(token),
     configure_epsxe: () => native.configure_epsxe(token),
+    configure_pcsx_redux: () => native.configure_pcsx_redux(token),
+    get_emulator_status: () => native.get_emulator_status(token),
+    set_emulator: (mode,port) => native.set_emulator(token,mode,port),
     start_game: () => native.start_game(token),
   }
 }
