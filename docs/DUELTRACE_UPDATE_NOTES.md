@@ -1,20 +1,34 @@
-# DUELTRACE v0.19.6 — Preview
+# DUELTRACE v0.20.0 — Preview
 
 ## Novidades
-- A aba de coleção de decks agora se chama **Meus Decks** no menu e nas telas.
-- Nome e descrições simplificados para facilitar a consulta dos decks salvos por ISO.
+- Novo **overlay nativo de RANK** sobre o ePSXe Windows, transparente, compacto e sem bordas.
+- O overlay acompanha a janela de jogo e não intercepta mouse, teclado nem cliques.
+- Mostra **RANK previsto** e classificação (ex.: S-POW) quando há leitura coerente em duelo.
+- Em fase de calibração, indica **ANALISANDO**, sem inventar pontos de RANK.
+- Em Configurações, é possível ativar/desativar o overlay, alterar posição, tamanho e opacidade.
 
 ## Melhorias
-- Removido o termo em inglês usado anteriormente na interface da coleção.
-- Mantidos nomes dos decks personalizados, buscas por cartas e galeria de fusões com miniaturas.
-- Traduções do título Meus Decks atualizadas nos idiomas disponíveis.
-- O botão Salvar deck continua abrindo diretamente o deck recém-salvo em Meus Decks.
+- Usa o monitor de RAM compartilhado iniciado pelo DUELTRACE; não cria um segundo scanner.
+- Segue a área útil (client area) do ePSXe ao mover/redimensionar a janela.
+- Oculta automaticamente quando o emulador é minimizado, perde o foco ou a leitura de duelo termina.
+- Preferências persistentes no próprio DUELTRACE, com validação estrita e sem exigir plugin no ePSXe.
+- Preservadas as abas Decks, Meus Decks, Fusões, Drops, Biblioteca e a leitura em segundo plano.
 
 ## Correções
-- Uniformizado o nome da aba nos títulos, menu lateral e atalhos internos.
-- Preservadas as rotas locais e os arquivos dos decks existentes, sem migração ou perda de dados.
-- Nenhuma alteração no Memory Card, na RAM do ePSXe ou nas regras de fusão.
+- Sem sobreposição permanente em outros programas; somente ePSXe ativo e em primeiro plano.
+- Valores provisórios não são apresentados como resultado oficial do jogo.
+- Janelas e processos auxiliares são encerrados junto com o DUELTRACE Windows.
+- Nenhum processo ePSXe recebe escrita de RAM, injeção ou interceptação de controles.
 
-## Observações
-- O endereço interno da tela permanece compatível com a versão anterior.
-- A organização dos decks é local, por ISO, sem sincronização automática com a nuvem.
+## Limitações
+- A sobreposição é opt-in: ative-a uma vez em Configurações > Overlay de RANK no ePSXe.
+- RANK só é exibido quando o motor já reconheceu um duelo e conseguiu uma leitura plausível.
+- O RANK é uma previsão e continua sujeito à validação por ISO; não substitui a pontuação final do jogo.
+- Recomendado **ePSXe em modo janela ou janela maximizada**. Fullscreen exclusivo pode ocultar a sobreposição.
+- A posição e transparência dependem das janelas nativas do Windows; validar no ePSXe real.
+- Emuladores múltiplos simultâneos não são suportados pelo overlay inicial.
+- Não existe API pública, transmissão de vídeo, HTTP/WebSocket externo ou compartilhamento remoto.
+
+## Créditos e direitos
+- Desenvolvido por Batoni Dev - Guilherme Batoni.
+- Distribuição somente com autorização expressa do desenvolvedor.
