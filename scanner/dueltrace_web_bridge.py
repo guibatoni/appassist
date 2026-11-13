@@ -538,10 +538,13 @@ class DueltraceWebBridge:
         return sorted({pid for pid in pids if type(pid) is int and 0<pid<2**31})[:32]
 
     def _redux_preferred_pid(self):
+        # Explicit user selection takes precedence over a prior launcher PID.
+        if self._redux_selected_pid is not None:
+            return self._redux_selected_pid
         if (self._process is not None and self._process.poll() is None
                 and self._process_kind=="pcsx-redux"):
             return self._process.pid
-        return self._redux_selected_pid
+        return None
 
     def select_redux_process(self, pid):
         """Explicitly select which running Redux instance to inspect.
