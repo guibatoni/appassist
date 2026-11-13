@@ -50,6 +50,7 @@ class BackgroundLiveTests(unittest.TestCase):
         bridge=SyntheticBridge()
         now=[10.0]
         worker=BackgroundLiveTracker(bridge,clock=lambda:now[0],detector=lambda:True)
+        worker._started=True
         for kind in ("hand","rank","opponent"):
             self.assertTrue(worker.sample_once(kind))
         self.assertEqual(worker.snapshot("hand",bridge.sha)["hand"][0]["id"],461)
