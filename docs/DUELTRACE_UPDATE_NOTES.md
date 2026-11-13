@@ -6,8 +6,8 @@
 - Preparação documental da futura API de snapshots ePSXe para o DUELTRACE Cloud, sem abrir portas, enviar RAM ou ativar conexões não autorizadas.
 
 ## Melhorias
-- Mantida toda a leitura de mão, fusões e cálculo RANK ePSXe, com perfis por ISO, Memory Card, biblioteca de cartas e mods, imagens, decks, diagnósticos e janelas.
-- O usuário pode atualizar diretamente de v0.19.0/v0.19.1 para v0.19.2 preservando os dados do DUELTRACE e das ISOs; recomenda-se extrair a nova versão em pasta separada antes de usar o atualizador.
+- Mantidos ePSXe, leitura de mão, fusões, RANK, biblioteca, Memory Card, imagens, decks e janelas.
+- Atualização direta de v0.19.0/v0.19.1, com configurações e dados preservados; primeiro extraia em pasta separada.
 - A integração futura com a versão web será baseada em dados derivados e validados, e não em acesso livre à RAM, ISO/BIN ou ao disco.
 
 ## Correções
