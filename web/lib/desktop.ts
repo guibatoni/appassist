@@ -897,6 +897,11 @@ export type DeckLibrary = {
   status:string;displayName:string;selectedDeckId:string;gameIntegrityVerified:boolean
   savePinned:boolean
   activeInEmulatorVerified:boolean
+  deckSource?:"memory_card"|"snapshot"
+  liveDeckMatchesSave?:boolean
+  liveDeckStatus?:string
+  blocks?:Array<{block:number;status:"fm_valid"|"other_game"|"continuation"|"empty"|"unverified"
+    label:string;selectable:boolean;saveName:string|null}>
   saves:Array<{block:number;saveName:string;duelistCode:number;saveSequence:number
     displayName:string;association:"linked_current_mod"|"linked_other_mod"|"shared_between_mods"|"unassigned"
     linkedModName:string|null;saveTitle:string}>

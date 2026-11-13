@@ -62,12 +62,53 @@ def _extract_saves(blob):
                       **checked})
     return found
 
+def _list_card_blocks(blob, saves):
+    """Report all 15 PHYSICAL PS1 blocks, not just validated FM saves.
+
+    A valid PS1 directory entry is not a valid FM deck. Only a separately
+    CRC/seal-verified FM save may be selected. Unknown and corrupt slots
+    remain visible so the player understands why the picker has one save.
+    """
+    valid={row["block"]:row for row in saves}
+    slots=[]
+    for block in range(1,16):
+        directory=blob[block*128:(block+1)*128]
+        flag=directory[0] if directory[1:4]==bytes(3) else None
+        checksum=_frame_checksum(directory)
+        name=directory[10:31].split(bytes(1),1)[0].decode("ascii","replace")
+        name="".join(ch for ch in name if 32<=ord(ch)<127)[:21]
+        if block in valid:
+            status="fm_valid"
+            label="Save FM validado"
+        elif not checksum and any(directory):
+            status="unverified"
+            label="Diretório não validado"
+        elif flag==0x51:
+            status="unverified" if SAVE_NAME_RE.search(name) else "other_game"
+            label=("Save FM não validado" if status=="unverified"
+                   else "Outro jogo")
+        elif flag in (0x52,0x53):
+            status="continuation"
+            label="Continuação de save"
+        elif flag in (0xA0,0xA1,0xA2,0xA3) or not any(directory):
+            status="empty"
+            label="Livre / não ocupado"
+        else:
+            status="unverified"
+            label="Bloco não identificado"
+        slots.append({"block":block,"status":status,
+                      "label":label,"selectable":status=="fm_valid",
+                      "saveName":name if status=="fm_valid" else None})
+    return slots
+
+
 def parse_memory_card(blob):
     if not isinstance(blob,bytes):
         raise ValueError("Conteúdo do cartão inválido.")
     saves=_extract_saves(blob)
     return {"schema":1,"format":"PS1-RAW","bytes":len(blob),
-            "saves":saves,"detectedSaveCount":len(saves),
+            "saves":saves,"blocks":_list_card_blocks(blob,saves),
+            "detectedSaveCount":len(saves),
             "gameIntegrityVerified":bool(saves)}
 
 
@@ -157,8 +198,12 @@ class MemoryCardStore:
                     selected_save=row
                     break
         if selected_save is None and len(result["saves"])==1:
-            # Only auto-pick an unambiguous FIRST selection, not a missing pin.
-            if not isinstance(previous,dict) or previous.get("selectedBlock") is None:
+            # A newly chosen card is an explicit new choice; its sole valid
+            # FM save is unambiguous even if the previous card had a pin.
+            # Never silently switch slots inside an already linked card.
+            if (not isinstance(previous,dict)
+                    or previous.get("selectedBlock") is None
+                    or previous.get("path") != str(source)):
                 selected_save=result["saves"][0]
         keep_missing_pin=(
             selected_save is None
@@ -225,6 +270,9 @@ class MemoryCardStore:
         linked=self._binding_data().get("links",{}).get(sha)
         if not isinstance(linked,dict):
             linked={}
+        card_path=linked.get("path")
+        card_token=(hashlib.sha256(card_path.encode("utf8")).hexdigest()
+                    if type(card_path) is str and card_path else None)
         chosen=next((save for save in parsed["saves"]
                      if type(linked.get("selectedBlock")) is int
                      and save["block"]==linked["selectedBlock"]
@@ -238,7 +286,11 @@ class MemoryCardStore:
             # Use slot in the key: older releases wrote auto-<hash>.json
             # for ALL saves under any mod. Preserve them as backups, but do
             # not let their filenames suppress correctly linked snapshots.
-            snapshot_id="auto-"+str(save["block"])+"-"+fp
+            # Older snapshots keyed by block only could accidentally display
+            # a deck from a different memory card using the same FM slot.
+            # Include the link's file identity, not the volatile card bytes.
+            snapshot_id=("auto-"+str(save["block"])+"-"+
+                         (card_token[:12] if card_token else "unlinked")+"-"+fp)
             dest=folder2/(snapshot_id+".json")
             if not dest.exists():
                 mod=safe_mod_name(linked.get("modName")) or "mod vinculado"
@@ -247,6 +299,7 @@ class MemoryCardStore:
                           "name":("Deck · Bloco "+str(save["block"])+" · "+mod)[:90],
                           "cards":deck,"source":"memory_card","saveName":save["saveName"],
                           "saveBlock":save["block"],
+                          "memoryCardPathHash":card_token,
                           "verifiedInGame":False,
                           "saveIntegrityVerified":True,
                           "duelistCode":save["duelistCode"],
@@ -258,6 +311,9 @@ class MemoryCardStore:
     def _saved(self,sha):
         folder=self.home/"deck_snapshots"/sha
         link=(self._binding_data().get("links") or {}).get(sha) or {}
+        card_path=link.get("path")
+        current_card_token=(hashlib.sha256(card_path.encode("utf8")).hexdigest()
+                            if type(card_path) is str and card_path else None)
         if not folder.is_dir():
             return []
         found=[]
@@ -270,7 +326,8 @@ class MemoryCardStore:
                 continue
             if (payload.get("rom_sha256")!=sha
                     or (payload.get("source")=="memory_card"
-                        and (type(payload.get("saveBlock")) is not int
+                        and (payload.get("memoryCardPathHash")!=current_card_token
+                             or type(payload.get("saveBlock")) is not int
                              or payload.get("saveBlock")!=link.get("selectedBlock")
                              or not self._matches_selected_save(
                                  link, {"saveName":payload.get("saveName"),
@@ -291,13 +348,13 @@ class MemoryCardStore:
     def read(self,rom_sha256,mod_name=None):
         if not isinstance(rom_sha256,str) or not ROM_RE.fullmatch(rom_sha256):
             return {"linked":False,"status":"Nenhum mod ativo.","saved":[],
-                    "deckIds":[],"saves":[],"selectedBlock":None}
+                    "deckIds":[],"saves":[],"blocks":[],"selectedBlock":None}
         data=self._binding_data()
         link=(data.get("links") or {}).get(rom_sha256)
         base={"linked":False,
               "status":"Selecione um Memory Card na Biblioteca de Mods.",
               "saved":self._saved(rom_sha256),"deckIds":[],"cardName":None,
-              "saveName":None,"saves":[],"selectedBlock":None,
+              "saveName":None,"saves":[],"blocks":[],"selectedBlock":None,
               "gameIntegrityVerified":False,"activeInEmulatorVerified":False}
         if not isinstance(link,dict) or not link.get("path"):
             return base
@@ -337,6 +394,7 @@ class MemoryCardStore:
                           if chosen and row["block"]==chosen["block"]),None)
         return {**base,"linked":True,"cardName":path.name,
                 "saves":choices,
+                "blocks":result["blocks"],
                 "saveDisplayName":(chosen_label or {}).get("displayName"),
                 "activeModName":(safe_mod_name(mod_name)
                                  or safe_mod_name(link.get("modName"))),

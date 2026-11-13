@@ -168,14 +168,16 @@ class BackgroundLiveTests(unittest.TestCase):
             self.assertTrue(app.get_state()["backgroundLiveRunning"])
             monitor.stop()
 
-    def test_decks_page_uses_background_state_but_saves_still_read_fresh_ram(self):
+    def test_decks_page_uses_cache_only_as_corrobation_and_saves_selected_card(self):
         source=(ROOT/"scanner/dueltrace_web_bridge.py").read_text(encoding="utf8")
         section=source[source.index("    def get_deck_library("):
                        source.index("    def save_current_deck(")]
         self.assertIn('self._background_live.snapshot("deck",sha)',section)
         save=source[source.index("    def save_current_deck("):
                     source.index("    def get_drops(")]
-        self.assertIn('self._get_confirmed_live_deck(active["sha256"])',save)
+        self.assertNotIn('self._get_confirmed_live_deck(active["sha256"])',save)
+        self.assertIn('store.save_snapshot(active["sha256"],name)',save)
+        self.assertIn('live.get("matchesVerifiedSave") is not True',section)
 
     def test_desktop_bootstraps_sampler_before_webview_and_stops_on_exit(self):
         source=(ROOT/"scanner/dueltrace_web_desktop.py").read_text(encoding="utf8")

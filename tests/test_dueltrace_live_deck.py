@@ -43,15 +43,36 @@ class LiveDeckTests(unittest.TestCase):
         bridge._launched_rom_sha=SHA
         bridge._process=Mock(pid=1234,poll=Mock(return_value=None))
         fake={"ready":True,"deckIds":list(range(1,41)),"pid":1234}
-        with patch("dueltrace_live_deck.read_live_deck",return_value=fake) as read:
+        bridge.catalog=Mock()
+        bridge.catalog.home=Path("/mock-memorycard-home")
+        approved={"gameIntegrityVerified":True,"deckIds":list(range(1,41))}
+        with (patch("dueltrace_live_deck.read_live_deck",return_value=fake) as read,
+              patch.object(MemoryCardStore,"read",return_value=approved)):
             self.assertIsNone(bridge._get_confirmed_live_deck(OTHER))
             read.assert_not_called()
-            self.assertEqual(bridge._get_confirmed_live_deck(SHA),fake)
+            self.assertEqual(bridge._get_confirmed_live_deck(SHA)["deckIds"],fake["deckIds"])
             read.assert_called_once_with(1234)
         bridge._process.poll.return_value=1
         with patch("dueltrace_live_deck.read_live_deck") as read:
             self.assertIsNone(bridge._get_confirmed_live_deck(SHA))
             read.assert_not_called()
+
+    def test_wrong_plausible_ram_deck_cannot_overwrite_saved_cards(self):
+        bridge=object.__new__(DueltraceWebBridge)
+        bridge._launched_rom_sha=SHA
+        bridge._process=Mock(pid=1234,poll=Mock(return_value=None))
+        bridge.catalog=Mock()
+        bridge.catalog.home=Path("/mock-memorycard-home")
+        wrong={"ready":True,"deckIds":[722]*40,"pid":1234}
+        approved={"gameIntegrityVerified":True,"deckIds":list(range(1,41))}
+        with (patch("dueltrace_live_deck.read_live_deck",return_value=wrong),
+              patch.object(MemoryCardStore,"read",return_value=approved)):
+            self.assertIsNone(bridge._get_confirmed_live_deck(SHA))
+        with (patch("dueltrace_live_deck.read_live_deck",return_value=wrong),
+              patch.object(MemoryCardStore,"read",return_value={
+                  "gameIntegrityVerified":False,"deckIds":[]}) as saved):
+            self.assertIsNone(bridge._get_confirmed_live_deck(SHA))
+            saved.assert_called_once_with(SHA)
 
     def test_save_verified_live_snapshot_without_touching_memory_card(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -70,7 +91,8 @@ class LiveDeckTests(unittest.TestCase):
         self.assertIn("self._get_confirmed_live_deck(sha)",src)
         self.assertIn("live is not None",src)
         self.assertIn("activeInEmulatorVerified",src)
-        self.assertIn("save_live_snapshot(",src)
+        self.assertNotIn("return store.save_live_snapshot(",src)
+        self.assertIn('return store.save_snapshot(active["sha256"],name)',src)
 
 
 if __name__=="__main__":

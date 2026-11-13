@@ -3,7 +3,7 @@
 import {T,useI18n} from "@/lib/i18n"
 
 import {useEffect,useMemo,useState} from "react"
-import {BookMarked,Layers,RefreshCcw,Save} from "lucide-react"
+import {BookMarked,Layers,RefreshCcw,Save,FolderOpen} from "lucide-react"
 import {desktopApi} from "@/lib/desktop"
 import type {DeckLibrary,LocalCard} from "@/lib/desktop"
 import {CardFace} from "./deck-card-face"
@@ -51,6 +51,17 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
     finally{setBusy(false)}
   }
 
+  const chooseMemoryCard=async()=>{
+    const api=desktopApi()
+    if(!api||busy)return
+    setBusy(true)
+    try{
+      const response=await api.select_memory_card()
+      if(!response.cancelled){setChosen("");setPreview(null);setRefresh(v=>v+1);setError("")}
+    }catch(e){setError(e instanceof Error?e.message:"Não foi possível selecionar o Memory Card.")}
+    finally{setBusy(false)}
+  }
+
   const saveDeck=async()=>{
     const api=desktopApi()
     if(!api||!name.trim())return
@@ -81,13 +92,21 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             Save selecionado: {state.saveDisplayName}
           </p>}
         </div>
-        <button type="button" className="btn-ghost" onClick={()=>setRefresh(x=>x+1)}>
-          <RefreshCcw className="size-4"/> Recarregar
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn-ghost" disabled={busy||!desktopApi()}
+            onClick={()=>void chooseMemoryCard()}>
+            <FolderOpen className="size-4"/> Selecionar outro Memory Card
+          </button>
+          <button type="button" className="btn-ghost" onClick={()=>setRefresh(x=>x+1)}>
+            <RefreshCcw className="size-4"/> Recarregar
+          </button>
+        </div>
       </div>
       {error&&<p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
-      {state?.activeInEmulatorVerified&&
-        <p className="mt-2 text-sm text-primary"><T k="Leitura ao vivo confirmada na RAM do ePSXe iniciado pelo DUELTRACE. Alterações ainda não salvas no Memory Card podem aparecer aqui."/></p>}
+      <p className="mt-2 text-xs text-muted">
+        As cartas abaixo vêm do Memory Card selecionado ou de um snapshot local, e não de um endereço RAM estimado.
+        {state?.liveDeckStatus?" "+state.liveDeckStatus:""}
+      </p>
       <p className="mt-3 text-xs text-muted"><T k="O DUELTRACE identifica o título do save PS1 quando disponível e associa cada bloco ao mod que você selecionou. Mods que compartilham o mesmo identificador do jogo não podem ser diferenciados só por esse código. O ePSXe continua responsável pelo cartão original."/></p>
       {(state?.saves?.length??0)>0&&
         <label className="mt-4 flex flex-col gap-1 text-sm text-muted">Saves identificados neste Memory Card
@@ -100,6 +119,32 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
             </option>)}
           </select>
         </label>}
+      {(state?.blocks?.length??0)>0&&
+        <div className="mt-4" aria-label="15 blocos físicos do Memory Card">
+          <p className="mb-2 text-sm font-semibold text-white">
+            Blocos do Memory Card ({state?.saves?.length??0} saves FM íntegros de 15 posições físicas)
+          </p>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+            {state!.blocks!.map(slot=><button type="button" key={slot.block}
+              disabled={busy||!slot.selectable}
+              onClick={()=>void chooseSave(slot.block)}
+              title={`Bloco ${slot.block}: ${slot.label}`}
+              aria-label={`Bloco ${slot.block}: ${slot.label}`}
+              aria-pressed={state?.selectedBlock===slot.block}
+              className={"min-h-16 rounded-lg border p-2 text-left text-xs "+
+                (state?.selectedBlock===slot.block?"border-gold bg-gold/10 text-gold":
+                slot.selectable?"border-primary/50 bg-primary/10 text-white hover:border-gold":
+                "border-line/50 bg-background/30 text-muted cursor-default")}>
+                <span className="block font-semibold">Bloco {slot.block}</span>
+                <span className="mt-1 block text-[11px]">{slot.label}</span>
+              </button>)}
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            Um cartão PS1 possui 15 blocos de dados, mas nem todos são partidas salvas.
+            Apenas saves de Forbidden Memories com integridade confirmada podem ser escolhidos.
+            O ePSXe pode usar dois cartões diferentes; selecione o arquivo do outro cartão se o seu save não aparecer.
+          </p>
+        </div>}
       {state?.savePinned&&state.selectedBlock&&
         <p className="mt-2 text-xs text-primary">Bloco {state.selectedBlock} salvo como preferência desta ISO. A sequência acompanha os saves do jogo.</p>}
       <label className="mt-4 flex flex-col gap-1 text-sm text-muted">Selecionar deck
@@ -115,7 +160,7 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
           aria-label={t("Nome do novo deck salvo")} placeholder={t("Nome para salvar o deck ativo")}
           value={name} maxLength={72} onChange={e=>setName(e.target.value)}/>
         <button type="button" className="btn-gold disabled:opacity-50"
-          disabled={busy||state?.deckCount!==40||(!state?.activeInEmulatorVerified&&!state?.saveName)||!name.trim()||!desktopApi()}
+          disabled={busy||Boolean(chosen)||state?.deckCount!==40||!state?.saveName||!name.trim()||!desktopApi()}
           onClick={()=>void saveDeck()}><Save className="size-4"/> <T k="Salvar deck"/></button>
       </div>
     </div>
@@ -126,6 +171,10 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
         </h2>
         <p className="text-sm text-primary">{state?.deckCount??0}/40 cartas</p>
       </div>
+      {state?.deckCount===40&&<p className="mt-2 text-xs text-primary">
+        Origem: {state.deckSource==="snapshot"?"cópia local escolhida":"save selecionado do Memory Card"}.
+        Integridade do formato do save verificada, sem garantia de que seja o deck ativo nesta partida.
+      </p>}
       {state?.deckCount===40?
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {state.cards.map(card=><button type="button" key={card.id} onClick={()=>showCard(card.id)}
