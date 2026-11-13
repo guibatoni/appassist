@@ -1,0 +1,32 @@
+name: DUELTRACE Windows — PCSX-Redux compatibility tests
+
+on:
+  push:
+    branches:
+      - feature/dueltrace-v0.19.0-pcsx-redux
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-redux-adapter:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check package version, branch and patch notes
+        run: python tools/security/verify_preview_metadata.py --branch feature/dueltrace-v0.19.0-pcsx-redux
+      - name: Install imports needed by the desktop bridge
+        run: python -m pip install pillow==13.0.0 capstone==5.0.9
+      - name: Check PCSX Redux modules compile
+        run: python -m py_compile scanner/dueltrace_pcsx_redux.py scanner/pcsx_redux_launcher.py scanner/dueltrace_web_bridge.py scanner/dueltrace_web_security.py
+      - name: Test REST API, 2/8 MiB RAM, process fallback, launcher and WebUI
+        run: python -m unittest discover -s tests -p 'test_dueltrace_pcsx_redux*.py' -v
