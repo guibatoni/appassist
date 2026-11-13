@@ -99,7 +99,11 @@ class BackgroundLiveTracker:
         """Deterministic step for tests and both background workers."""
         if kind not in MAX_AGE:
             raise ValueError("Fluxo ao vivo inválido.")
-        sha = self._active_sha()
+        try:
+            sha = self._active_sha()
+        except (OSError, RuntimeError, ValueError, TypeError, KeyError):
+            self.invalidate()
+            return False
         if not sha:
             self.invalidate()
             return False
@@ -138,7 +142,12 @@ class BackgroundLiveTracker:
                     value.update(runtimeOpponentId=None)
         # The active ISO can change while the RAM reader is busy. Never
         # publish a result derived from the old profile into a new tab.
-        if sha != self._active_sha() or self._stop.is_set():
+        try:
+            still_active = sha == self._active_sha()
+        except (OSError, RuntimeError, ValueError, TypeError, KeyError):
+            still_active = False
+        if not still_active or self._stop.is_set():
+            self.invalidate()
             return False
         with self._lock:
             if self._cache and any(x["sha"] != sha for x in self._cache.values()):
@@ -151,16 +160,24 @@ class BackgroundLiveTracker:
         # First sample starts immediately, before any user opens 'Início'.
         while not self._stop.is_set():
             start = self.clock()
-            self.sample_once("hand")
-            if self._stop.is_set():
-                break
-            self.sample_once("rank")
+            try:
+                self.sample_once("hand")
+                if self._stop.is_set():
+                    break
+                self.sample_once("rank")
+            except Exception:
+                # An unexpected scan failure must not kill the always-on
+                # worker and leave a ready-looking snapshot frozen forever.
+                self.invalidate()
             self._stop.wait(max(0.1, min(HAND_INTERVAL, RANK_INTERVAL) -
                                 (self.clock() - start)))
 
     def _loop_opponent(self):
         while not self._stop.is_set():
             start = self.clock()
-            self.sample_once("opponent")
+            try:
+                self.sample_once("opponent")
+            except Exception:
+                self.invalidate()
             self._stop.wait(max(0.3, OPPONENT_INTERVAL -
                                 (self.clock() - start)))
