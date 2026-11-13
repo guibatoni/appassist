@@ -15,7 +15,7 @@ from pathlib import Path
 from dueltrace_preferences import _GLOBAL_SETTINGS_LOCK, _atomic_json, _read_json
 
 SETTINGS_KEY = "epsxe_rank_overlay"
-TRANSPARENT = "#ff00fe"
+TRANSPARENT = "#000000"  # Dark color-key avoids magenta fringes on antialiased text.
 POSITIONS = ("top-center-right", "top-left", "top-center", "top-right")
 DEFAULT = {"enabled": False, "position": "top-center-right", "scale": 100, "opacity": 95}
 RANK_LABEL = re.compile(r"^(?:[SABCD]-(?:POW|TEC)|Z-POW)$")
@@ -155,12 +155,8 @@ def render_rank_overlay_bitmap(lines, width, height, *, font_path=None):
     def font(pixel, weight):
         return overlay_font(max(8, round(pixel * factor)), weight, font_path)
 
-    def text_at(x, y, label, face, color, *, anchor="mm", shadow=False):
+    def text_at(x, y, label, face, color, *, anchor="mm"):
         x, y = round(x * factor), round(y * factor)
-        if shadow:
-            draw.text((x + factor//2, y + factor//2), label,
-                      font=face, anchor=anchor, fill=(1, 8, 20, 235),
-                      stroke_width=factor, stroke_fill=(1, 8, 20, 160))
         draw.text((x, y), label, font=face, anchor=anchor, fill=color)
 
     # Calculator layout: RANK heading, white tabular score/pts,
@@ -172,7 +168,7 @@ def render_rank_overlay_bitmap(lines, width, height, *, font_path=None):
         measure = draw.textbbox((0, 0), number, font=main_face)
         score_width = (measure[2] - measure[0]) / factor
         score_x = width/2 - 15
-        text_at(score_x, height*.40, number, main_face, WHITE_COLOR, shadow=True)
+        text_at(score_x, height*.40, number, main_face, WHITE_COLOR)
         text_at(score_x + score_width/2 + 7,
                 height*.47, "pts", font(11, 500), MUTED_COLOR,
                 anchor="lm")
@@ -184,7 +180,7 @@ def render_rank_overlay_bitmap(lines, width, height, *, font_path=None):
         badge_x = width/2 - 17
         badge_y = height*.70
         text_at(grade_x, badge_y, grade, grade_face,
-                BAND_COLORS[grade], shadow=True)
+                BAND_COLORS[grade])
         fill, border = MODE_COLORS[mode]
         bx0 = round(badge_x*factor)
         by0 = round((badge_y-badge_h/2)*factor)
@@ -197,7 +193,7 @@ def render_rank_overlay_bitmap(lines, width, height, *, font_path=None):
                 font(8, 650), MUTED_COLOR)
     else:
         text_at(width/2, height*.42, "—", font(37, 800),
-                WHITE_COLOR, shadow=True)
+                WHITE_COLOR)
         text_at(width/2, height*.75, lines[1], font(17, 700), MUTED_COLOR)
         text_at(width/2, height*.97, lines[2], font(8, 600), MUTED_COLOR)
     return image.resize((width, height), Image.Resampling.LANCZOS)
