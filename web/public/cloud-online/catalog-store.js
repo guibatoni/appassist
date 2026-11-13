@@ -4,7 +4,7 @@
  */
 "use strict";
 window.DueltraceCatalogStore = (() => {
-  const DB="dueltrace-cloud-catalogs", VERSION=1;
+  const DB="dueltrace-cloud-catalogs", VERSION=2;
   function open(){
     return new Promise((resolve,reject)=>{
       if(!("indexedDB" in window))return reject(Error("Este navegador não suporta salvar catálogos locais."));
@@ -13,6 +13,7 @@ window.DueltraceCatalogStore = (() => {
         const db=req.result;
         if(!db.objectStoreNames.contains("mods"))db.createObjectStore("mods",{keyPath:"id"});
         if(!db.objectStoreNames.contains("settings"))db.createObjectStore("settings");
+        if(!db.objectStoreNames.contains("decks"))db.createObjectStore("decks");
       };
       req.onsuccess=()=>resolve(req.result);
       req.onerror=()=>reject(Error("Não foi possível abrir o armazenamento local do navegador."));
@@ -87,5 +88,12 @@ window.DueltraceCatalogStore = (() => {
   const remove=id=>txRun("mods","readwrite",store=>store.delete(id));
   const getActive=()=>txRun("settings","readonly",store=>store.get("active"));
   const setActive=id=>txRun("settings","readwrite",store=>store.put(id,"active"));
-  return Object.freeze({save,all,get,remove,getActive,setActive,normalize});
+  const getDeck=id=>txRun("decks","readonly",store=>store.get(id));
+  async function saveDeck(id,rows){
+    if(!/^[0-9a-f]{64}$/.test(id))throw Error("Mod inválido para o deck.");
+    if(!Array.isArray(rows)||rows.length>80||!rows.every(r=>r&&Number.isInteger(r.id)&&r.id>=1&&r.id<=722&&Number.isInteger(r.count)&&r.count>=1&&r.count<=3))
+      throw Error("Lista de deck inválida.");
+    return txRun("decks","readwrite",store=>store.put(rows,id));
+  }
+  return Object.freeze({save,all,get,remove,getActive,setActive,getDeck,saveDeck,normalize});
 })();
