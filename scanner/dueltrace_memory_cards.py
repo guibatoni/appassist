@@ -198,8 +198,12 @@ class MemoryCardStore:
                     selected_save=row
                     break
         if selected_save is None and len(result["saves"])==1:
-            # Only auto-pick an unambiguous FIRST selection, not a missing pin.
-            if not isinstance(previous,dict) or previous.get("selectedBlock") is None:
+            # A newly chosen card is an explicit new choice; its sole valid
+            # FM save is unambiguous even if the previous card had a pin.
+            # Never silently switch slots inside an already linked card.
+            if (not isinstance(previous,dict)
+                    or previous.get("selectedBlock") is None
+                    or previous.get("path") != str(source)):
                 selected_save=result["saves"][0]
         keep_missing_pin=(
             selected_save is None
