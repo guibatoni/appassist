@@ -8,6 +8,7 @@
 
 ## Melhorias
 - Mantidos todos os recursos do ePSXe, Biblioteca de Mods, fusões, imagens e configurações da v0.18.0.
+- Memory Card, decks, backups e ISOs permanecem preservados ao atualizar o aplicativo Windows.
 - Início opcional do PCSX-Redux com a ISO/BIN do mod ativo, utilizando flags oficiais sem alterar configurações do emulador.
 - Reconexão e descarte de mão antiga quando a RAM ou a sessão deixam de ser válidas.
 - O DUELTRACE não faz POST ao servidor do PCSX-Redux, não escreve na RAM e não envia dados do jogo para a nuvem.
@@ -20,7 +21,7 @@
 ## Correções
 - Endereços Windows do ePSXe não são usados por engano no PCSX-Redux.
 - A preferência de emulador é salva sem sobrescrever as ISOs, decks ou backups.
-- Versões PCSX-Redux sem as rotas HTTP esperadas exibem indisponibilidade, não leituras falsas.
+- Versões PCSX-Redux sem a API HTTP esperada passam por descoberta conservadora da RAM do processo Windows, validando mudanças reais da mão antes de mostrar cartas.
 - A conexão é limitada ao endereço local 127.0.0.1, com limite de bytes e bloqueio de redirecionamentos.
 
 ## Limitações
