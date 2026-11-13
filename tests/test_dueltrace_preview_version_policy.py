@@ -19,7 +19,7 @@ class PreviewReleaseMetadataPolicyTests(unittest.TestCase):
     def test_canonical_semver_branch_and_notes_are_consistent(self):
         self.assertEqual(policy.current_version(), CURRENT_VERSION)
         self.assertEqual(policy.verify_release_metadata(
-            "feature/dueltrace-v0.20.0-epsxe-rank-overlay"), CURRENT_VERSION)
+            "feature/dueltrace-v0.20.1-overlay-calculator-parity"), CURRENT_VERSION)
         self.assertEqual(policy.verify_release_metadata("main"), CURRENT_VERSION)
 
     def test_old_branch_cannot_publish_newer_binary(self):
