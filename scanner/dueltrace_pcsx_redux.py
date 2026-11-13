@@ -168,16 +168,17 @@ def connection_status(*, port: int=DEFAULT_PORT, fetch=_fetch, pids=None) -> dic
     try:
         state=_state(port,fetch)
     except (OSError,ValueError,urllib.error.URLError,TimeoutError):
-        return {"available":False,"running":False,"port":port,
-                "status":"Servidor PCSX-Redux indisponível. Ative Configuration > Emulation > Enable Web Server."}
+        return {"available":False,"httpReachable":False,"running":False,"port":port,
+                "status":"API HTTP não encontrada. A leitura do processo Windows continua disponível."}
     found=discover_redux_pids() if pids is None else list(pids)
     if not found:
-        return {"available":False,"running":False,"port":port,
-                "status":"API acessível, mas processo PCSX-Redux não confirmado neste Windows."}
+        return {"available":False,"httpReachable":True,"running":state["running"],"port":port,
+                "status":"API HTTP acessível, mas o processo Windows não foi identificado."}
     if len(found)!=1:
-        return {"available":False,"running":False,"port":port,
-                "status":"Várias instâncias PCSX-Redux abertas; mantenha apenas uma."}
-    return {"available":True,"running":state["running"],"port":port,
+        return {"available":False,"httpReachable":True,"running":state["running"],"port":port,
+                "status":"API HTTP acessível, mas há várias instâncias. "
+                         "Escolha o processo em Configurações para ler a RAM com segurança."}
+    return {"available":True,"httpReachable":True,"running":state["running"],"port":port,
             "status":("PCSX-Redux conectado; jogo em execução."
                       if state["running"] else "PCSX-Redux conectado; aguardando jogo em execução.")}
 
