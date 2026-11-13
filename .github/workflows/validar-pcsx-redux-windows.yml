@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/dueltrace-v0.19.0-pcsx-redux
+      - feature/dueltrace-v0.19.1-redux-file-picker-pid-selection
   workflow_dispatch:
 
 permissions:
@@ -23,7 +24,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Check package version, branch and patch notes
-        run: python tools/security/verify_preview_metadata.py --branch feature/dueltrace-v0.19.0-pcsx-redux
+        run: python tools/security/verify_preview_metadata.py --branch "${{ github.ref_name }}"
       - name: Install imports needed by the desktop bridge
         run: python -m pip install pillow==13.0.0 capstone==5.0.9
       - name: Check PCSX Redux modules compile
