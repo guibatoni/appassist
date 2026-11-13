@@ -1,0 +1,60 @@
+name: DUELTRACE Cloud — navegador sem Connector (GitHub Pages)
+
+on:
+  push:
+    branches:
+      - feature/dueltrace-cloud-v0.7.0-no-connector
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: dueltrace-cloud-browser-pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify browser-only scripts and synthetic ISO/BIN tests
+        run: |
+          node --check web/public/cloud-online/iso-scanner.js
+          node --check web/public/cloud-online/catalog-store.js
+          node --check web/public/cloud-online/app.js
+          node --test web/tests/cloud_browser_scanner.test.cjs
+
+      - name: Prepare public static browser website
+        run: |
+          mkdir -p "$RUNNER_TEMP/dueltrace-pages"
+          cp web/public/cloud-online/index.html "$RUNNER_TEMP/dueltrace-pages/index.html"
+          cp web/public/cloud-online/app.css "$RUNNER_TEMP/dueltrace-pages/app.css"
+          cp web/public/cloud-online/app.js "$RUNNER_TEMP/dueltrace-pages/app.js"
+          cp web/public/cloud-online/iso-scanner.js "$RUNNER_TEMP/dueltrace-pages/iso-scanner.js"
+          cp web/public/cloud-online/catalog-store.js "$RUNNER_TEMP/dueltrace-pages/catalog-store.js"
+          touch "$RUNNER_TEMP/dueltrace-pages/.nojekyll"
+          test -s "$RUNNER_TEMP/dueltrace-pages/iso-scanner.js"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload website
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.temp }}/dueltrace-pages
+
+      - name: Publish website
+        id: deployment
+        uses: actions/deploy-pages@v4
