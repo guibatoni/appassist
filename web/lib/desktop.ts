@@ -359,6 +359,9 @@ export type EmulatorStatus = {
   pcsxReduxConfigured: boolean
   reduxAvailable: boolean
   reduxRunning: boolean
+  reduxHttpReachable: boolean
+  reduxPids: number[]
+  selectedReduxPid: number | null
   reduxProcessFallback?: boolean
   status: string
   warning: string
@@ -998,6 +1001,7 @@ export interface DesktopAPI {
   configure_pcsx_redux(): Promise<{cancelled: boolean; configured?: boolean}>
   get_emulator_status(): Promise<EmulatorStatus>
   set_emulator(mode:EmulatorMode,port:number): Promise<EmulatorStatus>
+  select_redux_process(pid:number|null): Promise<EmulatorStatus>
   start_game(): Promise<{started: boolean; status: string}>
 }
 
@@ -1075,6 +1079,7 @@ interface ProtectedNativeAPI {
   configure_pcsx_redux(token: string): Promise<{cancelled: boolean; configured?: boolean}>
   get_emulator_status(token: string): Promise<EmulatorStatus>
   set_emulator(token:string,mode:EmulatorMode,port:number): Promise<EmulatorStatus>
+  select_redux_process(token:string,pid:number|null): Promise<EmulatorStatus>
   start_game(token: string): Promise<{started: boolean; status: string}>
 }
 
@@ -1172,6 +1177,7 @@ export function desktopApi(): DesktopAPI | null {
     configure_pcsx_redux: () => native.configure_pcsx_redux(token),
     get_emulator_status: () => native.get_emulator_status(token),
     set_emulator: (mode,port) => native.set_emulator(token,mode,port),
+    select_redux_process: (pid) => native.select_redux_process(token,pid),
     start_game: () => native.start_game(token),
   }
 }
