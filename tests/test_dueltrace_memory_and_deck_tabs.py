@@ -60,6 +60,51 @@ class MemoryCardTests(unittest.TestCase):
         self.assertEqual(data["saves"][0]["deckIds"],list(range(1,41)))
         self.assertTrue(data["gameIntegrityVerified"])
 
+    def test_all_fifteen_ps1_slots_visible_without_inventing_saves(self):
+        data=parse_memory_card(memory_bytes())
+        self.assertEqual(len(data["blocks"]),15)
+        self.assertEqual([x["block"] for x in data["blocks"]],list(range(1,16)))
+        self.assertEqual(data["detectedSaveCount"],1)
+        self.assertEqual(data["blocks"][0]["status"],"fm_valid")
+        self.assertTrue(data["blocks"][0]["selectable"])
+        self.assertTrue(all(row["status"]=="empty" for row in data["blocks"][1:]))
+        self.assertTrue(all(not row["selectable"] for row in data["blocks"][1:]))
+
+    def test_invalid_fm_and_other_game_slots_are_visible_but_not_selectable(self):
+        raw=bytearray(memory_bytes())
+        # The save has a valid PS1 header but its FM body fails CRC.
+        raw[BLOCK+0x200+1]^=1
+        raw[BLOCK+0x880+1]^=1
+        bad=parse_memory_card(bytes(raw))
+        self.assertEqual(bad["detectedSaveCount"],0)
+        self.assertEqual(bad["blocks"][0]["status"],"unverified")
+        self.assertFalse(bad["blocks"][0]["selectable"])
+        other=parse_memory_card(memory_bytes(save_name=b"BASLUS-99999-OTHER"))
+        self.assertEqual(other["blocks"][0]["status"],"other_game")
+        self.assertFalse(other["blocks"][0]["selectable"])
+
+    def test_player_switches_between_two_epsxe_cards_with_different_decks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            first=root/"epsxe000.mcr"
+            second=root/"epsxe001.mcr"
+            first.write_bytes(memory_bytes(list(range(1,41))))
+            second.write_bytes(memory_bytes(list(range(41,81))))
+            store=MemoryCardStore(root/"data")
+            store.select(SHA,first)
+            original=store.read(SHA)
+            self.assertEqual(original["cardName"],"epsxe000.mcr")
+            self.assertEqual(original["deckIds"],list(range(1,41)))
+            self.assertTrue(original["savePinned"])
+            store.select(SHA,second)
+            changed=store.read(SHA)
+            self.assertEqual(changed["cardName"],"epsxe001.mcr")
+            self.assertEqual(changed["deckIds"],list(range(41,81)))
+            self.assertEqual(changed["selectedBlock"],1)
+            self.assertEqual(len(changed["blocks"]),15)
+            self.assertEqual(first.read_bytes(),memory_bytes(list(range(1,41))))
+            self.assertEqual(second.read_bytes(),memory_bytes(list(range(41,81))))
+
     def test_bad_crc_in_both_copies_is_not_a_deck(self):
         blob=bytearray(memory_bytes())
         blob[BLOCK+0x200+1] ^= 1
