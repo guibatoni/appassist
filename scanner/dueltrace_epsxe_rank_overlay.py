@@ -77,6 +77,132 @@ def rank_overlay_text(rank):
     return None
 
 
+
+# Exact DUELTRACE calculator palette from rank-score-display.tsx and globals.css.
+# The Exo 2 variable font is used by the React "font-display" token.
+BAND_COLORS = {
+    "S": "#ff4dd7", "A": "#ff5353", "B": "#facc15",
+    "C": "#4ade80", "D": "#9ca3af", "Z": "#f5b83d",
+}
+MODE_COLORS = {
+    "POW": ("#b42332", "#ef555d"),
+    "TEC": ("#1554ab", "#579bf8"),
+}
+MUTED_COLOR = "#8ea3c7"
+WHITE_COLOR = "#ffffff"
+EXO2_RELATIVE_PATH = Path("fonts") / "Exo2-Variable.ttf"
+
+
+def overlay_font_path():
+    """Find the SAME local Exo 2 used by the native-bundled React calculator."""
+    bundle = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+    paths = (bundle / EXO2_RELATIVE_PATH,
+             Path(__file__).resolve().parent.parent / "web" / "app" /
+             "fonts" / "Exo2-Variable.ttf")
+    return next((item for item in paths if item.is_file()), None)
+
+
+def overlay_font(size, weight, font_path=None):
+    """Load a private bundled font without installing it into Windows."""
+    from PIL import ImageFont
+    path = font_path if font_path is not None else overlay_font_path()
+    if path is not None:
+        try:
+            font = ImageFont.truetype(str(path), size)
+            try:
+                axes = font.get_variation_axes()
+                if axes and len(axes) == 1:
+                    font.set_variation_by_axes([weight])
+            except (OSError, ValueError, AttributeError):
+                pass
+            return font
+        except (OSError, ValueError):
+            pass
+    # Fallback only for unusual local developer builds with no bundled Exo 2.
+    for name in ("C:/Windows/Fonts/seguisb.ttf",
+                 "C:/Windows/Fonts/arialbd.ttf"):
+        try:
+            return ImageFont.truetype(name, size)
+        except (OSError, ValueError):
+            continue
+    return ImageFont.load_default(size=size)
+
+
+def render_rank_overlay_bitmap(lines, width, height, *, font_path=None):
+    """Return a transparent antialiased RGBA image matching the calculator.
+
+    Content only. Never draws an opaque background over the game. The grade
+    uses S/A/B/C/D/Z colors and POW/TEC uses a colored rounded badge.
+    """
+    from PIL import Image, ImageDraw
+    if (not isinstance(lines, (tuple, list)) or len(lines) != 3
+            or type(width) is not int or type(height) is not int
+            or width < 110 or height < 55 or width > 800 or height > 400):
+        raise ValueError("Dimensões ou conteúdo inválidos para overlay.")
+    grade = mode = None
+    if type(lines[1]) is str and re.fullmatch(r"[SABCDZ]-(POW|TEC)", lines[1]):
+        grade, mode = lines[1].split("-", 1)
+    if (type(lines[0]) is not str or len(lines[0]) > 25
+            or type(lines[2]) is not str or len(lines[2]) > 25):
+        raise ValueError("Conteúdo de RANK inválido.")
+
+    # Supersampling preserves Exo 2 curves and rounded badge borders.
+    factor = 3
+    w, h = width * factor, height * factor
+    image = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+
+    def font(pixel, weight):
+        return overlay_font(max(8, round(pixel * factor)), weight, font_path)
+
+    def text_at(x, y, label, face, color, *, anchor="mm", shadow=False):
+        x, y = round(x * factor), round(y * factor)
+        if shadow:
+            draw.text((x + factor//2, y + factor//2), label,
+                      font=face, anchor=anchor, fill=(1, 8, 20, 235),
+                      stroke_width=factor, stroke_fill=(1, 8, 20, 160))
+        draw.text((x, y), label, font=face, anchor=anchor, fill=color)
+
+    # Calculator layout: RANK heading, white tabular score/pts,
+    # colored large grade, red/blue rounded POW/TEC label.
+    text_at(width/2, height*.105, "RANK", font(9, 600), MUTED_COLOR)
+    if grade and mode:
+        number = lines[0][len("RANK: "):]
+        main_face = font(37, 800)
+        measure = draw.textbbox((0, 0), number, font=main_face)
+        score_width = (measure[2] - measure[0]) / factor
+        score_x = width/2 - 15
+        text_at(score_x, height*.40, number, main_face, WHITE_COLOR, shadow=True)
+        text_at(score_x + score_width/2 + 7,
+                height*.47, "pts", font(11, 500), MUTED_COLOR,
+                anchor="lm")
+        grade_face = font(35, 900)
+        mode_face = font(15, 800)
+        badge_w = 76
+        badge_h = 34
+        grade_x = width/2 - 52
+        badge_x = width/2 - 17
+        badge_y = height*.70
+        text_at(grade_x, badge_y, grade, grade_face,
+                BAND_COLORS[grade], shadow=True)
+        fill, border = MODE_COLORS[mode]
+        bx0 = round(badge_x*factor)
+        by0 = round((badge_y-badge_h/2)*factor)
+        bx1 = round((badge_x+badge_w)*factor)
+        by1 = round((badge_y+badge_h/2)*factor)
+        draw.rounded_rectangle((bx0, by0, bx1, by1), radius=7*factor,
+                               fill=fill, outline=border, width=1*factor)
+        text_at(badge_x+badge_w/2, badge_y+1, mode, mode_face, WHITE_COLOR)
+        text_at(width/2, height*.96, "PREVISÃO",
+                font(8, 650), MUTED_COLOR)
+    else:
+        text_at(width/2, height*.42, "—", font(37, 800),
+                WHITE_COLOR, shadow=True)
+        text_at(width/2, height*.75, lines[1], font(17, 700), MUTED_COLOR)
+        text_at(width/2, height*.97, lines[2], font(8, 600), MUTED_COLOR)
+    return image.resize((width, height), Image.Resampling.LANCZOS)
+
+
 def overlay_geometry(game, position, scale):
     """Place a compact label inside the ePSXe CLIENT area (not title bar).
 
@@ -88,8 +214,8 @@ def overlay_geometry(game, position, scale):
     left, top, client_w, client_h = game
     if client_w < 320 or client_h < 180:
         return None
-    width = max(110, round(215 * scale / 100))
-    height = max(50, round(92 * scale / 100))
+    width = max(170, round(250 * scale / 100))
+    height = max(70, round(116 * scale / 100))
     width = min(client_w - 12, width)
     height = min(client_h - 10, height)
     if position == "top-left":
@@ -252,6 +378,8 @@ class EpsxeRankOverlay:
                                bd=0, relief="flat")
             canvas.pack(fill="both", expand=True)
             root.update_idletasks()
+            from PIL import ImageTk
+            current_photo = [None]  # Keep Tk PhotoImage alive until next draw.
 
             # Tk transparency makes background pixels invisible; these Win32
             # flags also pass all mouse clicks straight through to the game.
@@ -313,19 +441,9 @@ class EpsxeRankOverlay:
                     if key != last_draw[0]:
                         canvas.config(width=w, height=h)
                         canvas.delete("all")
-                        scale = config["scale"] / 100
-                        main_font = ("Segoe UI", max(12, round(22 * scale)), "bold")
-                        sub_font = ("Segoe UI", max(12, round(19 * scale)), "bold")
-                        note_font = ("Segoe UI", max(8, round(9 * scale)), "bold")
-                        for label, yy, font, color in (
-                            (lines[0], round(h*.30), main_font, "#ffffff"),
-                            (lines[1], round(h*.65), sub_font, "#ffffff"),
-                            (lines[2], round(h*.92), note_font, "#dbeafe"),
-                        ):
-                            canvas.create_text(w//2+1, yy+2, text=label,
-                                               font=font, fill="#000000")
-                            canvas.create_text(w//2, yy, text=label,
-                                               font=font, fill=color)
+                        bitmap = render_rank_overlay_bitmap(lines, w, h)
+                        current_photo[0] = ImageTk.PhotoImage(bitmap, master=root)
+                        canvas.create_image(0, 0, anchor="nw", image=current_photo[0])
                         root.wm_attributes("-alpha", config["opacity"]/100)
                         last_draw[0] = key
                     # Reposition if the user moves/resizes the emulator.
