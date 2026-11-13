@@ -953,7 +953,7 @@ export interface DesktopAPI {
   select_memory_card():Promise<{cancelled:boolean;selected?:boolean;status?:string}>
   select_memory_save(block:number):Promise<{selected:boolean;block:number}>
   get_deck_library(deckId?:string):Promise<DeckLibrary>
-  save_current_deck(name:string):Promise<{saved:boolean;name:string;status:string}>
+  save_current_deck(name:string):Promise<{saved:boolean;name:string;id?:string;status:string}>
   get_drops(opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
   get_card_fusions(cardId: number, offset?: number, limit?: number, sort?: "atk" | "name" | "id"): Promise<CardFusionSuggestions>
   get_card_fusion_paths(cardId: number): Promise<CardFusionPaths>
@@ -1027,7 +1027,7 @@ interface ProtectedNativeAPI {
   select_memory_card(token:string):Promise<{cancelled:boolean;selected?:boolean;status?:string}>
   select_memory_save(token:string,block:number):Promise<{selected:boolean;block:number}>
   get_deck_library(token:string,deckId?:string):Promise<DeckLibrary>
-  save_current_deck(token:string,name:string):Promise<{saved:boolean;name:string;status:string}>
+  save_current_deck(token:string,name:string):Promise<{saved:boolean;name:string;id?:string;status:string}>
   get_drops(token: string, opponentId: number, group: string, query: string, offset: number, limit: number, sort?: string, cardType?: string, rank?: string): Promise<DropsPage>
   get_card_fusions(token: string, cardId: number, offset?: number, limit?: number, sort?: "atk" | "name" | "id"): Promise<CardFusionSuggestions>
   get_card_fusion_paths(token: string, cardId: number): Promise<CardFusionPaths>
