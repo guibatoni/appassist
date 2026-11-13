@@ -119,9 +119,10 @@ jobs:
       - name: Empacotar UI v0 com motor Python
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --onedir --noconsole --name DUELTRACE-WebUI --paths scanner --collect-all webview --add-data "web/out;web/out" --add-data "scanner/dueltrace-build.json;." --add-data "docs/DUELTRACE_UPDATE_NOTES.md;." scanner/dueltrace_web_desktop.py
+          python -m PyInstaller --noconfirm --clean --onedir --noconsole --name DUELTRACE-WebUI --paths scanner --collect-all webview --hidden-import PIL.ImageTk --add-data "web/out;web/out" --add-data "web/app/fonts/Exo2-Variable.ttf;fonts" --add-data "scanner/dueltrace-build.json;." --add-data "docs/DUELTRACE_UPDATE_NOTES.md;." scanner/dueltrace_web_desktop.py
           if (-not (Test-Path dist/DUELTRACE-WebUI/DUELTRACE-WebUI.exe)) { throw "Executável experimental ausente" }
           if (-not (Test-Path dist/DUELTRACE-WebUI/_internal/DUELTRACE_UPDATE_NOTES.md)) { throw "Patch Notes não incluídos no executável." }
+          if (-not (Test-Path dist/DUELTRACE-WebUI/_internal/fonts/Exo2-Variable.ttf)) { throw "Fonte Exo 2 da calculadora ausente no overlay Windows." }
           Copy-Item tools/security/AVISO-SEGURANCA-PREVIEW.txt dist/DUELTRACE-WebUI/LEIA-ME-SEGURANCA.txt
           Compress-Archive -Path dist/DUELTRACE-WebUI/* -DestinationPath dist/DUELTRACE-WebUI-Windows-Preview.zip -Force
       - name: Testar bloqueio de release pública sem editor autorizado
