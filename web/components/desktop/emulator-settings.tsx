@@ -75,10 +75,12 @@ export function EmulatorSettings(){
       Executável Redux: {status?.pcsxReduxConfigured?"configurado":"não configurado"}
     </p>
     <p className="mt-3 rounded border border-gold/35 p-3 text-xs text-gold">
-      No PCSX-Redux, abra Configuration → Emulation → Enable Web Server.
-      O servidor pode ficar acessível em outras interfaces de rede e
-      também oferece operações de escrita; restrinja a porta no Firewall do Windows.
-      O DUELTRACE envia exclusivamente requisições GET e não altera RAM nem saves.
+      O DUELTRACE tenta primeiro a API nativa do PCSX-Redux. Se ela não
+      estiver disponível, usa uma busca conservadora da RAM do processo Windows,
+      sem alterar o jogo. Para usar HTTP, ative Configuration → Emulation →
+      Enable Web Server. Esse servidor também oferece operações de escrita
+      e pode ficar exposto à rede: restrinja a porta no Firewall do Windows.
+      O DUELTRACE envia somente GET e nunca altera a RAM ou saves.
     </p>
     {error&&<p role="alert" className="mt-2 text-sm text-red-300">{error}</p>}
   </section>
