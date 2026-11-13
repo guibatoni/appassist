@@ -99,6 +99,9 @@ class DueltraceWebBridge:
         self._rank_experimental_sha = None
         self._process = None
         self._process_kind = None
+        # Runtime-only choice. Windows PIDs may be reused after a restart.
+        # Never store a PID in persistent settings.
+        self._redux_selected_pid = None
         self._launched_rom_sha = None
         self._lock = threading.RLock()
         self._live_diagnostics = None
@@ -520,33 +523,78 @@ class DueltraceWebBridge:
         if state.get("available"):
             return "pcsx-redux",port
         try:
-            if len(discover_redux_pids())==1:
+            if discover_redux_pids():
                 return "pcsx-redux",port
         except OSError:
             pass
         return "epsxe",port
 
+    def _redux_processes(self):
+        """Return active Redux PIDs, bounded. Never expose process paths."""
+        try:
+            pids=discover_redux_pids()
+        except (OSError,ValueError):
+            pids=[]
+        return sorted({pid for pid in pids if type(pid) is int and 0<pid<2**31})[:32]
+
+    def _redux_preferred_pid(self):
+        if (self._process is not None and self._process.poll() is None
+                and self._process_kind=="pcsx-redux"):
+            return self._process.pid
+        return self._redux_selected_pid
+
+    def select_redux_process(self, pid):
+        """Explicitly select which running Redux instance to inspect.
+
+        PIDs are valid only for this runtime. A stale PID is rechecked on
+        every read. The original ePSXe binding is left untouched.
+        """
+        if pid is not None and (type(pid) is not int or pid<=0):
+            raise ValueError("Instância PCSX-Redux inválida.")
+        with self._lock:
+            pids=self._redux_processes()
+            if pid is not None and pid not in pids:
+                raise ValueError("A instância PCSX-Redux selecionada não está ativa.")
+            if self._redux_selected_pid!=pid:
+                self._redux_selected_pid=pid
+                self._reset_rank_read_state()
+                self._hand_suggestions_key=None
+                self._hand_suggestions=None
+            return self.get_emulator_status()
+
     def get_emulator_status(self):
         with self._lock:
             mode,port,settings=self._emulator_config()
             kind,_=self._emulator_backend()
+            pids=self._redux_processes()
+            if self._redux_selected_pid is not None and self._redux_selected_pid not in pids:
+                self._redux_selected_pid=None
+                self._reset_rank_read_state()
+            chosen=self._redux_preferred_pid()
             redux=redux_connection_status(port=port)
-            fallback=False
-            if not redux.get("available"):
-                try:
-                    fallback=len(discover_redux_pids())==1
-                except OSError:
-                    pass
+            fallback=bool(pids) and not redux.get("available")
+            if len(pids)>1 and chosen is None:
+                status=("Foram detectados vários processos PCSX-Redux. "
+                        "Selecione abaixo qual instância está executando o jogo.")
+            elif chosen is not None and len(pids)>1:
+                status=(f"Instância {chosen} selecionada. Leitura pela RAM "
+                        "do processo Windows (não pela API HTTP ambígua).")
+            elif fallback:
+                status=("PCSX-Redux detectado: leitura de RAM pelo processo Windows; "
+                        "API HTTP não disponível ou não vinculada à instância.")
+            else:
+                status=redux["status"]
             return {
                 "mode":mode,"active":kind,"port":port,
                 "epsxeConfigured":bool(settings.get("epsxe_executable")),
                 "pcsxReduxConfigured":bool(settings.get("pcsx_redux_executable")),
                 "reduxAvailable":redux["available"],
+                "reduxHttpReachable":redux.get("httpReachable") is True,
                 "reduxRunning":redux["running"],
                 "reduxProcessFallback":fallback,
-                "status":("PCSX-Redux detectado: leitura de RAM pelo processo Windows; "
-                          "API HTTP indisponível."
-                          if fallback else redux["status"]),
+                "reduxPids":pids,
+                "selectedReduxPid":chosen if chosen in pids else None,
+                "status":status,
                 "warning":("O PCSX-Redux escuta em todas as interfaces quando "
                            "o servidor web é ativado. Bloqueie acesso externo "
                            "no firewall antes de habilitar esse recurso."),
@@ -860,16 +908,24 @@ class DueltraceWebBridge:
                 return {"ready":False,"status":"Ative uma ISO na Biblioteca de Mods",
                         "hand":[],"pairs":[],"chains":[]}
             kind,port=self._emulator_backend()
-            preferred=(self._process.pid if self._process is not None
-                       and self._process.poll() is None
-                       and self._process_kind==kind else None)
+            preferred=(self._redux_preferred_pid() if kind=="pcsx-redux"
+                       else self._process.pid if self._process is not None
+                       and self._process.poll() is None and self._process_kind==kind
+                       else None)
             try:
                 if kind=="pcsx-redux" and not self._ram_reader_injected:
-                    sample=read_hand_from_redux(preferred_pid=preferred,port=port)
-                    if (not sample.get("ready")
-                            and sample.get("status")==
-                               "PCSX-Redux: servidor ou RAM indisponíveis."):
-                        sample=read_hand_from_redux_host(preferred_pid=preferred)
+                    pids=self._redux_processes()
+                    if len(pids)>1:
+                        # A loopback HTTP port cannot identify which Windows
+                        # process owns it. Explicitly selected PID uses ONLY
+                        # the read-only host scanner.
+                        sample=read_hand_from_redux_host(preferred_pid=preferred,pids=pids)
+                    else:
+                        sample=read_hand_from_redux(preferred_pid=preferred,port=port)
+                        if (not sample.get("ready")
+                                and sample.get("status")==
+                                   "PCSX-Redux: servidor ou RAM indisponíveis."):
+                            sample=read_hand_from_redux_host(preferred_pid=preferred)
                 else:
                     sample=self._ram_reader(preferred_pid=preferred)
             except (OSError,RuntimeError,ValueError) as exc:
@@ -939,9 +995,10 @@ class DueltraceWebBridge:
                 "sourceMode":"unsupported","rankSystem":rank_system(sha),
                 "score":None,"category":None,"counters":None}
         kind,port=self._emulator_backend()
-        preferred=(self._process.pid if self._process is not None
-                   and self._process.poll() is None
-                   and self._process_kind==kind else None)
+        preferred=(self._redux_preferred_pid() if kind=="pcsx-redux"
+                   else self._process.pid if self._process is not None
+                   and self._process.poll() is None and self._process_kind==kind
+                   else None)
         if kind=="pcsx-redux" and not self._rank_reader_injected:
             # Existing mod bindings are Windows ePSXe HOST addresses, not
             # PS1 offsets; never apply them to a different emulator.
@@ -953,10 +1010,14 @@ class DueltraceWebBridge:
                     "score":None,"category":None,"counters":None}
         try:
             if kind=="pcsx-redux" and not self._rank_reader_injected:
-                sample=read_rank_candidate_redux(preferred_pid=preferred,port=port)
-                if (not sample.get("ready")
-                        and not redux_connection_status(port=port).get("available")):
-                    sample=read_rank_candidate_redux_host(preferred_pid=preferred)
+                pids=self._redux_processes()
+                if len(pids)>1:
+                    sample=read_rank_candidate_redux_host(preferred_pid=preferred,pids=pids)
+                else:
+                    sample=read_rank_candidate_redux(preferred_pid=preferred,port=port)
+                    if (not sample.get("ready")
+                            and not redux_connection_status(port=port).get("available")):
+                        sample=read_rank_candidate_redux_host(preferred_pid=preferred)
             else:
                 sample=(self._rank_mod_reader(binding, preferred_pid=preferred)
                         if binding is not None else
