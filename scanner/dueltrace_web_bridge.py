@@ -496,6 +496,10 @@ class DueltraceWebBridge:
         if monitor is not None:
             monitor.stop()
 
+    def _invalidate_background_live(self):
+        if self._background_live is not None:
+            self._background_live.invalidate()
+
     def _cached_live_result(self, kind):
         monitor = self._background_live
         if monitor is None or not monitor.running:
@@ -557,6 +561,7 @@ class DueltraceWebBridge:
                 self._alpha_bundle_cache={}
                 self._hand_suggestions_key=None
                 self._hand_suggestions=None
+                self._invalidate_background_live()
             return removed
 
     def _alpha_bundle(self, sha, entry, profile):
@@ -2539,6 +2544,7 @@ class DueltraceWebBridge:
         self._rank_last_snapshot=None
         self._rank_pending_capture=None
         self._rank_experimental_sha=None
+        self._invalidate_background_live()
         return self.get_state()
 
     def audit_mod_iso(self, sha):
@@ -2778,6 +2784,7 @@ class DueltraceWebBridge:
             self._hand_suggestions=None
             self._cross_mod_cards_cache_key=None
             self._cross_mod_cards_cache=None
+            self._invalidate_background_live()
             self._rank_calibration=None
             self._rank_legacy_trial=None
             self._rank_gap_started=None
