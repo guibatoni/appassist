@@ -39,7 +39,8 @@ from dueltrace_pcsx_redux import (
     DEFAULT_PORT as REDUX_DEFAULT_PORT,
     connection_status as redux_connection_status,
     read_hand_from_redux, read_rank_candidate_redux, valid_port,
-    is_redux_process_name,
+    read_hand_from_redux_host, read_rank_candidate_redux_host,
+    discover_redux_pids, is_redux_process_name,
 )
 from dueltrace_drops import get_drop_catalog, get_card_drop_sources
 from dueltrace_alpha_reward_pools import GROUPS as ALPHA_REWARD_GROUPS
@@ -516,20 +517,36 @@ class DueltraceWebBridge:
         except OSError:
             pass
         state=redux_connection_status(port=port)
-        return ("pcsx-redux" if state.get("available") else "epsxe"),port
+        if state.get("available"):
+            return "pcsx-redux",port
+        try:
+            if len(discover_redux_pids())==1:
+                return "pcsx-redux",port
+        except OSError:
+            pass
+        return "epsxe",port
 
     def get_emulator_status(self):
         with self._lock:
             mode,port,settings=self._emulator_config()
             kind,_=self._emulator_backend()
             redux=redux_connection_status(port=port)
+            fallback=False
+            if not redux.get("available"):
+                try:
+                    fallback=len(discover_redux_pids())==1
+                except OSError:
+                    pass
             return {
                 "mode":mode,"active":kind,"port":port,
                 "epsxeConfigured":bool(settings.get("epsxe_executable")),
                 "pcsxReduxConfigured":bool(settings.get("pcsx_redux_executable")),
                 "reduxAvailable":redux["available"],
                 "reduxRunning":redux["running"],
-                "status":redux["status"],
+                "reduxProcessFallback":fallback,
+                "status":("PCSX-Redux detectado: leitura de RAM pelo processo Windows; "
+                          "API HTTP indisponível."
+                          if fallback else redux["status"]),
                 "warning":("O PCSX-Redux escuta em todas as interfaces quando "
                            "o servidor web é ativado. Bloqueie acesso externo "
                            "no firewall antes de habilitar esse recurso."),
@@ -849,6 +866,10 @@ class DueltraceWebBridge:
             try:
                 if kind=="pcsx-redux" and not self._ram_reader_injected:
                     sample=read_hand_from_redux(preferred_pid=preferred,port=port)
+                    if (not sample.get("ready")
+                            and sample.get("status")==
+                               "PCSX-Redux: servidor ou RAM indisponíveis."):
+                        sample=read_hand_from_redux_host(preferred_pid=preferred)
                 else:
                     sample=self._ram_reader(preferred_pid=preferred)
             except (OSError,RuntimeError,ValueError) as exc:
@@ -933,6 +954,9 @@ class DueltraceWebBridge:
         try:
             if kind=="pcsx-redux" and not self._rank_reader_injected:
                 sample=read_rank_candidate_redux(preferred_pid=preferred,port=port)
+                if (not sample.get("ready")
+                        and not redux_connection_status(port=port).get("available")):
+                    sample=read_rank_candidate_redux_host(preferred_pid=preferred)
             else:
                 sample=(self._rank_mod_reader(binding, preferred_pid=preferred)
                         if binding is not None else
