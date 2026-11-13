@@ -319,6 +319,13 @@ def read_rank_candidate_redux_host(*, preferred_pid=None, pids=None) -> dict:
     if pid is None:
         return {"ready":False,"pid":None,"counters":None,
                 "status":"PCSX-Redux não encontrado ou múltiplas instâncias."}
+    from dueltrace_live_hand import _PID_HAND_ADDRESS_CACHE
+    # The legacy ePSXe HOST address is not meaningful in Redux. Only allow
+    # the candidate reader after the version-neutral hand scanner discovered
+    # and confirmed a RAM mapping in this exact Windows PID.
+    if pid not in _PID_HAND_ADDRESS_CACHE:
+        return {"ready":False,"pid":pid,"counters":None,
+                "status":"PCSX-Redux: aguarde confirmar a mão antes de investigar RANK X15."}
     from dueltrace_rank_live import read_rank_candidate
     try:
         result=read_rank_candidate(preferred_pid=pid,pids=[pid])
