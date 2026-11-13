@@ -96,12 +96,17 @@ class MemoryCardTests(unittest.TestCase):
             self.assertEqual(original["cardName"],"epsxe000.mcr")
             self.assertEqual(original["deckIds"],list(range(1,41)))
             self.assertTrue(original["savePinned"])
+            self.assertTrue(any(x["ids"]==list(range(1,41)) for x in original["saved"]))
             store.select(SHA,second)
             changed=store.read(SHA)
             self.assertEqual(changed["cardName"],"epsxe001.mcr")
             self.assertEqual(changed["deckIds"],list(range(41,81)))
             self.assertEqual(changed["selectedBlock"],1)
             self.assertEqual(len(changed["blocks"]),15)
+            # Slot 1 of the previous card must not remain as an automatic
+            # deck snapshot of the newly selected second memory card.
+            self.assertTrue(any(x["ids"]==list(range(41,81)) for x in changed["saved"]))
+            self.assertFalse(any(x["ids"]==list(range(1,41)) for x in changed["saved"]))
             self.assertEqual(first.read_bytes(),memory_bytes(list(range(1,41))))
             self.assertEqual(second.read_bytes(),memory_bytes(list(range(41,81))))
 
