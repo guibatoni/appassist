@@ -73,9 +73,9 @@ def _list_card_blocks(blob, saves):
     slots=[]
     for block in range(1,16):
         directory=blob[block*128:(block+1)*128]
-        flag=directory[0] if directory[1:4]==b"\\x00"*3 else None
+        flag=directory[0] if directory[1:4]==bytes(3) else None
         checksum=_frame_checksum(directory)
-        name=directory[10:31].split(b"\\x00",1)[0].decode("ascii","replace")
+        name=directory[10:31].split(bytes(1),1)[0].decode("ascii","replace")
         name="".join(ch for ch in name if 32<=ord(ch)<127)[:21]
         if block in valid:
             status="fm_valid"
