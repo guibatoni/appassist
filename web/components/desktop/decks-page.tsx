@@ -92,7 +92,7 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       <div className="flex items-center gap-3"><Layers className="size-6 text-gold"/>
         <div><h1 className="font-display text-2xl font-bold text-gold"><T k="Decks"/></h1>
           <p className="text-sm text-muted">Deck atual do Memory Card, pesquisa de cartas e fusões possíveis</p></div>
-        <Link href="/decks-salvos" className="btn-ghost ml-auto"><BookMarked className="size-4"/> Decks Salvos</Link>
+        <Link href="/decks-salvos" className="btn-ghost ml-auto"><BookMarked className="size-4"/> Meus Decks</Link>
       </div>
     </header>
     <div className="panel rounded-xl p-4">
