@@ -1703,7 +1703,16 @@ class DueltraceWebBridge:
             cards={c["id"]:c for c in self._cards(profile)}
             ids=memory.get("deckIds",[])
             display_name="Deck gravado no Memory Card"
-            live=None if deck_id else self._get_confirmed_live_deck(sha)
+            if deck_id:
+                live=None
+            elif self._background_live is not None and self._background_live.running:
+                # The same active-deck RAM sample is already maintained
+                # across tabs. Save actions continue to take a fresh read.
+                candidate=self._background_live.snapshot("deck",sha)
+                live=(candidate if isinstance(candidate,dict)
+                      and candidate.get("ready") is True else None)
+            else:
+                live=self._get_confirmed_live_deck(sha)
             if live is not None:
                 ids=live["deckIds"]
                 display_name="Deck ativo no ePSXe (RAM confirmada)"
