@@ -31,6 +31,18 @@ export function EmulatorSettings(){
       setError(e instanceof Error?e.message:"Não foi possível configurar PCSX-Redux.")
     }finally{setBusy(false)}
   }
+  const chooseProcess=async(value:string)=>{
+    const api=desktopApi()
+    if(!api||busy)return
+    setBusy(true);setError("")
+    try{
+      const pid=value?Number(value):null
+      const updated=await api.select_redux_process(pid)
+      setStatus(updated)
+    }catch(e){
+      setError(e instanceof Error?e.message:"Não foi possível selecionar a instância.")
+    }finally{setBusy(false)}
+  }
   const portNumber=Number(port)
   const portOk=Number.isInteger(portNumber)&&portNumber>=1024&&portNumber<=65535
   return <section className="panel rounded-xl p-4 sm:p-5">
@@ -66,18 +78,35 @@ export function EmulatorSettings(){
       <button type="button" className="btn-ghost" onClick={()=>void operate("check")}
         disabled={busy||!desktopApi()}>Verificar conexão</button>
     </div>
+    {(status?.reduxPids?.length??0)>1&&
+      <label className="mt-3 flex max-w-xl flex-col gap-2 text-sm text-muted">
+        Instância PCSX-Redux executando o jogo
+        <select className="field w-full p-3 text-white" disabled={busy}
+          value={status?.selectedReduxPid??""}
+          onChange={event=>void chooseProcess(event.target.value)}>
+          <option value="">Selecione um processo (PID)</option>
+          {status?.reduxPids.map(pid=><option value={pid} key={pid}>Instância PID {pid}</option>)}
+        </select>
+        <span className="text-xs text-gold">
+          Selecione a instância que está executando o duelo. Esta escolha não é
+          gravada em disco e precisará ser refeita caso o emulador seja reiniciado.
+          Em caso de dúvida, consulte o PID no Gerenciador de Tarefas do Windows.
+        </span>
+      </label>}
     <p className="mt-3 text-sm text-primary" role="status">
       {status?.status??"Verificando emuladores instalados…"}
     </p>
     <p className="mt-1 text-xs text-muted">
       Ativo: {status?.active==="pcsx-redux"?"PCSX-Redux":"ePSXe"} ·
-      Servidor Redux: {status?.reduxAvailable?"acessível":"não encontrado"} ·
+      API HTTP: {status?.reduxHttpReachable?"detectada":"não encontrada"} ·
+      Processos Redux: {status?.reduxPids?.length??0} ·
       Executável Redux: {status?.pcsxReduxConfigured?"configurado":"não configurado"}
     </p>
     <p className="mt-3 rounded border border-gold/35 p-3 text-xs text-gold">
-      O DUELTRACE tenta primeiro a API nativa do PCSX-Redux. Se ela não
-      estiver disponível, usa uma busca conservadora da RAM do processo Windows,
-      sem alterar o jogo. Para usar HTTP, ative Configuration → Emulation →
+      O DUELTRACE tenta primeiro a API nativa do PCSX-Redux. Com múltiplas
+      instâncias, exige seleção explícita do processo e utiliza apenas a RAM
+      desse processo Windows. Se não houver HTTP compatível, usa uma busca
+      conservadora, sem alterar o jogo. Para usar HTTP, ative Configuration → Emulation →
       Enable Web Server. Esse servidor também oferece operações de escrita
       e pode ficar exposto à rede: restrinja a porta no Firewall do Windows.
       O DUELTRACE envia somente GET e nunca altera a RAM ou saves.
