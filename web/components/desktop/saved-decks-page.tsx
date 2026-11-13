@@ -13,7 +13,7 @@ import {DeckFusionGallery} from "./deck-fusion-gallery"
 const normalize=(value:string)=>value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR").trim()
 
 /** Named snapshots live in DUELTRACE_DATA, never overwrite PS1 Memory Cards.
- * Loadouts are read-only build references: viewing does not send a deck to ePSXe.
+ * Saved decks are read-only build references: viewing does not send a deck to ePSXe.
  */
 export function SavedDecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
   const [index,setIndex]=useState<DeckLibrary|null>(null)
@@ -43,7 +43,7 @@ export function SavedDecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) 
         const next=await api.get_deck_library()
         if(active){setIndex(next);setError("")}
       }catch(e){
-        if(active)setError(e instanceof Error?e.message:"Não foi possível consultar os decks salvos.")
+        if(active)setError(e instanceof Error?e.message:"Não foi possível consultar seus decks.")
       }finally{reading=false}
     }
     void load()
@@ -70,7 +70,7 @@ export function SavedDecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) 
         const next=await api.get_deck_library(selectedId)
         if(active){setDetail(next);setError("")}
       }catch(e){
-        if(active){setDetail(null);setError(e instanceof Error?e.message:"Loadout indisponível.")}
+        if(active){setDetail(null);setError(e instanceof Error?e.message:"Deck salvo indisponível.")}
       }finally{reading=false}
     }
     void load()
@@ -103,8 +103,8 @@ export function SavedDecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) 
         <div className="flex items-center gap-3">
           <BookMarked className="size-7 text-gold"/>
           <div>
-            <h1 className="font-display text-2xl font-semibold text-gold">Decks Salvos</h1>
-            <p className="text-sm text-muted">Seus loadouts para consultar, comparar e montar no jogo</p>
+            <h1 className="font-display text-2xl font-semibold text-gold">Meus Decks</h1>
+            <p className="text-sm text-muted">Seus decks para consultar, comparar e montar no jogo</p>
           </div>
         </div>
         <Link href="/decks" className="btn-ghost"><ArrowLeft className="size-4"/> Deck atual</Link>
@@ -112,18 +112,18 @@ export function SavedDecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) 
     </header>
 
     {error&&<p className="rounded-lg border border-red-500/50 bg-red-950/30 p-3 text-sm text-red-200" role="alert">{error}</p>}
-    {!sha&&<p className="panel rounded-xl p-4 text-sm text-muted">Ative uma ISO na Biblioteca de Mods para consultar os loadouts dessa versão do jogo.</p>}
+    {!sha&&<p className="panel rounded-xl p-4 text-sm text-muted">Ative uma ISO na Biblioteca de Mods para consultar os decks dessa versão do jogo.</p>}
     {sha&&<div className="grid items-start gap-4 xl:grid-cols-[minmax(270px,0.38fr)_minmax(0,1fr)]">
       <section className="panel min-w-0 rounded-xl p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-display text-lg font-semibold text-gold">Meus loadouts</h2>
+          <h2 className="font-display text-lg font-semibold text-gold">Meus Decks</h2>
           <button className="btn-ghost" type="button" onClick={()=>setRefresh(n=>n+1)} title="Recarregar decks salvos">
             <RefreshCcw className="size-4"/> Atualizar
           </button>
         </div>
         <p className="mt-1 text-xs text-muted">{index?.saved.length??0} decks salvos ou capturas automáticas para a ISO ativa</p>
         <label className="mt-3 flex flex-col gap-1 text-xs text-muted">
-          Pesquisar loadout ou carta incluída
+          Pesquisar deck ou carta incluída
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted"/>
             <input className="field w-full py-2 pl-9 pr-3 text-sm"
@@ -144,7 +144,7 @@ export function SavedDecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) 
                 <span className="shrink-0 text-xs text-primary">40 cartas</span>
               </div>
               <p className="mt-1 text-xs text-muted">
-                {item.source==="memory_card"?"Captura automática":"Loadout salvo manualmente"} · {names.size} cartas diferentes
+                {item.source==="memory_card"?"Captura automática":"Deck salvo manualmente"} · {names.size} cartas diferentes
               </p>
               {item.createdAt&&<p className="mt-1 text-[11px] text-muted">
                 {new Date(item.createdAt).toLocaleDateString("pt-BR")}
@@ -154,7 +154,7 @@ export function SavedDecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) 
           {index&&!matching.length&&<p className="rounded-lg border border-line/50 p-3 text-sm text-muted">
             {index.saved.length?"Nenhum deck contém o nome pesquisado.":"Ainda não há decks salvos para esta ISO. Vá à aba Decks e escolha Salvar deck."}
           </p>}
-          {!index&&!error&&<p className="text-sm text-muted">Consultando loadouts…</p>}
+          {!index&&!error&&<p className="text-sm text-muted">Consultando decks…</p>}
         </div>
       </section>
 
@@ -164,17 +164,17 @@ export function SavedDecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) 
           <section className="panel rounded-xl p-4">
             <h2 className="font-display text-xl font-semibold text-gold">{selected.name}</h2>
             <p className="mt-1 text-sm text-muted">
-              Loadout de referência · {detail.deckCount}/40 cartas · {detail.cards.length} cartas diferentes
+              Deck de referência · {detail.deckCount}/40 cartas · {detail.cards.length} cartas diferentes
             </p>
             <p className="mt-1 text-xs text-muted">
               Esta visualização não altera o deck do ePSXe ou os arquivos de Memory Card.
               Para montar, use a relação de cartas abaixo como referência.
             </p>
             <label className="mt-3 flex flex-col gap-1 text-xs text-muted">
-              Localizar carta neste loadout
+              Localizar carta neste deck
               <input className="field w-full px-3 py-2 text-sm" value={cardSearch}
                 onChange={e=>setCardSearch(e.target.value)}
-                placeholder="Nome ou ID da carta" aria-label="Pesquisar carta do loadout"/>
+                placeholder="Nome ou ID da carta" aria-label="Pesquisar carta do deck"/>
             </label>
             <p className="mt-2 text-xs text-primary">
               {shownCards.length} de {detail.cards.length} cartas diferentes na lista
@@ -195,7 +195,7 @@ export function SavedDecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) 
           <DeckFusionGallery state={detail} sha={sha} onCardClick={showCard}/>
         </>:
         <section className="panel rounded-xl p-4 text-sm text-muted">
-          {index?.saved.length?"Selecione um loadout para ver as 40 cartas e as fusões possíveis.":"Salve seu deck atual na aba Decks para começar a montar sua coleção de loadouts."}
+          {index?.saved.length?"Selecione um deck para ver as 40 cartas e as fusões possíveis.":"Salve seu deck atual na aba Decks para começar a montar sua coleção de decks."}
         </section>}
       </div>
     </div>}
