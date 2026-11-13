@@ -1,27 +1,28 @@
-# DUELTRACE v0.19.2 — Preview
+# DUELTRACE v0.19.3 — Preview
 
 ## Novidades
-- DUELTRACE Windows voltou a ser **exclusivamente ePSXe**, abandonando os experimentos com PCSX-Redux das previews v0.19.0 e v0.19.1.
-- Base recuperada integralmente da versão Windows estável de trabalho v0.18.0: sem menus, servidores, processo, PIN/PID nem dependências para PCSX-Redux.
-- Preparação documental da futura API de snapshots ePSXe para o DUELTRACE Cloud, sem abrir portas, enviar RAM ou ativar conexões não autorizadas.
+- **Leitura contínua em segundo plano:** mão, fusões ao vivo, RANK e candidato de adversário continuam sendo acompanhados ao navegar por qualquer aba.
+- O monitor inicia junto com o DUELTRACE Windows, antes da abertura da Central de Duelo.
+- A tela principal e os visores pop-up compartilham os mesmos resultados recentes; abrir outra aba não reinicia o acompanhamento.
+- Um indicador em cada tela mostra que a leitura ao vivo permanece em segundo plano.
 
 ## Melhorias
-- Mantidos ePSXe, leitura de mão, fusões, RANK, biblioteca, Memory Card, imagens, decks e janelas.
-- Atualização direta de v0.19.0/v0.19.1, com configurações e dados preservados; primeiro extraia em pasta separada.
-- A integração futura com a versão web será baseada em dados derivados e validados, e não em acesso livre à RAM, ISO/BIN ou ao disco.
+- Motor Python em duas rotinas de leitura: mão/RANK e adversário, independentes do estado das páginas React.
+- Cache de curto prazo por ISO, evitando múltiplas leituras de RAM quando duas janelas estão abertas.
+- Invalidação automática da mão ao trocar de ISO, perder conexão com ePSXe ou encerrar o aplicativo.
+- Mantidos Memory Card, biblioteca de mods, fusões, drops e configurações da versão ePSXe 0.19.2.
 
 ## Correções
-- **Retirados** a seleção PCSX-Redux.exe, o formulário da porta 8080 e a descoberta de processos PCSX-Redux.
-- **Retirados** todos os adaptadores REST e de RAM do PCSX-Redux, bem como as rotinas de inicialização do emulador que não funciona com os mods testados.
-- Configurações, leitura de RAM e inicialização ePSXe restauradas sem a opção alternativa.
-- As previews antigas de PCSX-Redux foram descontinuadas; nenhuma atualização nova deve recuperá-las.
+- Ao retornar de Fusões, Biblioteca, Drops, Oponentes ou Decks, mão e RANK não precisam reiniciar sua calibração por causa da troca de aba.
+- Visores flutuantes deixam de disparar leituras duplicadas; consultam o mesmo estado compartilhado.
+- Resultados antigos não permanecem exibidos indefinidamente quando a leitura para.
+- Nenhum recurso PCSX-Redux foi reintroduzido; o emulador continua sendo exclusivamente ePSXe.
 
-## Compatibilidade e privacidade
-- ePSXe Windows e mods com perfis RAM/ISO validados; não é possível prometer leitura automática de todos os mods sem validação.
-- O ePSXe não oferece uma API remota de RAM documentada que tenha sido confirmada nesta investigação.
-- Um site comum não pode ler a RAM de um processo Windows externo sem uma integração nativa autorizada.
-- O DUELTRACE Windows desta versão não oferece API HTTP pública, não abre portas para o navegador e não modifica a RAM.
-- Os dados do jogo continuam locais, salvo ações explícitas do usuário em funcionalidades previamente existentes.
+## Limitações e privacidade
+- O motor funciona enquanto o DUELTRACE Windows estiver aberto e houver perfil de ISO ativo; leituras exigem ePSXe em execução.
+- Oponente e RANK permanecem provisórios quando o mod não tiver mapeamento validado.
+- Ferramentas de diagnóstico forense e qualquer envio remoto continuam dependendo de consentimento separado.
+- Nenhuma porta, API HTTP, WebSocket, integração com nuvem ou gravação de RAM é ativada nesta versão.
 
 ## Créditos e direitos
 - Desenvolvido por Batoni Dev - Guilherme Batoni.
