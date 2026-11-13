@@ -125,6 +125,18 @@ def foreground_epsxe_client():
         return None
 
     user32 = ctypes.windll.user32
+    # ctypes defaults to 32-bit int returns, which can truncate HWND on x64.
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.GetWindowThreadProcessId.argtypes = [
+        wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.IsIconic.argtypes = [wintypes.HWND]
+    user32.GetWindow.argtypes = [wintypes.HWND, ctypes.c_uint]
+    user32.GetWindow.restype = wintypes.HWND
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextW.argtypes = [
+        wintypes.HWND, ctypes.c_wchar_p, ctypes.c_int]
     foreground = user32.GetForegroundWindow()
     if not foreground:
         return None
@@ -140,6 +152,8 @@ def foreground_epsxe_client():
     class POINT(ctypes.Structure):
         _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
 
+    user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(RECT)]
+    user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
     found = []
     callback_type = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
 
@@ -241,11 +255,25 @@ class EpsxeRankOverlay:
 
             # Tk transparency makes background pixels invisible; these Win32
             # flags also pass all mouse clicks straight through to the game.
+            from ctypes import wintypes
             win32 = ctypes.windll.user32
-            hwnd = int(root.winfo_id())
-            exstyle = win32.GetWindowLongW(hwnd, -20)  # GWL_EXSTYLE
-            win32.SetWindowLongW(hwnd, -20, exstyle | 0x80000 | 0x20 | 0x80 | 0x08000000)
-            # WS_EX_LAYERED | TRANSPARENT | TOOLWINDOW | NOACTIVATE
+            win32.GetAncestor.argtypes = [wintypes.HWND, ctypes.c_uint]
+            win32.GetAncestor.restype = wintypes.HWND
+            win32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+            win32.SetWindowLongW.argtypes = [
+                wintypes.HWND, ctypes.c_int, ctypes.c_long]
+            win32.SetWindowPos.argtypes = [
+                wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+            win32.SetWindowPos.restype = wintypes.BOOL
+            hwnd = win32.GetAncestor(root.winfo_id(), 2) or int(root.winfo_id())
+            def clickthrough():
+                exstyle = win32.GetWindowLongW(hwnd, -20)  # GWL_EXSTYLE
+                win32.SetWindowLongW(
+                    hwnd, -20,
+                    exstyle | 0x80000 | 0x20 | 0x80 | 0x08000000)
+                # WS_EX_LAYERED | TRANSPARENT | TOOLWINDOW | NOACTIVATE
+            clickthrough()
             root.update_idletasks()
             shown = [False]
             last_draw = [None]
@@ -305,6 +333,9 @@ class EpsxeRankOverlay:
                                   f"{w}x{h}{x:+d}{y:+d}")
                     if not shown[0]:
                         root.deiconify()
+                        # Tk may reapply native extended styles when a
+                        # withdrawn window is shown; enforce pass-through.
+                        clickthrough()
                         shown[0] = True
                     # Never activate/focus the overlay or intercept input.
                     win32.SetWindowPos(hwnd, -1, x, y, w, h,
