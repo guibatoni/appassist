@@ -34,6 +34,13 @@ from dueltrace_rank_profile_live import (
     validate_live_rank_binding, project_rank_for_mod, x15_compatible_runtime
 )
 from epsxe_launcher import launch_epsxe
+from pcsx_redux_launcher import launch_redux
+from dueltrace_pcsx_redux import (
+    DEFAULT_PORT as REDUX_DEFAULT_PORT,
+    connection_status as redux_connection_status,
+    read_hand_from_redux, read_rank_candidate_redux, valid_port,
+    is_redux_process_name,
+)
 from dueltrace_drops import get_drop_catalog, get_card_drop_sources
 from dueltrace_alpha_reward_pools import GROUPS as ALPHA_REWARD_GROUPS
 from dueltrace_dynamic_reward_discovery import discover_dynamic_reward_pools
@@ -73,6 +80,9 @@ class DueltraceWebBridge:
                  rank_mod_reader=None):
         self.catalog = catalog or ModCatalog()
         self._file_picker = file_picker
+        self._ram_reader_injected=ram_reader is not None
+        self._rank_reader_injected=rank_reader is not None
+        self._rank_mod_reader_injected=rank_mod_reader is not None
         self._ram_reader = ram_reader or read_hand_from_epsxe
         self._rank_reader = rank_reader or read_rank_candidate
         self._rank_mod_reader = rank_mod_reader or read_rank_from_verified_binding
@@ -87,6 +97,7 @@ class DueltraceWebBridge:
         # Opt-in temporário: nunca comprova compatibilidade nem persiste entre sessões.
         self._rank_experimental_sha = None
         self._process = None
+        self._process_kind = None
         self._launched_rom_sha = None
         self._lock = threading.RLock()
         self._live_diagnostics = None
@@ -479,6 +490,86 @@ class DueltraceWebBridge:
             raise RuntimeError("Não foi possível abrir o navegador padrão.")
         return {"opened":True}
 
+    def _emulator_config(self):
+        settings=load_json(self.settings_path,{})
+        mode=settings.get("emulator_mode","auto")
+        if mode not in ("auto","epsxe","pcsx-redux"):
+            mode="auto"
+        port=settings.get("pcsx_redux_port",REDUX_DEFAULT_PORT)
+        if type(port) is not int or not 1024<=port<=65535:
+            port=REDUX_DEFAULT_PORT
+        return mode,port,settings
+
+    def _emulator_backend(self, preferred=None):
+        """Avoid silent switching from a user-launched emulator session."""
+        mode,port,settings=self._emulator_config()
+        if mode!="auto":
+            return mode,port
+        if (self._process is not None and self._process.poll() is None
+                and self._process_kind in ("epsxe","pcsx-redux")):
+            return self._process_kind,port
+        # Prefer the existing ePSXe path when both emulators are open.
+        from dueltrace_live_hand import discover_epsxe_pids
+        try:
+            if discover_epsxe_pids():
+                return "epsxe",port
+        except OSError:
+            pass
+        state=redux_connection_status(port=port)
+        return ("pcsx-redux" if state.get("available") else "epsxe"),port
+
+    def get_emulator_status(self):
+        with self._lock:
+            mode,port,settings=self._emulator_config()
+            kind,_=self._emulator_backend()
+            redux=redux_connection_status(port=port)
+            return {
+                "mode":mode,"active":kind,"port":port,
+                "epsxeConfigured":bool(settings.get("epsxe_executable")),
+                "pcsxReduxConfigured":bool(settings.get("pcsx_redux_executable")),
+                "reduxAvailable":redux["available"],
+                "reduxRunning":redux["running"],
+                "status":redux["status"],
+                "warning":("O PCSX-Redux escuta em todas as interfaces quando "
+                           "o servidor web é ativado. Bloqueie acesso externo "
+                           "no firewall antes de habilitar esse recurso."),
+            }
+
+    def set_emulator(self, mode, port=REDUX_DEFAULT_PORT):
+        if type(mode) is not str or mode not in ("auto","epsxe","pcsx-redux"):
+            raise ValueError("Emulador selecionado inválido.")
+        valid_port(port)
+        with self._lock:
+            settings=load_json(self.settings_path,{})
+            previous=(settings.get("emulator_mode","auto"),
+                      settings.get("pcsx_redux_port",REDUX_DEFAULT_PORT))
+            settings["emulator_mode"]=mode
+            settings["pcsx_redux_port"]=port
+            atomic_json(self.settings_path,settings)
+            if previous!=(mode,port):
+                self._reset_rank_read_state()
+                self._hand_suggestions_key=None
+                self._hand_suggestions=None
+            return self.get_emulator_status()
+
+    def configure_pcsx_redux(self):
+        if self._file_picker is None:
+            raise RuntimeError("Seleção de executável disponível somente no Windows.")
+        files=self._file_picker("pcsx_redux")
+        if not files:
+            return {"cancelled":True}
+        path=Path(files[0]).resolve(strict=True)
+        if (not path.is_file() or path.suffix.lower()!=".exe"
+                or not is_redux_process_name(path.name)):
+            raise ValueError("Selecione pcsx-redux.exe instalado no Windows.")
+        with self._lock:
+            settings=load_json(self.settings_path,{})
+            settings["pcsx_redux_executable"]=str(path)
+            settings["emulator_mode"]="pcsx-redux"
+            atomic_json(self.settings_path,settings)
+            self._reset_rank_read_state()
+        return {"cancelled":False,"configured":True}
+
     def get_state(self):
         with self._lock:
             active, entry, profile = self._active()
@@ -495,7 +586,9 @@ class DueltraceWebBridge:
                     if profile and profile.get("supported_features",{}).get("fusions")
                     else 0,
                 "epsxeConfigured":bool(settings.get("epsxe_executable")),
-                "warning":"O DUELTRACE não confirma automaticamente qual ISO o ePSXe abriu.",
+                "pcsxReduxConfigured":bool(settings.get("pcsx_redux_executable")),
+                "emulatorMode":self._emulator_config()[0],
+                "warning":"Confirme que a ISO ativa no DUELTRACE é a mesma carregada no emulador.",
             }
 
     def rename_mod(self, sha, display_name):
@@ -749,10 +842,15 @@ class DueltraceWebBridge:
             if not profile:
                 return {"ready":False,"status":"Ative uma ISO na Biblioteca de Mods",
                         "hand":[],"pairs":[],"chains":[]}
-            preferred=(self._process.pid if self._process is not None and
-                       self._process.poll() is None else None)
+            kind,port=self._emulator_backend()
+            preferred=(self._process.pid if self._process is not None
+                       and self._process.poll() is None
+                       and self._process_kind==kind else None)
             try:
-                sample=self._ram_reader(preferred_pid=preferred)
+                if kind=="pcsx-redux" and not self._ram_reader_injected:
+                    sample=read_hand_from_redux(preferred_pid=preferred,port=port)
+                else:
+                    sample=self._ram_reader(preferred_pid=preferred)
             except (OSError,RuntimeError,ValueError) as exc:
                 sample={"ready":False,"status":f"Leitura não disponível: {exc}",
                         "hand_ids":None}
@@ -819,12 +917,26 @@ class DueltraceWebBridge:
                          "e confira os LP; ou use o cálculo manual.",
                 "sourceMode":"unsupported","rankSystem":rank_system(sha),
                 "score":None,"category":None,"counters":None}
-        preferred=(self._process.pid if self._process is not None and
-                   self._process.poll() is None else None)
+        kind,port=self._emulator_backend()
+        preferred=(self._process.pid if self._process is not None
+                   and self._process.poll() is None
+                   and self._process_kind==kind else None)
+        if kind=="pcsx-redux" and not self._rank_reader_injected:
+            # Existing mod bindings are Windows ePSXe HOST addresses, not
+            # PS1 offsets; never apply them to a different emulator.
+            if binding is not None or not model_available(sha):
+                return None,sha,{"state":"unsupported","ready":False,
+                    "status":"RANK deste mod ainda não mapeado na RAM PCSX-Redux. "
+                             "Use o cálculo manual até validar a estrutura.",
+                    "rankSystem":rank_system(sha),
+                    "score":None,"category":None,"counters":None}
         try:
-            sample=(self._rank_mod_reader(binding, preferred_pid=preferred)
-                    if binding is not None else
-                    self._rank_reader(preferred_pid=preferred))
+            if kind=="pcsx-redux" and not self._rank_reader_injected:
+                sample=read_rank_candidate_redux(preferred_pid=preferred,port=port)
+            else:
+                sample=(self._rank_mod_reader(binding, preferred_pid=preferred)
+                        if binding is not None else
+                        self._rank_reader(preferred_pid=preferred))
         except (OSError,RuntimeError,ValueError) as exc:
             sample={"ready":False,"status":str(exc)[:150],"pid":None,"counters":None}
         if not sample.get("ready"):
@@ -1124,7 +1236,11 @@ class DueltraceWebBridge:
                     preferred=(self._process.pid if self._process is not None
                                and self._process.poll() is None else None)
                     try:
-                        observed=self._rank_reader(preferred_pid=preferred)
+                        kind,port=self._emulator_backend()
+                        if kind=="pcsx-redux" and not self._rank_reader_injected:
+                            observed=None  # Never auto-promote unknown Redux RAM.
+                        else:
+                            observed=self._rank_reader(preferred_pid=preferred)
                     except (OSError,RuntimeError,ValueError,TypeError,KeyError):
                         observed=None
                     if isinstance(observed,dict) and observed.get("ready") is True:
@@ -2793,7 +2909,9 @@ class DueltraceWebBridge:
         with self._lock:
             settings=load_json(self.settings_path,{})
             settings["epsxe_executable"]=str(path)
+            settings["emulator_mode"]="epsxe"
             atomic_json(self.settings_path,settings)
+            self._reset_rank_read_state()
         return {"cancelled":False,"configured":True}
 
     def start_game(self):
@@ -2802,11 +2920,27 @@ class DueltraceWebBridge:
             if not profile:
                 raise ValueError("Ative o perfil do mod antes de iniciar.")
             settings=load_json(self.settings_path,{})
-            executable=settings.get("epsxe_executable")
-            if not executable:
-                raise ValueError("Configure o caminho do ePSXe.exe.")
+            selected=settings.get("emulator_mode","auto")
+            if selected=="auto":
+                selected=("pcsx-redux" if settings.get("pcsx_redux_executable")
+                          and not settings.get("epsxe_executable") else "epsxe")
             if self._process is not None and self._process.poll() is None:
-                return {"started":False,"status":"ePSXe já iniciado por DUELTRACE"}
-            self._process=launch_epsxe(self.catalog,executable,active["sha256"])
+                return {"started":False,"status":"Emulador já iniciado pelo DUELTRACE"}
+            if selected=="pcsx-redux":
+                executable=settings.get("pcsx_redux_executable")
+                if not executable:
+                    raise ValueError("Selecione o executável PCSX-Redux nas Configurações.")
+                self._process=launch_redux(self.catalog,executable,active["sha256"])
+                self._process_kind="pcsx-redux"
+                message=("PCSX-Redux iniciado com o mod ativo. "
+                         "Habilite o servidor web manualmente e proteja a porta no firewall.")
+            else:
+                executable=settings.get("epsxe_executable")
+                if not executable:
+                    raise ValueError("Configure o caminho do ePSXe.exe.")
+                self._process=launch_epsxe(self.catalog,executable,active["sha256"])
+                self._process_kind="epsxe"
+                message="ePSXe iniciado com o mod selecionado"
+            self._reset_rank_read_state()
             self._launched_rom_sha=active["sha256"]
-            return {"started":True,"status":"ePSXe iniciado com o mod selecionado"}
+            return {"started":True,"status":message}
