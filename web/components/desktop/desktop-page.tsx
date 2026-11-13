@@ -12,13 +12,14 @@ import {cardClassicHd, cardArtHd, cardArt, cardWithFrame, desktopApi, useDesktop
 import {DropsPage} from "./drops-page"
 import {OpponentsPage} from "./opponents-page"
 import {DecksPage} from "./decks-page"
+import {SavedDecksPage} from "./saved-decks-page"
 import {RankScoreDisplay} from "./rank-score-display"
 import {copyOpponentReport} from "@/lib/opponent-report"
 import {CardHoverPreview} from "./card-hover-preview"
 import type {CardPreviewSelection} from "./card-hover-preview"
 import type {LocalCard, HandState, FusionPage, FusionSearchScope, LocalMod, RankState, CardMatchResult, CardAIMatchReport, ModScanDiagnostic, WindowObservationResult, CandidateMatrixPage, LiveOpponentProbe, LiveDiagnosticsStatus, PrivateEvidenceSyncStatus, IsoLayoutComparison, IsoForensicAudit, MipsTraceResult, AlphaDiscovery} from "@/lib/desktop"
 
-type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops" | "oponentes" | "decks"
+type Page = "inicio" | "mods" | "biblioteca" | "fusoes" | "drops" | "oponentes" | "decks" | "decks-salvos"
 
 function Heading({title,subtitle}:{title:string;subtitle:string}) {
   const {t}=useI18n()
@@ -1508,5 +1509,6 @@ export function DesktopPage({page}:{page:Page}) {
     {page==="drops"&&<DropsPage sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="oponentes"&&<OpponentsPage sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="decks"&&<DecksPage sha={state?.activeSha??null} cards={state?.cards??[]}/>}
+    {page==="decks-salvos"&&<SavedDecksPage sha={state?.activeSha??null} cards={state?.cards??[]}/>}
   </div>
 }
