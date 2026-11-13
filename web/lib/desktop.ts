@@ -359,6 +359,7 @@ export type EmulatorStatus = {
   pcsxReduxConfigured: boolean
   reduxAvailable: boolean
   reduxRunning: boolean
+  reduxProcessFallback?: boolean
   status: string
   warning: string
 }
