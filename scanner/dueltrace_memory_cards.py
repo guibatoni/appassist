@@ -270,6 +270,9 @@ class MemoryCardStore:
         linked=self._binding_data().get("links",{}).get(sha)
         if not isinstance(linked,dict):
             linked={}
+        card_path=linked.get("path")
+        card_token=(hashlib.sha256(card_path.encode("utf8")).hexdigest()
+                    if type(card_path) is str and card_path else None)
         chosen=next((save for save in parsed["saves"]
                      if type(linked.get("selectedBlock")) is int
                      and save["block"]==linked["selectedBlock"]
@@ -283,7 +286,11 @@ class MemoryCardStore:
             # Use slot in the key: older releases wrote auto-<hash>.json
             # for ALL saves under any mod. Preserve them as backups, but do
             # not let their filenames suppress correctly linked snapshots.
-            snapshot_id="auto-"+str(save["block"])+"-"+fp
+            # Older snapshots keyed by block only could accidentally display
+            # a deck from a different memory card using the same FM slot.
+            # Include the link's file identity, not the volatile card bytes.
+            snapshot_id=("auto-"+str(save["block"])+"-"+
+                         (card_token[:12] if card_token else "unlinked")+"-"+fp)
             dest=folder2/(snapshot_id+".json")
             if not dest.exists():
                 mod=safe_mod_name(linked.get("modName")) or "mod vinculado"
@@ -292,6 +299,7 @@ class MemoryCardStore:
                           "name":("Deck · Bloco "+str(save["block"])+" · "+mod)[:90],
                           "cards":deck,"source":"memory_card","saveName":save["saveName"],
                           "saveBlock":save["block"],
+                          "memoryCardPathHash":card_token,
                           "verifiedInGame":False,
                           "saveIntegrityVerified":True,
                           "duelistCode":save["duelistCode"],
@@ -303,6 +311,9 @@ class MemoryCardStore:
     def _saved(self,sha):
         folder=self.home/"deck_snapshots"/sha
         link=(self._binding_data().get("links") or {}).get(sha) or {}
+        card_path=link.get("path")
+        current_card_token=(hashlib.sha256(card_path.encode("utf8")).hexdigest()
+                            if type(card_path) is str and card_path else None)
         if not folder.is_dir():
             return []
         found=[]
@@ -315,7 +326,8 @@ class MemoryCardStore:
                 continue
             if (payload.get("rom_sha256")!=sha
                     or (payload.get("source")=="memory_card"
-                        and (type(payload.get("saveBlock")) is not int
+                        and (payload.get("memoryCardPathHash")!=current_card_token
+                             or type(payload.get("saveBlock")) is not int
                              or payload.get("saveBlock")!=link.get("selectedBlock")
                              or not self._matches_selected_save(
                                  link, {"saveName":payload.get("saveName"),
