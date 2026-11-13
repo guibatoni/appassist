@@ -70,7 +70,7 @@ class LiveDeckTests(unittest.TestCase):
             self.assertIsNone(bridge._get_confirmed_live_deck(SHA))
         with (patch("dueltrace_live_deck.read_live_deck",return_value=wrong),
               patch.object(MemoryCardStore,"read",return_value={
-                  "gameIntegrityVerified":False,"deckIds":[]})) as saved:
+                  "gameIntegrityVerified":False,"deckIds":[]}) as saved):
             self.assertIsNone(bridge._get_confirmed_live_deck(SHA))
             saved.assert_called_once_with(SHA)
 
@@ -91,7 +91,8 @@ class LiveDeckTests(unittest.TestCase):
         self.assertIn("self._get_confirmed_live_deck(sha)",src)
         self.assertIn("live is not None",src)
         self.assertIn("activeInEmulatorVerified",src)
-        self.assertIn("save_live_snapshot(",src)
+        self.assertNotIn("return store.save_live_snapshot(",src)
+        self.assertIn('return store.save_snapshot(active["sha256"],name)',src)
 
 
 if __name__=="__main__":
