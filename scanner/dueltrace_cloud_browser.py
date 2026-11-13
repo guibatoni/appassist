@@ -340,7 +340,7 @@ def render_local_page(state, *, token, tab="inicio", query="", opponent=0,
                         '<p>Modo local: dados processados apenas neste computador.</p>'
                         '<p>Este navegador se comunica com 127.0.0.1; '
                         'não é necessário Node.js, PowerShell ou chave digitada.</p>'
-                        '<p class="muted">DUELTRACE Cloud v0.5.1 · diagnóstico '
+                        '<p class="muted">DUELTRACE Cloud v0.6.0 · diagnóstico '
                         'independente de JavaScript</p></section>')
 
     return ('''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
@@ -354,7 +354,7 @@ fill="none" stroke="#38c8ff" stroke-width="3"/></svg><div>
 <span class="pill">● Connector local ativo · Sem login</span></header>
 <div class="layout"><nav aria-label="Navegação">''' + navigation +
             '''</nav><main><div class="hero"><h1>DUELTRACE Cloud</h1>
-<span class="muted">MultiMod Companion · modo local no Chrome · v0.5.1</span>
+<span class="muted">MultiMod Companion · modo local no Chrome · v0.6.0</span>
 </div>''' + "".join(sections) +
             '''<footer>🔒 ISO, Memory Card e RAM permanecem no PC ·
 Acesso local 127.0.0.1 · Batoni Dev</footer></main></div></body></html>''')

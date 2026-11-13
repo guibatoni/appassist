@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import queue
+import secrets
 import subprocess
 import sys
 import threading
@@ -15,10 +16,11 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
-from dueltrace_cloud_connector import DEFAULT_PORT, HOST, DEV_ORIGINS, create_server
+from dueltrace_cloud_connector import DEFAULT_PORT, HOST, DEFAULT_ALLOWED_ORIGINS, create_server
 
 
 LOCAL_URL = f"http://{HOST}:{DEFAULT_PORT}/local/"
+ONLINE_URL = "https://dueltrace-cloud.vercel.app/cloud-online/"
 
 
 def chrome_candidates():
@@ -128,7 +130,7 @@ def runtime_smoke_test():
     """Check frozen engine imports and the local HTML response without a browser."""
     from dueltrace_web_bridge import DueltraceWebBridge
     bridge = DueltraceWebBridge(file_picker=lambda _kind: ())
-    server = create_server(bridge, allowed_origins=DEV_ORIGINS,
+    server = create_server(bridge, allowed_origins=DEFAULT_ALLOWED_ORIGINS,
                            token="smoke-test-" + "s" * 40, port=0)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
@@ -137,7 +139,7 @@ def runtime_smoke_test():
         with urllib.request.urlopen(url, timeout=15) as response:
             page = response.read()
             return (response.status == 200 and b"DUELTRACE Cloud" in page
-                    and b"v0.5.1" in page and b"<script" not in page.lower())
+                    and b"v0.6.0" in page and b"<script" not in page.lower())
     finally:
         server.shutdown()
         server.server_close()
@@ -151,8 +153,8 @@ def run_window():
 
     root = tk.Tk()
     root.title("DUELTRACE Connector — Chrome")
-    root.geometry("510x310")
-    root.minsize(470, 285)
+    root.geometry("530x420")
+    root.minsize(490, 390)
     root.configure(background="#061126")
     try:
         root.iconbitmap(default="")
@@ -172,6 +174,8 @@ def run_window():
     tk.Label(root, text="ISOs, Memory Cards e RAM permanecem no computador.",
              fg=muted, bg="#061126", font=("Segoe UI", 9)).pack(pady=(10, 9))
 
+    # A new pairing key per execution, never placed in a URL or sent to Vercel.
+    session_token = secrets.token_urlsafe(32)
     picker = UiFilePicker(root)
     messages = queue.Queue()
     running = {"server": None, "closing": False, "ready": False}
@@ -187,19 +191,49 @@ def run_window():
         except Exception:
             status.set("Abra manualmente " + LOCAL_URL)
 
-    button = tk.Button(root, text="Abrir DUELTRACE no Chrome", command=open_browser,
+    button = tk.Button(root, text="Abrir DUELTRACE local no Chrome", command=open_browser,
                        bg="#20496c", fg=fg, activebackground="#2a719a",
                        activeforeground="#ffffff", font=("Segoe UI", 11, "bold"),
                        padx=16, pady=8, relief="flat", state="disabled")
-    button.pack(pady=6)
+    button.pack(pady=4)
+
+    def open_online():
+        if not running["ready"]:
+            messagebox.showwarning("DUELTRACE", "O Connector ainda não está pronto.")
+            return
+        if not webbrowser.open(ONLINE_URL):
+            status.set("Abra " + ONLINE_URL + " no Chrome.")
+
+    online = tk.Button(root, text="Abrir DUELTRACE Cloud online",
+                       command=open_online, bg="#142b51", fg=fg,
+                       activebackground="#235483", activeforeground="#ffffff",
+                       font=("Segoe UI", 10, "bold"), padx=14, pady=6,
+                       relief="flat", state="disabled")
+    online.pack(pady=3)
+
+    def copy_key():
+        if not running["ready"]:
+            return
+        # Explicit user action only. Never put the key in HTML, console,
+        # logs, URLs, telemetry or browser storage.
+        root.clipboard_clear()
+        root.clipboard_append(session_token)
+        status.set("Chave temporária copiada. Cole somente no DUELTRACE Cloud oficial.")
+
+    copy = tk.Button(root, text="Copiar chave para conectar online",
+                     command=copy_key, bg="#423214", fg=gold,
+                     activebackground="#684a1b", activeforeground="#ffe59a",
+                     font=("Segoe UI", 10), padx=14, pady=6,
+                     relief="flat", state="disabled")
+    copy.pack(pady=3)
 
     def start_server():
         server = None
         try:
             bridge = DueltraceWebBridge(file_picker=picker.pick)
             # Port remains fixed so desktop links and browser bookmarks work.
-            server = create_server(bridge, allowed_origins=DEV_ORIGINS,
-                                   token=__import__("secrets").token_urlsafe(32),
+            server = create_server(bridge, allowed_origins=DEFAULT_ALLOWED_ORIGINS,
+                                   token=session_token,
                                    port=DEFAULT_PORT)
             running["server"] = server
             messages.put(("ready", None))
@@ -222,11 +256,15 @@ def run_window():
                     running["ready"] = True
                     status.set("Conectado · serviço local ativo")
                     button.configure(state="normal")
+                    online.configure(state="normal")
+                    copy.configure(state="normal")
                     # Auto-open once after the server confirms readiness.
                     root.after(180, open_browser)
                 elif kind == "error":
                     status.set(info)
                     button.configure(state="disabled")
+                    online.configure(state="disabled")
+                    copy.configure(state="disabled")
         except queue.Empty:
             pass
         root.after(120, poll_messages)

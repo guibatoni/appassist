@@ -27,10 +27,15 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install locked frontend dependencies
         run: npm ci --prefix web
+      - name: Validate standalone online portal JavaScript syntax
+        run: node --check web/public/cloud-online/app.js
       - name: Build static browser frontend
         run: npm run build --prefix web
       - name: Verify static cloud route
         shell: bash
         run: |
           test -s web/out/cloud/index.html
+          test -s web/out/cloud-online/index.html
+          test -s web/out/cloud-online/app.js
+          test -s web/out/cloud-online/app.css
           echo "DUELTRACE Cloud HTML export verified."
