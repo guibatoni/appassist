@@ -467,6 +467,10 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.set_emulator(mode,port)
 
+    def select_redux_process(self, credential, pid):
+        self._authorize(credential)
+        return self._bridge.select_redux_process(pid)
+
     def configure_pcsx_redux(self, credential):
         self._authorize(credential)
         return self._bridge.configure_pcsx_redux()
