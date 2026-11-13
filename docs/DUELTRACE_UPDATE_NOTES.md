@@ -12,8 +12,7 @@
 - Segue a área útil (client area) do ePSXe ao mover/redimensionar a janela.
 - Oculta automaticamente quando o emulador é minimizado, perde o foco ou a leitura de duelo termina.
 - Preferências persistentes no próprio DUELTRACE, com validação estrita e sem exigir plugin no ePSXe.
-- Preservadas as abas Decks, Meus Decks, Fusões, Drops, Biblioteca e a leitura em segundo plano.
-- Preservados os arquivos de Memory Card e os saves do ePSXe sem qualquer modificação.
+- Preservadas as abas Decks, Meus Decks, Fusões, Drops, Biblioteca, a leitura em segundo plano e os arquivos de Memory Card.
 
 ## Correções
 - Sem sobreposição permanente em outros programas; somente ePSXe ativo e em primeiro plano.
