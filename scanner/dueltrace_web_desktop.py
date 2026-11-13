@@ -366,6 +366,7 @@ def main():
                 ("Imagens de jogo (*.iso;*.bin)",)
                 if kind=="iso" else
                 ("Log MIPS de duelo (*.log;*.txt)",) if kind=="trace" else
+                ("PCSX-Redux (pcsx-redux.exe)",) if kind=="pcsx_redux" else
                 ("Executável ePSXe (*.exe)",))
             return window.create_file_dialog(
                 webview.FileDialog.OPEN,allow_multiple=False,
