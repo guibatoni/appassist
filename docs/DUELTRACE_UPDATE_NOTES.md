@@ -3,6 +3,7 @@
 ## Novidades
 - **Leitura contínua em segundo plano:** mão, fusões ao vivo, RANK e candidato de adversário continuam sendo acompanhados ao navegar por qualquer aba.
 - O monitor inicia junto com o DUELTRACE Windows, antes da abertura da Central de Duelo.
+- Deck ativo validado no ePSXe também é atualizado em segundo plano quando o jogo foi iniciado pelo DUELTRACE.
 - A tela principal e os visores pop-up compartilham os mesmos resultados recentes; abrir outra aba não reinicia o acompanhamento.
 - Um indicador em cada tela mostra que a leitura ao vivo permanece em segundo plano.
 
