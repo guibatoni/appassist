@@ -9,7 +9,7 @@
 
 ## Melhorias
 - POW usa fundo vermelho com texto branco; TEC usa fundo azul com texto branco e contorno suave.
-- Letras, números e bordas do overlay são desenhados com suavização para acompanhar a interface Windows.
+- A tipografia permanece limpa, sem contorno rosa; a cor magenta continua apenas como preenchimento do RANK S.
 - A fonte Exo 2 já presente no projeto é incluída no aplicativo Windows, sem exigir instalação de fontes no sistema.
 - A imagem nativa do overlay é atualizada quando o RANK muda, sem criar nova leitura de RAM.
 - Preservadas as abas Decks, Meus Decks, fusões, biblioteca e o conteúdo do Memory Card.
