@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from dueltrace_web_bridge import DueltraceWebBridge
+from dueltrace_epsxe_rank_overlay import EpsxeRankOverlay
 from dueltrace_web_security import ProtectedDesktopApi
 from dueltrace_native_resize import enable_native_edge_resize
 from dueltrace_preferences import WindowPreferenceStore
@@ -245,6 +246,11 @@ def main():
     # Start BEFORE the first page renders: live RAM reading continues even
     # while the user browses Mods, Fusões, Drops, Biblioteca or pop-outs.
     bridge.start_background_live()
+    # Passive click-through Windows overlay has its own Tk event thread.
+    # It never takes ownership of the main pywebview UI or the emulator.
+    rank_overlay=EpsxeRankOverlay(bridge,bridge.settings_path)
+    bridge._rank_overlay=rank_overlay
+    rank_overlay.start()
     try:
         window=webview.create_window(
             "DUELTRACE — MultiMod Companion",
@@ -386,6 +392,7 @@ def main():
     finally:
         # A closing/minimized tab must not control the lifetime of RAM reads.
         # Only the desktop tracker itself stops its background workers.
+        rank_overlay.stop()
         bridge.stop_background_live()
         geometry_store.close()
         server.shutdown()

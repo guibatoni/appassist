@@ -183,6 +183,15 @@ class ProtectedDesktopApi:
         self._authorize(credential)
         return self._bridge.get_alpha_preferences()
 
+    def get_rank_overlay_settings(self, credential):
+        self._authorize(credential)
+        return self._bridge.get_rank_overlay_settings()
+
+    def set_rank_overlay_settings(self, credential, enabled, position, scale, opacity):
+        self._authorize(credential)
+        return self._bridge.set_rank_overlay_settings(
+            enabled, position, scale, opacity)
+
     def get_ui_settings(self, credential):
         self._authorize(credential)
         return self._bridge.get_ui_settings()

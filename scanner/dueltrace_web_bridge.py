@@ -8,6 +8,7 @@ API HTTP aberta para comandos. As imagens são lidas localmente.
 from __future__ import annotations
 
 import threading
+import sys
 import json
 import hashlib
 import re
@@ -91,6 +92,7 @@ class DueltraceWebBridge:
         # Launched explicitly by the Windows entrypoint, not by API calls or
         # construction in tests. Keeps RAM work alive across route changes.
         self._background_live = None
+        self._rank_overlay = None
         self._lock = threading.RLock()
         self._live_diagnostics = None
         self._live_diagnostics_stop = None
@@ -135,6 +137,29 @@ class DueltraceWebBridge:
         self._memory_sync_thread=threading.Thread(
             target=monitor,daemon=True,name="dueltrace-memory-card-sync")
         self._memory_sync_thread.start()
+
+    def get_rank_overlay_settings(self):
+        """Return only public, validated UI preferences and native status."""
+        from dueltrace_epsxe_rank_overlay import read_overlay_settings
+        with self._lock:
+            overlay=self._rank_overlay
+            if overlay is not None:
+                return overlay.status()
+            return {**read_overlay_settings(self.settings_path),
+                    "running":False,"visible":False,"error":None,
+                    "supported":sys.platform=="win32"}
+
+    def set_rank_overlay_settings(self, enabled, position, scale, opacity):
+        """Save a strict allowlisted preference without touching emulator RAM."""
+        from dueltrace_epsxe_rank_overlay import save_overlay_settings
+        with self._lock:
+            settings=save_overlay_settings(
+                self.settings_path,enabled,position,scale,opacity)
+            overlay=self._rank_overlay
+            if overlay is not None:
+                return overlay.configure(settings)
+            return {**settings,"running":False,"visible":False,"error":None,
+                    "supported":sys.platform=="win32"}
 
     def get_ui_settings(self):
         from dueltrace_preferences import public_settings
