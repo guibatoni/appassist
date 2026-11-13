@@ -91,9 +91,12 @@ class BackgroundLiveTracker:
                 return None
             return deepcopy(entry["value"])
 
-    def invalidate(self):
+    def invalidate(self, kind=None):
         with self._lock:
-            self._cache.clear()
+            if kind is None:
+                self._cache.clear()
+            elif kind in MAX_AGE:
+                self._cache.pop(kind, None)
 
     def sample_once(self, kind: str):
         """Deterministic step for tests and both background workers."""
@@ -138,7 +141,8 @@ class BackgroundLiveTracker:
                     value = {"ready": False, "deckIds": []}
                 if not isinstance(value, dict):
                     raise ValueError("Leitura de RAM inválida.")
-            except (OSError, RuntimeError, ValueError, TypeError, KeyError):
+            except (OSError, RuntimeError, ValueError, TypeError, KeyError,
+                    AttributeError, ImportError, OverflowError):
                 value = {"ready": False, "status": "Leitura temporariamente indisponível"}
                 if kind == "hand":
                     value.update(hand=[], pairs=[], chains=[])
@@ -188,6 +192,9 @@ class BackgroundLiveTracker:
                 if not self._stop.is_set():
                     self.sample_once("deck")
             except Exception:
-                self.invalidate()
+                # A slow or incompatible opponent/deck probe cannot erase
+                # a validated hand or RANK snapshot from the core worker.
+                self.invalidate("opponent")
+                self.invalidate("deck")
             self._stop.wait(max(0.3, OPPONENT_INTERVAL -
                                 (self.clock() - start)))
