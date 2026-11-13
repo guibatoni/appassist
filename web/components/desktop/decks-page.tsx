@@ -92,7 +92,7 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       <div className="flex items-center gap-3"><Layers className="size-6 text-gold"/>
         <div><h1 className="font-display text-2xl font-bold text-gold"><T k="Decks"/></h1>
           <p className="text-sm text-muted">Deck atual do Memory Card, pesquisa de cartas e fusões possíveis</p></div>
-        <Link href="/decks-salvos" className="btn-ghost ml-auto"><BookMarked className="size-4"/> Decks Salvos</Link>
+        <Link href="/decks-salvos" className="btn-ghost ml-auto"><BookMarked className="size-4"/> Meus Decks</Link>
       </div>
     </header>
     <div className="panel rounded-xl p-4">
@@ -160,7 +160,7 @@ export function DecksPage({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
       {state?.savePinned&&state.selectedBlock&&
         <p className="mt-2 text-xs text-primary">Bloco {state.selectedBlock} salvo como preferência desta ISO. A sequência acompanha os saves do jogo.</p>}
       <p className="mt-3 text-xs text-muted">
-        Salve uma cópia nomeada do deck e consulte-a depois em <Link href="/decks-salvos" className="text-primary underline">Decks Salvos</Link>.
+        Salve uma cópia nomeada do deck e consulte-a depois em <Link href="/decks-salvos" className="text-primary underline">Meus Decks</Link>.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input className="field min-w-52 flex-1 px-3 py-2 text-sm"

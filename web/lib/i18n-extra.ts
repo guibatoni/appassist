@@ -1,10 +1,10 @@
 export const EXTRA_TRANSLATIONS: Record<string,Record<string,string>> = {
-  "Decks Salvos": {
-    "en": "Saved Decks",
-    "es": "Mazos guardados",
-    "ja": "保存済みデッキ",
-    "zh-CN": "已保存的卡组",
-    "it": "Mazzi salvati"
+  "Meus Decks": {
+    "en": "My Decks",
+    "es": "Mis mazos",
+    "ja": "マイデッキ",
+    "zh-CN": "我的卡组",
+    "it": "I miei mazzi"
   },
   "Biblioteca de Drops": {
     "en": "Drop Library",
