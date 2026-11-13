@@ -14,7 +14,7 @@ const navItems = [
   { label: "Drops", href: "/drops", icon: Gift, enabled: true },
   { label: "Oponentes", href: "/oponentes", icon: Users, enabled: true },
   { label: "Decks", href: "/decks", icon: BookMarked, enabled: true },
-  { label: "Decks Salvos", href: "/decks-salvos", icon: BookMarked, enabled: true },
+  { label: "Meus Decks", href: "/decks-salvos", icon: BookMarked, enabled: true },
   { label: "Configurações", href: "/configuracoes", icon: Settings2, enabled: true },
 ]
 
