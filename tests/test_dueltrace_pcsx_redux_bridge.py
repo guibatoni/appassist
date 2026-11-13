@@ -79,6 +79,22 @@ class EmulatorBridgeTests(unittest.TestCase):
         self.assertIn("Redux",result["status"])
         read.assert_called_once_with(preferred_pid=None,port=8080)
 
+    def test_redux_missing_http_falls_back_to_verified_process_scan(self):
+        with patch("dueltrace_web_bridge.redux_connection_status",
+                   return_value={"available":False,"running":False,"status":"offline"}), \
+             patch("dueltrace_web_bridge.read_hand_from_redux",
+                   return_value={"ready":False,"hand_ids":None,
+                                 "status":"PCSX-Redux: servidor ou RAM indisponíveis."}), \
+             patch("dueltrace_web_bridge.read_hand_from_redux_host",
+                   return_value={"ready":True,"hand_ids":[1,2,3,4,5],
+                                 "status":"PCSX-Redux: RAM dinâmica confirmada"}) as fallback:
+            self.bridge.set_emulator("pcsx-redux",8080)
+            with patch.object(self.bridge,"_fusion_index",return_value={}):
+                hand=self.bridge.get_hand()
+        self.assertTrue(hand["ready"])
+        fallback.assert_called_once_with(preferred_pid=None)
+        self.assertEqual([c["id"] for c in hand["hand"]],[1,2,3,4,5])
+
     def test_epsxe_reader_injection_still_used_unchanged(self):
         fake=Mock(return_value={"ready":True,"hand_ids":[1,2,3,4,5],
                                 "status":"ePSXe confirmado"})
