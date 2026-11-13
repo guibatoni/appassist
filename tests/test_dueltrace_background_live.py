@@ -21,7 +21,7 @@ class SyntheticBridge:
         self._lock=threading.RLock()
         self.sha="a"*64
         self.profile=True
-        self.calls={"hand":0,"rank":0,"opponent":0}
+        self.calls={"hand":0,"rank":0,"opponent":0,"deck":0}
         self.hand_ids=[461,16,635,10,123]
         self.hand_entered=threading.Event()
 
@@ -44,6 +44,12 @@ class SyntheticBridge:
         return {"ready":True,"runtimeOpponentId":9,
                 "mayActivateDrops":False}
 
+    def _get_confirmed_live_deck(self,sha):
+        self.calls["deck"]+=1
+        if sha!=self.sha:
+            return None
+        return {"ready":True,"deckIds":[461,16,635,10,123]*8}
+
 
 class BackgroundLiveTests(unittest.TestCase):
     def test_independent_sampler_updates_cards_rank_opponent_and_fusions(self):
@@ -51,13 +57,15 @@ class BackgroundLiveTests(unittest.TestCase):
         now=[10.0]
         worker=BackgroundLiveTracker(bridge,clock=lambda:now[0],detector=lambda:True)
         worker._started=True
-        for kind in ("hand","rank","opponent"):
+        for kind in ("hand","rank","opponent","deck"):
             self.assertTrue(worker.sample_once(kind))
         self.assertEqual(worker.snapshot("hand",bridge.sha)["hand"][0]["id"],461)
         self.assertEqual(worker.snapshot("hand",bridge.sha)["pairs"][0]["result"],69)
         self.assertEqual(worker.snapshot("rank",bridge.sha)["score"],95)
         self.assertEqual(worker.snapshot("opponent",bridge.sha)["runtimeOpponentId"],9)
-        self.assertEqual(bridge.calls,{"hand":1,"rank":1,"opponent":1})
+        self.assertEqual(worker.snapshot("deck",bridge.sha)["deckIds"][0],461)
+        self.assertEqual(len(worker.snapshot("deck",bridge.sha)["deckIds"]),40)
+        self.assertEqual(bridge.calls,{"hand":1,"rank":1,"opponent":1,"deck":1})
 
     def test_caches_are_defensive_copies_and_expire_instead_of_freezing(self):
         bridge=SyntheticBridge()
@@ -95,10 +103,10 @@ class BackgroundLiveTests(unittest.TestCase):
         bridge=SyntheticBridge()
         worker=BackgroundLiveTracker(bridge,detector=lambda:False)
         worker._started=True
-        for kind in ("hand","rank","opponent"):
+        for kind in ("hand","rank","opponent","deck"):
             self.assertTrue(worker.sample_once(kind))
             self.assertFalse(worker.snapshot(kind,bridge.sha)["ready"])
-        self.assertEqual(bridge.calls,{"hand":0,"rank":0,"opponent":0})
+        self.assertEqual(bridge.calls,{"hand":0,"rank":0,"opponent":0,"deck":0})
         worker.stop()
 
     def test_read_failure_does_not_publish_old_cards(self):
@@ -159,6 +167,15 @@ class BackgroundLiveTests(unittest.TestCase):
             fake_opponent.assert_called_once()
             self.assertTrue(app.get_state()["backgroundLiveRunning"])
             monitor.stop()
+
+    def test_decks_page_uses_background_state_but_saves_still_read_fresh_ram(self):
+        source=(ROOT/"scanner/dueltrace_web_bridge.py").read_text(encoding="utf8")
+        section=source[source.index("    def get_deck_library("):
+                       source.index("    def save_current_deck(")]
+        self.assertIn('self._background_live.snapshot("deck",sha)',section)
+        save=source[source.index("    def save_current_deck("):
+                    source.index("    def get_drops(")]
+        self.assertIn('self._get_confirmed_live_deck(active["sha256"])',save)
 
     def test_desktop_bootstraps_sampler_before_webview_and_stops_on_exit(self):
         source=(ROOT/"scanner/dueltrace_web_desktop.py").read_text(encoding="utf8")
