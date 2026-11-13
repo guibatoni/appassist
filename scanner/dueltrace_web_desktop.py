@@ -24,6 +24,17 @@ from dueltrace_display_layout import (
     window_geometry, tool_geometry, windows_work_area,
 )
 
+# pywebview.util.parse_file_type allows only word chars/spaces in the
+# label. 'PCSX-Redux' in the label raises "is not a valid file filter".
+FILE_PICKER_FILTERS={
+    "memory_card":("Memory Card PS1 (*.mcr;*.mcd;*.mc;*.srm;*.mem;*.vm1)",),
+    "iso":("Imagens de jogo (*.iso;*.bin)",),
+    "trace":("Log MIPS de duelo (*.log;*.txt)",),
+    "pcsx_redux":("Executavel PCSX Redux (*.exe)",),
+    "epsxe":("Executavel ePSXe (*.exe)",),
+    "rank_report":("JSON (*.json)",),
+}
+
 ART_PATTERN=re.compile(r"^/__art__/([0-9a-f]{64})/([0-9]{1,3})\.png$")
 ART_HD_PATTERN=re.compile(r"^/__art_hd__/([0-9a-f]{64})/([0-9]{1,3})\.png$")
 CARD_PATTERN=re.compile(r"^/__card__/([0-9a-f]{64})/([0-9]{1,3})\.png$")
@@ -355,22 +366,16 @@ def main():
         api._tool_window_close=close_tool_window
 
         def pick_file(kind):
+            if kind not in FILE_PICKER_FILTERS:
+                raise ValueError("Tipo de arquivo não autorizado.")
             if kind=="rank_report":
                 return window.create_file_dialog(
                     webview.FileDialog.SAVE,
                     save_filename="DUELTRACE-RANK-EVIDENCE.json",
-                    file_types=("JSON (*.json)",))
-            file_types=(
-                ("Memory Card PS1 (*.mcr;*.mcd;*.mc;*.srm;*.mem;*.vm1)",)
-                if kind=="memory_card" else
-                ("Imagens de jogo (*.iso;*.bin)",)
-                if kind=="iso" else
-                ("Log MIPS de duelo (*.log;*.txt)",) if kind=="trace" else
-                ("Executável PCSX-Redux (*.exe)",) if kind=="pcsx_redux" else
-                ("Executável ePSXe (*.exe)",))
+                    file_types=FILE_PICKER_FILTERS[kind])
             return window.create_file_dialog(
                 webview.FileDialog.OPEN,allow_multiple=False,
-                file_types=file_types)
+                file_types=FILE_PICKER_FILTERS[kind])
         bridge._file_picker=pick_file
         def close_for_update():
             # Resposta JS é entregue antes de destruir a janela; helper externo
