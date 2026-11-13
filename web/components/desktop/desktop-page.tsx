@@ -1494,6 +1494,10 @@ export function DesktopPage({page}:{page:Page}) {
     <div className="panel flex min-w-0 flex-wrap items-center gap-3 rounded-xl px-3 py-2 text-xs sm:px-4">
 
       <span className="text-muted"><T k="ISO ativa:"/> <strong className="break-all font-semibold text-white">{state?.activeName??t("Nenhuma ISO selecionada")}</strong></span>
+      {state?.backgroundLiveRunning&&<span className="ml-auto text-xs font-medium text-success"
+        title="Mão, fusões, RANK e adversário são acompanhados mesmo fora da Central de Duelo.">
+        ● Leitura ao vivo em segundo plano
+      </span>}
     </div>
     {error&&<p className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm text-gold" role="status">{error}</p>}
     {loading&&<p className="text-sm text-muted"><T k="Carregando dados locais..."/></p>}
