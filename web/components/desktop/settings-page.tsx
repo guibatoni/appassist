@@ -3,6 +3,7 @@
 import {useState} from "react"
 import {CheckCircle2,Globe2,Monitor,ShieldAlert,Settings2} from "lucide-react"
 import {LOCALES,useI18n,T,type AppLocale} from "@/lib/i18n"
+import {EmulatorSettings} from "./emulator-settings"
 
 export function SettingsPage() {
   const {locale,setLocale,ready,t}=useI18n()
@@ -49,6 +50,7 @@ export function SettingsPage() {
         <T k="Não foi possível salvar. Tente novamente."/>
       </p>}
     </section>
+    <EmulatorSettings/>
     <section className="panel rounded-xl p-4 sm:p-5">
       <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-white">
         <Monitor className="size-5 text-primary"/><T k="Aparência e janela"/>
