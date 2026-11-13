@@ -14,6 +14,7 @@ const navItems = [
   { label: "Drops", href: "/drops", icon: Gift, enabled: true },
   { label: "Oponentes", href: "/oponentes", icon: Users, enabled: true },
   { label: "Decks", href: "/decks", icon: BookMarked, enabled: true },
+  { label: "Decks Salvos", href: "/decks-salvos", icon: BookMarked, enabled: true },
   { label: "Configurações", href: "/configuracoes", icon: Settings2, enabled: true },
 ]
 
@@ -26,7 +27,7 @@ export function Sidebar() {
       <nav aria-label={t("Navegação principal")}>
         <ul className="dt-nav-list grid grid-cols-3 gap-1 min-[600px]:grid-cols-4 lg:grid-cols-1 lg:flex lg:flex-col lg:gap-1.5">
           {navItems.map(({ label, href, icon: Icon, enabled }) => {
-            const active = pathname.startsWith(href)
+            const active = pathname === href || pathname.startsWith(href + "/")
             const className = cn(
               "dt-nav-link group flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 text-center text-[11px] leading-tight transition-all min-[600px]:text-xs lg:flex-row lg:justify-start lg:gap-3 lg:px-4 lg:py-3 lg:text-left lg:text-[15px]",
               active

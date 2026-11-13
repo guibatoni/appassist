@@ -1754,7 +1754,10 @@ class DueltraceWebBridge:
                                  "def":cards.get(cid,{}).get("def")}
                                 for cid,amount in sorted(counts.items())]
                 recipes,provisional=self._combined_fusion_recipes(sha,entry,profile)
-                fusions=fusion_pairs_for_deck(ids,recipes,cards)
+                # Up to 40 unique cards yield at most 780 distinct
+                # unordered material pairs. Return all source-bound rows,
+                # so the Decks UI can search beyond the old first-80 cut.
+                fusions=fusion_pairs_for_deck(ids,recipes,cards,max_results=820)
                 fusions["provisional"]=provisional
             else:
                 fusions={"total":0,"rows":[],"provisional":False}

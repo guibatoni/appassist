@@ -1,29 +1,30 @@
-# DUELTRACE v0.19.4 — Preview
+# DUELTRACE v0.19.5 — Preview
 
 ## Novidades
-- Aba Decks apresenta os 15 blocos físicos do Memory Card PS1, distinguindo saves FM íntegros, slots vazios e outros jogos.
-- Novo botão Selecionar outro Memory Card na aba Decks, para alternar entre os dois cartões do ePSXe.
-- Origem das 40 cartas identificada claramente como Memory Card ou cópia local salva.
+- Nova aba **Decks Salvos** com loadouts nomeados da ISO ativa, incluindo quantidade e lista das 40 cartas.
+- Ao salvar um deck no Memory Card, o DUELTRACE abre automaticamente o loadout recém-salvo.
+- Busca por nome ou ID da carta no deck atual e nos loadouts salvos.
+- Fusões do deck com miniaturas dos dois materiais e do resultado, com visualização de informações por clique.
+- Filtro por nomes/IDs das cartas envolvidas nas fusões e seleção de 1, 5, 10, 20, 50, 100, 200 ou todas.
 
 ## Melhorias
-- Deck mostrado no DUELTRACE usa o save selecionado e validado, sem ser substituído por dados suspeitos da RAM.
-- Trocar explicitamente de Memory Card escolhe o save FM único do novo cartão quando for inequívoco.
-- Snapshots automáticos ficam vinculados ao cartão selecionado; o deck do cartão anterior não aparece como atual.
-- Mão, fusões, RANK, biblioteca, Memory Card e monitoramento em segundo plano continuam disponíveis.
+- Aba Decks fica focada no deck do Memory Card; Decks Salvos organiza os loadouts de montagem.
+- O filtro de fusões cobre toda a lista de pares possíveis do deck, sem o limite antigo de 80 resultados.
+- Pesquisa nos loadouts encontra tanto o nome do deck quanto as cartas que ele contém.
+- Loadouts são cópias locais vinculadas à ISO e permanecem disponíveis sem alterar saves do ePSXe.
+- Mantidos a leitura em segundo plano, biblioteca, fusões ao vivo, RANK e emulador ePSXe.
 
 ## Correções
-- Corrigida a substituição indevida das cartas do deck por 40 IDs encontrados em um endereço RAM estimado.
-- Deck RAM só pode ser aceito como candidato corroborado após coincidir integralmente com um save íntegro.
-- Saves inválidos ou de outros jogos aparecem como blocos não selecionáveis, sem interpretação falsa de cartas.
-- Salvar deck usa apenas o Memory Card selecionado; nunca persiste RAM não validada como deck confirmado.
-- O ePSXe continua sendo o único emulador e nenhum recurso PCSX-Redux é incluído.
+- Elimina o corte silencioso dos resultados de fusão na página Decks.
+- Salvamento abre diretamente o deck identificado, sem depender da seleção manual de uma lista.
+- Navegação independente entre Decks e Decks Salvos, sem duas abas destacadas ao mesmo tempo.
+- Nenhum Memory Card é modificado durante a consulta dos loadouts; não há escrita na RAM.
 
 ## Limitações
-- O cartão PS1 possui 15 blocos físicos, mas não necessariamente 15 saves. Cada arquivo mostra seus próprios blocos.
-- A integridade do save não garante qual ISO ou mod está rodando atualmente no ePSXe.
-- A posição do deck ativo na RAM exige confirmação adicional com um duelo real, sem dados presumidos.
-- Arquivos de Save State do ePSXe não são saves de Memory Card e exigem análise separada.
-- Nenhuma transmissão de RAM, HTTP/WebSocket ou modificação do Memory Card foi adicionada.
+- Os loadouts são modelos de referência: não alteram automaticamente o deck do ePSXe.
+- Salvamento atual usa somente as 40 cartas de um save válido selecionado no Memory Card.
+- Receitas de fusão não confirmadas para um mod continuam sinalizadas como provisórias.
+- Sem API remota, transmissão de RAM ou recursos PCSX-Redux nesta versão.
 
 ## Créditos e direitos
 - Desenvolvido por Batoni Dev - Guilherme Batoni.
