@@ -62,12 +62,53 @@ def _extract_saves(blob):
                       **checked})
     return found
 
+def _list_card_blocks(blob, saves):
+    """Report all 15 PHYSICAL PS1 blocks, not just validated FM saves.
+
+    A valid PS1 directory entry is not a valid FM deck. Only a separately
+    CRC/seal-verified FM save may be selected. Unknown and corrupt slots
+    remain visible so the player understands why the picker has one save.
+    """
+    valid={row["block"]:row for row in saves}
+    slots=[]
+    for block in range(1,16):
+        directory=blob[block*128:(block+1)*128]
+        flag=directory[0] if directory[1:4]==b"\\x00"*3 else None
+        checksum=_frame_checksum(directory)
+        name=directory[10:31].split(b"\\x00",1)[0].decode("ascii","replace")
+        name="".join(ch for ch in name if 32<=ord(ch)<127)[:21]
+        if block in valid:
+            status="fm_valid"
+            label="Save FM validado"
+        elif not checksum and any(directory):
+            status="unverified"
+            label="Diretório não validado"
+        elif flag==0x51:
+            status="unverified" if SAVE_NAME_RE.search(name) else "other_game"
+            label=("Save FM não validado" if status=="unverified"
+                   else "Outro jogo")
+        elif flag in (0x52,0x53):
+            status="continuation"
+            label="Continuação de save"
+        elif flag in (0xA0,0xA1,0xA2,0xA3) or not any(directory):
+            status="empty"
+            label="Livre / não ocupado"
+        else:
+            status="unverified"
+            label="Bloco não identificado"
+        slots.append({"block":block,"status":status,
+                      "label":label,"selectable":status=="fm_valid",
+                      "saveName":name if status=="fm_valid" else None})
+    return slots
+
+
 def parse_memory_card(blob):
     if not isinstance(blob,bytes):
         raise ValueError("Conteúdo do cartão inválido.")
     saves=_extract_saves(blob)
     return {"schema":1,"format":"PS1-RAW","bytes":len(blob),
-            "saves":saves,"detectedSaveCount":len(saves),
+            "saves":saves,"blocks":_list_card_blocks(blob,saves),
+            "detectedSaveCount":len(saves),
             "gameIntegrityVerified":bool(saves)}
 
 
@@ -291,13 +332,13 @@ class MemoryCardStore:
     def read(self,rom_sha256,mod_name=None):
         if not isinstance(rom_sha256,str) or not ROM_RE.fullmatch(rom_sha256):
             return {"linked":False,"status":"Nenhum mod ativo.","saved":[],
-                    "deckIds":[],"saves":[],"selectedBlock":None}
+                    "deckIds":[],"saves":[],"blocks":[],"selectedBlock":None}
         data=self._binding_data()
         link=(data.get("links") or {}).get(rom_sha256)
         base={"linked":False,
               "status":"Selecione um Memory Card na Biblioteca de Mods.",
               "saved":self._saved(rom_sha256),"deckIds":[],"cardName":None,
-              "saveName":None,"saves":[],"selectedBlock":None,
+              "saveName":None,"saves":[],"blocks":[],"selectedBlock":None,
               "gameIntegrityVerified":False,"activeInEmulatorVerified":False}
         if not isinstance(link,dict) or not link.get("path"):
             return base
@@ -337,6 +378,7 @@ class MemoryCardStore:
                           if chosen and row["block"]==chosen["block"]),None)
         return {**base,"linked":True,"cardName":path.name,
                 "saves":choices,
+                "blocks":result["blocks"],
                 "saveDisplayName":(chosen_label or {}).get("displayName"),
                 "activeModName":(safe_mod_name(mod_name)
                                  or safe_mod_name(link.get("modName"))),
