@@ -4,61 +4,51 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src http://127.0.0.1:8765; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'">
-<title>DUELTRACE Cloud — MultiMod Companion</title>
+<title>DUELTRACE Cloud — 100% navegador</title>
 <link rel="stylesheet" href="./app.css">
+<script defer src="./iso-scanner.js"></script>
+<script defer src="./catalog-store.js"></script>
 <script defer src="./app.js"></script>
 </head>
 <body>
 <header class="header">
-  <div class="brand">
-    <svg width="48" height="44" viewBox="0 0 48 44" aria-hidden="true"><path d="M2 2h44L24 42z" fill="none" stroke="#80dfff" stroke-width="4"/><path d="M13 9h22L24 30z" fill="none" stroke="#35baff" stroke-width="3"/></svg>
-    <div><strong>DUELTRACE</strong><em>— MultiMod Companion —</em></div>
-  </div>
-  <div class="headerright"><span class="pill" id="connection">Conector desconectado</span><span class="small version">Cloud Web v0.6.0</span></div>
+ <div class="brand">
+  <svg width="48" height="44" viewBox="0 0 48 44" aria-hidden="true"><path d="M2 2h44L24 42z" fill="none" stroke="#80dfff" stroke-width="4"/><path d="M13 9h22L24 30z" fill="none" stroke="#35baff" stroke-width="3"/></svg>
+  <div><strong>DUELTRACE</strong><em>— MultiMod Companion —</em></div>
+ </div>
+ <div class="headerright">
+  <span class="pill">☁ Navegador independente</span>
+  <span class="small version">Cloud Web v0.7.0</span>
+ </div>
 </header>
 <div class="frame">
 <nav id="navigation" aria-label="Navegação do DUELTRACE">
-  <button type="button" data-tab="inicio" class="active">⌂ &nbsp; Início</button>
-  <button type="button" data-tab="mods">▣ &nbsp; Biblioteca de Mods</button>
-  <button type="button" data-tab="biblioteca">▤ &nbsp; Biblioteca de Cartas</button>
-  <button type="button" data-tab="fusoes">∞ &nbsp; Fusões</button>
-  <button type="button" data-tab="drops">♧ &nbsp; Drops</button>
-  <button type="button" data-tab="oponentes">♟ &nbsp; Oponentes</button>
-  <button type="button" data-tab="decks">▧ &nbsp; Decks</button>
-  <button type="button" data-tab="configuracoes">⚙ &nbsp; Configurações</button>
+ <button type="button" data-tab="inicio" class="active">⌂ &nbsp; Início</button>
+ <button type="button" data-tab="mods">▣ &nbsp; Biblioteca de Mods</button>
+ <button type="button" data-tab="biblioteca">▤ &nbsp; Biblioteca de Cartas</button>
+ <button type="button" data-tab="fusoes">∞ &nbsp; Fusões</button>
+ <button type="button" data-tab="drops">♧ &nbsp; Drops</button>
+ <button type="button" data-tab="oponentes">♟ &nbsp; Oponentes</button>
+ <button type="button" data-tab="decks">▧ &nbsp; Decks</button>
+ <button type="button" data-tab="duelo">♙ &nbsp; Duelo manual</button>
+ <button type="button" data-tab="configuracoes">⚙ &nbsp; Configurações</button>
 </nav>
 <main>
-  <section class="hero"><h1>DUELTRACE Cloud</h1><p>Seu MultiMod Companion online, conectado ao motor de análise local do Windows.</p></section>
-  <div id="status" role="status" aria-live="polite" class="notice"></div>
-  <section id="pair" class="columns">
-    <div class="panel">
-      <h2>Conectar ao computador</h2>
-      <p>A interface funciona na internet. O motor continua no seu Windows: nenhuma ISO, BIN, imagem original, Memory Card ou RAM é enviada à hospedagem.</p>
-      <label for="key">Chave temporária do DUELTRACE Connector</label>
-      <input type="password" id="key" placeholder="Cole a chave da sessão local" autocomplete="off" spellcheck="false" maxlength="160">
-      <p class="small muted">A chave fica apenas na memória desta guia. Não é armazenada nem colocada na URL.</p>
-      <button type="button" id="connect" class="gold">Conectar ao PC</button>
-      <p id="client-status" class="small">Interface web carregada.</p>
-    </div>
-    <div class="panel">
-      <h2>Modo local — sem chave</h2>
-      <p>Para usar o aplicativo no próprio computador sem digitar uma chave, execute o <strong>DUELTRACE-Connector.exe</strong> e abra o painel local.</p>
-      <a class="button" href="http://127.0.0.1:8765/local/" target="_blank" rel="noopener noreferrer">Abrir DUELTRACE local</a>
-      <p class="muted small">O link local só funciona no Windows onde o Connector está aberto. Alguns navegadores solicitam permissão para acessar a rede local.</p>
-      <p class="small"><a href="https://github.com/guibatoni/appassist/releases" target="_blank" rel="noopener noreferrer">Ver versões do Connector no GitHub</a></p>
-    </div>
-  </section>
-  <section id="workspace" class="hidden">
-    <div class="panel toolbar">
-      <div><div class="muted small">ISO ativa</div><h2 id="active-mod">Nenhum mod ativado</h2><div id="counts" class="muted small"></div></div>
-      <div class="actions"><button id="reload" type="button">Recarregar</button><button id="disconnect" type="button">Desconectar</button></div>
-    </div>
-    <section id="panel" aria-label="Conteúdo do DUELTRACE Cloud"></section>
-  </section>
-  <footer>DUELTRACE Cloud Web v0.6.0 · Conexão navegador → 127.0.0.1 · Arquivos do jogo sempre no PC</footer>
+ <section class="hero"><h1>DUELTRACE Cloud</h1><p>Biblioteca e análise de mods diretamente no Chrome, Edge, Firefox ou celular — sem Connector, instalação ou ePSXe.</p></section>
+ <div id="status" role="status" aria-live="polite" class="notice"></div>
+ <section class="panel toolbar">
+  <div><div class="muted small">Catálogo ativo</div><h2 id="active-mod">Nenhum mod importado</h2><div id="counts" class="muted small"></div></div>
+  <div class="actions">
+   <input id="iso-file" type="file" accept=".iso,.bin" hidden>
+   <input id="catalog-file" type="file" accept=".json,application/json" hidden>
+   <button type="button" id="import-iso" class="gold">Importar ISO/BIN</button>
+   <button type="button" id="import-json">Importar catálogo JSON</button>
+  </div>
+ </section>
+ <section id="panel" aria-label="Conteúdo do DUELTRACE Cloud"></section>
+ <footer>DUELTRACE Cloud Web v0.7.0 · Sem Connector · Os arquivos ISO/BIN não saem do seu navegador · Catálogos são salvos neste dispositivo</footer>
 </main>
 </div>
-<noscript><p class="noscript">Esta página online precisa de JavaScript. O DUELTRACE local funciona sem JavaScript: abra http://127.0.0.1:8765/local/ com o Connector em execução.</p></noscript>
+<noscript><p class="noscript">Ative JavaScript para importar e consultar mods. Nenhum Connector é necessário.</p></noscript>
 </body>
 </html>
