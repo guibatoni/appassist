@@ -29,6 +29,12 @@ jobs:
         run: npm ci --prefix web
       - name: Validate standalone online portal JavaScript syntax
         run: node --check web/public/cloud-online/app.js
+      - name: Validate connector-free scripts and run synthetic ISO/BIN tests
+        run: |
+          node --check web/public/cloud-online/iso-scanner.js
+          node --check web/public/cloud-online/catalog-store.js
+          node --check web/public/cloud-online/app.js
+          node --test web/tests/cloud_browser_scanner.test.cjs
       - name: Build static browser frontend
         run: npm run build --prefix web
       - name: Verify static cloud route
@@ -38,4 +44,6 @@ jobs:
           test -s web/out/cloud-online/index.html
           test -s web/out/cloud-online/app.js
           test -s web/out/cloud-online/app.css
+          test -s web/out/cloud-online/iso-scanner.js
+          test -s web/out/cloud-online/catalog-store.js
           echo "DUELTRACE Cloud HTML export verified."
