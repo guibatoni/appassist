@@ -243,7 +243,10 @@ class ClientContractTests(unittest.TestCase):
         self.assertIn('href: "/oponentes"',sidebar)
         self.assertIn('href: "/decks"',sidebar)
         self.assertIn("Selecionar Memory Card",main)
-        self.assertIn('kind=="memory_card"',picker)
+        # The native picker now uses an allowlisted map rather than an
+        # open-ended kind-specific conditional. Assert the actual contract.
+        self.assertIn('"memory_card":("Memory Card PS1 ',picker)
+        self.assertIn("file_types=FILE_PICKER_FILTERS[kind]",picker)
         self.assertIn('page==="decks"',main)
         self.assertIn('page==="oponentes"',main)
         opponents=(ROOT/"web/components/desktop/opponents-page.tsx").read_text("utf8")
