@@ -14,9 +14,12 @@ misturar seus limites/pools com os dez rankings do original.
 """
 from __future__ import annotations
 
-from scanner_multiiso import X15_SHA
+from scanner_multiiso import X15_SHA, X15_RANK_LABEL_ONLY_SHA
 
 X15_RANKS = ("Z-POW", "S-POW", "S-TEC")
+X15_RANK_TABLE_SHA256 = "dffacc55349f6b565d9e9a70db20ce9fe5f5ef5702a5bcc7c35926b764af28e0"
+X15_RANK_TABLE_FIRST_OFFSET = 7475 * 2048 + 0x16D0
+X15_RANK_TABLE_STRIDE = 3 * 2048
 CLASSIC_RANKS = (
     "S-POW", "A-POW", "B-POW", "C-POW", "D-POW",
     "D-TEC", "C-TEC", "B-TEC", "A-TEC", "S-TEC",
@@ -48,20 +51,45 @@ CLASSIC_SCORE_RANKS = (
 
 
 def is_x15_sha(sha: str | None) -> bool:
+    """True apenas para a imagem exata cujo modelo X15 foi validado."""
     return type(sha) is str and sha.casefold() == X15_SHA.casefold()
 
 
+def is_x15_rank_label_sha(sha: str | None) -> bool:
+    """Identifica ISOs que usam a nomenclatura de três RANKs X15."""
+    return (type(sha) is str and sha.casefold() in {
+        X15_SHA.casefold(), X15_RANK_LABEL_ONLY_SHA.casefold(),
+    })
+
+
+def has_verified_x15_rank_labels(sha: str | None, analysis: dict | None) -> bool:
+    """Confirma a tabela e o layout no BIN traduzido, sem validar execução MIPS."""
+    if is_x15_sha(sha):
+        return True
+    if (type(sha) is not str or
+            sha.casefold() != X15_RANK_LABEL_ONLY_SHA.casefold() or
+            not isinstance(analysis, dict)):
+        return False
+    return (
+        analysis.get("structure_verified") is True
+        and analysis.get("table_sha256") == X15_RANK_TABLE_SHA256
+        and analysis.get("table_count") == 40
+        and analysis.get("first_offset") == X15_RANK_TABLE_FIRST_OFFSET
+        and analysis.get("repeat_stride") == X15_RANK_TABLE_STRIDE
+    )
+
+
 def rank_system(sha: str | None) -> str:
-    return "x15" if is_x15_sha(sha) else "classic"
+    return "x15" if is_x15_rank_label_sha(sha) else "classic"
 
 
 def available_ranks(sha: str | None) -> tuple[str, ...]:
-    return X15_RANKS if is_x15_sha(sha) else CLASSIC_RANKS
+    return X15_RANKS if is_x15_rank_label_sha(sha) else CLASSIC_RANKS
 
 
 def drop_filter_ranks(sha: str | None) -> tuple[str, ...]:
     """Dropdown choices for reward tables; NOT the duel's RANK system."""
-    return X15_RANKS if is_x15_sha(sha) else CLASSIC_DROP_FILTERS
+    return X15_RANKS if is_x15_rank_label_sha(sha) else CLASSIC_DROP_FILTERS
 
 
 def pool_index_for_drop_filter(sha: str | None, rank: str) -> int:
@@ -70,7 +98,7 @@ def pool_index_for_drop_filter(sha: str | None, rank: str) -> int:
     Old individual rank filters remain accepted for existing API clients.
     The X15 ISO never receives these classic-only grouped filter labels.
     """
-    if type(rank) is str and not is_x15_sha(sha):
+    if type(rank) is str and not is_x15_rank_label_sha(sha):
         classic_group_pools = {
             "SA-POW": 0,
             "BCD-POW": 1,
@@ -83,11 +111,11 @@ def pool_index_for_drop_filter(sha: str | None, rank: str) -> int:
 
 
 def drop_pool_labels(sha: str | None) -> tuple[str, ...]:
-    return X15_POOLS if is_x15_sha(sha) else CLASSIC_POOLS
+    return X15_POOLS if is_x15_rank_label_sha(sha) else CLASSIC_POOLS
 
 
 def pool_ranks(sha: str | None) -> tuple[tuple[str, ...], ...]:
-    return X15_POOL_RANKS if is_x15_sha(sha) else CLASSIC_POOL_RANKS
+    return X15_POOL_RANKS if is_x15_rank_label_sha(sha) else CLASSIC_POOL_RANKS
 
 
 def pool_index_for_rank(sha: str | None, rank: str) -> int:
@@ -122,11 +150,11 @@ def rank_label_for_existing_score(sha: str | None, score: int) -> str:
     """
     if type(score) is not int or not -10000 <= score <= 10000:
         raise ValueError("Pontuação calculada inválida.")
-    if is_x15_sha(sha):
+    if is_x15_rank_label_sha(sha):
         return x15_rank_for_verified_score(max(0,min(score,300)))
     return classic_rank_for_verified_score(max(0,min(score,99)))
 
 
 def score_rank_for_verified_result(sha: str | None, points: int) -> str:
-    return (x15_rank_for_verified_score(points) if is_x15_sha(sha)
+    return (x15_rank_for_verified_score(points) if is_x15_rank_label_sha(sha)
             else classic_rank_for_verified_score(points))
