@@ -10,7 +10,7 @@ import re
 from scanner_multiiso import X15_SHA
 from dueltrace_rank_system import (
     available_ranks, drop_filter_ranks, drop_pool_labels, pool_ranks,
-    pool_index_for_drop_filter, rank_system, is_x15_sha,
+    pool_index_for_drop_filter, rank_system, is_x15_rank_label_sha,
 )
 from dueltrace_library_sort import validate_sort,card_type_value,matches_type,sort_key
 
@@ -223,7 +223,7 @@ def get_drop_catalog(profile: dict | None, *, opponent_id: int = 0,
                      row["cardName"],sort),
             row["opponentId"],raw_groups.index(row["group"])))
     image_sha = profile.get("rom_sha256")
-    is_known = (is_x15_sha(image_sha)
+    is_known = (is_x15_rank_label_sha(image_sha)
                 and profile.get("verified", {}).get("nomes_dos_ranks") == "verificado")
     return {
         **empty, "available": True,

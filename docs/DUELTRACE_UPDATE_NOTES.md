@@ -1,26 +1,20 @@
-# DUELTRACE v0.20.1 — Preview
+# DUELTRACE v0.21.0 — Preview
 
 ## Novidades
-- O overlay do ePSXe agora utiliza a **mesma fonte Exo 2** e a identidade visual da calculadora do DUELTRACE.
-- Pontuação branca com marcador `pts`, letra do RANK destacada e etiqueta POW/TEC com bordas arredondadas.
-- Cores idênticas às da calculadora: S magenta, A vermelho, B amarelo, C verde, D cinza e Z dourado.
-- Fundo do overlay permanece transparente e os cliques passam direto para o ePSXe.
-- O overlay segue disponível em Configurações com controles de posição, tamanho, opacidade e ativação.
+- Reconhece o Remaster X15 com descrições PT-BR pela assinatura da ISO.
+- Exibe os ranks Z-POW, S-POW e S-TEC nos filtros deste mod.
+- O overlay do ePSXe utiliza a mesma fonte Exo 2 e a identidade visual da calculadora.
+- Pontuação branca com marcador pts, RANK destacado e etiquetas POW/TEC arredondadas.
+- Cores do painel: S magenta, A vermelho, B amarelo, C verde, D cinza e Z dourado.
 
 ## Melhorias
-- POW usa fundo vermelho com texto branco; TEC usa fundo azul com texto branco e contorno suave.
-- A tipografia permanece limpa, sem contorno rosa; a cor magenta continua apenas como preenchimento do RANK S.
-- A fonte Exo 2 já presente no projeto é incluída no aplicativo Windows, sem exigir instalação de fontes no sistema.
-- A imagem nativa do overlay é atualizada quando o RANK muda, sem criar nova leitura de RAM.
+- Só identifica os nomes dos ranks quando a tabela local corresponde à estrutura esperada.
+- Mantém o cálculo ao vivo indisponível para esta variante enquanto o executável não for validado.
+- POW usa fundo vermelho e TEC usa fundo azul, com texto branco e contornos suaves.
+- A tipografia permanece limpa; o magenta aparece no preenchimento do RANK S.
 - Preservadas as abas Decks, Meus Decks, fusões, biblioteca e o conteúdo do Memory Card.
 
 ## Correções
-- Substituída a tipografia Segoe UI, que destoava da calculadora principal.
-- Removida a exibição do RANK como texto branco uniforme; nota e modo seguem o padrão visual do painel.
-- Sem alteração dos cálculos SPOILS, RANK, compatibilidade com mods ou dados do emulador.
-
-## Limitações
-- Preview Windows, recomendado ePSXe em modo janela ou maximizado; tela cheia exclusiva pode ocultar o overlay.
-- O RANK exibido permanece uma previsão: valores não confirmados não são mostrados como resultado oficial.
-- A aparência precisa de validação visual no seu Windows com o ePSXe aberto.
-- Sem plugin, DLL injetada, gravação de RAM nem conexão remota.
+- Evita oferecer os dez ranks clássicos para esta ISO reconhecida.
+- Remove o contorno rosa do texto do overlay.
+- Mantém o score e as leituras de RAM sem alteração nesta atualização.

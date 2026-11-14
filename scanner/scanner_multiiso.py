@@ -37,6 +37,7 @@ WA_CARD_SECTOR_START=722
 WA_CARD_SECTORS=7
 RANKS=('Z-POW','S-POW','S-TEC')
 X15_SHA='aff9410791ac107de9bd48a00c495d88f582fec28994f30a0c9f4e6241b74776'
+X15_RANK_LABEL_ONLY_SHA='b60b8dd798aca75bf685947ffbdede932af87c95d00129dd8fdda1046f05c0a1'
 ART_PARSER_REVISION=11  # novo cache visual e nomes por ISO
 SCAN_PARSER_REVISION=32  # descobrir nomes de tipos reais por tabela de ISO
 
@@ -665,7 +666,11 @@ def process(path,output,with_art=False,digest=None,progress=None):
         from fm_rank_tables import extract_rank_table
         info['rank_analysis']=extract_rank_table(
             wa,slus=sl,rom_sha256=info['sha256'],known_rom_sha256=X15_SHA)
-        info['versao_conhecida']='Remaster X15 1.2.1' if info['sha256']==X15_SHA else 'desconhecida — não atribuir dados X15'
+        info['versao_conhecida']=(
+            'Remaster X15 1.2.1' if info['sha256']==X15_SHA else
+            'Remaster X15 1.2.1 — tabela de RANK compatível; SLUS não confirmado'
+            if info['sha256']==X15_RANK_LABEL_ONLY_SHA else
+            'desconhecida — não atribuir dados X15')
         if progress:progress("Decodificando cartas e adversários",0,1)
         info['nomes_status']=nomes_status
         if sl and not opponents:
