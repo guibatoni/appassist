@@ -18,7 +18,9 @@ from dueltrace_type_forensics import analyze_iso_types, apply_iso_type_evidence
 from dueltrace_type_names import apply_type_names
 from mod_effects_iso import extract_embedded_effects
 from dueltrace_rank_profiles import rank_profile_for_image
-from dueltrace_rank_system import CLASSIC_RANKS
+from dueltrace_rank_system import (
+    CLASSIC_RANKS, has_verified_x15_rank_labels, is_x15_rank_label_sha,
+)
 from dueltrace_catalog_validation import validate_identity_catalogs, validate_drop_associations
 
 SCHEMA = 1
@@ -46,6 +48,9 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
     decks = rows(extracted / "decks.csv")
     checks = rows(extracted / "validacao_pesos.csv")
     known_x15 = result["sha256"].lower() == X15_SHA.lower()
+    rank_analysis = result.get("rank_analysis")
+    known_x15_rank_labels = has_verified_x15_rank_labels(
+        result["sha256"], rank_analysis)
 
     identity_validation = validate_identity_catalogs(cards, opponents)
     card_ok = identity_validation["cards_valid"]
@@ -156,7 +161,7 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
             ("matrizes_candidatas_sem_identidade" if not (card_ok and opponent_ok)
              else "matrizes_candidatas_inconsistentes") if weights_structural_ok else
             "pendente"),
-        "nomes_dos_ranks": "verificado" if known_x15 else "padrao_original_presumido",
+        "nomes_dos_ranks": "verificado" if known_x15_rank_labels else "padrao_original_presumido",
         "regras_de_pontuacao": "verificado_x15" if known_x15 else "não_extraídas",
         "fusoes": "não_extraídas",
         "artes": "extraídas" if result.get("artes_extraidas") == 722 else "indisponíveis",
@@ -171,7 +176,9 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
 
     payload = {
         "schema": SCHEMA,
-        "name": "Remaster X15 1.2.1" if known_x15 else "Mod local — " + iso.stem,
+        "name": "Remaster X15 1.2.1" if known_x15 else
+            "Remaster X15 1.2.1 — descrições PT-BR" if known_x15_rank_labels else
+            "Mod local — " + iso.stem,
         "rom_sha256": result["sha256"],
         "exe_sha256": result.get("hash_executavel"),
         "wa_sha256": result.get("hash_wa"),
@@ -198,10 +205,12 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
             "categories": card_ok,
             "effects": effects_info["count"] > 0,
         },
-        "rank_labels": LABELS_X15 if known_x15 else list(CLASSIC_RANKS),
-        "rank_system":("x15" if known_x15 else "classic"),
-        "rank_system_verification":("sha_x15_confirmado" if known_x15
-                                    else "layout_original_presumido"),
+        "rank_labels": LABELS_X15 if known_x15_rank_labels else list(CLASSIC_RANKS),
+        "rank_system":("x15" if is_x15_rank_label_sha(result["sha256"]) else "classic"),
+        "rank_system_verification":(
+            "sha_x15_confirmado" if known_x15 else
+            "tabela_x15_confirmada_slus_nao_validado" if known_x15_rank_labels else
+            "layout_original_presumido"),
         "rank_points": rank_profile_for_image(result["sha256"],result.get("rank_analysis")),
         "rank_mips_evidence": result.get("rank_mips_evidence", {
             "status":"not_scanned","rank_routine_confirmed":False,"candidates":[]}),
@@ -211,7 +220,7 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
                              "opponent_names_source": result.get("executavel"),
                              "table_count": len(checks) if weights_ok else 0,
                              "weight_total": 2048 if weights_ok else None,
-                             "rank_label_verified": bool(known_x15 and weights_ok),
+                             "rank_label_verified": bool(known_x15_rank_labels and weights_ok),
                              "candidate_table_count": len(checks) if weights_structural_ok else 0,
                              "candidate_entry_count": len(drops) if weights_structural_ok else 0,
                              "candidate_weight_total": 2048 if weights_structural_ok else None,
@@ -222,7 +231,7 @@ def analyse(extracted: Path, result: dict, iso: Path) -> dict:
                                  if weights_structural_ok and not weights_ok else
                                  "associados_catalogo" if weights_ok else
                                  "estrutura_nao_reconhecida"),
-                             "labels_unknown": not known_x15,
+                             "labels_unknown": not known_x15_rank_labels,
                              "in_game_verified":False},
         "drop_group_labels": groups if weights_ok else [],
         "art_root": str((extracted / "artes_722").resolve()) if status["artes"] == "extraídas" else None,
