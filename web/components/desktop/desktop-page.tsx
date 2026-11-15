@@ -1094,8 +1094,9 @@ function WindowEvidenceForm({mod}:{mod:LocalMod}) {
   </details>
 }
 
-function Mods({mods,sha,onRefresh,configured}:{
+function Mods({mods,sha,onRefresh,configured,onActivityChange}:{
   mods:LocalMod[];sha:string|null;onRefresh:()=>Promise<void>;configured:boolean
+  onActivityChange:(label:string|null)=>void
 }) {
   const {t}=useI18n()
   const [search,setSearch]=useState("")
@@ -1120,11 +1121,16 @@ function Mods({mods,sha,onRefresh,configured}:{
     return()=>{mounted=false}
   },[expandedSha,alphaResults])
 
-  const perform=async(task:()=>Promise<unknown>,notice:string)=>{
-    setBusy(true);setMessage(null)
+  const perform=async(task:()=>Promise<unknown>,notice:string,activityLabel="Processando…")=>{
+    setBusy(true);setMessage(null);onActivityChange(activityLabel)
     try{await task();await onRefresh();setMessage(notice)}
     catch(e){setMessage(e instanceof Error?e.message:"Não foi possível concluir a operação.")}
-    finally{setBusy(false)}
+    finally{setBusy(false);onActivityChange(null)}
+  }
+
+  const refreshMods=async()=>{
+    onActivityChange("Carregando lista de mods…")
+    try{await onRefresh()}finally{onActivityChange(null)}
   }
 
   const rescan=async(mod:LocalMod)=>{
@@ -1133,20 +1139,20 @@ function Mods({mods,sha,onRefresh,configured}:{
       setAlphaResults(v=>{
         const next={...v};delete next[mod.sha256];return next
       })
-    },"Informações atualizadas.")
+    },"Informações atualizadas.","Reconhecendo mod e atualizando os dados…")
   }
 
   const saveNickname=async(mod:LocalMod)=>{
     if(!nickname.trim()){setMessage("Informe um apelido para este mod.");return}
     await perform(()=>desktopApi()!.rename_mod(mod.sha256,nickname.trim()),
-      "Apelido salvo. O nome do arquivo original permanece igual.")
+      "Apelido salvo. O nome do arquivo original permanece igual.","Salvando apelido do mod…")
     setEditingSha(null)
   }
 
   const removeMod=async(mod:LocalMod)=>{
     if(!window.confirm(`Remover "${mod.name}" da biblioteca do DUELTRACE?\n\nA ISO original permanecerá no computador.`))return
     await perform(()=>desktopApi()!.remove_mod(mod.sha256),
-      "Mod removido da biblioteca. O arquivo original foi preservado.")
+      "Mod removido da biblioteca. O arquivo original foi preservado.","Atualizando biblioteca de mods…")
     if(expandedSha===mod.sha256)setExpandedSha(null)
   }
 
@@ -1160,26 +1166,26 @@ function Mods({mods,sha,onRefresh,configured}:{
     <section className="panel rounded-xl p-4">
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn-gold" disabled={busy||!desktopApi()}
-          onClick={()=>void perform(()=>desktopApi()!.import_iso(),"Mod adicionado à biblioteca.")}>
+          onClick={()=>void perform(()=>desktopApi()!.import_iso(),"Mod adicionado à biblioteca.","Carregando e reconhecendo mod…")}>
           <FilePlus2 className="size-4"/> Adicionar mod
         </button>
         <button type="button" className="btn-ghost" disabled={busy||!desktopApi()||!sha}
           onClick={()=>void perform(async()=>{
             const selected=await desktopApi()!.select_memory_card()
             if(selected.cancelled)throw new Error("Seleção cancelada.")
-          },"Memory Card selecionado. Leitura e backup automáticos ativados.")}>
+          },"Memory Card selecionado. Leitura e backup automáticos ativados.","Carregando Memory Card…")}>
           <CreditCard className="size-4"/> Selecionar Memory Card
         </button>
         <button type="button" className="btn-ghost" disabled={busy||!desktopApi()}
-          onClick={()=>void perform(()=>desktopApi()!.configure_epsxe(),"Emulador configurado.")}>
+          onClick={()=>void perform(()=>desktopApi()!.configure_epsxe(),"Emulador configurado.","Carregando configuração do ePSXe…")}>
           <Gamepad2 className="size-4"/>{configured?"Alterar emulador":"Configurar emulador"}
         </button>
         <button type="button" className="btn-ghost" disabled={busy||!configured||!sha||!desktopApi()}
-          onClick={()=>void perform(()=>desktopApi()!.start_game(),"Jogo iniciado.")}>
+          onClick={()=>void perform(()=>desktopApi()!.start_game(),"Jogo iniciado.","Carregando jogo…")}>
           <Play className="size-4"/> Jogar
         </button>
         <button type="button" className="btn-ghost" disabled={busy}
-          onClick={()=>void onRefresh()}><RefreshCcw className="size-4"/> <T k="Atualizar lista"/></button>
+          onClick={()=>void refreshMods()}><RefreshCcw className="size-4"/> <T k="Atualizar lista"/></button>
       </div>
       <label className="field mt-4 flex items-center gap-2 px-3 py-2">
         <Search className="size-4 text-primary"/>
@@ -1246,7 +1252,7 @@ function Mods({mods,sha,onRefresh,configured}:{
                   disabled={busy||!desktopApi()||active} onClick={()=>{
                     if(mod.requiresReview&&!window.confirm("Ativar este mod com os recursos disponíveis?"))return
                     void perform(()=>desktopApi()!.activate_mod(mod.sha256,mod.requiresReview),
-                      "Mod ativado.")
+                      "Mod ativado.","Carregando mod…")
                   }}>{active?"Mod ativo":"Ativar mod"}</button>
                 <button className="btn-ghost flex-1" type="button" disabled={busy||!desktopApi()}
                   onClick={()=>void rescan(mod)}>
@@ -1491,6 +1497,8 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
 export function DesktopPage({page}:{page:Page}) {
   const {t}=useI18n()
   const {state,error,loading,refresh}=useDesktopState()
+  const [activity,setActivity]=useState<string|null>(null)
+  const activityLabel=activity??(loading?(page==="mods"?"Carregando mods…":"Carregando dados locais…"):null)
   return <div className="flex flex-col gap-3 lg:gap-4">
     <div className="panel flex min-w-0 flex-wrap items-center gap-3 rounded-xl px-3 py-2 text-xs sm:px-4">
 
@@ -1500,10 +1508,15 @@ export function DesktopPage({page}:{page:Page}) {
         ● Leitura ao vivo em segundo plano
       </span>}
     </div>
+    {activityLabel&&<div role="status" aria-live="polite" aria-busy="true"
+      className="pointer-events-none fixed bottom-4 right-4 z-50 flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-full border border-primary/40 bg-[#071221]/95 px-4 py-3 text-sm font-medium text-white shadow-xl backdrop-blur">
+      <span aria-hidden="true" className="size-4 shrink-0 animate-spin rounded-full border-2 border-primary/30 border-t-primary"/>
+      <span>{activityLabel}</span>
+    </div>}
     {error&&<p className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm text-gold" role="status">{error}</p>}
     {loading&&<p className="text-sm text-muted"><T k="Carregando dados locais..."/></p>}
     {page==="inicio"&&<Home sha={state?.activeSha??null} cards={state?.cards??[]}/>}
-    {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>}
+    {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh} onActivityChange={setActivity}/>}
     {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="fusoes"&&<Fusions sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="drops"&&<DropsPage sha={state?.activeSha??null} cards={state?.cards??[]}/>}
