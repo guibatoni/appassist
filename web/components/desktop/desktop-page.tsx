@@ -8,7 +8,7 @@ import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardCopy, FilePlus2, Gamepad2,
   GitMerge, Layers, Pencil, Play, RefreshCcw, Search, Shield, Swords, Trash2, Upload, CreditCard,
 } from "lucide-react"
-import {cardClassicHd, cardArtHd, cardArt, cardWithFrame, desktopApi, useDesktopState} from "@/lib/desktop"
+import {cardClassicHd, cardArtHd, cardArt, cardWithFrame, desktopApi, setDesktopActivity, useDesktopActivity, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
 import {OpponentsPage} from "./opponents-page"
 import {DecksPage} from "./decks-page"
@@ -1094,9 +1094,8 @@ function WindowEvidenceForm({mod}:{mod:LocalMod}) {
   </details>
 }
 
-function Mods({mods,sha,onRefresh,configured,onActivityChange}:{
+function Mods({mods,sha,onRefresh,configured}:{
   mods:LocalMod[];sha:string|null;onRefresh:()=>Promise<void>;configured:boolean
-  onActivityChange:(label:string|null)=>void
 }) {
   const {t}=useI18n()
   const [search,setSearch]=useState("")
@@ -1122,15 +1121,15 @@ function Mods({mods,sha,onRefresh,configured,onActivityChange}:{
   },[expandedSha,alphaResults])
 
   const perform=async(task:()=>Promise<unknown>,notice:string,activityLabel="Processando…")=>{
-    setBusy(true);setMessage(null);onActivityChange(activityLabel)
+    setBusy(true);setMessage(null);setDesktopActivity(activityLabel)
     try{await task();await onRefresh();setMessage(notice)}
     catch(e){setMessage(e instanceof Error?e.message:"Não foi possível concluir a operação.")}
-    finally{setBusy(false);onActivityChange(null)}
+    finally{setBusy(false);setDesktopActivity(null)}
   }
 
   const refreshMods=async()=>{
-    onActivityChange("Carregando lista de mods…")
-    try{await onRefresh()}finally{onActivityChange(null)}
+    setDesktopActivity("Carregando lista de mods…")
+    try{await onRefresh()}finally{setDesktopActivity(null)}
   }
 
   const rescan=async(mod:LocalMod)=>{
@@ -1497,7 +1496,7 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
 export function DesktopPage({page}:{page:Page}) {
   const {t}=useI18n()
   const {state,error,loading,refresh}=useDesktopState()
-  const [activity,setActivity]=useState<string|null>(null)
+  const activity=useDesktopActivity()
   const activityLabel=activity??(loading?(page==="mods"?"Carregando mods…":"Carregando dados locais…"):null)
   return <div className="flex flex-col gap-3 lg:gap-4">
     <div className="panel flex min-w-0 flex-wrap items-center gap-3 rounded-xl px-3 py-2 text-xs sm:px-4">
@@ -1516,7 +1515,7 @@ export function DesktopPage({page}:{page:Page}) {
     {error&&<p className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm text-gold" role="status">{error}</p>}
     {loading&&<p className="text-sm text-muted"><T k="Carregando dados locais..."/></p>}
     {page==="inicio"&&<Home sha={state?.activeSha??null} cards={state?.cards??[]}/>}
-    {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh} onActivityChange={setActivity}/>}
+    {page==="mods"&&<Mods mods={state?.mods??[]} sha={state?.activeSha??null} configured={Boolean(state?.epsxeConfigured)} onRefresh={refresh}/>}
     {page==="biblioteca"&&<Library sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="fusoes"&&<Fusions sha={state?.activeSha??null} cards={state?.cards??[]}/>}
     {page==="drops"&&<DropsPage sha={state?.activeSha??null} cards={state?.cards??[]}/>}
