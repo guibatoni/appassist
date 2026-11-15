@@ -5,6 +5,7 @@ import Image from "next/image"
 import { Sidebar } from "./sidebar"
 import { TopBar } from "./top-bar"
 import {I18nProvider} from "@/lib/i18n"
+import {useDesktopActivity} from "@/lib/desktop"
 
 function ShellBody({ children }: { children: React.ReactNode }) {
   const route=usePathname()
@@ -39,6 +40,21 @@ function ShellBody({ children }: { children: React.ReactNode }) {
   )
 }
 
+function ActivityIndicator() {
+  const activity=useDesktopActivity()
+  if(!activity)return null
+  return <div role="status" aria-live="polite" aria-busy="true"
+    className="pointer-events-none fixed right-4 top-1/2 z-[90] flex max-w-[calc(100vw-2rem)] -translate-y-1/2 items-center gap-3 rounded-full border border-primary/40 bg-[#071221]/95 px-4 py-3 text-sm font-medium text-white shadow-xl backdrop-blur">
+    <span aria-hidden="true" className="size-4 shrink-0 animate-spin rounded-full border-2 border-primary/30 border-t-primary"/>
+    <span>{activity}</span>
+  </div>
+}
+
 export function AppShell({children}:{children:React.ReactNode}) {
-  return <I18nProvider><ShellBody>{children}</ShellBody></I18nProvider>
+  return <I18nProvider>
+    <>
+      <ShellBody>{children}</ShellBody>
+      <ActivityIndicator/>
+    </>
+  </I18nProvider>
 }
