@@ -8,12 +8,12 @@ Plataforma: Windows.
 
 ## Pedido
 
-Durante o reconhecimento de mods ou o carregamento de recursos, mostrar um indicador discreto em um canto da interface, informando a operação em andamento.
+Durante o reconhecimento de mods ou o carregamento de recursos, mostrar um indicador discreto ao lado da barra de rolagem, sempre na área visível, informando a operação em andamento.
 
 ## Implementação
 
-- `web/components/desktop/desktop-page.tsx`: cria um indicador fixo no canto inferior direito, com animação acessível via `role=status` e `aria-live`.
-- O componente de Mods comunica a atividade à página principal, mantendo o indicador visível durante navegação entre abas.
+- `web/components/shell/app-shell.tsx`: renderiza o indicador ao lado da barra de rolagem, fixo à janela e fora do contêiner rolável, com `role=status` e `aria-live`.
+- `web/components/desktop/desktop-page.tsx` publica a atividade no store compartilhado, mantendo o indicador visível durante rolagem e troca de abas.
 - Os rótulos incluem reconhecimento/importação de ISO, atualização de dados, ativação de mod, carregamento do Memory Card, configuração do ePSXe, inicialização do jogo e atualização da lista.
 - A inicialização dos dados locais também apresenta indicador.
 - `docs/DUELTRACE_UPDATE_NOTES.md`: Patch Notes sincronizadas com a versão v0.21.1.
