@@ -1,6 +1,32 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
+
+let desktopActivitySnapshot: string | null = null
+const desktopActivityListeners = new Set<() => void>()
+
+function subscribeDesktopActivity(listener: () => void) {
+  desktopActivityListeners.add(listener)
+  return () => desktopActivityListeners.delete(listener)
+}
+
+function getDesktopActivity() {
+  return desktopActivitySnapshot
+}
+
+export function setDesktopActivity(label: string | null) {
+  if (desktopActivitySnapshot === label) return
+  desktopActivitySnapshot = label
+  desktopActivityListeners.forEach(listener => listener())
+}
+
+export function useDesktopActivity() {
+  return useSyncExternalStore(
+    subscribeDesktopActivity,
+    getDesktopActivity,
+    () => null
+  )
+}
 
 export type LocalCard = {
   id: number

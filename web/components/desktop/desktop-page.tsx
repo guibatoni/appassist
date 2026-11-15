@@ -8,7 +8,7 @@ import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardCopy, FilePlus2, Gamepad2,
   GitMerge, Layers, Pencil, Play, RefreshCcw, Search, Shield, Swords, Trash2, Upload, CreditCard,
 } from "lucide-react"
-import {cardClassicHd, cardArtHd, cardArt, cardWithFrame, desktopApi, useDesktopState} from "@/lib/desktop"
+import {cardClassicHd, cardArtHd, cardArt, cardWithFrame, desktopApi, setDesktopActivity, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
 import {OpponentsPage} from "./opponents-page"
 import {DecksPage} from "./decks-page"
@@ -1120,11 +1120,16 @@ function Mods({mods,sha,onRefresh,configured}:{
     return()=>{mounted=false}
   },[expandedSha,alphaResults])
 
-  const perform=async(task:()=>Promise<unknown>,notice:string)=>{
-    setBusy(true);setMessage(null)
+  const perform=async(task:()=>Promise<unknown>,notice:string,activityLabel="Processando…")=>{
+    setBusy(true);setMessage(null);setDesktopActivity(activityLabel)
     try{await task();await onRefresh();setMessage(notice)}
     catch(e){setMessage(e instanceof Error?e.message:"Não foi possível concluir a operação.")}
-    finally{setBusy(false)}
+    finally{setBusy(false);setDesktopActivity(null)}
+  }
+
+  const refreshMods=async()=>{
+    setDesktopActivity("Carregando lista de mods…")
+    try{await onRefresh()}finally{setDesktopActivity(null)}
   }
 
   const rescan=async(mod:LocalMod)=>{
@@ -1133,20 +1138,20 @@ function Mods({mods,sha,onRefresh,configured}:{
       setAlphaResults(v=>{
         const next={...v};delete next[mod.sha256];return next
       })
-    },"Informações atualizadas.")
+    },"Informações atualizadas.","Reconhecendo mod e atualizando os dados…")
   }
 
   const saveNickname=async(mod:LocalMod)=>{
     if(!nickname.trim()){setMessage("Informe um apelido para este mod.");return}
     await perform(()=>desktopApi()!.rename_mod(mod.sha256,nickname.trim()),
-      "Apelido salvo. O nome do arquivo original permanece igual.")
+      "Apelido salvo. O nome do arquivo original permanece igual.","Salvando apelido do mod…")
     setEditingSha(null)
   }
 
   const removeMod=async(mod:LocalMod)=>{
     if(!window.confirm(`Remover "${mod.name}" da biblioteca do DUELTRACE?\n\nA ISO original permanecerá no computador.`))return
     await perform(()=>desktopApi()!.remove_mod(mod.sha256),
-      "Mod removido da biblioteca. O arquivo original foi preservado.")
+      "Mod removido da biblioteca. O arquivo original foi preservado.","Atualizando biblioteca de mods…")
     if(expandedSha===mod.sha256)setExpandedSha(null)
   }
 
@@ -1160,26 +1165,26 @@ function Mods({mods,sha,onRefresh,configured}:{
     <section className="panel rounded-xl p-4">
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn-gold" disabled={busy||!desktopApi()}
-          onClick={()=>void perform(()=>desktopApi()!.import_iso(),"Mod adicionado à biblioteca.")}>
+          onClick={()=>void perform(()=>desktopApi()!.import_iso(),"Mod adicionado à biblioteca.","Carregando e reconhecendo mod…")}>
           <FilePlus2 className="size-4"/> Adicionar mod
         </button>
         <button type="button" className="btn-ghost" disabled={busy||!desktopApi()||!sha}
           onClick={()=>void perform(async()=>{
             const selected=await desktopApi()!.select_memory_card()
             if(selected.cancelled)throw new Error("Seleção cancelada.")
-          },"Memory Card selecionado. Leitura e backup automáticos ativados.")}>
+          },"Memory Card selecionado. Leitura e backup automáticos ativados.","Carregando Memory Card…")}>
           <CreditCard className="size-4"/> Selecionar Memory Card
         </button>
         <button type="button" className="btn-ghost" disabled={busy||!desktopApi()}
-          onClick={()=>void perform(()=>desktopApi()!.configure_epsxe(),"Emulador configurado.")}>
+          onClick={()=>void perform(()=>desktopApi()!.configure_epsxe(),"Emulador configurado.","Carregando configuração do ePSXe…")}>
           <Gamepad2 className="size-4"/>{configured?"Alterar emulador":"Configurar emulador"}
         </button>
         <button type="button" className="btn-ghost" disabled={busy||!configured||!sha||!desktopApi()}
-          onClick={()=>void perform(()=>desktopApi()!.start_game(),"Jogo iniciado.")}>
+          onClick={()=>void perform(()=>desktopApi()!.start_game(),"Jogo iniciado.","Carregando jogo…")}>
           <Play className="size-4"/> Jogar
         </button>
         <button type="button" className="btn-ghost" disabled={busy}
-          onClick={()=>void onRefresh()}><RefreshCcw className="size-4"/> <T k="Atualizar lista"/></button>
+          onClick={()=>void refreshMods()}><RefreshCcw className="size-4"/> <T k="Atualizar lista"/></button>
       </div>
       <label className="field mt-4 flex items-center gap-2 px-3 py-2">
         <Search className="size-4 text-primary"/>
@@ -1246,7 +1251,7 @@ function Mods({mods,sha,onRefresh,configured}:{
                   disabled={busy||!desktopApi()||active} onClick={()=>{
                     if(mod.requiresReview&&!window.confirm("Ativar este mod com os recursos disponíveis?"))return
                     void perform(()=>desktopApi()!.activate_mod(mod.sha256,mod.requiresReview),
-                      "Mod ativado.")
+                      "Mod ativado.","Carregando mod…")
                   }}>{active?"Mod ativo":"Ativar mod"}</button>
                 <button className="btn-ghost flex-1" type="button" disabled={busy||!desktopApi()}
                   onClick={()=>void rescan(mod)}>
