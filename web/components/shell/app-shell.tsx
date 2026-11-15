@@ -44,7 +44,7 @@ function ActivityIndicator() {
   const activity=useDesktopActivity()
   if(!activity)return null
   return <div role="status" aria-live="polite" aria-busy="true"
-    className="pointer-events-none fixed right-4 top-1/2 z-[90] flex max-w-[calc(100vw-2rem)] -translate-y-1/2 items-center gap-3 rounded-full border border-primary/40 bg-[#071221]/95 px-4 py-3 text-sm font-medium text-white shadow-xl backdrop-blur">
+    className="pointer-events-none fixed bottom-4 right-4 z-[90] flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-full border border-primary/40 bg-[#071221]/95 px-4 py-3 text-sm font-medium text-white shadow-xl backdrop-blur">
     <span aria-hidden="true" className="size-4 shrink-0 animate-spin rounded-full border-2 border-primary/30 border-t-primary"/>
     <span>{activity}</span>
   </div>
