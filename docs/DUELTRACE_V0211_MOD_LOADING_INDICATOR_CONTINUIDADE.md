@@ -8,11 +8,11 @@ Plataforma: Windows.
 
 ## Pedido
 
-Durante o reconhecimento de mods ou o carregamento de recursos, mostrar um indicador discreto ao lado da barra de rolagem, sempre na área visível, informando a operação em andamento.
+Durante o reconhecimento de mods ou o carregamento de recursos, mostrar um indicador discreto no canto inferior direito, sempre na área visível, informando a operação em andamento.
 
 ## Implementação
 
-- `web/components/shell/app-shell.tsx`: renderiza o indicador ao lado da barra de rolagem, fixo à janela e fora do contêiner rolável, com `role=status` e `aria-live`.
+- `web/components/shell/app-shell.tsx`: renderiza o indicador no canto inferior direito, fixo à janela e fora do contêiner rolável, com `role=status` e `aria-live`.
 - `web/components/desktop/desktop-page.tsx` publica a atividade no store compartilhado, mantendo o indicador visível durante rolagem e troca de abas.
 - Os rótulos incluem reconhecimento/importação de ISO, atualização de dados, ativação de mod, carregamento do Memory Card, configuração do ePSXe, inicialização do jogo e atualização da lista.
 - A inicialização dos dados locais também apresenta indicador.
