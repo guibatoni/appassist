@@ -8,7 +8,7 @@ import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardCopy, FilePlus2, Gamepad2,
   GitMerge, Layers, Pencil, Play, RefreshCcw, Search, Shield, Swords, Trash2, Upload, CreditCard,
 } from "lucide-react"
-import {cardClassicHd, cardArtHd, cardArt, cardWithFrame, desktopApi, setDesktopActivity, useDesktopActivity, useDesktopState} from "@/lib/desktop"
+import {cardClassicHd, cardArtHd, cardArt, cardWithFrame, desktopApi, setDesktopActivity, useDesktopState} from "@/lib/desktop"
 import {DropsPage} from "./drops-page"
 import {OpponentsPage} from "./opponents-page"
 import {DecksPage} from "./decks-page"
@@ -1496,8 +1496,6 @@ function Fusions({sha,cards}:{sha:string|null;cards:LocalCard[]}) {
 export function DesktopPage({page}:{page:Page}) {
   const {t}=useI18n()
   const {state,error,loading,refresh}=useDesktopState()
-  const activity=useDesktopActivity()
-  const activityLabel=activity??(loading?(page==="mods"?"Carregando mods…":"Carregando dados locais…"):null)
   return <div className="flex flex-col gap-3 lg:gap-4">
     <div className="panel flex min-w-0 flex-wrap items-center gap-3 rounded-xl px-3 py-2 text-xs sm:px-4">
 
@@ -1507,11 +1505,6 @@ export function DesktopPage({page}:{page:Page}) {
         ● Leitura ao vivo em segundo plano
       </span>}
     </div>
-    {activityLabel&&<div role="status" aria-live="polite" aria-busy="true"
-      className="pointer-events-none fixed bottom-4 right-4 z-50 flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-full border border-primary/40 bg-[#071221]/95 px-4 py-3 text-sm font-medium text-white shadow-xl backdrop-blur">
-      <span aria-hidden="true" className="size-4 shrink-0 animate-spin rounded-full border-2 border-primary/30 border-t-primary"/>
-      <span>{activityLabel}</span>
-    </div>}
     {error&&<p className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm text-gold" role="status">{error}</p>}
     {loading&&<p className="text-sm text-muted"><T k="Carregando dados locais..."/></p>}
     {page==="inicio"&&<Home sha={state?.activeSha??null} cards={state?.cards??[]}/>}
